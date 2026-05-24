@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: league-postgres
+    environment:
+      POSTGRES_USER: league
+      POSTGRES_PASSWORD: league
+      POSTGRES_DB: league
+    ports:
+      - "5432:5432"
+    volumes:
+      - league_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U league -d league"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  league_pgdata:

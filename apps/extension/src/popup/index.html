@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>42 League</title>
+    <style>
+      :root {
+        --bg-0: #0b0f17;
+        --bg-1: #111827;
+        --bg-2: #1a2233;
+        --bg-3: #243044;
+        --border: #243044;
+        --teal: #00d9dc;
+        --teal-dim: #00babc;
+        --teal-deep: #007577;
+        --teal-glow: rgba(0, 217, 220, 0.35);
+        --teal-soft: rgba(0, 217, 220, 0.08);
+        --gold: #ffb71b;
+        --gold-soft: rgba(255, 183, 27, 0.12);
+        --red: #ff3b5c;
+        --muted: #6b7689;
+        --muted-2: #95a3b8;
+        --text: #e6ecf5;
+        --text-strong: #fff;
+      }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 var(--teal-glow); }
+        50%      { box-shadow: 0 0 0 10px transparent; }
+      }
+      @keyframes scan {
+        0%, 100% { opacity: 0.5; } 50% { opacity: 1; }
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        margin: 0; padding: 0;
+        width: 300px;
+        color: var(--text);
+        background:
+          radial-gradient(ellipse at top, rgba(0, 217, 220, 0.08) 0%, transparent 60%),
+          var(--bg-0);
+        font-size: 13px;
+      }
+
+      header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 14px 16px 12px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--bg-1) 0%, transparent 100%);
+      }
+      header img {
+        width: 26px; height: 26px; border-radius: 4px;
+        border: 1px solid var(--teal-deep);
+        box-shadow: 0 0 10px var(--teal-glow);
+      }
+      h1 {
+        font-size: 12px; margin: 0;
+        font-weight: 800;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        background: linear-gradient(90deg, var(--teal) 0%, #fff 50%, var(--gold) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      h1::after {
+        content: '◆';
+        margin-left: 8px;
+        color: var(--teal); font-size: 8px;
+        vertical-align: middle;
+        animation: scan 2s infinite;
+        -webkit-text-fill-color: var(--teal);
+      }
+
+      .body { padding: 14px 16px 16px; }
+
+      .auth-state {
+        display: flex; flex-direction: column; gap: 8px; align-items: center;
+        padding: 16px 8px;
+        border-radius: 4px;
+        margin-bottom: 14px;
+        animation: fade-in 200ms ease-out;
+        position: relative;
+      }
+      .auth-state.connected {
+        background: linear-gradient(180deg, var(--teal-soft) 0%, transparent 100%);
+        border: 1px solid var(--teal-deep);
+      }
+      .auth-state.anon {
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+      }
+      .auth-state.connecting {
+        background: var(--bg-1);
+        border: 1px solid var(--teal-deep);
+      }
+
+      .avatar {
+        width: 46px; height: 46px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--teal-deep), var(--teal));
+        color: #001416;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; font-weight: 900; text-transform: uppercase;
+        border: 2px solid var(--teal);
+        box-shadow: 0 0 16px var(--teal-glow);
+      }
+      .connecting .avatar { animation: pulse 1.2s infinite; }
+      .anon .avatar {
+        background: var(--bg-2); color: var(--muted-2);
+        border: 1px dashed var(--muted);
+        box-shadow: none;
+      }
+
+      .login-label {
+        font-weight: 700; font-size: 14px;
+        color: var(--text-strong);
+        letter-spacing: 0.02em;
+      }
+      .elo-label {
+        color: var(--gold); font-size: 11px; font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        padding: 3px 8px;
+        background: var(--gold-soft);
+        border: 1px solid var(--gold);
+        border-radius: 2px;
+        letter-spacing: 0.08em; text-transform: uppercase;
+      }
+
+      .row { display: flex; gap: 8px; align-items: center; }
+      .row.split { display: grid; grid-template-columns: 1fr 1fr; }
+
+      button {
+        font-family: inherit; font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        background: linear-gradient(180deg, var(--teal) 0%, var(--teal-dim) 100%);
+        color: #001416;
+        border: none; border-radius: 3px;
+        padding: 9px 12px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        transition: filter 120ms, transform 80ms, box-shadow 120ms;
+      }
+      button:hover { filter: brightness(1.1); box-shadow: 0 0 14px var(--teal-glow); }
+      button:active { transform: scale(0.97); }
+      button.ghost {
+        background: transparent; color: var(--muted-2);
+        border: 1px solid var(--border);
+      }
+      button.ghost:hover {
+        color: var(--teal); border-color: var(--teal);
+        background: var(--teal-soft); box-shadow: none;
+      }
+      button.full { width: 100%; }
+      button:disabled { opacity: 0.4; cursor: default; transform: none; filter: none; box-shadow: none; }
+
+      .quick-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .quick-actions button {
+        padding: 12px 6px;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 10px;
+        background: var(--bg-1);
+        color: var(--text-strong);
+        border: 1px solid var(--border);
+      }
+      .quick-actions button:hover {
+        border-color: var(--teal);
+        color: var(--teal);
+        background: var(--teal-soft);
+        box-shadow: none;
+        filter: none;
+      }
+      .quick-actions .qa-icon {
+        font-size: 18px; line-height: 1;
+        color: var(--teal);
+      }
+      .quick-actions .qa-gold .qa-icon { color: var(--gold); }
+      .quick-actions .qa-label {
+        font-weight: 700; letter-spacing: 0.1em;
+      }
+
+      .spinner {
+        width: 12px; height: 12px;
+        border: 2px solid rgba(0, 0, 0, 0.2); border-top-color: #001416;
+        border-radius: 50%; animation: spin 0.7s linear infinite;
+        display: inline-block;
+      }
+      .spinner.dark { border-color: rgba(0, 217, 220, 0.2); border-top-color: var(--teal); }
+
+      .error { color: var(--red); font-size: 11px; margin-top: 8px; }
+      .muted {
+        color: var(--muted); font-size: 10px;
+        margin: 12px 0 0; text-align: center;
+        text-transform: uppercase; letter-spacing: 0.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="../../icons/42_league.png" alt="" />
+      <h1>42 League</h1>
+    </header>
+
+    <div class="body">
+      <div id="state" class="auth-state anon">
+        <div class="avatar" id="avatar">42</div>
+        <div class="login-label" id="login-label">…</div>
+        <div class="elo-label" id="elo-label" style="display:none"></div>
+      </div>
+
+      <div class="row">
+        <button id="action" class="full">…</button>
+      </div>
+
+      <div class="quick-actions">
+        <button id="open-defis" class="qa-gold" type="button">
+          <span class="qa-icon">⚔</span>
+          <span class="qa-label">Défis</span>
+        </button>
+        <button id="open-leaderboard" type="button">
+          <span class="qa-icon">★</span>
+          <span class="qa-label">Classement</span>
+        </button>
+      </div>
+
+      <div class="row split" style="margin-top:8px">
+        <button id="open-options" class="ghost">Réglages</button>
+        <button id="open-intra" class="ghost">Intra</button>
+      </div>
+
+      <div id="error" class="error"></div>
+      <p class="muted">Console complète dans Réglages.</p>
+    </div>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

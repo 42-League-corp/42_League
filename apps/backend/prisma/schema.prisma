@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  login           String   @id
+  ftId            Int?     @unique @map("ft_id")
+  campus          String?
+  imageUrl        String?  @map("image_url")
+  title           String?
+  elo             Int      @default(1000)
+  matchesPlayed   Int      @default(0) @map("matches_played")
+  dodgeCount      Int      @default(0) @map("dodge_count")
+  tournamentsWon  Int      @default(0) @map("tournaments_won")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  declaredPending     PendingMatch[]     @relation("declarer")
+  awaitingPending     PendingMatch[]     @relation("opponent")
+  matchesAsA          PlayedMatch[]      @relation("playerA")
+  matchesAsB          PlayedMatch[]      @relation("playerB")
+  challengesSent      Challenge[]        @relation("challenger")
+  challengesReceived  Challenge[]        @relation("opponentChallenge")
+  tournamentsCreated  Tournament[]       @relation("tournamentCreator")
+  tournamentsWonRel   Tournament[]       @relation("tournamentWinner")
+  tournamentEntries   TournamentEntry[]
+  tournamentMatchesA  TournamentMatch[]  @relation("tournPlayerA")
+  tournamentMatchesB  TournamentMatch[]  @relation("tournPlayerB")
+  opsAsOwner          Ops[]              @relation("opsOwner")
+  opsAsTarget         Ops[]              @relation("opsTarget")
+
+  @@map("users")
+}
+
+model Ops {
+  id          String   @id @default(uuid())
+  ownerLogin  String   @map("owner_login")
+  targetLogin String   @map("target_login")
+  declaredAt  DateTime @default(now()) @map("declared_at")
+  expiresAt   DateTime @map("expires_at")
+
+  owner  User @relation("opsOwner", fields: [ownerLogin], references: [login])
+  target User @relation("opsTarget", fields: [targetLogin], references: [login])
+
+  @@index([ownerLogin, expiresAt])
+  @@index([targetLogin, expiresAt])
+  @@map("ops")
+}
+
+model Tournament {
+  id            String   @id @default(uuid())
+  name          String
+  kind          String   @default("friendly")  // 'friendly' | 'official'
+  capacity      Int      // 4 or 8
+  status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
+  createdByLogin String  @map("created_by_login")
+  winnerLogin   String?  @map("winner_login")
+  createdAt     DateTime @default(now()) @map("created_at")
+  startedAt     DateTime? @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+
+  createdBy User              @relation("tournamentCreator", fields: [createdByLogin], references: [login])
+  winner    User?             @relation("tournamentWinner", fields: [winnerLogin], references: [login])
+  entries   TournamentEntry[]
+  matches   TournamentMatch[]
+
+  @@index([status])
+  @@map("tournaments")
+}
+
+model TournamentEntry {
+  tournamentId String   @map("tournament_id")
+  login        String
+  joinedAt     DateTime @default(now()) @map("joined_at")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [login], references: [login])
+
+  @@id([tournamentId, login])
+  @@map("tournament_entries")
+}
+
+model TournamentMatch {
+  id            String   @id @default(uuid())
+  tournamentId  String   @map("tournament_id")
+  round         Int      // 1, 2, 3...
+  slot          Int      // position in the round (0-indexed)
+  playerALogin  String?  @map("player_a_login")
+  playerBLogin  String?  @map("player_b_login")
+  scoreA        Int?     @map("score_a")
+  scoreB        Int?     @map("score_b")
+  winnerLogin   String?  @map("winner_login")
+  recordedByLogin String? @map("recorded_by_login")
+  recordedAt    DateTime? @map("recorded_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  playerA    User?      @relation("tournPlayerA", fields: [playerALogin], references: [login])
+  playerB    User?      @relation("tournPlayerB", fields: [playerBLogin], references: [login])
+
+  @@unique([tournamentId, round, slot])
+  @@index([tournamentId, round])
+  @@map("tournament_matches")
+}
+
+model Challenge {
+  id              String    @id @default(uuid())
+  challengerLogin String    @map("challenger_login")
+  opponentLogin   String    @map("opponent_login")
+  status          String    // 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled'
+  scheduledAt     DateTime  @map("scheduled_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  decidedAt       DateTime? @map("decided_at")
+
+  challenger User @relation("challenger", fields: [challengerLogin], references: [login])
+  opponent   User @relation("opponentChallenge", fields: [opponentLogin], references: [login])
+
+  @@index([opponentLogin, status])
+  @@index([challengerLogin, status])
+  @@map("challenges")
+}
+
+model PendingMatch {
+  id              String   @id @default(uuid())
+  declarerLogin   String   @map("declarer_login")
+  opponentLogin   String   @map("opponent_login")
+  scoreDeclarer   Int      @map("score_declarer")
+  scoreOpponent   Int      @map("score_opponent")
+  declaredAt      DateTime @default(now()) @map("declared_at")
+
+  declarer User @relation("declarer", fields: [declarerLogin], references: [login])
+  opponent User @relation("opponent", fields: [opponentLogin], references: [login])
+
+  @@index([opponentLogin])
+  @@map("pending_matches")
+}
+
+model PlayedMatch {
+  id            String   @id
+  playerALogin  String   @map("player_a_login")
+  playerBLogin  String   @map("player_b_login")
+  scoreA        Int      @map("score_a")
+  scoreB        Int      @map("score_b")
+  winner        String   // 'A' or 'B'
+  playedAt      DateTime @map("played_at")
+  countedForElo Boolean  @map("counted_for_elo")
+  deltaA        Int      @map("delta_a")
+  deltaB        Int      @map("delta_b")
+
+  playerA User @relation("playerA", fields: [playerALogin], references: [login])
+  playerB User @relation("playerB", fields: [playerBLogin], references: [login])
+
+  @@index([playerALogin, playerBLogin, playedAt])
+  @@map("played_matches")
+}
