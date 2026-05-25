@@ -11,6 +11,12 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    hmr: { port: 5173 },
+    host: true, // Toujours nécessaire pour WSL
+    cors: true, // <-- AJOUT : Autorise Chrome à lire les fichiers
+    origin: 'http://localhost:5173', // <-- AJOUT : Indique à CRX où trouver les assets
+    hmr: {
+      port: 5173,
+      host: 'localhost',
+    },
   },
 });

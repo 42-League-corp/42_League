@@ -37,6 +37,7 @@ export default defineManifest({
     'https://*.intra.42.fr/*',
     'https://api.intra.42.fr/*',
     'http://localhost:3000/*',
+    'http://localhost:5173/*',
   ],
   content_scripts: [
     {
