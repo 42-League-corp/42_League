@@ -1,0 +1,51 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        'bg-0': '#0b0f17',
+        'bg-1': '#111827',
+        'bg-2': '#1a2233',
+        'bg-3': '#243044',
+        border: '#243044',
+        teal: {
+          DEFAULT: '#00d9dc',
+          dim: '#00babc',
+          deep: '#007577',
+        },
+        gold: '#ffb71b',
+        red: '#ff3b5c',
+        muted: '#6b7689',
+        'muted-2': '#95a3b8',
+        text: '#e6ecf5',
+        'text-strong': '#ffffff',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        'teal-glow': '0 0 16px rgba(0, 217, 220, 0.35)',
+      },
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        pop: {
+          '0%': { transform: 'scale(0.92)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        spin: {
+          to: { transform: 'rotate(360deg)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 120ms ease-out',
+        pop: 'pop 160ms ease-out',
+        spin: 'spin 0.7s linear infinite',
+      },
+    },
+  },
+  plugins: [],
+};

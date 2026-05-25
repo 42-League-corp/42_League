@@ -1,15 +1,12 @@
 {
   "name": "@42-league/extension",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@42-league/shared": "*"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",

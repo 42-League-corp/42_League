@@ -9,14 +9,9 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
-    port: 5173,
+    // The popup builds for Chrome — it never collides with the web app's port.
+    port: 5180,
     strictPort: true,
-    host: true, // Toujours nécessaire pour WSL
-    cors: true, // <-- AJOUT : Autorise Chrome à lire les fichiers
-    origin: 'http://localhost:5173', // <-- AJOUT : Indique à CRX où trouver les assets
-    hmr: {
-      port: 5173,
-      host: 'localhost',
-    },
+    host: true,
   },
 });

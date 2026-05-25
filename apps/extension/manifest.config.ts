@@ -5,8 +5,9 @@ const ICON = 'icons/42_league.png';
 export default defineManifest({
   manifest_version: 3,
   name: '42 League',
-  version: '0.0.1',
-  description: 'Ranked babyfoot pour les étudiants 42 — déclare et confirme tes matchs depuis l\'intra.',
+  version: '0.0.3',
+  description:
+    '42 League — badges ELO sur les profils intra + raccourci vers la web app.',
   icons: {
     16: ICON,
     32: ICON,
@@ -27,11 +28,7 @@ export default defineManifest({
     service_worker: 'src/background/index.ts',
     type: 'module',
   },
-  options_ui: {
-    page: 'src/options/index.html',
-    open_in_tab: true,
-  },
-  permissions: ['storage', 'identity'],
+  permissions: ['storage', 'identity', 'tabs'],
   host_permissions: [
     'https://intra.42.fr/*',
     'https://*.intra.42.fr/*',

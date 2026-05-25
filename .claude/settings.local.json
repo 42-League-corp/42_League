@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(which node; which npm; node --version 2>&1; ls /usr/bin/node* /usr/local/bin/node* 2>&1 | head)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "Read(//c/Users/adrbi/AppData/Local/Temp/claude/--wsl-localhost-ubuntu-home-adrien-projects-42-League/a5cd08b1-64b8-4e67-9d5d-3a38a49d40da/tasks/**)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess,State | Format-Table; Get-Process -Id \\(\\(Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue\\).OwningProcess\\) -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path | Format-Table)",
+      "Read(//c/Users/adrbi/AppData/Local/wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src/options/**)",
+      "Read(///wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src/options/**)",
+      "Read(///wsl.localhost/ubuntu/proc/**)",
+      "Bash(rm \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/web/src/pages/HomePage.tsx\" 2>/dev/null && echo \"removed\" || echo \"absent\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ls -la \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/\" | grep -iE 'logo|\\\\.png|\\\\.svg|\\\\.jpg|\\\\.webp')"
+    ]
+  }
+}

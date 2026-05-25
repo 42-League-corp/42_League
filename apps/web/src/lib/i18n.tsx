@@ -1,10 +1,20 @@
-import { currentLang } from './prefs.js';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { getStoredLang, setStoredLang } from './storage';
+
+export type Lang = 'fr' | 'en';
 
 type Dict = Record<string, string>;
 
 const fr: Dict = {
   // Topbar / nav
-  'app.console': '42 League · Console',
+  'app.console': '42 League',
   'nav.defis': 'Défis',
   'nav.tournois': 'Tournois',
   'nav.leaderboard': 'Classement',
@@ -14,7 +24,6 @@ const fr: Dict = {
   'nav.reglages': 'Réglages',
   'auth.notConnected': 'non connecté',
 
-  // Panels
   'panel.defis.title': 'Défis',
   'panel.defis.sub': 'Lance un duel — sois honoré.',
   'defis.received': 'Défis reçus',
@@ -22,21 +31,17 @@ const fr: Dict = {
   'defis.sent': 'Défis envoyés',
   'defis.challenge': 'Défier un joueur de la league',
   'defis.empty': 'Aucun autre joueur inscrit pour le moment.',
-  'defis.from': 'Défi de ',
-  'defis.to': 'Défi à ',
-  'defis.vs': 'Match vs ',
+  'defis.from': 'Défi de',
+  'defis.to': 'Défi à',
+  'defis.vs': 'Match vs',
   'defis.accept': 'Accepter',
   'defis.decline': 'Refuser',
   'defis.cancel': 'Annuler',
   'defis.enterScore': 'Saisir score',
   'defis.send': 'Envoyer',
   'defis.youScore': 'Ton score',
-  'defis.oppScorePrefix': 'Score ',
+  'defis.oppScorePrefix': 'Score',
   'defis.btn': 'Défier',
-  'defis.sentToast': 'Défi envoyé à ',
-  'defis.acceptedToast': 'Défi accepté',
-  'defis.closedToast': 'Défi clos',
-  'defis.scoreSentToast': 'Score envoyé — en attente de confirmation',
 
   'panel.lb.title': 'Classement',
   'panel.lb.sub': 'joueurs · saison en cours',
@@ -68,10 +73,6 @@ const fr: Dict = {
   'history.loss': 'DÉFAITE',
 
   'panel.settings.title': 'Réglages',
-  'settings.theme': 'Thème',
-  'settings.theme.dark': 'Sombre',
-  'settings.theme.light': 'Clair',
-  'settings.theme.system': 'Système',
   'settings.lang': 'Langue',
   'settings.lang.fr': 'Français',
   'settings.lang.en': 'English',
@@ -80,28 +81,21 @@ const fr: Dict = {
   'settings.logout': 'Se déconnecter',
   'settings.loggedOut': 'Déconnecté.',
   'settings.connecting': 'Connexion…',
-  'settings.reconnected': 'Reconnecté en tant que ',
 
-  // Anon
   'anon.title': 'Connexion requise',
   'anon.text':
     'Connecte-toi avec ton compte 42 pour défier tes camarades, suivre ton ELO et grimper au classement.',
   'anon.cta': 'Se connecter avec 42',
-  'anon.welcome': 'Bienvenue ',
+  'anon.welcome': 'Bienvenue',
 
-  // Misc
   'common.loading': 'Initialisation…',
-  'common.now': 'maintenant',
-  'common.justNow': "à l'instant",
-  'common.minute1': '1 minute',
-  'common.hour1': '1 heure',
-  'common.in': 'dans ',
-  'common.ago': 'il y a ',
+  'common.in': 'dans',
+  'common.ago': 'il y a',
   'common.toi': 'toi',
 };
 
 const en: Dict = {
-  'app.console': '42 League · Console',
+  'app.console': '42 League',
   'nav.defis': 'Challenges',
   'nav.tournois': 'Tournaments',
   'nav.leaderboard': 'Leaderboard',
@@ -118,21 +112,17 @@ const en: Dict = {
   'defis.sent': 'Sent challenges',
   'defis.challenge': 'Challenge a player from the league',
   'defis.empty': 'No other player registered yet.',
-  'defis.from': 'Challenge from ',
-  'defis.to': 'Challenge to ',
-  'defis.vs': 'Match vs ',
+  'defis.from': 'Challenge from',
+  'defis.to': 'Challenge to',
+  'defis.vs': 'Match vs',
   'defis.accept': 'Accept',
   'defis.decline': 'Decline',
   'defis.cancel': 'Cancel',
   'defis.enterScore': 'Enter score',
   'defis.send': 'Send',
   'defis.youScore': 'Your score',
-  'defis.oppScorePrefix': 'Score for ',
+  'defis.oppScorePrefix': 'Score for',
   'defis.btn': 'Challenge',
-  'defis.sentToast': 'Challenge sent to ',
-  'defis.acceptedToast': 'Challenge accepted',
-  'defis.closedToast': 'Challenge closed',
-  'defis.scoreSentToast': 'Score submitted — waiting for confirmation',
 
   'panel.lb.title': 'Leaderboard',
   'panel.lb.sub': 'players · current season',
@@ -164,10 +154,6 @@ const en: Dict = {
   'history.loss': 'LOSS',
 
   'panel.settings.title': 'Settings',
-  'settings.theme': 'Theme',
-  'settings.theme.dark': 'Dark',
-  'settings.theme.light': 'Light',
-  'settings.theme.system': 'System',
   'settings.lang': 'Language',
   'settings.lang.fr': 'Français',
   'settings.lang.en': 'English',
@@ -176,27 +162,67 @@ const en: Dict = {
   'settings.logout': 'Sign out',
   'settings.loggedOut': 'Signed out.',
   'settings.connecting': 'Signing in…',
-  'settings.reconnected': 'Signed in as ',
 
   'anon.title': 'Sign in required',
   'anon.text':
     'Sign in with your 42 account to challenge your peers, track your ELO and climb the ladder.',
   'anon.cta': 'Sign in with 42',
-  'anon.welcome': 'Welcome ',
+  'anon.welcome': 'Welcome',
 
   'common.loading': 'Loading…',
-  'common.now': 'now',
-  'common.justNow': 'just now',
-  'common.minute1': '1 minute',
-  'common.hour1': '1 hour',
-  'common.in': 'in ',
+  'common.in': 'in',
   'common.ago': '',
   'common.toi': 'you',
 };
 
-const dicts: Record<string, Dict> = { fr, en };
+const DICTS: Record<Lang, Dict> = { fr, en };
+const LOCALES: Record<Lang, string> = { fr: 'fr-FR', en: 'en-GB' };
 
-export function t(key: string): string {
-  const dict = dicts[currentLang()] ?? fr;
-  return dict[key] ?? fr[key] ?? key;
+function readInitialLang(): Lang {
+  const stored = getStoredLang();
+  if (stored === 'fr' || stored === 'en') return stored;
+  if (typeof navigator !== 'undefined' && navigator.language.startsWith('en')) {
+    return 'en';
+  }
+  return 'fr';
+}
+
+interface I18nContextValue {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: (key: string) => string;
+  locale: string;
+}
+
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(() => readInitialLang());
+
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
+    setStoredLang(next);
+  }, []);
+
+  const value = useMemo<I18nContextValue>(() => {
+    const dict = DICTS[lang];
+    return {
+      lang,
+      setLang,
+      t: (key) => dict[key] ?? fr[key] ?? key,
+      locale: LOCALES[lang],
+    };
+  }, [lang, setLang]);
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n(): I18nContextValue {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error('useI18n must be used within <I18nProvider>');
+  return ctx;
+}
+
+export function useT(): (key: string) => string {
+  return useI18n().t;
 }

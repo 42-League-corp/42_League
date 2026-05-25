@@ -40,6 +40,7 @@ interface FtMeResponse {
 interface OauthStateCookie {
   nonce: string;
   ext?: string;
+  web?: string;
 }
 
 function isValidExtRedirect(url: string): boolean {
@@ -51,17 +52,37 @@ function isValidExtRedirect(url: string): boolean {
   }
 }
 
+export function getAllowedWebOrigins(): string[] {
+  const raw = process.env.WEB_APP_URLS ?? 'http://localhost:5173';
+  return raw
+    .split(',')
+    .map((s) => s.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+}
+
+function isValidWebRedirect(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return getAllowedWebOrigins().includes(u.origin);
+  } catch {
+    return false;
+  }
+}
+
 export function createAuthRouter(
   onLogin: (profile: FtProfile) => Promise<void> | void,
 ) {
   const router = new Hono();
 
-  async function startOauth(c: Context, ext?: string) {
+  async function startOauth(
+    c: Context,
+    opts: { ext?: string; web?: string } = {},
+  ) {
     const uid = requireEnv('FT_OAUTH_UID');
     const redirectUri = requireEnv('FT_OAUTH_REDIRECT_URI');
     const secret = requireEnv('SESSION_SECRET');
     const nonce = randomBytes(16).toString('hex');
-    const state: OauthStateCookie = ext ? { nonce, ext } : { nonce };
+    const state: OauthStateCookie = { nonce, ...opts };
 
     await setSignedCookie(c, STATE_COOKIE, JSON.stringify(state), secret, {
       maxAge: STATE_MAX_AGE,
@@ -89,7 +110,17 @@ export function createAuthRouter(
         message: 'ext_redirect must be a https://*.chromiumapp.org URL',
       });
     }
-    return startOauth(c, ext);
+    return startOauth(c, { ext });
+  });
+
+  router.get('/web/login', (c) => {
+    const web = c.req.query('return_to');
+    if (!web || !isValidWebRedirect(web)) {
+      throw new HTTPException(400, {
+        message: `return_to must match one of WEB_APP_URLS (${getAllowedWebOrigins().join(', ') || 'none configured'})`,
+      });
+    }
+    return startOauth(c, { web });
   });
 
   router.get('/callback', async (c) => {
@@ -166,8 +197,9 @@ export function createAuthRouter(
 
     if (!isWhitelisted(profile.login)) {
       deleteCookie(c, STATE_COOKIE, { path: '/' });
-      if (stored.ext) {
-        const redirect = new URL(stored.ext);
+      const externalReturn = stored.ext ?? stored.web;
+      if (externalReturn) {
+        const redirect = new URL(externalReturn);
         redirect.searchParams.set('error', 'not_whitelisted');
         redirect.searchParams.set('login', profile.login);
         return c.redirect(redirect.toString());
@@ -191,9 +223,10 @@ p{line-height:1.5;color:#95a3b8;font-size:13px}
 
     await onLogin(profile);
 
-    if (stored.ext) {
+    const externalReturn = stored.ext ?? stored.web;
+    if (externalReturn) {
       const leagueToken = issueToken(profile.login, secret);
-      const redirect = new URL(stored.ext);
+      const redirect = new URL(externalReturn);
       redirect.searchParams.set('token', leagueToken);
       redirect.searchParams.set('login', profile.login);
       if (profile.campus) redirect.searchParams.set('campus', profile.campus);

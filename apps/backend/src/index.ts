@@ -18,7 +18,12 @@ import {
   shouldCountForElo,
 } from '@42-league/shared';
 import { prisma } from './db.js';
-import { createAuthRouter, getSessionLogin, type FtProfile } from './auth.js';
+import {
+  createAuthRouter,
+  getAllowedWebOrigins,
+  getSessionLogin,
+  type FtProfile,
+} from './auth.js';
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
 import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
@@ -61,6 +66,8 @@ async function getCurrentLogin(c: Context): Promise<string> {
   });
 }
 
+const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
+
 const app = new Hono();
 app.use(logger());
 app.use(
@@ -72,6 +79,7 @@ app.use(
       if (origin.endsWith('.intra.42.fr')) return origin;
       if (origin.startsWith('chrome-extension://')) return origin;
       if (origin.startsWith('moz-extension://')) return origin;
+      if (WEB_APP_ORIGINS.has(origin)) return origin;
       return null;
     },
     allowMethods: ['GET', 'POST', 'OPTIONS'],

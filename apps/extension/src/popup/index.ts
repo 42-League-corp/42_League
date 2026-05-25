@@ -1,55 +1,27 @@
 import { api, AuthError } from '../lib/api.js';
 import { authBridge } from '../lib/auth-bridge.js';
 
+const WEB_APP_URL =
+  (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
+  'http://localhost:5173';
+
 const stateEl = document.getElementById('state') as HTMLDivElement;
 const avatarEl = document.getElementById('avatar') as HTMLDivElement;
 const loginLabel = document.getElementById('login-label') as HTMLDivElement;
 const eloLabel = document.getElementById('elo-label') as HTMLDivElement;
-const actionBtn = document.getElementById('action') as HTMLButtonElement;
-const openOptions = document.getElementById('open-options') as HTMLButtonElement;
-const openIntra = document.getElementById('open-intra') as HTMLButtonElement;
-const openDefis = document.getElementById('open-defis') as HTMLButtonElement;
-const openLeaderboard = document.getElementById('open-leaderboard') as HTMLButtonElement;
+const openWebBtn = document.getElementById('open-web') as HTMLButtonElement;
+const authActionBtn = document.getElementById('auth-action') as HTMLButtonElement;
+const openIntraBtn = document.getElementById('open-intra') as HTMLButtonElement;
 const errorEl = document.getElementById('error') as HTMLDivElement;
+const urlLabel = document.getElementById('url-label') as HTMLElement;
+
+urlLabel.textContent = WEB_APP_URL.replace(/^https?:\/\//, '');
 
 type Mode = 'anon' | 'connecting' | 'connected';
 
-function setMode(mode: Mode) {
-  stateEl.className = `auth-state ${mode}`;
+function setMode(m: Mode) {
+  stateEl.className = `auth-state ${m}`;
 }
-
-function setAction(label: string, opts: { busy?: boolean; onClick?: () => void } = {}) {
-  actionBtn.innerHTML = '';
-  actionBtn.disabled = !!opts.busy;
-  if (opts.busy) {
-    const s = document.createElement('span');
-    s.className = 'spinner';
-    actionBtn.appendChild(s);
-  }
-  actionBtn.appendChild(document.createTextNode(label));
-  actionBtn.onclick = opts.onClick ?? null;
-}
-
-async function openOptionsAt(anchor: string) {
-  const url = chrome.runtime.getURL(`src/options/index.html#${anchor}`);
-  const tabs = await chrome.tabs.query({
-    url: chrome.runtime.getURL('src/options/index.html*'),
-  });
-  const existing = tabs[0];
-  if (existing && existing.id != null) {
-    await chrome.tabs.update(existing.id, { active: true, url });
-    if (existing.windowId != null) {
-      await chrome.windows.update(existing.windowId, { focused: true });
-    }
-  } else {
-    await chrome.tabs.create({ url });
-  }
-}
-
-openOptions.onclick = () => chrome.runtime.openOptionsPage();
-openIntra.onclick = () => chrome.tabs.create({ url: 'https://profile.intra.42.fr/' });
-openDefis.onclick = () => openOptionsAt('defis');
-openLeaderboard.onclick = () => openOptionsAt('leaderboard');
 
 function setAvatar(login: string | null, imageUrl: string | null) {
   avatarEl.innerHTML = '';
@@ -57,7 +29,6 @@ function setAvatar(login: string | null, imageUrl: string | null) {
     const img = document.createElement('img');
     img.src = imageUrl;
     img.alt = login ?? '';
-    img.style.cssText = 'width:100%;height:100%;border-radius:50%;object-fit:cover;display:block';
     img.onerror = () => {
       avatarEl.textContent = (login?.[0] ?? '?').toUpperCase();
     };
@@ -67,17 +38,63 @@ function setAvatar(login: string | null, imageUrl: string | null) {
   }
 }
 
+function setAuthAction(label: string, onClick: () => void, danger = false) {
+  authActionBtn.innerHTML = '';
+  authActionBtn.className = danger ? 'danger' : 'ghost';
+  authActionBtn.disabled = false;
+  authActionBtn.appendChild(document.createTextNode(label));
+  authActionBtn.onclick = onClick;
+}
+
+function setAuthBusy(label: string) {
+  authActionBtn.innerHTML = '';
+  authActionBtn.className = 'ghost';
+  authActionBtn.disabled = true;
+  const s = document.createElement('span');
+  s.className = 'spinner';
+  authActionBtn.appendChild(s);
+  authActionBtn.appendChild(document.createTextNode(' ' + label));
+}
+
+async function openWebApp() {
+  const matchPattern = `${WEB_APP_URL}/*`;
+  try {
+    const tabs = await chrome.tabs.query({ url: matchPattern });
+    const existing = tabs[0];
+    if (existing?.id != null) {
+      await chrome.tabs.update(existing.id, { active: true });
+      if (existing.windowId != null) {
+        await chrome.windows.update(existing.windowId, { focused: true });
+      }
+    } else {
+      await chrome.tabs.create({ url: WEB_APP_URL });
+    }
+    window.close();
+  } catch {
+    await chrome.tabs.create({ url: WEB_APP_URL });
+    window.close();
+  }
+}
+
+openWebBtn.onclick = openWebApp;
+openIntraBtn.onclick = async () => {
+  await chrome.tabs.create({ url: 'https://profile.intra.42.fr/' });
+  window.close();
+};
+
 async function showConnected(login: string) {
   setMode('connected');
   setAvatar(login, null);
   loginLabel.textContent = login;
   eloLabel.style.display = 'none';
-  setAction('Se déconnecter', {
-    onClick: async () => {
+  setAuthAction(
+    'Se déconnecter',
+    async () => {
       await authBridge.logout();
       await render();
     },
-  });
+    true,
+  );
   try {
     const me = await api.me();
     setAvatar(login, me.user?.imageUrl ?? null);
@@ -86,7 +103,7 @@ async function showConnected(login: string) {
       eloLabel.style.display = 'block';
     }
   } catch {
-    // ignore — UI still shows the logged-in state
+    /* still show logged-in state even if /me fails */
   }
 }
 
@@ -96,7 +113,7 @@ function showAnon() {
   avatarEl.textContent = '42';
   loginLabel.textContent = 'Non connecté';
   eloLabel.style.display = 'none';
-  setAction('Se connecter avec 42', { onClick: startLogin });
+  setAuthAction('Se connecter', startLogin);
 }
 
 function showConnecting() {
@@ -105,7 +122,7 @@ function showConnecting() {
   avatarEl.textContent = '42';
   loginLabel.textContent = 'Connexion en cours…';
   eloLabel.style.display = 'none';
-  setAction('Connexion…', { busy: true });
+  setAuthBusy('Connexion…');
 }
 
 async function startLogin() {
@@ -143,4 +160,4 @@ async function render() {
   }
 }
 
-render();
+void render();

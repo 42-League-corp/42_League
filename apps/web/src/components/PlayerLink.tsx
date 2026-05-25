@@ -1,0 +1,19 @@
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+
+interface PlayerLinkProps {
+  login: string;
+  children: ReactNode;
+  className?: string;
+}
+
+export function PlayerLink({ login, children, className = '' }: PlayerLinkProps) {
+  return (
+    <Link
+      to={`/joueur/${encodeURIComponent(login)}`}
+      className={`inline-flex items-center gap-2 text-text hover:text-teal transition ${className}`}
+    >
+      {children}
+    </Link>
+  );
+}
