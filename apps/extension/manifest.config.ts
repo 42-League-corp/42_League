@@ -36,6 +36,15 @@ export default defineManifest({
     'http://localhost:3000/*',
     'http://localhost:5173/*',
   ],
+  web_accessible_resources: [
+    {
+      resources: [
+        'icons/baby-raccourci-logo-intra.png',
+        'icons/baby-raccourci-logo-intra-hover.png'
+      ],
+      matches: ['https://intra.42.fr/*', 'https://*.intra.42.fr/*'],
+    },
+  ],
   content_scripts: [
     {
       matches: ['https://intra.42.fr/*', 'https://*.intra.42.fr/*'],

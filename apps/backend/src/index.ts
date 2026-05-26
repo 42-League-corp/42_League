@@ -70,6 +70,18 @@ const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
 const app = new Hono();
 app.use(logger());
+app.use('*', async (c, next) => {
+  await next();
+  // Permet à Chrome de valider les requêtes vers localhost (loopback)
+  if (c.req.header('Access-Control-Request-Private-Network')) {
+    c.header('Access-Control-Allow-Private-Network', 'true');
+  }
+});
+app.use('*', async (c, next) => {
+  // On autorise explicitement Chrome à communiquer avec localhost depuis l'Intra
+  c.header('Access-Control-Allow-Private-Network', 'true');
+  await next();
+});
 app.use(
   '*',
   cors({

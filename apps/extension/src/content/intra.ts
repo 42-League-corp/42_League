@@ -460,7 +460,6 @@ function renderPendingLine(p: PendingMatch): HTMLElement {
   });
 
   if (!youConfirm) {
-    // Declarer side — just shows the declared scores + wait
     const winnerScore = Math.max(p.scoreDeclarer, p.scoreOpponent);
     const loserScore = Math.min(p.scoreDeclarer, p.scoreOpponent);
     appendScores(line, winnerScore, loserScore);
@@ -473,7 +472,6 @@ function renderPendingLine(p: PendingMatch): HTMLElement {
     return line;
   }
 
-  // Opponent side — bilateral re-entry of score
   const draft =
     draftConfirmScores.get(p.id) ??
     (() => {
@@ -683,21 +681,128 @@ async function refresh() {
   }
 }
 
-async function bootstrap() {
-  const status = await authBridge.status().catch(() => ({
-    authenticated: false,
-    login: null as string | null,
-  }));
-  if (!status.authenticated) return;
+// ==========================================
+// CODE INJECTION LOGO BABY INTRA
+// ==========================================
 
-  await refresh();
-  pollTimer = setInterval(refresh, REFRESH_MS);
+
+function startLogoInjector() {
+  const WRAP_ID = 'league-42-sidebar-wrap';
+  const LINK_ID = 'league-42-sidebar-link';
+  const STYLE_ID = 'league-42-sidebar-style';
+
+  setInterval(() => {
+    // 1. Si on l'a déjà injecté, on s'arrête
+    if (document.getElementById(WRAP_ID)) return;
+
+    // 2. On cherche la barre latérale
+    const sidebar = document.querySelector('.main-left-navbar');
+    if (!sidebar) return; 
+
+    // 3. On cherche la liste des menus
+    const listContainer = sidebar.querySelector('.main-left-menu') || sidebar.querySelector('ul');
+    const container = listContainer || sidebar;
+
+    const defaultIconUrl = chrome.runtime.getURL('icons/baby-raccourci-logo-intra.png');
+    const hoverIconUrl = chrome.runtime.getURL('icons/baby-raccourci-logo-intra-hover.png');
+
+    // 4. Style pour le centrage et la taille
+    if (!document.getElementById(STYLE_ID)) {
+      const style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.textContent = `
+        #${WRAP_ID} {
+          display: block;
+          width: 100%;
+          text-align: center;
+          padding: 0;
+        }
+        #${LINK_ID} {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 55px; 
+          width: 100%;
+          cursor: pointer;
+          text-decoration: none;
+          transition: background-color 0.2s;
+        }
+        #${LINK_ID}:hover {
+          background-color: rgba(255, 255, 255, 0.05);
+        }
+        #league-42-icon {
+          width: 34px; 
+          height: 34px;
+          margin: 0 auto; 
+          background-image: url('${defaultIconUrl}');
+          background-size: contain;
+          background-repeat: no-repeat;
+          background-position: center;
+          transition: transform 0.1s ease, background-image 0.1s ease;
+        }
+        #${LINK_ID}:hover #league-42-icon {
+          background-image: url('${hoverIconUrl}');
+          transform: scale(1.1); 
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // 5. Création des balises
+    const a = document.createElement('a');
+    a.id = LINK_ID;
+    a.href = 'http://localhost:5173'; // ⚠️ Remplacer par ton URL
+    a.target = '_blank';
+    a.rel = 'noreferrer noopener';
+    a.title = 'Aller sur 42 League';
+
+    const iconDiv = document.createElement('div');
+    iconDiv.id = 'league-42-icon';
+    a.appendChild(iconDiv);
+
+    // 6. L'ASTUCE EST ICI 👇
+    if (listContainer) {
+      const li = document.createElement('li');
+      li.id = WRAP_ID;
+      li.appendChild(a);
+      
+      // On insère notre logo en 3ème position (index 2)
+      // Ça le mettra en haut, juste avec les logos principaux !
+      if (listContainer.children.length >= 2) {
+        listContainer.insertBefore(li, listContainer.children[2]);
+      } else {
+        listContainer.appendChild(li);
+      }
+    } else {
+      a.id = WRAP_ID;
+      container.appendChild(a);
+    }
+
+  }, 1000);
+}
+
+// ==========================================
+// BOOTSTRAP DE L'EXTENSION
+// ==========================================
+async function bootstrap() {
+  // Lancement du logo !
+  startLogoInjector();
 
   const observer = new MutationObserver(() => {
     const block = document.getElementById(BLOCK_ID);
     if (!block || !block.isConnected) paint();
   });
   observer.observe(document.body, { childList: true, subtree: true });
+
+  const status = await authBridge.status().catch(() => ({
+    authenticated: false,
+    login: null as string | null,
+  }));
+  
+  if (!status.authenticated) return;
+
+  await refresh();
+  pollTimer = setInterval(refresh, REFRESH_MS);
 }
 
 bootstrap().catch((err) => console.error('[42 League] bootstrap failed', err));

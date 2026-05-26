@@ -194,42 +194,6 @@ function injectSkill(opts: {
   card.append(wrap);
 }
 
-async function bootstrap() {
-  const login = extractLogin();
-  if (!login) return;
-  try {
-    const [profile, lb] = await Promise.all([
-      api.userProfile(login),
-      api.leaderboard(),
-    ]);
-    injectLink(login, profile.user.elo);
-    if (profile.rank != null && lb.length > 0) {
-      injectSkill({
-        rank: profile.rank,
-        total: lb.length,
-        wins: profile.wins,
-        losses: profile.losses,
-        title: profile.user.title,
-      });
-    }
-    // re-inject skill after a delay in case intra rerenders the Skills card
-    setTimeout(() => {
-      if (!document.getElementById(SKILL_ID) && profile.rank != null) {
-        injectSkill({
-          rank: profile.rank,
-          total: lb.length,
-          wins: profile.wins,
-          losses: profile.losses,
-          title: profile.user.title,
-        });
-      }
-    }, 1500);
-  } catch (err) {
-    if (err instanceof AuthError) return;
-    // 404 = user not in league: silently skip
-  }
-}
-
 bootstrap().catch(() => {});
 
 // Re-run on intra's pjax/turbolinks navigation
