@@ -15,7 +15,7 @@ export const WHITELIST_DISABLED = false;
 export const WHITELIST: string[] = [
   'throbert',
   'nithomas',
-  'rbardet',
+  'rbardet-',
   'jubrouss',
   'abidaux',
   'garside',
