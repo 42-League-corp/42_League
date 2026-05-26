@@ -104,6 +104,7 @@ export function DefisPage() {
       <DeclareGameSection
         others={others}
         recentOpponents={recentOpponents}
+        opponentCounts={opponentCounts}
         myLogin={myLogin}
         onDone={refresh}
       />
@@ -211,11 +212,13 @@ export function DefisPage() {
 function DeclareGameSection({
   others,
   recentOpponents,
+  opponentCounts,
   myLogin,
   onDone,
 }: {
   others: LeaderboardEntry[];
   recentOpponents: LeaderboardEntry[];
+  opponentCounts: Record<string, number>;
   myLogin: string | undefined;
   onDone: () => Promise<void>;
 }) {
@@ -274,7 +277,7 @@ function DeclareGameSection({
         </button>
       ) : (
         <div
-          className="relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md animate-pop min-h-[420px] flex flex-col"
+          className="relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md animate-pop min-h-[460px] flex flex-col"
           style={{
             backgroundImage:
               'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,217,220,0.15), transparent 70%)',
@@ -300,6 +303,7 @@ function DeclareGameSection({
             <PlayerSearch
               players={others}
               recentPlayers={recentOpponents}
+              opponentCounts={opponentCounts}
               selected={opponent}
               onSelect={handleOpponentSelect}
               onClear={() => { setOpponent(null); setIWon(null); }}
@@ -421,7 +425,13 @@ function OutcomeButton({
   );
 }
 
-// ─── Abacus slider (Hi-Tech Magnetic) ─────────────────────────────────────────
+// ─── Abacus slider ────────────────────────────────────────────────────────────
+//
+// Foosball-style score rod: one 3D bead threaded on a metallic rod with tick
+// detents under it. The bead is rendered at the snapped integer position; CSS
+// transition with spring easing produces the "magnetic" feel when the bead
+// glides between detents as the user drags. During a drag the transition is
+// shortened so the bead tracks the pointer in real time.
 
 function AbacusSlider({
   value,
@@ -436,13 +446,14 @@ function AbacusSlider({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const beads = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const [dragging, setDragging] = useState(false);
+  const ticks = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
   const valueFromPointer = useCallback((clientX: number) => {
     const track = trackRef.current;
     if (!track) return value;
     const rect = track.getBoundingClientRect();
-    const padding = 24; // matches px-6 below
+    const padding = 28; // matches px-7 below
     const usable = rect.width - padding * 2;
     const x = Math.max(0, Math.min(usable, clientX - rect.left - padding));
     const ratio = usable <= 0 ? 0 : x / usable;
@@ -451,6 +462,7 @@ function AbacusSlider({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = true;
+    setDragging(true);
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
     const next = valueFromPointer(e.clientX);
     if (next !== value) onChange(next);
@@ -464,84 +476,161 @@ function AbacusSlider({
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = false;
+    setDragging(false);
     try { (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
   };
+
+  const ratio = (value - min) / (max - min);
+  const isNeg = value < 0;
+  const isZero = value === 0;
+
+  // Bead palette
+  const beadGradient = isNeg
+    ? 'radial-gradient(circle at 32% 28%, #ffd5dd 0%, #ff7a91 28%, #ff3b5c 55%, #8a0a23 100%)'
+    : isZero
+      ? 'radial-gradient(circle at 32% 28%, #ffffff 0%, #d8e0eb 30%, #8d9aae 60%, #3a4459 100%)'
+      : 'radial-gradient(circle at 32% 28%, #d6ffff 0%, #7af0f2 25%, #00d9dc 55%, #014a4c 100%)';
+
+  const beadShadow = isNeg
+    ? `0 0 ${dragging ? 30 : 18}px rgba(255,59,92,${dragging ? 0.65 : 0.45}), 0 8px 14px rgba(0,0,0,0.55), inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.35)`
+    : isZero
+      ? `0 0 ${dragging ? 20 : 12}px rgba(150,164,180,${dragging ? 0.4 : 0.25}), 0 8px 14px rgba(0,0,0,0.55), inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.45)`
+      : `0 0 ${dragging ? 30 : 18}px rgba(0,217,220,${dragging ? 0.65 : 0.45}), 0 8px 14px rgba(0,0,0,0.55), inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.35)`;
 
   return (
     <div className="select-none">
       {/* Big readout */}
-      <div className="flex items-end justify-center gap-2 mb-6 h-16">
+      <div className="flex items-end justify-center mb-4 h-14">
         <span
           key={value}
-          className={`text-6xl font-black tracking-tighter leading-none animate-bead-pulse drop-shadow-sm ${
-            value < 0 ? 'text-red' : value === 0 ? 'text-muted-2' : 'text-teal'
+          className={`text-6xl font-black tracking-tighter leading-none animate-bead-pulse ${
+            isNeg ? 'text-red' : isZero ? 'text-muted-2' : 'text-teal'
           }`}
+          style={{
+            textShadow: isNeg
+              ? '0 0 24px rgba(255,59,92,0.35)'
+              : isZero
+                ? 'none'
+                : '0 0 24px rgba(0,217,220,0.35)',
+          }}
         >
           {value}
         </span>
       </div>
 
-      {/* Track */}
+      {/* Rod + bead */}
       <div
         ref={trackRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative h-12 px-6 cursor-pointer touch-none group"
+        className={`relative h-16 px-7 touch-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         role="slider"
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
       >
-        {/* Hi-Tech Track Line (Rail) */}
-        <div className="absolute top-1/2 left-4 right-4 h-2.5 -translate-y-1/2 rounded-full bg-gradient-to-b from-bg-2 to-bg-0 shadow-[inset_0_1px_4px_rgba(0,0,0,0.4)] border border-border/40" />
-
-        {/* center marker (0) */}
+        {/* Metallic rod */}
         <div
-          className="absolute top-1/2 w-1 h-5 -translate-y-1/2 bg-muted/40 rounded-full pointer-events-none"
-          style={{ left: `calc(24px + ${(0 - min) / (max - min)} * (100% - 48px))` }}
+          className="absolute top-1/2 left-7 right-7 h-[6px] -translate-y-1/2 rounded-full"
+          style={{
+            background:
+              'linear-gradient(to bottom, #0c1118 0%, #2a3548 18%, #6b7689 45%, #b0bccd 52%, #6b7689 60%, #1f2737 82%, #0a0e15 100%)',
+            boxShadow:
+              '0 1px 0 rgba(255,255,255,0.18) inset, 0 -1px 0 rgba(0,0,0,0.6) inset, 0 8px 14px rgba(0,0,0,0.55), 0 0 22px rgba(0,217,220,0.08)',
+          }}
         />
 
-        {/* beads */}
-        {beads.map((b) => {
-          const ratio = (b - min) / (max - min);
-          const active = b === value;
-          const isZero = b === 0;
-          
+        {/* End caps for the rod */}
+        <div
+          className="absolute top-1/2 left-6 w-2 h-3 -translate-y-1/2 rounded-sm"
+          style={{
+            background: 'linear-gradient(to bottom, #243044, #0c1118 60%, #1a2233)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.5)',
+          }}
+        />
+        <div
+          className="absolute top-1/2 right-6 w-2 h-3 -translate-y-1/2 rounded-sm"
+          style={{
+            background: 'linear-gradient(to bottom, #243044, #0c1118 60%, #1a2233)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.5)',
+          }}
+        />
+
+        {/* Tick detents (every integer position) */}
+        {ticks.map((t) => {
+          const tr = (t - min) / (max - min);
+          const isMajor = t === min || t === max || t === 0;
+          const isNear = Math.abs(t - value) <= 1;
           return (
             <div
-              key={b}
-              onClick={(e) => { e.stopPropagation(); onChange(b); }}
-              className={`absolute top-1/2 transition-all duration-200 ease-out cursor-pointer flex items-center justify-center ${
-                active ? 'z-20' : 'z-10 hover:scale-125'
-              }`}
-              style={{
-                left: `calc(24px + ${ratio} * (100% - 48px))`,
-                width: active ? 32 : 12,
-                height: active ? 32 : 12,
-                transform: 'translate(-50%, -50%)',
-              }}
-              aria-label={`Score ${b}`}
+              key={t}
+              onClick={(e) => { e.stopPropagation(); onChange(t); }}
+              className="absolute top-1/2 -translate-x-1/2 cursor-pointer"
+              style={{ left: `calc(28px + ${tr} * (100% - 56px))`, transform: 'translate(-50%, -50%)' }}
+              aria-label={`Score ${t}`}
             >
-              <div className={`w-full h-full rounded-full transition-all duration-200 ${
-                active
-                  ? b < 0
-                    ? 'bg-gradient-to-br from-[#ff5a75] to-[#d92645] shadow-[0_0_16px_rgba(255,90,117,0.6)] border border-red/50 scale-100'
-                    : 'bg-gradient-to-br from-[#00f0f5] to-[#00b3b8] shadow-[0_0_16px_rgba(0,240,245,0.6)] border border-teal/50 scale-100'
-                  : isZero
-                    ? 'bg-muted-2 shadow-sm scale-75'
-                    : 'bg-border hover:bg-muted shadow-sm scale-75'
-              }`} />
+              <div
+                className={`mx-auto rounded-full transition-all duration-200 ${
+                  isMajor
+                    ? 'w-[3px] h-5 bg-muted-2/70'
+                    : isNear
+                      ? 'w-[2px] h-3.5 bg-muted/80'
+                      : 'w-[2px] h-2.5 bg-muted/40'
+                }`}
+              />
             </div>
           );
         })}
+
+        {/* Bead (3D sphere threaded on the rod) */}
+        <div
+          className="absolute top-1/2 pointer-events-none z-10"
+          style={{
+            left: `calc(28px + ${ratio} * (100% - 56px))`,
+            transform: 'translate(-50%, -50%)',
+            transition: dragging
+              ? 'left 90ms cubic-bezier(0.22, 1, 0.36, 1)'
+              : 'left 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+        >
+          {/* Outer halo while dragging */}
+          <div
+            className={`absolute inset-0 rounded-full transition-all duration-300 ${dragging ? 'scale-150 opacity-100' : 'scale-100 opacity-0'}`}
+            style={{
+              background: isNeg
+                ? 'radial-gradient(circle, rgba(255,59,92,0.25) 0%, transparent 70%)'
+                : isZero
+                  ? 'radial-gradient(circle, rgba(150,164,180,0.2) 0%, transparent 70%)'
+                  : 'radial-gradient(circle, rgba(0,217,220,0.25) 0%, transparent 70%)',
+            }}
+          />
+          {/* Bead body */}
+          <div
+            className={`relative w-11 h-11 rounded-full transition-transform duration-150 ${dragging ? 'scale-[1.08]' : 'scale-100'}`}
+            style={{ background: beadGradient, boxShadow: beadShadow }}
+          >
+            {/* Specular highlight */}
+            <div
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                top: 5,
+                left: 7,
+                width: 12,
+                height: 8,
+                background: 'radial-gradient(ellipse, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 70%)',
+                filter: 'blur(0.5px)',
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Axis labels */}
-      <div className="flex justify-between text-[11px] text-muted mt-2 px-2 font-mono font-bold opacity-60">
+      <div className="flex justify-between text-[10px] text-muted mt-2 px-5 font-mono font-bold opacity-70 tracking-wider">
         <span>{min}</span>
-        <span>0</span>
+        <span className={isZero ? 'text-muted-2' : ''}>0</span>
         <span>{max}</span>
       </div>
     </div>
@@ -553,12 +642,14 @@ function AbacusSlider({
 function PlayerSearch({
   players,
   recentPlayers,
+  opponentCounts,
   selected,
   onSelect,
   onClear,
 }: {
   players: LeaderboardEntry[];
   recentPlayers: LeaderboardEntry[];
+  opponentCounts: Record<string, number>;
   selected: LeaderboardEntry | null;
   onSelect: (p: LeaderboardEntry) => void;
   onClear: () => void;
@@ -569,10 +660,19 @@ function PlayerSearch({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // If query is empty, show all recent players. Otherwise, filter all players and limit to 4.
-  const filtered = query.trim()
-    ? players.filter((p) => p.login.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
-    : recentPlayers;
+  // Default view (no query): recent opponents first (sorted by play count desc),
+  // then everyone else by leaderboard rank. Fully scrollable.
+  // With a query: filter the full pool of players by login.
+  const defaultList: LeaderboardEntry[] = (() => {
+    const recentLogins = new Set(recentPlayers.map((p) => p.login));
+    const others = players.filter((p) => !recentLogins.has(p.login));
+    return [...recentPlayers, ...others];
+  })();
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? players.filter((p) => p.login.toLowerCase().includes(q))
+    : defaultList;
 
   const commit = useCallback((p: LeaderboardEntry) => {
     onSelect(p);
@@ -634,6 +734,8 @@ function PlayerSearch({
     );
   }
 
+  const showingRecents = !q && recentPlayers.length > 0;
+
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
@@ -652,42 +754,66 @@ function PlayerSearch({
 
       {open && filtered.length > 0 && (
         <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl overflow-hidden animate-pop">
-          {!query.trim() && recentPlayers.length > 0 && (
-            <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted font-bold bg-bg-2/50 border-b border-border">
-              Adversaires récents
+          {showingRecents && (
+            <div className="flex items-center justify-between px-4 py-2 bg-bg-2/50 border-b border-border">
+              <span className="text-[10px] uppercase tracking-wider text-muted font-bold">
+                Tes adversaires
+              </span>
+              <span className="text-[10px] text-muted-2 font-mono">
+                {recentPlayers.length} joué·s · scrolle pour voir tous
+              </span>
             </div>
           )}
-          <div className="max-h-60 overflow-y-auto custom-scrollbar">
-            {filtered.map((p, i) => (
-              <button
-                key={p.login}
-                onMouseDown={(e) => { e.preventDefault(); commit(p); }}
-                onMouseEnter={() => setActiveIdx(i)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  i === activeIdx ? 'bg-teal/10 text-text-strong border-l-4 border-teal' : 'hover:bg-bg-2 text-muted-2 border-l-4 border-transparent'
-                }`}
-              >
-                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
-                  {p.imageUrl ? (
-                    <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
-                      {p.login[0]?.toUpperCase()}
+          <div className="max-h-72 overflow-y-auto custom-scrollbar">
+            {filtered.map((p, i) => {
+              const count = opponentCounts[p.login] ?? 0;
+              const isPlayed = count > 0;
+              return (
+                <button
+                  key={p.login}
+                  onMouseDown={(e) => { e.preventDefault(); commit(p); }}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                    i === activeIdx
+                      ? 'bg-teal/10 text-text-strong border-l-2 border-teal'
+                      : 'hover:bg-bg-2 text-muted-2 border-l-2 border-transparent'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
+                        {p.login[0]?.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold truncate">
+                      <HighlightMatch text={p.login} query={query} />
                     </div>
-                  )}
-                </div>
-                <span className="flex-1 text-sm font-bold">
-                  <HighlightMatch text={p.login} query={query} />
-                </span>
-                <span className="text-xs text-teal font-extrabold">{p.elo}</span>
-                <span className="text-[10px] text-muted font-medium">#{p.rank}</span>
-              </button>
-            ))}
+                    <div className="text-[10px] text-muted font-medium">
+                      {isPlayed ? (
+                        <span className="text-teal/80">
+                          {count} game{count > 1 ? 's' : ''} jouée{count > 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span>Jamais joué</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                    <span className="text-xs text-teal font-extrabold leading-none">{p.elo}</span>
+                    <span className="text-[9px] text-muted font-medium leading-none">#{p.rank}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {open && query.length > 0 && filtered.length === 0 && (
+      {open && q.length > 0 && filtered.length === 0 && (
         <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl px-4 py-4 text-sm text-muted font-medium text-center animate-pop">
           Aucun joueur trouvé
         </div>
