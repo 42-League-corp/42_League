@@ -45,6 +45,11 @@ export default {
           '60%': { transform: 'scale(1.12)', opacity: '1' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
+        'send-away': {
+          '0%':   { opacity: '1', transform: 'perspective(700px) rotateX(0deg) rotateY(0deg) translateY(0px) scale(1)' },
+          '30%':  { opacity: '1', transform: 'perspective(700px) rotateX(3deg) rotateY(-6deg) translateY(-6px) scale(1.02)' },
+          '100%': { opacity: '0', transform: 'perspective(700px) rotateX(-8deg) rotateY(14deg) translateY(-28px) scale(0.87)' },
+        },
         spin: {
           to: { transform: 'rotate(360deg)' },
         },
@@ -54,6 +59,7 @@ export default {
         pop: 'pop 160ms ease-out',
         'slide-down': 'slide-down 220ms cubic-bezier(0.16, 1, 0.3, 1)',
         'bead-pulse': 'bead-pulse 180ms ease-out',
+        'send-away': 'send-away 280ms cubic-bezier(0.4, 0, 0.8, 0.6) forwards',
         spin: 'spin 0.7s linear infinite',
       },
     },

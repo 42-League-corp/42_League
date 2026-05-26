@@ -228,11 +228,13 @@ function DeclareGameSection({
   const [iWon, setIWon] = useState<boolean | null>(null);
   const [loserScore, setLoserScore] = useState<number>(0);
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const reset = () => {
     setOpponent(null);
     setIWon(null);
     setLoserScore(0);
+    setSending(false);
   };
 
   const handleOpponentSelect = (u: LeaderboardEntry) => {
@@ -277,7 +279,7 @@ function DeclareGameSection({
         </button>
       ) : (
         <div
-          className="relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md animate-pop min-h-[460px] flex flex-col"
+          className={`relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md min-h-[460px] flex flex-col ${sending ? 'animate-send-away' : 'animate-pop'}`}
           style={{
             backgroundImage:
               'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,217,220,0.15), transparent 70%)',
@@ -374,7 +376,7 @@ function DeclareGameSection({
                 <Button
                   size="md"
                   loading={busy}
-                  onClick={handleSubmit}
+                  onClick={() => { setSending(true); setTimeout(handleSubmit, 140); }}
                   className="w-full py-3 text-sm font-bold shadow-lg"
                 >
                   Envoyer la déclaration

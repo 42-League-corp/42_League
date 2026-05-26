@@ -40,7 +40,8 @@
       "Bash(cd \"/mnt/wsl/instances/ubuntu/home/adrien/projects/42_League/apps/web\")",
       "Bash(ls /mnt/wsl/)",
       "Bash(wsl ls *)",
-      "PowerShell(wsl -d ubuntu --cd /home/adrien/projects/42_League/apps/web -- npx tsc -b --noEmit 2>&1)"
+      "PowerShell(wsl -d ubuntu --cd /home/adrien/projects/42_League/apps/web -- npx tsc -b --noEmit 2>&1)",
+      "Bash(git add *)"
     ]
   }
 }
