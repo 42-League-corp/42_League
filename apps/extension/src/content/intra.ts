@@ -716,12 +716,13 @@ function startLogoInjector() {
           width: 100%;
           text-align: center;
           padding: 0;
+          margin: 0;
         }
         #${LINK_ID} {
           display: flex;
           justify-content: center;
           align-items: center;
-          height: 55px; 
+          height: 50px; /* Adapté à la taille native des boutons de l'intra */
           width: 100%;
           cursor: pointer;
           text-decoration: none;
@@ -731,8 +732,8 @@ function startLogoInjector() {
           background-color: rgba(255, 255, 255, 0.05);
         }
         #league-42-icon {
-          width: 34px; 
-          height: 34px;
+          width: 28px; /* Ajusté pour s'aligner parfaitement avec les icônes de l'intra */
+          height: 28px;
           margin: 0 auto; 
           background-image: url('${defaultIconUrl}');
           background-size: contain;
@@ -751,7 +752,7 @@ function startLogoInjector() {
     // 5. Création des balises
     const a = document.createElement('a');
     a.id = LINK_ID;
-    a.href = 'http://localhost:5173'; // ⚠️ Remplacer par ton URL
+    a.href = 'http://localhost:5173'; // ⚠️ Remplacer par ton URL de production plus tard
     a.target = '_blank';
     a.rel = 'noreferrer noopener';
     a.title = 'Aller sur 42 League';
@@ -760,22 +761,25 @@ function startLogoInjector() {
     iconDiv.id = 'league-42-icon';
     a.appendChild(iconDiv);
 
-    // 6. L'ASTUCE EST ICI 👇
-    if (listContainer) {
-      const li = document.createElement('li');
-      li.id = WRAP_ID;
-      li.appendChild(a);
-      
-      // On insère notre logo en 3ème position (index 2)
-      // Ça le mettra en haut, juste avec les logos principaux !
-      if (listContainer.children.length >= 2) {
-        listContainer.insertBefore(li, listContainer.children[2]);
-      } else {
-        listContainer.appendChild(li);
-      }
+    const li = document.createElement('li');
+    li.id = WRAP_ID;
+    li.appendChild(a);
+
+    // 6. Injection juste en dessous du Shop / Cadis
+    // On repère le lien du shop via son attribut href qui contient "/shop"
+    const shopLink = document.querySelector('a[href*="/shop"]');
+    const shopLi = shopLink?.closest('li');
+
+    if (shopLi && shopLi.parentNode) {
+      // En Javascript natif, il n'y a pas de "insertAfter".
+      // On insert donc "avant le petit frère" (nextSibling) du logo shop.
+      shopLi.parentNode.insertBefore(li, shopLi.nextSibling);
+    } else if (listContainer) {
+      // Fallback si le Shop n'est pas trouvé (ça peut arriver si un jour l'intra change)
+      // On l'ajoute à la fin de la liste
+      listContainer.appendChild(li);
     } else {
-      a.id = WRAP_ID;
-      container.appendChild(a);
+      container.appendChild(li);
     }
 
   }, 1000);
