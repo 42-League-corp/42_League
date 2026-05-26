@@ -14,7 +14,7 @@ export function TournoisPage() {
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
-  const [capacity, setCapacity] = useState<4 | 8>(4);
+  const [capacity, setCapacity] = useState<2 | 4>(4);
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
   const [busy, setBusy] = useState(false);
 
@@ -53,11 +53,11 @@ export function TournoisPage() {
           />
           <select
             value={capacity}
-            onChange={(e) => setCapacity(Number(e.target.value) as 4 | 8)}
+            onChange={(e) => setCapacity(Number(e.target.value) as 2 | 4)}
             className="px-3 py-2 bg-bg-2 border border-border rounded text-sm focus:border-teal outline-none"
           >
+            <option value={2}>2 joueurs</option>
             <option value={4}>4 joueurs</option>
-            <option value={8}>8 joueurs</option>
           </select>
           <Button
             loading={busy}

@@ -78,7 +78,7 @@ export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 
 export const CreateTournamentSchema = z.object({
   name: z.string().min(2).max(60),
-  capacity: z.union([z.literal(4), z.literal(8)]),
+  capacity: z.union([z.literal(2), z.literal(4)]),
   kind: z.enum(['friendly', 'official']).default('friendly'),
 });
 
