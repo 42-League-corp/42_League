@@ -16,6 +16,10 @@ const REFRESH_MS = 30_000;
 
 const ANCHOR_KEYWORDS = ['évaluations', 'evaluations'];
 
+const WEB_APP_URL =
+  (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
+  'http://localhost:5173';
+
 let myLogin: string | null = null;
 let challenges: Challenge[] = [];
 let pending: PendingMatch[] = [];
@@ -752,7 +756,7 @@ function startLogoInjector() {
     // 5. Création des balises
     const a = document.createElement('a');
     a.id = LINK_ID;
-    a.href = 'http://localhost:5173'; // ⚠️ Remplacer par ton URL de production plus tard
+    a.href = WEB_APP_URL;
     a.target = '_blank';
     a.rel = 'noreferrer noopener';
     a.title = 'Aller sur 42 League';

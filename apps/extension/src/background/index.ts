@@ -4,8 +4,7 @@ import { clearToken, getToken, setToken } from '../lib/storage.js';
 type Message =
   | { type: 'auth:login' }
   | { type: 'auth:logout' }
-  | { type: 'auth:status' }
-  | { type: 'options:open' };
+  | { type: 'auth:status' };
 
 interface AuthStatus {
   authenticated: boolean;
@@ -67,9 +66,6 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ok: true, data: { authenticated: false, login: null } });
         } else if (msg.type === 'auth:status') {
           sendResponse({ ok: true, data: await getStatus() });
-        } else if (msg.type === 'options:open') {
-          await chrome.runtime.openOptionsPage();
-          sendResponse({ ok: true, data: null });
         } else {
           sendResponse({ ok: false, error: 'unknown message type' });
         }

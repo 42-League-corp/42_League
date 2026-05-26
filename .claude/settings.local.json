@@ -12,7 +12,10 @@
       "Read(///wsl.localhost/ubuntu/proc/**)",
       "Bash(rm \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/web/src/pages/HomePage.tsx\" 2>/dev/null && echo \"removed\" || echo \"absent\")",
       "mcp__Claude_Preview__preview_start",
-      "Bash(ls -la \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/\" | grep -iE 'logo|\\\\.png|\\\\.svg|\\\\.jpg|\\\\.webp')"
+      "Bash(ls -la \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/\" | grep -iE 'logo|\\\\.png|\\\\.svg|\\\\.jpg|\\\\.webp')",
+      "Bash(grep -nE \"navbar|main-left|ANCHOR|main_left|menuItem|profile-link|chrome\\\\.runtime\\\\.getURL\" \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src/content/intra.ts\" | head -30)",
+      "Bash(grep -nE \"function bootstrap|async function bootstrap|const bootstrap\" \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src/content/intra-profile.ts\" | head -5)",
+      "Bash(grep -nE \"^\\(async \\)?function|^const.*=.*async|^const.*=.*function\" \"//wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src/content/intra-profile.ts\" | head -20)"
     ]
   }
 }

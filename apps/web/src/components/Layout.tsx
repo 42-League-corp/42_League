@@ -15,7 +15,6 @@ const NAV: NavDef[] = [
   { to: '/defis', labelKey: 'nav.defis', icon: '⚔' },
   { to: '/tournois', labelKey: 'nav.tournois', icon: '🏟' },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', icon: '★' },
-  { to: '/trophees', labelKey: 'nav.trophees', icon: '🏆' },
   { to: '/profil', labelKey: 'nav.profil', icon: '◆' },
 ];
 
@@ -102,7 +101,7 @@ export function Layout({ children }: LayoutProps) {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 border-t border-border bg-bg-1/95 backdrop-blur">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-4 border-t border-border bg-bg-1/95 backdrop-blur">
         {NAV.map((n) => {
           const active =
             location.pathname === n.to || location.pathname.startsWith(`${n.to}/`);

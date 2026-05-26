@@ -4,6 +4,14 @@ const BLOCK_ID = 'league-42-profile-link';
 const SKILL_ID = 'league-42-babyfoot-skill';
 const STYLE_ID = 'league-42-profile-link-style';
 
+const WEB_APP_URL =
+  (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
+  'http://localhost:5173';
+
+function playerUrl(login: string): string {
+  return `${WEB_APP_URL}/joueur/${encodeURIComponent(login)}`;
+}
+
 function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const s = document.createElement('style');
@@ -102,9 +110,7 @@ function injectLink(login: string, elo: number) {
   ensureStyle();
   const link = document.createElement('a');
   link.id = BLOCK_ID;
-  link.href = chrome.runtime.getURL(
-    `src/options/index.html#player=${encodeURIComponent(login)}`,
-  );
+  link.href = playerUrl(login);
   link.target = '_blank';
   link.rel = 'noreferrer noopener';
   link.title = '42 League — voir le profil complet';
@@ -131,6 +137,7 @@ function findSkillsCard(): HTMLElement | null {
 }
 
 function injectSkill(opts: {
+  login: string;
   rank: number;
   total: number;
   wins: number;
@@ -164,9 +171,7 @@ function injectSkill(opts: {
   // Reuse intra's progress markup so it inherits their style
   const a = document.createElement('a');
   a.className = 'progress-container';
-  a.href = chrome.runtime.getURL(
-    `src/options/index.html#player=${encodeURIComponent((opts as unknown as { login?: string }).login ?? '')}`,
-  );
+  a.href = playerUrl(opts.login);
   a.target = '_blank';
   a.rel = 'noreferrer noopener';
 
@@ -192,6 +197,31 @@ function injectSkill(opts: {
   }
 
   card.append(wrap);
+}
+
+async function bootstrap() {
+  const login = extractLogin();
+  if (!login) return;
+  try {
+    const [profile, lb] = await Promise.all([
+      api.userProfile(login),
+      api.leaderboard(),
+    ]);
+    if (!profile.user) return;
+    injectLink(login, profile.user.elo);
+    injectSkill({
+      login,
+      rank: profile.rank ?? lb.length,
+      total: lb.length,
+      wins: profile.wins,
+      losses: profile.losses,
+      title: profile.user.title,
+    });
+  } catch (err) {
+    if (!(err instanceof AuthError)) {
+      console.warn('[42 League profile] bootstrap failed', err);
+    }
+  }
 }
 
 bootstrap().catch(() => {});
