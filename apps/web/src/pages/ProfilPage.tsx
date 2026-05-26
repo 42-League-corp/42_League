@@ -3,7 +3,6 @@ import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
-import { TrophiesSection } from '../components/TrophiesSection';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useI18n, useT } from '../lib/i18n';
 import { fmtCountdown } from '../lib/format';
@@ -93,8 +92,6 @@ export function ProfilPage() {
       </div>
 
       <OpsWidget opsMe={opsMe} locale={locale} />
-
-      <TrophiesSection />
     </Panel>
   );
 }

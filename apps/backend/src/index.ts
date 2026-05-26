@@ -317,6 +317,8 @@ app.post('/matches/:id/reject', async (c) => {
     throw new HTTPException(400, { message: parsed.error.message });
   }
 
+  const { contestReason, contestMessage } = parsed.data;
+
   await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
@@ -328,9 +330,13 @@ app.post('/matches/:id/reject', async (c) => {
       });
     }
     await tx.pendingMatch.delete({ where: { id } });
+    console.log(
+      `[contest] ${me} a contesté la déclaration de ${p.declarerLogin}` +
+      ` (${p.scoreDeclarer}-${p.scoreOpponent}) — raison: ${contestReason} — "${contestMessage}"`,
+    );
   });
 
-  return c.json({ id, status: 'rejected' });
+  return c.json({ id, status: 'rejected', contestReason });
 });
 
 app.get('/challenges', async (c) => {

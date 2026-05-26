@@ -13,6 +13,7 @@ import { ProfilPage } from './pages/ProfilPage';
 import { PlayerPage } from './pages/PlayerPage';
 import { HistoriquePage } from './pages/HistoriquePage';
 import { ReglagesPage } from './pages/ReglagesPage';
+import { TropheesPage } from './pages/TropheesPage';
 
 export function App() {
   const { authenticated } = useAuth();
@@ -56,7 +57,7 @@ function AppShell() {
           <Route path="/tournois" element={<TournoisPage />} />
           <Route path="/tournois/:id" element={<TournoiDetailPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
-          <Route path="/trophees" element={<Navigate to="/profil" replace />} />
+          <Route path="/trophees" element={<TropheesPage />} />
           <Route path="/profil" element={<ProfilPage />} />
           <Route path="/joueur/:login" element={<PlayerPage />} />
           <Route path="/historique" element={<HistoriquePage />} />

@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:reset": "dotenv -e ../../.env -- prisma migrate reset",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:add-notif": "dotenv -e ../../.env -- tsx prisma/add-test-notif.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:generate": "dotenv -e ../../.env -- prisma generate"
   },

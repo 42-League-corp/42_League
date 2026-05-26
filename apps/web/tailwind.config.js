@@ -36,6 +36,15 @@ export default {
           '0%': { transform: 'scale(0.92)', opacity: '0' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
+        'slide-down': {
+          '0%': { opacity: '0', transform: 'translateY(-10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'bead-pulse': {
+          '0%': { transform: 'scale(0.85)', opacity: '0.4' },
+          '60%': { transform: 'scale(1.12)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
         spin: {
           to: { transform: 'rotate(360deg)' },
         },
@@ -43,6 +52,8 @@ export default {
       animation: {
         'fade-in': 'fade-in 120ms ease-out',
         pop: 'pop 160ms ease-out',
+        'slide-down': 'slide-down 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'bead-pulse': 'bead-pulse 180ms ease-out',
         spin: 'spin 0.7s linear infinite',
       },
     },

@@ -12,6 +12,8 @@ import { confirmDialog } from '../lib/confirm.js';
 
 const BLOCK_ID = 'league-42-pending-block';
 const STYLE_ID = 'league-42-pending-style';
+const NOTIF_ID = 'league-42-notif-banner';
+const NOTIF_STYLE_ID = 'league-42-notif-style';
 const REFRESH_MS = 30_000;
 
 const ANCHOR_KEYWORDS = ['évaluations', 'evaluations'];
@@ -63,6 +65,471 @@ function shutdown() {
   pollTimer = null;
   document.getElementById(BLOCK_ID)?.remove();
   document.getElementById(STYLE_ID)?.remove();
+  document.getElementById(NOTIF_ID)?.remove();
+  document.getElementById(NOTIF_STYLE_ID)?.remove();
+}
+
+// ─── Notification banner ──────────────────────────────────────────────────────
+
+function notifStyleOnce() {
+  if (document.getElementById(NOTIF_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = NOTIF_STYLE_ID;
+  s.textContent = `
+    @keyframes l42nb-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes l42nb-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 183, 27, 0.4); }
+      50%       { box-shadow: 0 0 0 6px rgba(255, 183, 27, 0); }
+    }
+    #${NOTIF_ID} {
+      position: fixed;
+      top: 16px; right: 16px;
+      z-index: 2147483646;
+      width: 320px;
+      background: #0b0f17;
+      border: 1px solid rgba(255, 183, 27, 0.5);
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(255,183,27,0.15);
+      font-family: 'Inter', system-ui, sans-serif;
+      animation: l42nb-in 220ms ease-out, l42nb-pulse 2s ease-in-out 500ms 3;
+      overflow: hidden;
+    }
+    #${NOTIF_ID} .l42nb-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid rgba(255,183,27,0.2);
+    }
+    #${NOTIF_ID} .l42nb-icon { font-size: 14px; }
+    #${NOTIF_ID} .l42nb-title {
+      flex: 1;
+      font-size: 10px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.15em;
+      color: #ffb71b;
+    }
+    #${NOTIF_ID} .l42nb-close {
+      background: none; border: none; cursor: pointer;
+      color: #6b7689; font-size: 16px; line-height: 1;
+      width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 3px;
+      transition: color 120ms, background 120ms;
+    }
+    #${NOTIF_ID} .l42nb-close:hover { color: #e6ecf5; background: rgba(255,255,255,0.08); }
+    #${NOTIF_ID} .l42nb-match {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    #${NOTIF_ID} .l42nb-match:last-child { border-bottom: none; }
+    #${NOTIF_ID} .l42nb-meta {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 8px;
+      font-size: 12px; color: #95a3b8;
+    }
+    #${NOTIF_ID} .l42nb-declarer {
+      color: #ffb71b; font-weight: 700;
+    }
+    #${NOTIF_ID} .l42nb-score {
+      font-weight: 800; font-variant-numeric: tabular-nums;
+      font-size: 18px; color: #ffffff;
+      letter-spacing: 0.05em;
+    }
+    #${NOTIF_ID} .l42nb-score-sep { color: #6b7689; margin: 0 4px; font-size: 16px; }
+    #${NOTIF_ID} .l42nb-hint {
+      font-size: 10px; color: #6b7689;
+    }
+    #${NOTIF_ID} .l42nb-actions {
+      display: flex; gap: 6px; margin-top: 8px;
+    }
+    #${NOTIF_ID} .l42nb-btn-confirm {
+      flex: 1; padding: 7px 12px;
+      background: linear-gradient(180deg, #00d9dc, #00babc);
+      color: #001416; font-weight: 800;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      border: none; border-radius: 5px; cursor: pointer;
+      transition: filter 120ms, transform 80ms;
+    }
+    #${NOTIF_ID} .l42nb-btn-confirm:hover { filter: brightness(1.1); }
+    #${NOTIF_ID} .l42nb-btn-confirm:active { transform: scale(0.97); }
+    #${NOTIF_ID} .l42nb-btn-confirm:disabled { opacity: 0.4; cursor: default; }
+    #${NOTIF_ID} .l42nb-btn-contest {
+      padding: 7px 12px;
+      background: transparent;
+      color: #95a3b8; font-weight: 700;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      border: 1px solid #243044; border-radius: 5px; cursor: pointer;
+      transition: color 120ms, border-color 120ms, background 120ms;
+    }
+    #${NOTIF_ID} .l42nb-btn-contest:hover {
+      color: #ff3b5c; border-color: rgba(255,59,92,0.5);
+      background: rgba(255,59,92,0.06);
+    }
+    #${NOTIF_ID} .l42nb-btn-contest:disabled { opacity: 0.4; cursor: default; }
+  `;
+  document.head.appendChild(s);
+}
+
+function paintNotifBanner() {
+  const toConfirm = pending.filter((p) => p.opponentLogin === myLogin);
+
+  // Remove banner if nothing to confirm
+  if (toConfirm.length === 0) {
+    document.getElementById(NOTIF_ID)?.remove();
+    return;
+  }
+
+  notifStyleOnce();
+
+  // Remove existing and rebuild
+  document.getElementById(NOTIF_ID)?.remove();
+  const banner = document.createElement('div');
+  banner.id = NOTIF_ID;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'l42nb-header';
+  const icon = document.createElement('span');
+  icon.className = 'l42nb-icon';
+  icon.textContent = '⚡';
+  const title = document.createElement('span');
+  title.className = 'l42nb-title';
+  title.textContent = `${toConfirm.length} game${toConfirm.length > 1 ? 's' : ''} à confirmer`;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'l42nb-close';
+  closeBtn.textContent = '×';
+  closeBtn.title = 'Fermer (réapparaît au prochain refresh)';
+  closeBtn.onclick = () => banner.remove();
+  header.append(icon, title, closeBtn);
+  banner.append(header);
+
+  // One row per match
+  for (const p of toConfirm) {
+    const row = document.createElement('div');
+    row.className = 'l42nb-match';
+
+    const meta = document.createElement('div');
+    meta.className = 'l42nb-meta';
+    const decl = document.createElement('span');
+    decl.className = 'l42nb-declarer';
+    decl.textContent = p.declarerLogin;
+    meta.append(decl, document.createTextNode(' a déclaré :'));
+
+    const scoreWrap = document.createElement('div');
+    scoreWrap.style.cssText = 'display:flex;align-items:baseline;gap:0;margin:2px 0;';
+    const scoreEl = document.createElement('span');
+    scoreEl.className = 'l42nb-score';
+    const sep = document.createElement('span');
+    sep.className = 'l42nb-score-sep';
+    sep.textContent = '–';
+    const s1 = document.createElement('span');
+    s1.textContent = String(p.scoreDeclarer);
+    const s2 = document.createElement('span');
+    s2.textContent = String(p.scoreOpponent);
+    scoreEl.append(s1, sep, s2);
+    const hint = document.createElement('span');
+    hint.className = 'l42nb-hint';
+    hint.textContent = '(eux – toi)';
+    scoreWrap.append(scoreEl, hint);
+    scoreWrap.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin:4px 0;';
+
+    const actions = document.createElement('div');
+    actions.className = 'l42nb-actions';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'l42nb-btn-confirm';
+    confirmBtn.textContent = '✓ Confirmer';
+    confirmBtn.disabled = busy.has(p.id);
+    confirmBtn.onclick = async () => {
+      // Direct confirm with same scores as declared (fastest flow)
+      confirmBtn.disabled = true;
+      contestBtn.disabled = true;
+      busy.add(p.id);
+      try {
+        // Confirm with same scores that were declared (opponent=self, declarer=opp)
+        await api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer);
+        showToast('Match confirmé ✓', 'ok');
+        draftConfirmScores.delete(p.id);
+      } catch (err) {
+        if (isContextInvalidated(err)) return shutdown();
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('409') || msg.toLowerCase().includes('différents')) {
+          draftConfirmScores.delete(p.id);
+          showToast('Scores différents · match annulé, à redéclarer');
+        } else {
+          showToast('Erreur de validation');
+        }
+      } finally {
+        busy.delete(p.id);
+        refresh();
+      }
+    };
+
+    const contestBtn = document.createElement('button');
+    contestBtn.className = 'l42nb-btn-contest';
+    contestBtn.textContent = 'Contester';
+    contestBtn.disabled = busy.has(p.id);
+    contestBtn.onclick = () => contestMatchDialog(p);
+
+    actions.append(confirmBtn, contestBtn);
+    row.append(meta, scoreWrap, actions);
+    banner.append(row);
+  }
+
+  document.body.append(banner);
+}
+
+// ─── Contest dialog for extension ────────────────────────────────────────────
+
+const CONTEST_HOST_ID = 'league-42-contest-host';
+const CONTEST_STYLE_ID = 'league-42-contest-style';
+
+function ensureContestStyle() {
+  if (document.getElementById(CONTEST_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = CONTEST_STYLE_ID;
+  s.textContent = `
+    @keyframes l42ct-in  { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes l42ct-pop { from { transform: scale(0.92); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+    #${CONTEST_HOST_ID} {
+      position: fixed; inset: 0;
+      z-index: 2147483647;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      animation: l42ct-in 150ms ease-out;
+      font-family: 'Inter', system-ui, sans-serif;
+      padding: 16px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-card {
+      background: #0b0f17;
+      border: 1px solid rgba(255,59,92,0.35);
+      border-radius: 10px;
+      padding: 20px 20px 18px;
+      width: 400px; max-width: calc(100vw - 32px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(255,59,92,0.1);
+      animation: l42ct-pop 180ms ease-out;
+    }
+    #${CONTEST_HOST_ID} .l42ct-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-title {
+      font-size: 10px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.18em;
+      color: #ff3b5c; margin-bottom: 3px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-sub {
+      font-size: 11px; color: #6b7689;
+    }
+    #${CONTEST_HOST_ID} .l42ct-close {
+      background: none; border: none; cursor: pointer;
+      color: #6b7689; font-size: 18px; line-height: 1;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 4px; transition: color 120ms, background 120ms;
+    }
+    #${CONTEST_HOST_ID} .l42ct-close:hover { color: #e6ecf5; background: rgba(255,255,255,0.08); }
+    #${CONTEST_HOST_ID} .l42ct-warn {
+      background: rgba(255,59,92,0.07);
+      border: 1px solid rgba(255,59,92,0.25);
+      color: #ff8095; border-radius: 6px;
+      padding: 8px 10px; font-size: 11px; line-height: 1.4;
+      margin-bottom: 14px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-label {
+      font-size: 9px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: #6b7689; margin-bottom: 6px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-reasons {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      margin-bottom: 12px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-reason {
+      padding: 10px 10px 8px;
+      background: #111827; border: 1px solid #243044;
+      border-radius: 6px; cursor: pointer; text-align: left;
+      transition: border-color 120ms, background 120ms;
+    }
+    #${CONTEST_HOST_ID} .l42ct-reason:hover { border-color: rgba(255,59,92,0.4); background: rgba(255,59,92,0.04); }
+    #${CONTEST_HOST_ID} .l42ct-reason.l42ct-selected {
+      border-color: rgba(255,59,92,0.6); background: rgba(255,59,92,0.08);
+    }
+    #${CONTEST_HOST_ID} .l42ct-reason-icon { font-size: 16px; margin-bottom: 4px; display: block; }
+    #${CONTEST_HOST_ID} .l42ct-reason-text {
+      font-size: 11px; font-weight: 600; color: #e6ecf5; line-height: 1.3;
+    }
+    #${CONTEST_HOST_ID} .l42ct-textarea {
+      width: 100%; box-sizing: border-box;
+      padding: 9px 10px;
+      background: #0b0f17; border: 1px solid #243044;
+      border-radius: 6px; resize: none;
+      font-family: inherit; font-size: 12px; color: #e6ecf5;
+      line-height: 1.5; outline: none;
+      transition: border-color 120ms;
+    }
+    #${CONTEST_HOST_ID} .l42ct-textarea:focus { border-color: rgba(255,59,92,0.5); }
+    #${CONTEST_HOST_ID} .l42ct-counter {
+      text-align: right; font-size: 10px; color: #6b7689;
+      margin-top: 4px; margin-bottom: 14px;
+    }
+    #${CONTEST_HOST_ID} .l42ct-actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    #${CONTEST_HOST_ID} .l42ct-cancel {
+      padding: 8px 16px;
+      background: transparent; border: 1px solid #243044;
+      color: #95a3b8; border-radius: 5px; cursor: pointer;
+      font-family: inherit; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      transition: color 120ms, border-color 120ms;
+    }
+    #${CONTEST_HOST_ID} .l42ct-cancel:hover { color: #fff; border-color: #6b7689; }
+    #${CONTEST_HOST_ID} .l42ct-submit {
+      padding: 8px 18px;
+      background: linear-gradient(180deg, #ff3b5c, #c8203f);
+      color: #fff; border: none; border-radius: 5px; cursor: pointer;
+      font-family: inherit; font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      transition: filter 120ms, box-shadow 120ms;
+    }
+    #${CONTEST_HOST_ID} .l42ct-submit:hover:not(:disabled) {
+      filter: brightness(1.1);
+      box-shadow: 0 0 14px rgba(255,59,92,0.5);
+    }
+    #${CONTEST_HOST_ID} .l42ct-submit:disabled { opacity: 0.35; cursor: default; }
+  `;
+  document.head.appendChild(s);
+}
+
+function contestMatchDialog(p: PendingMatch): void {
+  ensureContestStyle();
+  document.getElementById(CONTEST_HOST_ID)?.remove();
+
+  let selectedReason: 'never_played' | 'wrong_score' | null = null;
+
+  const host = document.createElement('div');
+  host.id = CONTEST_HOST_ID;
+
+  const card = document.createElement('div');
+  card.className = 'l42ct-card';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'l42ct-header';
+  const titleWrap = document.createElement('div');
+  const titleEl = document.createElement('div');
+  titleEl.className = 'l42ct-title';
+  titleEl.textContent = 'Contester ce score';
+  const subEl = document.createElement('div');
+  subEl.className = 'l42ct-sub';
+  subEl.innerHTML = `<strong style="color:#e6ecf5">${p.declarerLogin}</strong> a déclaré <strong style="color:#e6ecf5">${p.scoreDeclarer}–${p.scoreOpponent}</strong>`;
+  titleWrap.append(titleEl, subEl);
+  const closeX = document.createElement('button');
+  closeX.className = 'l42ct-close';
+  closeX.textContent = '×';
+  closeX.onclick = () => host.remove();
+  header.append(titleWrap, closeX);
+
+  // Warning
+  const warn = document.createElement('div');
+  warn.className = 'l42ct-warn';
+  warn.innerHTML = '⚠ Ce système est basé sur la <strong>confiance</strong>. Une contestation injustifiée nuit à la communauté.';
+
+  // Reason
+  const reasonLabel = document.createElement('div');
+  reasonLabel.className = 'l42ct-label';
+  reasonLabel.textContent = 'Motif';
+  const reasons = document.createElement('div');
+  reasons.className = 'l42ct-reasons';
+
+  const makeReason = (value: 'never_played' | 'wrong_score', icon: string, text: string) => {
+    const btn = document.createElement('button');
+    btn.className = 'l42ct-reason';
+    btn.dataset.value = value;
+    const iconEl = document.createElement('span');
+    iconEl.className = 'l42ct-reason-icon';
+    iconEl.textContent = icon;
+    const textEl = document.createElement('span');
+    textEl.className = 'l42ct-reason-text';
+    textEl.textContent = text;
+    btn.append(iconEl, textEl);
+    btn.onclick = () => {
+      reasons.querySelectorAll('.l42ct-reason').forEach((el) => el.classList.remove('l42ct-selected'));
+      btn.classList.add('l42ct-selected');
+      selectedReason = value;
+      updateSubmit();
+    };
+    return btn;
+  };
+  reasons.append(
+    makeReason('never_played', '🚫', "La game n'a jamais eu lieu"),
+    makeReason('wrong_score', '❌', 'Le score est incorrect'),
+  );
+
+  // Message
+  const msgLabel = document.createElement('div');
+  msgLabel.className = 'l42ct-label';
+  msgLabel.textContent = 'Explique-toi *';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'l42ct-textarea';
+  textarea.rows = 3;
+  textarea.placeholder = 'Décris ce qui s\'est passé (min. 10 caractères)…';
+  const counter = document.createElement('div');
+  counter.className = 'l42ct-counter';
+  counter.textContent = '0 / 500';
+  textarea.oninput = () => {
+    if (textarea.value.length > 500) textarea.value = textarea.value.slice(0, 500);
+    counter.textContent = `${textarea.value.length} / 500`;
+    updateSubmit();
+  };
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'l42ct-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'l42ct-cancel';
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.onclick = () => host.remove();
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'l42ct-submit';
+  submitBtn.textContent = 'Envoyer la contestation';
+  submitBtn.disabled = true;
+  actions.append(cancelBtn, submitBtn);
+
+  const updateSubmit = () => {
+    submitBtn.disabled = !selectedReason || textarea.value.trim().length < 10;
+  };
+
+  submitBtn.onclick = async () => {
+    if (!selectedReason || textarea.value.trim().length < 10) return;
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    busy.add(p.id);
+    try {
+      await api.rejectMatch(p.id, selectedReason, textarea.value.trim());
+      host.remove();
+      showToast('Contestation envoyée', 'ok');
+    } catch (err) {
+      if (isContextInvalidated(err)) return shutdown();
+      showToast('Erreur lors de la contestation');
+    } finally {
+      busy.delete(p.id);
+      refresh();
+    }
+  };
+
+  host.onclick = (e) => { if (e.target === host) host.remove(); };
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape') { host.remove(); document.removeEventListener('keydown', onKey); }
+  });
+
+  card.append(header, warn, reasonLabel, reasons, msgLabel, textarea, counter, actions);
+  host.append(card);
+  document.body.append(host);
+  setTimeout(() => textarea.focus(), 50);
 }
 
 function styleOnce() {
@@ -539,6 +1006,7 @@ function paint() {
   block.innerHTML = '';
   for (const ch of challenges) block.appendChild(renderChallengeLine(ch));
   for (const p of pending) block.appendChild(renderPendingLine(p));
+  paintNotifBanner();
 }
 
 async function confirmMatch(p: PendingMatch, scoreSelf: number, scoreOpponent: number) {
@@ -569,26 +1037,8 @@ async function confirmMatch(p: PendingMatch, scoreSelf: number, scoreOpponent: n
 }
 
 async function rejectMatch(p: PendingMatch) {
-  const opp = p.declarerLogin === myLogin ? p.opponentLogin : p.declarerLogin;
-  const ok = await confirmDialog({
-    title: 'Refuser ce score ?',
-    message: `Tu refuses le score déclaré par ${opp} (${p.scoreDeclarer}–${p.scoreOpponent}). Le match ne comptera pas et devra être re-déclaré.`,
-    confirmLabel: 'Refuser le score',
-    cancelLabel: 'Garder',
-    danger: true,
-  });
-  if (!ok) return;
-  busy.add(p.id);
-  paint();
-  try {
-    await api.rejectMatch(p.id);
-  } catch (err) {
-    if (isContextInvalidated(err)) return shutdown();
-    console.warn('[42 League] reject failed', err);
-  } finally {
-    busy.delete(p.id);
-    refresh();
-  }
+  // Open the full contest dialog instead of simple confirm
+  contestMatchDialog(p);
 }
 
 async function acceptChallenge(ch: Challenge) {
@@ -860,24 +1310,29 @@ function startUserStatsInjector() {
     if (!container) return;
     if (!myLogin) return;
 
-    const me = leaderboard.find((u) => u.login === myLogin);
-    if (!me) return;
+    // On a profile page (/users/<login>), show that user's stats, not ours
+    const profileMatch = location.pathname.match(/^\/users\/([a-z0-9_-]+)(?:\/|$)/i);
+    const targetLogin = profileMatch ? profileMatch[1].toLowerCase() : myLogin;
 
-    const myMatches = allPlayed.filter(
-      (m) => m.playerALogin === myLogin || m.playerBLogin === myLogin,
+    const target = leaderboard.find((u) => u.login === targetLogin);
+    if (!target) return;
+
+    const targetMatches = allPlayed.filter(
+      (m) => m.playerALogin === targetLogin || m.playerBLogin === targetLogin,
     );
-    const wins = myMatches.filter((m) => {
-      const isA = m.playerALogin === myLogin;
+    const wins = targetMatches.filter((m) => {
+      const isA = m.playerALogin === targetLogin;
       return (isA && m.winner === 'A') || (!isA && m.winner === 'B');
     }).length;
-    const losses = myMatches.length - wins;
+    const losses = targetMatches.length - wins;
 
-    const dataKey = `${me.elo}|${me.rank}|${wins}|${losses}`;
+    const dataKey = `${target.elo}|${target.rank}|${wins}|${losses}`;
     const existing = container.querySelector<HTMLElement>(`.${MARKER_CLASS}`);
     if (existing && existing.dataset.dataKey === dataKey) return;
     container.querySelectorAll(`.${MARKER_CLASS}`).forEach((n) => n.remove());
 
-    const href = `${WEB_APP_URL}/joueur/${encodeURIComponent(myLogin)}`;
+    const href = `${WEB_APP_URL}/joueur/${encodeURIComponent(targetLogin)}`;
+    const isOtherProfile = targetLogin !== myLogin;
 
     const mkStat = (
       kind: 'elo' | 'rank' | 'record',
@@ -891,7 +1346,9 @@ function startUserStatsInjector() {
       a.href = href;
       a.target = '_blank';
       a.rel = 'noreferrer noopener';
-      a.title = '42 League — voir ma fiche';
+      a.title = isOtherProfile
+        ? `42 League — voir la fiche de ${targetLogin}`
+        : '42 League — voir ma fiche';
       if (isFirst) a.dataset.dataKey = dataKey;
       a.innerHTML =
         `<span class="l42-label">${label}</span>` +
@@ -900,8 +1357,8 @@ function startUserStatsInjector() {
     };
 
     container.append(
-      mkStat('elo', '<span class="l42-icon">⚔</span>42 League', String(me.elo), true),
-      mkStat('rank', 'Rang', `#${me.rank}`),
+      mkStat('elo', '<span class="l42-icon">⚔</span>42 League', String(target.elo), true),
+      mkStat('rank', 'Rang', `#${target.rank}`),
       mkStat(
         'record',
         'Bilan',

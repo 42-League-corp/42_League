@@ -221,12 +221,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ scoreSelf, scoreOpponent }),
     }),
-  rejectMatch: (id: string, reason?: string) =>
+  rejectMatch: (
+    id: string,
+    contestReason: 'never_played' | 'wrong_score',
+    contestMessage: string,
+  ) =>
     request<{ id: string; status: 'rejected' }>(
       `/matches/${encodeURIComponent(id)}/reject`,
       {
         method: 'POST',
-        body: JSON.stringify(reason ? { reason } : {}),
+        body: JSON.stringify({ contestReason, contestMessage }),
       },
     ),
   challenges: () => request<Challenge[]>('/challenges'),

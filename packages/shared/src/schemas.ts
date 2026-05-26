@@ -6,7 +6,7 @@ export const LoginSchema = z
   .max(32)
   .regex(/^[a-z0-9_-]+$/, 'login must match the 42 intra login format');
 
-export const MatchScoreSchema = z.number().int().min(0).max(10);
+export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
 export const DeclareMatchSchema = z
   .object({
@@ -42,7 +42,8 @@ export const ConfirmMatchSchema = z
 export type ConfirmMatchInput = z.infer<typeof ConfirmMatchSchema>;
 
 export const RejectMatchSchema = z.object({
-  reason: z.string().max(280).optional(),
+  contestReason: z.enum(['never_played', 'wrong_score']),
+  contestMessage: z.string().min(10).max(500),
 });
 
 export type RejectMatchInput = z.infer<typeof RejectMatchSchema>;

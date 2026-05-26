@@ -3,6 +3,7 @@ import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
+import { ContestModal } from '../components/ContestModal';
 import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '../lib/api';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
@@ -97,7 +98,6 @@ export function DefisPage() {
                 <PendingConfirmRow
                   key={p.id}
                   match={p}
-                  myLogin={myLogin ?? ''}
                   onDone={refresh}
                 />
               ))}
@@ -201,31 +201,32 @@ function DeclareGameSection({
   const [open, setOpen] = useState(false);
   const flash = useFlash();
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(null);
-  const [myScore, setMyScore] = useState('');
-  const [oppScore, setOppScore] = useState('');
+  const [iWon, setIWon] = useState<boolean | null>(null);
+  const [loserScore, setLoserScore] = useState<number>(0);
   const [busy, setBusy] = useState(false);
-  const myScoreRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
     setOpponent(null);
-    setMyScore('');
-    setOppScore('');
+    setIWon(null);
+    setLoserScore(0);
   };
 
   const handleOpponentSelect = (u: LeaderboardEntry) => {
     setOpponent(u);
-    // Auto-focus first score field after selection
-    setTimeout(() => myScoreRef.current?.focus(), 50);
+  };
+
+  const handleOutcome = (won: boolean) => {
+    setIWon(won);
+    setLoserScore(0);
   };
 
   const handleSubmit = async () => {
-    if (!opponent || myScore === '' || oppScore === '') return;
-    const a = Number(myScore);
-    const b = Number(oppScore);
-    if (!Number.isInteger(a) || !Number.isInteger(b)) return;
+    if (!opponent || iWon === null) return;
+    const scoreSelf = iWon ? 10 : loserScore;
+    const scoreOpponent = iWon ? loserScore : 10;
     setBusy(true);
     try {
-      await api.declareMatch({ opponentLogin: opponent.login, scoreSelf: a, scoreOpponent: b });
+      await api.declareMatch({ opponentLogin: opponent.login, scoreSelf, scoreOpponent });
       flash.show(`Game déclarée — ${opponent.login} doit confirmer le score`);
       await onDone();
       reset();
@@ -236,6 +237,9 @@ function DeclareGameSection({
       setBusy(false);
     }
   };
+
+  const winnerLogin = iWon ? (myLogin ?? 'Moi') : opponent?.login ?? '';
+  const loserLogin = iWon ? opponent?.login ?? '' : (myLogin ?? 'Moi');
 
   return (
     <div className="mb-6">
@@ -248,8 +252,14 @@ function DeclareGameSection({
           Déclarer une game passée
         </button>
       ) : (
-        <div className="border border-teal/40 bg-teal/5 rounded-lg p-4 animate-pop">
-          <div className="flex items-center justify-between mb-4">
+        <div
+          className="relative border border-teal/40 rounded-lg p-5 animate-pop min-h-[300px]"
+          style={{
+            backgroundImage:
+              'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(0,217,220,0.10), transparent 70%), linear-gradient(to bottom right, rgba(0,217,220,0.07), rgba(0,217,220,0.02))',
+          }}
+        >
+          <div className="relative flex items-center justify-between mb-4">
             <span className="text-[11px] font-bold uppercase tracking-wider text-teal">
               Déclarer une game passée
             </span>
@@ -261,8 +271,8 @@ function DeclareGameSection({
             </button>
           </div>
 
-          {/* Opponent search */}
-          <div className="mb-4">
+          {/* Step 1 — Opponent (kept exactly as before) */}
+          <div className="relative mb-4">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
               Adversaire
             </label>
@@ -270,60 +280,253 @@ function DeclareGameSection({
               players={others}
               selected={opponent}
               onSelect={handleOpponentSelect}
-              onClear={() => setOpponent(null)}
+              onClear={() => { setOpponent(null); setIWon(null); }}
             />
           </div>
 
-          {/* Score inputs */}
-          <div className={`transition-all duration-200 ${opponent ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
-              Score (toi – adversaire)
-            </label>
-            <div className="flex items-center gap-3">
-              <ScoreInput
-                ref={myScoreRef}
-                value={myScore}
-                onChange={setMyScore}
-                onEnter={() => document.getElementById('opp-score-input')?.focus()}
-                placeholder={myLogin ?? 'Toi'}
-                highlight
-              />
-              <span className="text-muted font-bold text-lg flex-shrink-0">–</span>
-              <ScoreInput
-                id="opp-score-input"
-                value={oppScore}
-                onChange={setOppScore}
-                onEnter={handleSubmit}
-                placeholder={opponent?.login ?? 'Adversaire'}
-              />
+          {/* Step 2 — Outcome (animates in once an opponent is set) */}
+          {opponent && iWon === null && (
+            <div key="outcome" className="relative mb-1 animate-slide-down">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+                Résultat
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>
+                  J'ai gagné
+                </OutcomeButton>
+                <OutcomeButton kind="loss" onClick={() => handleOutcome(false)}>
+                  J'ai perdu
+                </OutcomeButton>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Submit */}
-          <div className="flex gap-2 mt-4">
-            <Button
-              size="sm"
-              loading={busy}
-              disabled={!opponent || myScore === '' || oppScore === ''}
-              onClick={handleSubmit}
-              className="flex-1"
-            >
-              Déclarer
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => { setOpen(false); reset(); }}
-            >
-              Annuler
-            </Button>
-          </div>
+          {/* Step 2 recap chip (after outcome chosen) */}
+          {opponent && iWon !== null && (
+            <div className="relative mb-4 animate-fade-in">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
+                Résultat
+              </label>
+              <button
+                onClick={() => setIWon(null)}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded border transition-colors ${
+                  iWon
+                    ? 'border-teal/50 bg-teal/10 text-teal hover:bg-teal/15'
+                    : 'border-red/50 bg-red/10 text-red hover:bg-red/15'
+                }`}
+              >
+                <span className="text-sm font-bold tracking-wide">
+                  {iWon ? "J'ai gagné" : "J'ai perdu"}
+                </span>
+                <span className="text-muted-2 text-base leading-none">×</span>
+              </button>
+            </div>
+          )}
 
-          <p className="mt-3 text-[10px] text-muted leading-relaxed">
-            L'adversaire devra entrer le même score pour valider la game.
-          </p>
+          {/* Step 3 — Abacus score + confirmation */}
+          {opponent && iWon !== null && (
+            <div key="score" className="relative animate-slide-down">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-3">
+                Score de {iWon ? opponent.login : (myLogin ?? 'moi')}
+              </label>
+
+              <AbacusSlider value={loserScore} onChange={setLoserScore} min={-10} max={9} />
+
+              {/* Confirmation line */}
+              <div className="mt-5 px-3 py-2.5 rounded bg-bg-0/60 border border-border text-center text-sm text-muted-2 leading-relaxed">
+                <span className={`font-bold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
+                {' a gagné '}
+                <span className="font-bold text-text-strong">10</span>
+                <span className="text-muted mx-1">/</span>
+                <span className={`font-bold ${loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>{loserScore}</span>
+                {' face à '}
+                <span className={`font-bold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
+              </div>
+
+              {/* Send button */}
+              <div className="mt-4">
+                <Button
+                  size="md"
+                  loading={busy}
+                  onClick={handleSubmit}
+                  className="w-full"
+                >
+                  Envoyer
+                </Button>
+              </div>
+
+              <p className="mt-3 text-[10px] text-muted leading-relaxed text-center">
+                {opponent.login} devra confirmer ce score pour valider la game.
+              </p>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Outcome win/loss button ──────────────────────────────────────────────────
+
+function OutcomeButton({
+  kind,
+  onClick,
+  children,
+}: {
+  kind: 'win' | 'loss';
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const isWin = kind === 'win';
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative overflow-hidden py-4 rounded-lg border-2 transition-all duration-200 active:scale-[0.98] ${
+        isWin
+          ? 'border-teal/40 bg-teal/5 hover:border-teal hover:bg-teal/10 hover:shadow-teal-glow'
+          : 'border-red/40 bg-red/5 hover:border-red hover:bg-red/10'
+      }`}
+    >
+      <div className="relative flex flex-col items-center gap-1.5">
+        <span className={`text-2xl transition-transform duration-200 group-hover:scale-110 ${isWin ? '' : 'grayscale opacity-90'}`}>
+          {isWin ? '🏆' : '💀'}
+        </span>
+        <span className={`text-sm font-bold uppercase tracking-wider ${isWin ? 'text-teal' : 'text-red'}`}>
+          {children}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// ─── Abacus slider ────────────────────────────────────────────────────────────
+
+function AbacusSlider({
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const beads = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+  const valueFromPointer = useCallback((clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return value;
+    const rect = track.getBoundingClientRect();
+    const padding = 16; // matches px-4 below
+    const usable = rect.width - padding * 2;
+    const x = Math.max(0, Math.min(usable, clientX - rect.left - padding));
+    const ratio = usable <= 0 ? 0 : x / usable;
+    return Math.round(min + ratio * (max - min));
+  }, [min, max, value]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = true;
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    const next = valueFromPointer(e.clientX);
+    if (next !== value) onChange(next);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    const next = valueFromPointer(e.clientX);
+    if (next !== value) onChange(next);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = false;
+    try { (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  };
+
+  const activeRatio = (value - min) / (max - min);
+
+  return (
+    <div className="select-none">
+      {/* Big readout */}
+      <div className="flex items-end justify-center gap-2 mb-3 h-14">
+        <span
+          key={value}
+          className={`text-5xl font-black tracking-tight leading-none animate-bead-pulse ${
+            value < 0 ? 'text-red' : value === 0 ? 'text-muted-2' : 'text-teal'
+          }`}
+        >
+          {value}
+        </span>
+      </div>
+
+      {/* Track */}
+      <div
+        ref={trackRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="relative h-12 px-4 cursor-pointer touch-none"
+        role="slider"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+      >
+        {/* rail */}
+        <div className="absolute top-1/2 left-4 right-4 h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-bg-2 via-bg-3 to-bg-2" />
+
+        {/* center marker (0) */}
+        <div
+          className="absolute top-1/2 w-px h-3 -translate-y-1/2 bg-muted/40 pointer-events-none"
+          style={{ left: `calc(16px + ${(0 - min) / (max - min)} * (100% - 32px))` }}
+        />
+
+        {/* beads */}
+        {beads.map((b) => {
+          const ratio = (b - min) / (max - min);
+          const active = b === value;
+          const distance = Math.abs(b - value);
+          const isZero = b === 0;
+          return (
+            <div
+              key={b}
+              onClick={(e) => { e.stopPropagation(); onChange(b); }}
+              className={`absolute top-1/2 rounded-full transition-all duration-150 ease-out cursor-pointer ${
+                active
+                  ? `${b < 0 ? 'bg-red shadow-[0_0_18px_rgba(255,59,92,0.6)]' : 'bg-teal shadow-teal-glow'} z-10`
+                  : isZero
+                    ? 'bg-muted-2/60 hover:bg-muted-2'
+                    : 'bg-muted/50 hover:bg-muted-2'
+              }`}
+              style={{
+                left: `calc(16px + ${ratio} * (100% - 32px))`,
+                width: active ? 22 : distance <= 1 ? 9 : 6,
+                height: active ? 22 : distance <= 1 ? 9 : 6,
+                transform: 'translate(-50%, -50%)',
+              }}
+              aria-label={`Score ${b}`}
+            />
+          );
+        })}
+
+        {/* Active bead inner ring (decorative) */}
+        <div
+          className="absolute top-1/2 w-7 h-7 rounded-full border border-white/30 pointer-events-none transition-all duration-150 ease-out"
+          style={{
+            left: `calc(16px + ${activeRatio} * (100% - 32px))`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      </div>
+
+      {/* Axis labels */}
+      <div className="flex justify-between text-[10px] text-muted mt-1 px-1 font-mono">
+        <span>{min}</span>
+        <span>0</span>
+        <span>{max}</span>
+      </div>
     </div>
   );
 }
@@ -501,7 +704,7 @@ const ScoreInput = forwardRef<HTMLInputElement, ScoreInputProps>(function ScoreI
         ref={ref}
         id={id}
         type="number"
-        min={0}
+        min={-10}
         max={10}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -521,21 +724,19 @@ const ScoreInput = forwardRef<HTMLInputElement, ScoreInputProps>(function ScoreI
 
 function PendingConfirmRow({
   match,
-  myLogin,
   onDone,
 }: {
   match: PendingMatch;
-  myLogin: string;
   onDone: () => Promise<void>;
 }) {
   const flash = useFlash();
   const [confirming, setConfirming] = useState(false);
+  const [contesting, setContesting] = useState(false);
   const [myScore, setMyScore] = useState('');
   const [oppScore, setOppScore] = useState('');
   const [busy, setBusy] = useState(false);
 
   const declarer = match.declarerLogin;
-  // From my perspective: match.scoreOpponent = my score, match.scoreDeclarer = their score
   const theirDeclaredScore = match.scoreDeclarer;
   const myDeclaredScore = match.scoreOpponent;
 
@@ -546,7 +747,7 @@ function PendingConfirmRow({
     setBusy(true);
     try {
       await api.confirmMatch(match.id, a, b);
-      flash.show('Match confirmé ! ELO mis à jour.');
+      flash.show('✓ Match confirmé — ELO mis à jour !');
       await onDone();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -555,89 +756,98 @@ function PendingConfirmRow({
     }
   };
 
-  const handleReject = async () => {
+  const handleContestSubmit = async (
+    reason: 'never_played' | 'wrong_score',
+    message: string,
+  ) => {
     setBusy(true);
     try {
-      await api.rejectMatch(match.id);
-      flash.show('Match refusé.');
+      await api.rejectMatch(match.id, reason, message);
+      flash.show('Contestation envoyée.');
       await onDone();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     } finally {
       setBusy(false);
+      setContesting(false);
     }
   };
 
   return (
-    <div className="p-3 border border-gold/30 bg-gold/5 rounded animate-pop">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-base">⚡</span>
-        <span className="text-muted-2">
+    <>
+      <div className="p-3 border border-gold/30 bg-gold/5 rounded-lg animate-pop">
+        {/* Header */}
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-base">⚡</span>
           <PlayerLink login={declarer} className="font-semibold text-gold">
             {declarer}
           </PlayerLink>
-          <span className="ml-1.5">a déclaré :</span>
-        </span>
-        <span className="font-bold tabular-nums text-text-strong">
-          {theirDeclaredScore}
-          <span className="text-muted mx-1">–</span>
-          {myDeclaredScore}
-        </span>
-        <span className="text-[10px] text-muted">(eux – toi)</span>
-        <div className="flex-1" />
-        {!confirming && (
-          <>
-            <Button size="sm" onClick={() => setConfirming(true)}>
-              Confirmer
+          <span className="text-muted-2">a déclaré :</span>
+          <span className="font-bold tabular-nums text-text-strong text-base">
+            {theirDeclaredScore}
+            <span className="text-muted mx-1.5">–</span>
+            {myDeclaredScore}
+          </span>
+          <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">(eux – toi)</span>
+        </div>
+
+        {/* Actions ou formulaire de confirmation */}
+        {!confirming ? (
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" onClick={() => setConfirming(true)} className="flex-1">
+              ✓ Confirmer
             </Button>
-            <Button size="sm" variant="ghost" onClick={handleReject} disabled={busy}>
-              Refuser
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setContesting(true)}
+              className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+            >
+              Contester
             </Button>
-          </>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            <p className="text-[10px] text-muted leading-relaxed">
+              Entre le score tel que tu l'as vécu. Il doit correspondre exactement à la déclaration de {declarer} pour valider.
+            </p>
+            <div className="flex items-center gap-3">
+              <ScoreInput value={myScore} onChange={setMyScore} placeholder="Toi" highlight />
+              <span className="text-muted font-bold text-lg flex-shrink-0">–</span>
+              <ScoreInput value={oppScore} onChange={setOppScore} placeholder={declarer} />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                loading={busy}
+                disabled={myScore === '' || oppScore === ''}
+                onClick={handleConfirm}
+                className="flex-1"
+              >
+                Valider
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                Retour
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 
-      {confirming && (
-        <div className="mt-3 space-y-3">
-          <p className="text-[10px] text-muted">
-            Entre le score tel que tu l'as vécu — doit correspondre à ce que {declarer} a déclaré.
-          </p>
-          <div className="flex items-end gap-3">
-            <ScoreInput
-              value={myScore}
-              onChange={setMyScore}
-              placeholder="Toi"
-              highlight
-            />
-            <span className="text-muted font-bold text-lg mb-2.5">–</span>
-            <ScoreInput
-              value={oppScore}
-              onChange={setOppScore}
-              placeholder={declarer}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              loading={busy}
-              disabled={myScore === '' || oppScore === ''}
-              onClick={handleConfirm}
-              className="flex-1"
-            >
-              Valider
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-              Retour
-            </Button>
-            <Button size="sm" variant="ghost" onClick={handleReject} disabled={busy}>
-              Refuser
-            </Button>
-          </div>
-        </div>
+      {/* Contest modal */}
+      {contesting && (
+        <ContestModal
+          declarerLogin={declarer}
+          score={`${theirDeclaredScore}–${myDeclaredScore}`}
+          busy={busy}
+          onSubmit={handleContestSubmit}
+          onClose={() => setContesting(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
+
 
 function PendingWaitRow({ match }: { match: PendingMatch }) {
   const opp = match.opponentLogin;

@@ -21,7 +21,26 @@
       "Bash(ls -la /mnt/c/Users/adrbi/.../projects/42_League/apps/backend 2>&1 || ls -la apps/backend/)",
       "Bash(xargs kill -9)",
       "Bash(fuser -k 5173/tcp)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(find //wsl.localhost/ubuntu/home/adrien/projects/42_League/apps -maxdepth 2 -type d | sort)",
+      "Bash(find //wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/extension/src -type f | sort)",
+      "Bash(find //wsl.localhost/ubuntu/home/adrien/projects/42_League/packages/shared/src -type f | sort)",
+      "Bash(find //wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/backend/src -type f | sort)",
+      "Bash(find //wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/web/src -type f | sort)",
+      "Bash(grep -r \"notification\\\\|banner\\\\|alert\\\\|Toast\" //wsl.localhost/ubuntu/home/adrien/projects/42_League/apps/web/src --include=\"*.tsx\" --include=\"*.ts\" -l)",
+      "Bash(npm run *)",
+      "Read(///wsl.localhost/ubuntu//**)",
+      "Bash(ls \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\")",
+      "Bash(find \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\apps\\\\web\" -name \"*.tsx\")",
+      "Bash(find \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\apps\\\\extension\" -name \"*.tsx\")",
+      "Bash(cd \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\")",
+      "Bash(ls \"\\\\\\\\\\\\\\\\wsl.localhost\\\\\\\\ubuntu\\\\\\\\home\\\\\\\\adrien\\\\\\\\projects\\\\\\\\42_League\")",
+      "Bash(ls \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\apps\")",
+      "Bash(cd \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League/apps/web\")",
+      "Bash(cd \"/mnt/wsl/instances/ubuntu/home/adrien/projects/42_League/apps/web\")",
+      "Bash(ls /mnt/wsl/)",
+      "Bash(wsl ls *)",
+      "PowerShell(wsl -d ubuntu --cd /home/adrien/projects/42_League/apps/web -- npx tsc -b --noEmit 2>&1)"
     ]
   }
 }
