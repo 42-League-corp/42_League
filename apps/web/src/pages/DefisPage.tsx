@@ -16,7 +16,7 @@ type Kind = 'incoming' | 'outgoing' | 'accepted';
 export function DefisPage() {
   const t = useT();
   const { lang } = useI18n();
-  const { challenges, leaderboard, me, pending, refresh } = useLeagueData();
+  const { challenges, leaderboard, me, pending, matches, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
 
@@ -33,6 +33,18 @@ export function DefisPage() {
   const pendingWaiting = pending.filter((p) => p.declarerLogin === myLogin);
 
   const others = leaderboard.filter((u) => u.login !== myLogin);
+
+  // Extract recent opponents from match history
+  const recentOpponentLogins = Array.from(
+    new Set(
+      matches
+        .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
+        .map((m) => (m.playerALogin === myLogin ? m.playerBLogin : m.playerALogin))
+    )
+  );
+  const recentOpponents = recentOpponentLogins
+    .map((login) => leaderboard.find((u) => u.login === login))
+    .filter((u): u is LeaderboardEntry => u !== undefined);
 
   const handleAction = async (id: string, action: 'accept' | 'decline') => {
     if (action === 'decline') {
@@ -85,6 +97,7 @@ export function DefisPage() {
       {/* Quick retroactive game declaration */}
       <DeclareGameSection
         others={others}
+        recentOpponents={recentOpponents}
         myLogin={myLogin}
         onDone={refresh}
       />
@@ -191,10 +204,12 @@ export function DefisPage() {
 
 function DeclareGameSection({
   others,
+  recentOpponents,
   myLogin,
   onDone,
 }: {
   others: LeaderboardEntry[];
+  recentOpponents: LeaderboardEntry[];
   myLogin: string | undefined;
   onDone: () => Promise<void>;
 }) {
@@ -278,6 +293,7 @@ function DeclareGameSection({
             </label>
             <PlayerSearch
               players={others}
+              recentPlayers={recentOpponents}
               selected={opponent}
               onSelect={handleOpponentSelect}
               onClear={() => { setOpponent(null); setIWon(null); }}
@@ -399,7 +415,7 @@ function OutcomeButton({
   );
 }
 
-// ─── Abacus slider (Foosball Style) ───────────────────────────────────────────
+// ─── Abacus slider (Modern & Clean) ───────────────────────────────────────────
 
 function AbacusSlider({
   value,
@@ -451,7 +467,7 @@ function AbacusSlider({
       <div className="flex items-end justify-center gap-2 mb-6 h-16">
         <span
           key={value}
-          className={`text-6xl font-black tracking-tighter leading-none animate-bead-pulse drop-shadow-md ${
+          className={`text-6xl font-black tracking-tighter leading-none animate-bead-pulse drop-shadow-sm ${
             value < 0 ? 'text-red' : value === 0 ? 'text-muted-2' : 'text-teal'
           }`}
         >
@@ -466,18 +482,18 @@ function AbacusSlider({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative h-16 px-6 cursor-pointer touch-none group"
+        className="relative h-12 px-6 cursor-pointer touch-none group"
         role="slider"
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
       >
-        {/* Metal rod (Babyfoot style) */}
-        <div className="absolute top-1/2 left-4 right-4 h-3 -translate-y-1/2 rounded-full bg-gradient-to-b from-[#555] via-[#888] to-[#444] shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)] border border-[#333]" />
+        {/* Clean modern track line */}
+        <div className="absolute top-1/2 left-4 right-4 h-1.5 -translate-y-1/2 rounded-full bg-border/50 shadow-inner" />
 
         {/* center marker (0) */}
         <div
-          className="absolute top-1/2 w-1 h-6 -translate-y-1/2 bg-black/40 rounded-full pointer-events-none"
+          className="absolute top-1/2 w-1 h-4 -translate-y-1/2 bg-muted/30 rounded-full pointer-events-none"
           style={{ left: `calc(24px + ${(0 - min) / (max - min)} * (100% - 48px))` }}
         />
 
@@ -491,26 +507,25 @@ function AbacusSlider({
             <div
               key={b}
               onClick={(e) => { e.stopPropagation(); onChange(b); }}
-              className={`absolute top-1/2 transition-all duration-200 ease-out cursor-pointer flex items-center justify-center ${
-                active ? 'z-20' : 'z-10 hover:scale-110'
+              className={`absolute top-1/2 transition-all duration-300 ease-out cursor-pointer flex items-center justify-center ${
+                active ? 'z-20' : 'z-10 hover:scale-125'
               }`}
               style={{
                 left: `calc(24px + ${ratio} * (100% - 48px))`,
-                width: active ? 28 : 14,
-                height: active ? 44 : 24,
+                width: active ? 24 : 12,
+                height: active ? 24 : 12,
                 transform: 'translate(-50%, -50%)',
               }}
               aria-label={`Score ${b}`}
             >
-              {/* 3D Foosball Counter */}
-              <div className={`w-full h-full rounded-[4px] shadow-[0_4px_6px_rgba(0,0,0,0.4)] border-b-[3px] border-t border-t-white/20 transition-colors duration-200 ${
+              <div className={`w-full h-full rounded-full shadow-sm transition-colors duration-300 ${
                 active
                   ? b < 0
-                    ? 'bg-gradient-to-b from-[#ff5a75] to-[#d92645] border-b-[#8a1226]'
-                    : 'bg-gradient-to-b from-[#00f0f5] to-[#00b3b8] border-b-[#006b6e]'
+                    ? 'bg-red shadow-[0_0_12px_rgba(255,90,117,0.5)]'
+                    : 'bg-teal shadow-[0_0_12px_rgba(0,240,245,0.5)]'
                   : isZero
-                    ? 'bg-gradient-to-b from-[#666] to-[#444] border-b-[#222] opacity-60'
-                    : 'bg-gradient-to-b from-[#444] to-[#222] border-b-[#111] opacity-40'
+                    ? 'bg-muted-2'
+                    : 'bg-border hover:bg-muted'
               }`} />
             </div>
           );
@@ -518,7 +533,7 @@ function AbacusSlider({
       </div>
 
       {/* Axis labels */}
-      <div className="flex justify-between text-[11px] text-muted mt-3 px-2 font-mono font-bold opacity-60">
+      <div className="flex justify-between text-[11px] text-muted mt-2 px-2 font-mono font-bold opacity-60">
         <span>{min}</span>
         <span>0</span>
         <span>{max}</span>
@@ -531,11 +546,13 @@ function AbacusSlider({
 
 function PlayerSearch({
   players,
+  recentPlayers,
   selected,
   onSelect,
   onClear,
 }: {
   players: LeaderboardEntry[];
+  recentPlayers: LeaderboardEntry[];
   selected: LeaderboardEntry | null;
   onSelect: (p: LeaderboardEntry) => void;
   onClear: () => void;
@@ -546,9 +563,10 @@ function PlayerSearch({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // If query is empty, show recent players. Otherwise, filter all players and limit to 4.
   const filtered = query.trim()
-    ? players.filter((p) => p.login.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
-    : players.slice(0, 6);
+    ? players.filter((p) => p.login.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
+    : recentPlayers;
 
   const commit = useCallback((p: LeaderboardEntry) => {
     onSelect(p);
@@ -628,31 +646,38 @@ function PlayerSearch({
 
       {open && filtered.length > 0 && (
         <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl overflow-hidden animate-pop">
-          {filtered.map((p, i) => (
-            <button
-              key={p.login}
-              onMouseDown={(e) => { e.preventDefault(); commit(p); }}
-              onMouseEnter={() => setActiveIdx(i)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                i === activeIdx ? 'bg-teal/10 text-text-strong border-l-4 border-teal' : 'hover:bg-bg-2 text-muted-2 border-l-4 border-transparent'
-              }`}
-            >
-              <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
-                {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
-                    {p.login[0]?.toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <span className="flex-1 text-sm font-bold">
-                <HighlightMatch text={p.login} query={query} />
-              </span>
-              <span className="text-xs text-teal font-extrabold">{p.elo}</span>
-              <span className="text-[10px] text-muted font-medium">#{p.rank}</span>
-            </button>
-          ))}
+          {!query.trim() && recentPlayers.length > 0 && (
+            <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted font-bold bg-bg-2/50 border-b border-border">
+              Adversaires récents
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+            {filtered.map((p, i) => (
+              <button
+                key={p.login}
+                onMouseDown={(e) => { e.preventDefault(); commit(p); }}
+                onMouseEnter={() => setActiveIdx(i)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  i === activeIdx ? 'bg-teal/10 text-text-strong border-l-4 border-teal' : 'hover:bg-bg-2 text-muted-2 border-l-4 border-transparent'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
+                      {p.login[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <span className="flex-1 text-sm font-bold">
+                  <HighlightMatch text={p.login} query={query} />
+                </span>
+                <span className="text-xs text-teal font-extrabold">{p.elo}</span>
+                <span className="text-[10px] text-muted font-medium">#{p.rank}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
