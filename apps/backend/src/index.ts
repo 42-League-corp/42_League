@@ -72,22 +72,18 @@ const app = new Hono();
 // MIDDLEWARE CORS + PNA BLINDÉ
 // =========================================================================
 app.use('*', async (c, next) => {
-  // Récupérer l'origine (insensible à la casse)
   const reqOrigin = c.req.header('origin') || c.req.header('Origin');
   
-  // Règle d'or PNA : NE JAMAIS METTRE '*'. On force l'origine exacte.
-  const allowedOrigin = (reqOrigin && reqOrigin.includes('intra.42.fr')) 
-    ? reqOrigin 
-    : 'https://profile.intra.42.fr';
+  // Autoriser l'origine si elle est dans la liste WEB_APP_ORIGINS (chargée depuis .env) 
+  // ou si c'est l'intra 42
+  const isAllowed = reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || reqOrigin.includes('intra.42.fr'));
+  const allowedOrigin = isAllowed ? reqOrigin : 'https://profile.intra.42.fr';
 
   c.header('Access-Control-Allow-Origin', allowedOrigin);
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
-  
-  // LE header qui autorise Chrome à taper sur le localhost
   c.header('Access-Control-Allow-Private-Network', 'true');
 
-  // Interception immédiate du preflight Chrome
   if (c.req.method === 'OPTIONS') {
     return c.text('', 204);
   }
