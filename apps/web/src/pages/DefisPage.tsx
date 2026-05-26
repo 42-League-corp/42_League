@@ -246,34 +246,34 @@ function DeclareGameSection({
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="w-full group flex items-center justify-center gap-2 py-3 rounded border border-dashed border-border hover:border-teal hover:bg-teal/5 transition-all duration-200 text-muted-2 hover:text-teal text-xs font-bold uppercase tracking-wider"
+          className="w-full group flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-border hover:border-teal hover:bg-teal/5 transition-all duration-300 text-muted-2 hover:text-teal text-xs font-bold uppercase tracking-wider shadow-sm hover:shadow-md"
         >
-          <span className="text-base transition-transform duration-200 group-hover:rotate-90">+</span>
+          <span className="text-lg transition-transform duration-300 group-hover:rotate-90">+</span>
           Déclarer une game passée
         </button>
       ) : (
         <div
-          className="relative border border-teal/40 rounded-lg p-5 animate-pop min-h-[300px]"
+          className="relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md animate-pop min-h-[420px] flex flex-col"
           style={{
             backgroundImage:
-              'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(0,217,220,0.10), transparent 70%), linear-gradient(to bottom right, rgba(0,217,220,0.07), rgba(0,217,220,0.02))',
+              'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,217,220,0.15), transparent 70%)',
           }}
         >
-          <div className="relative flex items-center justify-between mb-4">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-teal">
+          <div className="relative flex items-center justify-between mb-6">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-teal">
               Déclarer une game passée
             </span>
             <button
               onClick={() => { setOpen(false); reset(); }}
-              className="text-muted hover:text-text-strong transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-white/10"
+              className="text-muted hover:text-text-strong transition-colors text-xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
             >
               ×
             </button>
           </div>
 
-          {/* Step 1 — Opponent (kept exactly as before) */}
-          <div className="relative mb-4">
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
+          {/* Step 1 — Opponent */}
+          <div className="relative mb-6 z-20">
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
               Adversaire
             </label>
             <PlayerSearch
@@ -284,13 +284,13 @@ function DeclareGameSection({
             />
           </div>
 
-          {/* Step 2 — Outcome (animates in once an opponent is set) */}
+          {/* Step 2 — Outcome */}
           {opponent && iWon === null && (
-            <div key="outcome" className="relative mb-1 animate-slide-down">
-              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+            <div key="outcome" className="relative mb-2 animate-slide-down flex-1">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3">
                 Résultat
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>
                   J'ai gagné
                 </OutcomeButton>
@@ -301,61 +301,61 @@ function DeclareGameSection({
             </div>
           )}
 
-          {/* Step 2 recap chip (after outcome chosen) */}
+          {/* Step 2 recap chip */}
           {opponent && iWon !== null && (
-            <div className="relative mb-4 animate-fade-in">
-              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
+            <div className="relative mb-6 animate-fade-in">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
                 Résultat
               </label>
               <button
                 onClick={() => setIWon(null)}
-                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded border transition-colors ${
+                className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all shadow-sm hover:shadow-md ${
                   iWon
-                    ? 'border-teal/50 bg-teal/10 text-teal hover:bg-teal/15'
-                    : 'border-red/50 bg-red/10 text-red hover:bg-red/15'
+                    ? 'border-teal/40 bg-teal/10 text-teal hover:bg-teal/20'
+                    : 'border-red/40 bg-red/10 text-red hover:bg-red/20'
                 }`}
               >
-                <span className="text-sm font-bold tracking-wide">
-                  {iWon ? "J'ai gagné" : "J'ai perdu"}
+                <span className="text-sm font-extrabold tracking-wide">
+                  {iWon ? "🏆 J'ai gagné" : "💀 J'ai perdu"}
                 </span>
-                <span className="text-muted-2 text-base leading-none">×</span>
+                <span className="text-muted-2 text-lg leading-none">×</span>
               </button>
             </div>
           )}
 
           {/* Step 3 — Abacus score + confirmation */}
           {opponent && iWon !== null && (
-            <div key="score" className="relative animate-slide-down">
-              <label className="block text-[10px] uppercase tracking-wider text-muted font-semibold mb-3">
+            <div key="score" className="relative animate-slide-down flex-1 flex flex-col justify-end">
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-4 text-center">
                 Score de {iWon ? opponent.login : (myLogin ?? 'moi')}
               </label>
 
               <AbacusSlider value={loserScore} onChange={setLoserScore} min={-10} max={9} />
 
               {/* Confirmation line */}
-              <div className="mt-5 px-3 py-2.5 rounded bg-bg-0/60 border border-border text-center text-sm text-muted-2 leading-relaxed">
-                <span className={`font-bold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
+              <div className="mt-8 px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
+                <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
                 {' a gagné '}
-                <span className="font-bold text-text-strong">10</span>
-                <span className="text-muted mx-1">/</span>
-                <span className={`font-bold ${loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>{loserScore}</span>
+                <span className="font-extrabold text-text-strong text-base">10</span>
+                <span className="text-muted mx-2 opacity-50">/</span>
+                <span className={`font-extrabold text-base ${loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>{loserScore}</span>
                 {' face à '}
-                <span className={`font-bold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
+                <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
               </div>
 
               {/* Send button */}
-              <div className="mt-4">
+              <div className="mt-5">
                 <Button
                   size="md"
                   loading={busy}
                   onClick={handleSubmit}
-                  className="w-full"
+                  className="w-full py-3 text-sm font-bold shadow-lg"
                 >
-                  Envoyer
+                  Envoyer la déclaration
                 </Button>
               </div>
 
-              <p className="mt-3 text-[10px] text-muted leading-relaxed text-center">
+              <p className="mt-4 text-[10px] text-muted/70 leading-relaxed text-center font-medium">
                 {opponent.login} devra confirmer ce score pour valider la game.
               </p>
             </div>
@@ -381,17 +381,17 @@ function OutcomeButton({
   return (
     <button
       onClick={onClick}
-      className={`group relative overflow-hidden py-4 rounded-lg border-2 transition-all duration-200 active:scale-[0.98] ${
+      className={`group relative overflow-hidden py-6 rounded-xl border-2 transition-all duration-300 active:scale-[0.97] shadow-sm hover:shadow-xl ${
         isWin
-          ? 'border-teal/40 bg-teal/5 hover:border-teal hover:bg-teal/10 hover:shadow-teal-glow'
-          : 'border-red/40 bg-red/5 hover:border-red hover:bg-red/10'
+          ? 'border-teal/30 bg-teal/5 hover:border-teal hover:bg-teal/10 hover:shadow-teal/20'
+          : 'border-red/30 bg-red/5 hover:border-red hover:bg-red/10 hover:shadow-red/20'
       }`}
     >
-      <div className="relative flex flex-col items-center gap-1.5">
-        <span className={`text-2xl transition-transform duration-200 group-hover:scale-110 ${isWin ? '' : 'grayscale opacity-90'}`}>
+      <div className="relative flex flex-col items-center gap-2">
+        <span className={`text-3xl transition-transform duration-300 group-hover:scale-125 group-hover:-translate-y-1 ${isWin ? '' : 'grayscale opacity-80'}`}>
           {isWin ? '🏆' : '💀'}
         </span>
-        <span className={`text-sm font-bold uppercase tracking-wider ${isWin ? 'text-teal' : 'text-red'}`}>
+        <span className={`text-sm font-extrabold uppercase tracking-widest ${isWin ? 'text-teal' : 'text-red'}`}>
           {children}
         </span>
       </div>
@@ -399,7 +399,7 @@ function OutcomeButton({
   );
 }
 
-// ─── Abacus slider ────────────────────────────────────────────────────────────
+// ─── Abacus slider (Foosball Style) ───────────────────────────────────────────
 
 function AbacusSlider({
   value,
@@ -420,7 +420,7 @@ function AbacusSlider({
     const track = trackRef.current;
     if (!track) return value;
     const rect = track.getBoundingClientRect();
-    const padding = 16; // matches px-4 below
+    const padding = 24; // matches px-6 below
     const usable = rect.width - padding * 2;
     const x = Math.max(0, Math.min(usable, clientX - rect.left - padding));
     const ratio = usable <= 0 ? 0 : x / usable;
@@ -445,15 +445,13 @@ function AbacusSlider({
     try { (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
   };
 
-  const activeRatio = (value - min) / (max - min);
-
   return (
     <div className="select-none">
       {/* Big readout */}
-      <div className="flex items-end justify-center gap-2 mb-3 h-14">
+      <div className="flex items-end justify-center gap-2 mb-6 h-16">
         <span
           key={value}
-          className={`text-5xl font-black tracking-tight leading-none animate-bead-pulse ${
+          className={`text-6xl font-black tracking-tighter leading-none animate-bead-pulse drop-shadow-md ${
             value < 0 ? 'text-red' : value === 0 ? 'text-muted-2' : 'text-teal'
           }`}
         >
@@ -468,61 +466,59 @@ function AbacusSlider({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative h-12 px-4 cursor-pointer touch-none"
+        className="relative h-16 px-6 cursor-pointer touch-none group"
         role="slider"
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
       >
-        {/* rail */}
-        <div className="absolute top-1/2 left-4 right-4 h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-bg-2 via-bg-3 to-bg-2" />
+        {/* Metal rod (Babyfoot style) */}
+        <div className="absolute top-1/2 left-4 right-4 h-3 -translate-y-1/2 rounded-full bg-gradient-to-b from-[#555] via-[#888] to-[#444] shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)] border border-[#333]" />
 
         {/* center marker (0) */}
         <div
-          className="absolute top-1/2 w-px h-3 -translate-y-1/2 bg-muted/40 pointer-events-none"
-          style={{ left: `calc(16px + ${(0 - min) / (max - min)} * (100% - 32px))` }}
+          className="absolute top-1/2 w-1 h-6 -translate-y-1/2 bg-black/40 rounded-full pointer-events-none"
+          style={{ left: `calc(24px + ${(0 - min) / (max - min)} * (100% - 48px))` }}
         />
 
         {/* beads */}
         {beads.map((b) => {
           const ratio = (b - min) / (max - min);
           const active = b === value;
-          const distance = Math.abs(b - value);
           const isZero = b === 0;
+          
           return (
             <div
               key={b}
               onClick={(e) => { e.stopPropagation(); onChange(b); }}
-              className={`absolute top-1/2 rounded-full transition-all duration-150 ease-out cursor-pointer ${
-                active
-                  ? `${b < 0 ? 'bg-red shadow-[0_0_18px_rgba(255,59,92,0.6)]' : 'bg-teal shadow-teal-glow'} z-10`
-                  : isZero
-                    ? 'bg-muted-2/60 hover:bg-muted-2'
-                    : 'bg-muted/50 hover:bg-muted-2'
+              className={`absolute top-1/2 transition-all duration-200 ease-out cursor-pointer flex items-center justify-center ${
+                active ? 'z-20' : 'z-10 hover:scale-110'
               }`}
               style={{
-                left: `calc(16px + ${ratio} * (100% - 32px))`,
-                width: active ? 22 : distance <= 1 ? 9 : 6,
-                height: active ? 22 : distance <= 1 ? 9 : 6,
+                left: `calc(24px + ${ratio} * (100% - 48px))`,
+                width: active ? 28 : 14,
+                height: active ? 44 : 24,
                 transform: 'translate(-50%, -50%)',
               }}
               aria-label={`Score ${b}`}
-            />
+            >
+              {/* 3D Foosball Counter */}
+              <div className={`w-full h-full rounded-[4px] shadow-[0_4px_6px_rgba(0,0,0,0.4)] border-b-[3px] border-t border-t-white/20 transition-colors duration-200 ${
+                active
+                  ? b < 0
+                    ? 'bg-gradient-to-b from-[#ff5a75] to-[#d92645] border-b-[#8a1226]'
+                    : 'bg-gradient-to-b from-[#00f0f5] to-[#00b3b8] border-b-[#006b6e]'
+                  : isZero
+                    ? 'bg-gradient-to-b from-[#666] to-[#444] border-b-[#222] opacity-60'
+                    : 'bg-gradient-to-b from-[#444] to-[#222] border-b-[#111] opacity-40'
+              }`} />
+            </div>
           );
         })}
-
-        {/* Active bead inner ring (decorative) */}
-        <div
-          className="absolute top-1/2 w-7 h-7 rounded-full border border-white/30 pointer-events-none transition-all duration-150 ease-out"
-          style={{
-            left: `calc(16px + ${activeRatio} * (100% - 32px))`,
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
       </div>
 
       {/* Axis labels */}
-      <div className="flex justify-between text-[10px] text-muted mt-1 px-1 font-mono">
+      <div className="flex justify-between text-[11px] text-muted mt-3 px-2 font-mono font-bold opacity-60">
         <span>{min}</span>
         <span>0</span>
         <span>{max}</span>
@@ -591,21 +587,21 @@ function PlayerSearch({
   // If a player is selected, show chip
   if (selected) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-bg-0 border border-teal/50 rounded animate-pop">
-        <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 border border-teal/40">
+      <div className="flex items-center gap-3 px-4 py-3 bg-bg-1 border-2 border-teal/40 rounded-xl animate-pop shadow-sm">
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border-2 border-teal/50 shadow-sm">
           {selected.imageUrl ? (
             <img src={selected.imageUrl} alt={selected.login} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-teal-deep flex items-center justify-center text-[10px] font-bold text-[#001416]">
+            <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
               {selected.login[0]?.toUpperCase()}
             </div>
           )}
         </div>
-        <span className="font-bold text-sm text-text-strong flex-1">{selected.login}</span>
-        <span className="text-teal text-xs font-bold">{selected.elo} ELO</span>
+        <span className="font-extrabold text-base text-text-strong flex-1">{selected.login}</span>
+        <span className="text-teal text-sm font-bold bg-teal/10 px-2 py-1 rounded-md">{selected.elo} ELO</span>
         <button
           onClick={() => { onClear(); setTimeout(() => inputRef.current?.focus(), 50); }}
-          className="ml-1 text-muted hover:text-red transition-colors text-base leading-none"
+          className="ml-2 text-muted hover:text-red transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center rounded-full hover:bg-red/10"
           title="Changer d'adversaire"
         >
           ×
@@ -617,7 +613,7 @@ function PlayerSearch({
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">🔍</span>
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted text-base pointer-events-none">🔍</span>
         <input
           ref={inputRef}
           autoFocus
@@ -626,42 +622,42 @@ function PlayerSearch({
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Tape un pseudo…"
-          className="w-full pl-9 pr-3 py-2.5 bg-bg-0 border border-border rounded text-sm focus:border-teal outline-none text-text-strong placeholder:text-muted transition-colors"
+          className="w-full pl-11 pr-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-sm font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-md"
         />
       </div>
 
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-bg-1 border border-border rounded-lg shadow-xl overflow-hidden animate-pop">
+        <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl overflow-hidden animate-pop">
           {filtered.map((p, i) => (
             <button
               key={p.login}
               onMouseDown={(e) => { e.preventDefault(); commit(p); }}
               onMouseEnter={() => setActiveIdx(i)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                i === activeIdx ? 'bg-teal/10 text-text-strong' : 'hover:bg-bg-2 text-muted-2'
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                i === activeIdx ? 'bg-teal/10 text-text-strong border-l-4 border-teal' : 'hover:bg-bg-2 text-muted-2 border-l-4 border-transparent'
               }`}
             >
-              <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 border border-border">
+              <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
                 {p.imageUrl ? (
                   <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full bg-teal-deep flex items-center justify-center text-[10px] font-bold text-[#001416]">
+                  <div className="w-full h-full bg-teal-deep flex items-center justify-center text-xs font-bold text-[#001416]">
                     {p.login[0]?.toUpperCase()}
                   </div>
                 )}
               </div>
-              <span className="flex-1 text-sm font-semibold">
+              <span className="flex-1 text-sm font-bold">
                 <HighlightMatch text={p.login} query={query} />
               </span>
-              <span className="text-xs text-teal font-bold">{p.elo}</span>
-              <span className="text-[10px] text-muted">#{p.rank}</span>
+              <span className="text-xs text-teal font-extrabold">{p.elo}</span>
+              <span className="text-[10px] text-muted font-medium">#{p.rank}</span>
             </button>
           ))}
         </div>
       )}
 
       {open && query.length > 0 && filtered.length === 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-bg-1 border border-border rounded-lg shadow-xl px-4 py-3 text-sm text-muted text-center animate-pop">
+        <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl px-4 py-4 text-sm text-muted font-medium text-center animate-pop">
           Aucun joueur trouvé
         </div>
       )}
