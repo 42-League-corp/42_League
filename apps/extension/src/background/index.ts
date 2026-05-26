@@ -1,15 +1,14 @@
 import { getApiBase } from '../lib/config.js';
 import { clearToken, getToken, setToken } from '../lib/storage.js';
+// Ajoute l'import de rawRequest et AuthError
+import { rawRequest, AuthError } from '../lib/api.js'; 
 
 type Message =
   | { type: 'auth:login' }
   | { type: 'auth:logout' }
-  | { type: 'auth:status' };
+  | { type: 'auth:status' }
+  | { type: 'api:proxy'; path: string; init?: RequestInit; options?: { auth?: boolean } }; // Ajout du type
 
-interface AuthStatus {
-  authenticated: boolean;
-  login: string | null;
-}
 
 async function startLoginFlow(): Promise<AuthStatus> {
   const redirectUri = chrome.identity.getRedirectURL();
@@ -66,6 +65,20 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ok: true, data: { authenticated: false, login: null } });
         } else if (msg.type === 'auth:status') {
           sendResponse({ ok: true, data: await getStatus() });
+        
+        // ---- NOUVELLE INTERCEPTION PROXY ----
+        } else if (msg.type === 'api:proxy') {
+          try {
+            const data = await rawRequest(msg.path, msg.init, msg.options);
+            sendResponse({ ok: true, data });
+          } catch (err) {
+            sendResponse({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        // -------------------------------------
+
         } else {
           sendResponse({ ok: false, error: 'unknown message type' });
         }
@@ -76,6 +89,6 @@ chrome.runtime.onMessage.addListener(
         });
       }
     })();
-    return true; // keep the message channel open for async sendResponse
+    return true; // Obligatoire pour garder le channel ouvert pour un appel asynchrone
   },
 );

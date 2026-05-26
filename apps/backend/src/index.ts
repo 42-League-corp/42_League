@@ -1,7 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
 import { logger } from 'hono/logger';
-import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { randomUUID } from 'node:crypto';
 import {
@@ -69,36 +68,47 @@ async function getCurrentLogin(c: Context): Promise<string> {
 const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
 const app = new Hono();
-app.use(logger());
+// =========================================================================
+// MIDDLEWARE CORS + PNA BLINDÉ
+// =========================================================================
 app.use('*', async (c, next) => {
-  await next();
-  // Permet à Chrome de valider les requêtes vers localhost (loopback)
-  if (c.req.header('Access-Control-Request-Private-Network')) {
-    c.header('Access-Control-Allow-Private-Network', 'true');
-  }
-});
-app.use('*', async (c, next) => {
-  // On autorise explicitement Chrome à communiquer avec localhost depuis l'Intra
+  // Récupérer l'origine (insensible à la casse)
+  const reqOrigin = c.req.header('origin') || c.req.header('Origin');
+  
+  // Règle d'or PNA : NE JAMAIS METTRE '*'. On force l'origine exacte.
+  const allowedOrigin = (reqOrigin && reqOrigin.includes('intra.42.fr')) 
+    ? reqOrigin 
+    : 'https://profile.intra.42.fr';
+
+  c.header('Access-Control-Allow-Origin', allowedOrigin);
+  c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
+  
+  // LE header qui autorise Chrome à taper sur le localhost
   c.header('Access-Control-Allow-Private-Network', 'true');
+
+  // Interception immédiate du preflight Chrome
+  if (c.req.method === 'OPTIONS') {
+    return c.text('', 204);
+  }
+
   await next();
 });
-app.use(
-  '*',
-  cors({
-    origin: (origin) => {
-      if (!origin) return origin;
-      if (origin === 'https://intra.42.fr') return origin;
-      if (origin.endsWith('.intra.42.fr')) return origin;
-      if (origin.startsWith('chrome-extension://')) return origin;
-      if (origin.startsWith('moz-extension://')) return origin;
-      if (WEB_APP_ORIGINS.has(origin)) return origin;
-      return null;
-    },
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['authorization', 'content-type', 'x-dev-login'],
-    credentials: false,
-  }),
-);
+
+// Gestionnaire d'erreurs global (pour que le CORS soit là même sur une erreur 401 !)
+app.onError((err, c) => {
+  const reqOrigin = c.req.header('origin') || c.req.header('Origin');
+  const allowedOrigin = (reqOrigin && reqOrigin.includes('intra.42.fr')) ? reqOrigin : 'https://profile.intra.42.fr';
+  
+  c.header('Access-Control-Allow-Origin', allowedOrigin);
+  c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
+  c.header('Access-Control-Allow-Private-Network', 'true');
+
+  const status = err instanceof HTTPException ? err.status : 500;
+  return c.json({ message: err.message || 'Internal Server Error' }, status);
+});
+
 
 app.get('/health', (c) => c.json({ ok: true }));
 

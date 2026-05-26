@@ -139,7 +139,13 @@ export interface Tournament {
 
 export class AuthError extends Error {}
 
-async function request<T>(
+// Détection: sommes-nous injectés dans une page web (comme l'intra) ?
+const IS_CONTENT_SCRIPT =
+  typeof window !== 'undefined' &&
+  window.location &&
+  window.location.protocol.startsWith('http');
+
+export async function rawRequest<T>(
   path: string,
   init: RequestInit = {},
   options: { auth?: boolean } = { auth: true },
@@ -164,6 +170,36 @@ async function request<T>(
     throw new Error(`${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`);
   }
   return (await res.json()) as T;
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  options: { auth?: boolean } = { auth: true },
+): Promise<T> {
+  if (IS_CONTENT_SCRIPT) {
+    return new Promise((resolve, reject) => {
+      const serializedInit = { method: init.method, body: init.body };
+      chrome.runtime.sendMessage(
+        { type: 'api:proxy', path, init: serializedInit, options },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response || !response.ok) {
+            const errMsg = response?.error || 'Unknown proxy error';
+            if (errMsg === 'session expired' || errMsg === 'not authenticated') {
+              return reject(new AuthError(errMsg));
+            }
+            return reject(new Error(errMsg));
+          }
+          resolve(response.data as T);
+        }
+      );
+    });
+  }
+
+  return rawRequest<T>(path, init, options);
 }
 
 export const api = {

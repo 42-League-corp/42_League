@@ -790,11 +790,134 @@ function startLogoInjector() {
 }
 
 // ==========================================
+// INJECTION STATS USER (ELO + Rang + W/L) dans .user-infos-sub
+// ==========================================
+function startUserStatsInjector() {
+  const MARKER_CLASS = 'league-42-user-stat';
+  const STYLE_ID = 'league-42-user-stats-style';
+
+  if (!document.getElementById(STYLE_ID)) {
+    const s = document.createElement('style');
+    s.id = STYLE_ID;
+    s.textContent = `
+      /* ── Aligner et uniformiser le padding de TOUTES les stats natives ── */
+      .user-infos-sub .user-inline-stat:not(.hidden) {
+        padding-top: 3px !important;
+        padding-bottom: 3px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
+      }
+      /* ── Ajuster la hauteur du bloc pour s'aligner avec le bas du bloc level ── */
+      .user-infos-sub {
+        padding-bottom: 6px !important;
+      }
+      /* ── Nos stats injectées — même taille/padding que les natives ── */
+      .${MARKER_CLASS} {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        width: 100% !important;
+        padding: 3px 16px !important;
+        margin: 0 !important;
+        color: inherit !important;
+        text-decoration: none !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        cursor: pointer;
+        transition: background-color 120ms;
+        box-sizing: border-box;
+      }
+      .${MARKER_CLASS}:hover { background-color: rgba(255, 255, 255, 0.045); }
+      .${MARKER_CLASS}:first-of-type {
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        margin-top: 3px !important;
+        padding-top: 4px !important;
+      }
+      .${MARKER_CLASS} .l42-label {
+        opacity: 0.82;
+        font-weight: 400;
+      }
+      .${MARKER_CLASS} .l42-icon { opacity: 0.7; margin-right: 5px; font-size: 12px; }
+      .${MARKER_CLASS} .l42-value {
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .${MARKER_CLASS}[data-l42-stat="elo"]  .l42-value { color: #00d9dc; }
+      .${MARKER_CLASS}[data-l42-stat="rank"] .l42-value { color: #ffb71b; }
+      .${MARKER_CLASS} .l42-w { color: #ffb71b; }
+      .${MARKER_CLASS} .l42-l { color: #ff3b5c; margin-left: 3px; }
+      .${MARKER_CLASS} .l42-sep { opacity: 0.5; margin: 0 3px; font-weight: 400; }
+    `;
+    document.head.appendChild(s);
+  }
+
+  setInterval(() => {
+    const container = document.querySelector('.user-infos-sub');
+    if (!container) return;
+    if (!myLogin) return;
+
+    const me = leaderboard.find((u) => u.login === myLogin);
+    if (!me) return;
+
+    const myMatches = allPlayed.filter(
+      (m) => m.playerALogin === myLogin || m.playerBLogin === myLogin,
+    );
+    const wins = myMatches.filter((m) => {
+      const isA = m.playerALogin === myLogin;
+      return (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+    }).length;
+    const losses = myMatches.length - wins;
+
+    const dataKey = `${me.elo}|${me.rank}|${wins}|${losses}`;
+    const existing = container.querySelector<HTMLElement>(`.${MARKER_CLASS}`);
+    if (existing && existing.dataset.dataKey === dataKey) return;
+    container.querySelectorAll(`.${MARKER_CLASS}`).forEach((n) => n.remove());
+
+    const href = `${WEB_APP_URL}/joueur/${encodeURIComponent(myLogin)}`;
+
+    const mkStat = (
+      kind: 'elo' | 'rank' | 'record',
+      label: string,
+      valueHtml: string,
+      isFirst = false,
+    ): HTMLAnchorElement => {
+      const a = document.createElement('a');
+      a.className = MARKER_CLASS;
+      a.dataset.l42Stat = kind;
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      a.title = '42 League — voir ma fiche';
+      if (isFirst) a.dataset.dataKey = dataKey;
+      a.innerHTML =
+        `<span class="l42-label">${label}</span>` +
+        `<span class="l42-value">${valueHtml}</span>`;
+      return a;
+    };
+
+    container.append(
+      mkStat('elo', '<span class="l42-icon">⚔</span>42 League', String(me.elo), true),
+      mkStat('rank', 'Rang', `#${me.rank}`),
+      mkStat(
+        'record',
+        'Bilan',
+        `<span class="l42-w">${wins}</span>W<span class="l42-sep">·</span><span class="l42-l">${losses}</span>L`,
+      ),
+    );
+  }, 1000);
+}
+
+// ==========================================
 // BOOTSTRAP DE L'EXTENSION
 // ==========================================
 async function bootstrap() {
   // Lancement du logo !
   startLogoInjector();
+  startUserStatsInjector();
 
   const observer = new MutationObserver(() => {
     const block = document.getElementById(BLOCK_ID);
@@ -806,7 +929,7 @@ async function bootstrap() {
     authenticated: false,
     login: null as string | null,
   }));
-  
+
   if (!status.authenticated) return;
 
   await refresh();
