@@ -34,14 +34,20 @@ export function DefisPage() {
 
   const others = leaderboard.filter((u) => u.login !== myLogin);
 
-  // Extract recent opponents from match history
-  const recentOpponentLogins = Array.from(
-    new Set(
-      matches
-        .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
-        .map((m) => (m.playerALogin === myLogin ? m.playerBLogin : m.playerALogin))
-    )
-  );
+  // Extract recent opponents from match history, sorted by frequency (most played first)
+  const opponentCounts: Record<string, number> = {};
+  matches.forEach((m) => {
+    if (m.playerALogin === myLogin) {
+      opponentCounts[m.playerBLogin] = (opponentCounts[m.playerBLogin] || 0) + 1;
+    } else if (m.playerBLogin === myLogin) {
+      opponentCounts[m.playerALogin] = (opponentCounts[m.playerALogin] || 0) + 1;
+    }
+  });
+  
+  const recentOpponentLogins = Object.entries(opponentCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([login]) => login);
+
   const recentOpponents = recentOpponentLogins
     .map((login) => leaderboard.find((u) => u.login === login))
     .filter((u): u is LeaderboardEntry => u !== undefined);
@@ -415,7 +421,7 @@ function OutcomeButton({
   );
 }
 
-// ─── Abacus slider (Modern & Clean) ───────────────────────────────────────────
+// ─── Abacus slider (Hi-Tech Magnetic) ─────────────────────────────────────────
 
 function AbacusSlider({
   value,
@@ -488,12 +494,12 @@ function AbacusSlider({
         aria-valuemax={max}
         aria-valuenow={value}
       >
-        {/* Clean modern track line */}
-        <div className="absolute top-1/2 left-4 right-4 h-1.5 -translate-y-1/2 rounded-full bg-border/50 shadow-inner" />
+        {/* Hi-Tech Track Line (Rail) */}
+        <div className="absolute top-1/2 left-4 right-4 h-2.5 -translate-y-1/2 rounded-full bg-gradient-to-b from-bg-2 to-bg-0 shadow-[inset_0_1px_4px_rgba(0,0,0,0.4)] border border-border/40" />
 
         {/* center marker (0) */}
         <div
-          className="absolute top-1/2 w-1 h-4 -translate-y-1/2 bg-muted/30 rounded-full pointer-events-none"
+          className="absolute top-1/2 w-1 h-5 -translate-y-1/2 bg-muted/40 rounded-full pointer-events-none"
           style={{ left: `calc(24px + ${(0 - min) / (max - min)} * (100% - 48px))` }}
         />
 
@@ -507,25 +513,25 @@ function AbacusSlider({
             <div
               key={b}
               onClick={(e) => { e.stopPropagation(); onChange(b); }}
-              className={`absolute top-1/2 transition-all duration-300 ease-out cursor-pointer flex items-center justify-center ${
+              className={`absolute top-1/2 transition-all duration-200 ease-out cursor-pointer flex items-center justify-center ${
                 active ? 'z-20' : 'z-10 hover:scale-125'
               }`}
               style={{
                 left: `calc(24px + ${ratio} * (100% - 48px))`,
-                width: active ? 24 : 12,
-                height: active ? 24 : 12,
+                width: active ? 32 : 12,
+                height: active ? 32 : 12,
                 transform: 'translate(-50%, -50%)',
               }}
               aria-label={`Score ${b}`}
             >
-              <div className={`w-full h-full rounded-full shadow-sm transition-colors duration-300 ${
+              <div className={`w-full h-full rounded-full transition-all duration-200 ${
                 active
                   ? b < 0
-                    ? 'bg-red shadow-[0_0_12px_rgba(255,90,117,0.5)]'
-                    : 'bg-teal shadow-[0_0_12px_rgba(0,240,245,0.5)]'
+                    ? 'bg-gradient-to-br from-[#ff5a75] to-[#d92645] shadow-[0_0_16px_rgba(255,90,117,0.6)] border border-red/50 scale-100'
+                    : 'bg-gradient-to-br from-[#00f0f5] to-[#00b3b8] shadow-[0_0_16px_rgba(0,240,245,0.6)] border border-teal/50 scale-100'
                   : isZero
-                    ? 'bg-muted-2'
-                    : 'bg-border hover:bg-muted'
+                    ? 'bg-muted-2 shadow-sm scale-75'
+                    : 'bg-border hover:bg-muted shadow-sm scale-75'
               }`} />
             </div>
           );
@@ -563,7 +569,7 @@ function PlayerSearch({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // If query is empty, show recent players. Otherwise, filter all players and limit to 4.
+  // If query is empty, show all recent players. Otherwise, filter all players and limit to 4.
   const filtered = query.trim()
     ? players.filter((p) => p.login.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
     : recentPlayers;
