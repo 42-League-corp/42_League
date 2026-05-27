@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
+import { AbacusSlider } from '../components/AbacusSlider';
+import { OutcomeButton } from '../components/OutcomeButton';
 import { api, type Tournament, type TournamentMatch } from '../lib/api';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
@@ -16,6 +18,18 @@ const STATUS_LABEL: Record<Tournament['status'], string> = {
   cancelled: 'ANNULÉ',
 };
 
+const WINNING_SCORE = 10;
+const LOSER_SCORE_MIN = -10;
+const LOSER_SCORE_MAX = WINNING_SCORE - 1;
+
+function roundLabel(round: number, totalRounds: number): string {
+  const fromEnd = totalRounds - round;
+  if (fromEnd === 0) return 'FINALE';
+  if (fromEnd === 1) return 'DEMI-FINALES';
+  if (fromEnd === 2) return 'QUARTS';
+  return `TOUR ${round}`;
+}
+
 export function TournoiDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = rawId ?? '';
@@ -23,15 +37,15 @@ export function TournoiDetailPage() {
   const flash = useFlash();
   const confirm = useConfirm();
 
-  const [tn, setTn] = useState<Tournament | null>(null);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setTn(await api.tournament(id));
+      setTournament(await api.tournament(id));
     } catch {
-      setTn(null);
+      setTournament(null);
     } finally {
       setLoading(false);
     }
@@ -49,7 +63,7 @@ export function TournoiDetailPage() {
       </Panel>
     );
   }
-  if (!tn) {
+  if (!tournament) {
     return (
       <Panel title="Tournoi" sub="introuvable">
         <BackLink />
@@ -59,76 +73,68 @@ export function TournoiDetailPage() {
   }
 
   const myLogin = me?.login;
-  const isOrganizer = tn.createdByLogin === myLogin;
-  const iAmIn = !!tn.entries?.some((e) => e.login === myLogin);
-  const count = tn.entries?.length ?? 0;
-  const kindLabel = tn.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
-  const sub = `${kindLabel} · ${count}/${tn.capacity} · ${STATUS_LABEL[tn.status]}`;
+  const isOrganizer = tournament.createdByLogin === myLogin;
+  const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
+  const entriesCount = tournament.entries?.length ?? 0;
+  const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
+  const sub = `${kindLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
 
-  const doAction = async (fn: () => Promise<unknown>, ok: string) => {
+  const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
-      await fn();
-      flash.show(ok);
+      await action();
+      flash.show(successMsg);
       await load();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     }
   };
 
+  const handleLeave = async () => {
+    const ok = await confirm({
+      title: 'Quitter ce tournoi ?',
+      message: 'Tu te retires des inscriptions.',
+      confirmLabel: 'Quitter',
+      cancelLabel: 'Rester',
+      danger: true,
+    });
+    if (!ok) return;
+    await runAction(() => api.leaveTournament(tournament.id), 'Désinscrit');
+  };
+
+  const handleCancel = async () => {
+    const ok = await confirm({
+      title: 'Annuler ce tournoi ?',
+      message: 'Tous les participants seront retirés.',
+      confirmLabel: 'Annuler le tournoi',
+      cancelLabel: 'Garder',
+      danger: true,
+    });
+    if (!ok) return;
+    await runAction(() => api.cancelTournament(tournament.id), 'Tournoi annulé');
+  };
+
   return (
-    <Panel title={tn.name} sub={sub}>
+    <Panel title={tournament.name} sub={sub}>
       <BackLink />
 
-      {tn.status === 'registration' && (
+      {tournament.status === 'registration' && (
         <>
           <div className="flex flex-wrap gap-2 mb-4">
-            {!iAmIn && count < tn.capacity && (
-              <Button onClick={() => doAction(() => api.joinTournament(tn.id), 'Inscrit au tournoi')}>
+            {!iAmIn && entriesCount < tournament.capacity && (
+              <Button onClick={() => runAction(() => api.joinTournament(tournament.id), 'Inscrit au tournoi')}>
                 S'inscrire
               </Button>
             )}
             {iAmIn && (
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: 'Quitter ce tournoi ?',
-                    message: 'Tu te retires des inscriptions.',
-                    confirmLabel: 'Quitter',
-                    cancelLabel: 'Rester',
-                    danger: true,
-                  });
-                  if (!ok) return;
-                  await doAction(() => api.leaveTournament(tn.id), 'Désinscrit');
-                }}
-              >
-                Se retirer
-              </Button>
+              <Button variant="ghost" onClick={handleLeave}>Se retirer</Button>
             )}
-            {isOrganizer && count === tn.capacity && (
-              <Button
-                onClick={() => doAction(() => api.startTournament(tn.id), 'Tournoi lancé · bracket généré')}
-              >
+            {isOrganizer && entriesCount === tournament.capacity && (
+              <Button onClick={() => runAction(() => api.startTournament(tournament.id), 'Tournoi lancé · bracket généré')}>
                 Lancer le tournoi
               </Button>
             )}
             {isOrganizer && (
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: 'Annuler ce tournoi ?',
-                    message: 'Tous les participants seront retirés.',
-                    confirmLabel: 'Annuler le tournoi',
-                    cancelLabel: 'Garder',
-                    danger: true,
-                  });
-                  if (!ok) return;
-                  await doAction(() => api.cancelTournament(tn.id), 'Tournoi annulé');
-                }}
-              >
-                Annuler
-              </Button>
+              <Button variant="danger" onClick={handleCancel}>Annuler</Button>
             )}
           </div>
 
@@ -136,7 +142,7 @@ export function TournoiDetailPage() {
             Inscrits
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {(tn.entries ?? []).map((e) => (
+            {(tournament.entries ?? []).map((e) => (
               <div
                 key={e.login}
                 className="flex items-center gap-2.5 p-2.5 border border-border bg-bg-2/40 rounded"
@@ -152,7 +158,7 @@ export function TournoiDetailPage() {
                 </PlayerLink>
               </div>
             ))}
-            {Array.from({ length: tn.capacity - count }).map((_, i) => (
+            {Array.from({ length: tournament.capacity - entriesCount }).map((_, i) => (
               <div
                 key={`slot-${i}`}
                 className="flex items-center gap-2.5 p-2.5 border border-dashed border-muted/40 bg-bg-2/20 rounded opacity-50"
@@ -167,21 +173,21 @@ export function TournoiDetailPage() {
         </>
       )}
 
-      {tn.status !== 'registration' && (
+      {tournament.status !== 'registration' && (
         <>
-          {tn.winner && tn.status === 'finished' && (
+          {tournament.winner && tournament.status === 'finished' && (
             <div className="border border-gold/40 bg-gold/5 rounded p-5 mb-6 text-center">
               <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
                 🏆 VAINQUEUR
               </div>
-              <PlayerLink login={tn.winner.login} className="inline-flex flex-col gap-2 text-base">
-                <Avatar login={tn.winner.login} imageUrl={tn.winner.imageUrl ?? null} size="lg" />
-                <span className="font-extrabold text-text-strong">{tn.winner.login}</span>
+              <PlayerLink login={tournament.winner.login} className="inline-flex flex-col gap-2 text-base">
+                <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
+                <span className="font-extrabold text-text-strong">{tournament.winner.login}</span>
               </PlayerLink>
             </div>
           )}
 
-          <Bracket tn={tn} myLogin={myLogin ?? null} onChange={load} />
+          <Bracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
         </>
       )}
     </Panel>
@@ -200,46 +206,45 @@ function BackLink() {
 }
 
 function Bracket({
-  tn,
+  tournament,
   myLogin,
   onChange,
 }: {
-  tn: Tournament;
+  tournament: Tournament;
   myLogin: string | null;
   onChange: () => Promise<void>;
 }) {
-  const matches = tn.matches ?? [];
-  const totalRounds = Math.log2(tn.capacity);
-  const rounds = new Map<number, TournamentMatch[]>();
-  for (const m of matches) {
-    const arr = rounds.get(m.round) ?? [];
-    arr.push(m);
-    rounds.set(m.round, arr);
-  }
+  // Pré-calcule les rounds une fois — recompute uniquement si la liste des matchs change.
+  // Math.log2 est valide tant que capacity est une puissance de 2 (garanti par CreateTournamentSchema).
+  const { totalRounds, roundsByIndex } = useMemo(() => {
+    const total = Math.log2(tournament.capacity);
+    const byIndex = new Map<number, TournamentMatch[]>();
+    for (const m of tournament.matches ?? []) {
+      const arr = byIndex.get(m.round) ?? [];
+      arr.push(m);
+      byIndex.set(m.round, arr);
+    }
+    for (const arr of byIndex.values()) {
+      arr.sort((a, b) => a.slot - b.slot);
+    }
+    return { totalRounds: total, roundsByIndex: byIndex };
+  }, [tournament.capacity, tournament.matches]);
 
   return (
     <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2">
-      {Array.from({ length: totalRounds }, (_, i) => i + 1).map((r) => {
-        const label =
-          r === totalRounds
-            ? 'FINALE'
-            : r === totalRounds - 1
-              ? 'DEMI-FINALES'
-              : r === totalRounds - 2
-                ? 'QUARTS'
-                : `TOUR ${r}`;
-        const ms = (rounds.get(r) ?? []).sort((a, b) => a.slot - b.slot);
+      {Array.from({ length: totalRounds }, (_, i) => i + 1).map((round) => {
+        const matches = roundsByIndex.get(round) ?? [];
         return (
-          <div key={r} className="min-w-[240px] flex flex-col gap-3 justify-around">
+          <div key={round} className="min-w-[240px] flex flex-col gap-3 justify-around">
             <div className="text-[10px] uppercase tracking-wider text-muted font-semibold text-center">
-              {label}
+              {roundLabel(round, totalRounds)}
             </div>
             <div className="flex flex-col gap-3">
-              {ms.map((m) => (
+              {matches.map((m) => (
                 <BracketMatch
                   key={m.id}
-                  tn={tn}
-                  m={m}
+                  tournament={tournament}
+                  match={m}
                   myLogin={myLogin}
                   onChange={onChange}
                 />
@@ -253,132 +258,118 @@ function Bracket({
 }
 
 function BracketMatch({
-  tn,
-  m,
+  tournament,
+  match,
   myLogin,
   onChange,
 }: {
-  tn: Tournament;
-  m: TournamentMatch;
+  tournament: Tournament;
+  match: TournamentMatch;
   myLogin: string | null;
   onChange: () => Promise<void>;
 }) {
-  const winnerA = m.winnerLogin && m.winnerLogin === m.playerALogin;
-  const winnerB = m.winnerLogin && m.winnerLogin === m.playerBLogin;
-  const iAmIn = !!(myLogin && (m.playerALogin === myLogin || m.playerBLogin === myLogin));
-  const recorded = m.recordedByLogin != null && m.scoreA != null && m.scoreB != null;
-  const iRecorded = recorded && m.recordedByLogin === myLogin;
-  const [recording, setRecording] = useState(false);
   const flash = useFlash();
   const confirm = useConfirm();
+  const [recording, setRecording] = useState(false);
+
+  const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
+  const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
+  const iAmIn = !!(myLogin && (match.playerALogin === myLogin || match.playerBLogin === myLogin));
+  const recorded = match.recordedByLogin != null && match.scoreA != null && match.scoreB != null;
+  const iRecorded = recorded && match.recordedByLogin === myLogin;
+
+  const canRecord =
+    tournament.status === 'in_progress' &&
+    iAmIn &&
+    !!match.playerALogin &&
+    !!match.playerBLogin &&
+    !match.confirmedAt;
+
+  const handleRecordSubmit = async (scoreA: number, scoreB: number) => {
+    try {
+      await api.recordTournamentMatch(tournament.id, match.id, scoreA, scoreB);
+      flash.show('Score enregistré · en attente de confirmation');
+      setRecording(false);
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
+  const handleConfirm = async () => {
+    // Narrowing safe : on rentre ici uniquement quand `recorded` est true.
+    if (match.scoreA == null || match.scoreB == null) return;
+    try {
+      const res = await api.confirmTournamentMatch(tournament.id, match.id, match.scoreA, match.scoreB);
+      flash.show(
+        res.finished
+          ? `🏆 ${res.winnerLogin} remporte le tournoi !`
+          : 'Score confirmé',
+      );
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
+  const handleReject = async () => {
+    const ok = await confirm({
+      title: 'Refuser ce score ?',
+      message: 'Le score sera reset, à ressaisir.',
+      confirmLabel: 'Refuser',
+      cancelLabel: 'Garder',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.rejectTournamentMatch(tournament.id, match.id);
+      flash.show('Score reset');
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
 
   return (
     <div
-      className={
-        'p-2.5 border rounded bg-bg-2/50 ' + (m.confirmedAt ? 'border-teal/40' : 'border-border')
-      }
+      className={`p-2.5 border rounded bg-bg-2/50 ${
+        match.confirmedAt ? 'border-teal/40' : 'border-border'
+      }`}
     >
-      <PlayerRow login={m.playerALogin} score={m.scoreA} winner={!!winnerA} />
-      <PlayerRow login={m.playerBLogin} score={m.scoreB} winner={!!winnerB} />
+      <PlayerRow login={match.playerALogin} score={match.scoreA} winner={winnerA} />
+      <PlayerRow login={match.playerBLogin} score={match.scoreB} winner={winnerB} />
 
-      {tn.status === 'in_progress' &&
-        iAmIn &&
-        m.playerALogin &&
-        m.playerBLogin &&
-        !m.confirmedAt && (
-          <>
-            {!recorded && !recording && (
-              <Button size="sm" full className="mt-2" onClick={() => setRecording(true)}>
-                Saisir le score
-              </Button>
-            )}
-            {recording && (
-              <RecordBracketForm
-                m={m}
-                onSubmit={async (a, b) => {
-                  try {
-                    await api.recordTournamentMatch(tn.id, m.id, a, b);
-                    flash.show('Score enregistré · en attente de confirmation');
-                    setRecording(false);
-                    await onChange();
-                  } catch (err) {
-                    flash.show(
-                      err instanceof Error ? err.message : String(err),
-                      'error',
-                    );
-                  }
-                }}
-                onCancel={() => setRecording(false)}
-              />
-            )}
-            {recorded && iRecorded && (
-              <div className="text-[11px] text-muted-2 mt-2 text-center">
-                En attente de confirmation par l'adversaire ({m.scoreA}-{m.scoreB})
-              </div>
-            )}
-            {recorded && !iRecorded && (
-              <div className="mt-2">
-                <div className="text-[11px] text-gold mb-1.5">
-                  Score à confirmer : {m.scoreA}-{m.scoreB}
-                </div>
-                <div className="flex gap-1.5">
-                  <Button
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        const res = await api.confirmTournamentMatch(
-                          tn.id,
-                          m.id,
-                          m.scoreA!,
-                          m.scoreB!,
-                        );
-                        flash.show(
-                          res.finished
-                            ? `🏆 ${res.winnerLogin} remporte le tournoi !`
-                            : 'Score confirmé',
-                        );
-                        await onChange();
-                      } catch (err) {
-                        flash.show(
-                          err instanceof Error ? err.message : String(err),
-                          'error',
-                        );
-                      }
-                    }}
-                  >
-                    Confirmer
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: 'Refuser ce score ?',
-                        message: 'Le score sera reset, à ressaisir.',
-                        confirmLabel: 'Refuser',
-                        cancelLabel: 'Garder',
-                        danger: true,
-                      });
-                      if (!ok) return;
-                      try {
-                        await api.rejectTournamentMatch(tn.id, m.id);
-                        flash.show('Score reset');
-                        await onChange();
-                      } catch (err) {
-                        flash.show(
-                          err instanceof Error ? err.message : String(err),
-                          'error',
-                        );
-                      }
-                    }}
-                  >
-                    Refuser
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+      {canRecord && !recorded && !recording && (
+        <Button size="sm" full className="mt-2" onClick={() => setRecording(true)}>
+          Saisir le score
+        </Button>
+      )}
+
+      {canRecord && recording && (
+        <RecordBracketForm
+          match={match}
+          onSubmit={handleRecordSubmit}
+          onCancel={() => setRecording(false)}
+        />
+      )}
+
+      {canRecord && recorded && iRecorded && (
+        <div className="text-[11px] text-muted-2 mt-2 text-center">
+          En attente de confirmation par l'adversaire ({match.scoreA}-{match.scoreB})
+        </div>
+      )}
+
+      {canRecord && recorded && !iRecorded && (
+        <div className="mt-2">
+          <div className="text-[11px] text-gold mb-1.5">
+            Score à confirmer : {match.scoreA}-{match.scoreB}
+          </div>
+          <div className="flex gap-1.5">
+            <Button size="sm" onClick={handleConfirm}>Confirmer</Button>
+            <Button size="sm" variant="ghost" onClick={handleReject}>Refuser</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -394,10 +385,9 @@ function PlayerRow({
 }) {
   return (
     <div
-      className={
-        'flex items-center justify-between gap-2 py-1.5 px-1 border-b border-border/40 last:border-0 ' +
-        (winner ? 'text-text-strong font-bold' : 'text-text')
-      }
+      className={`flex items-center justify-between gap-2 py-1.5 px-1 border-b border-border/40 last:border-0 ${
+        winner ? 'text-text-strong font-bold' : 'text-text'
+      }`}
     >
       {login ? (
         <PlayerLink login={login} className="text-sm truncate min-w-0">
@@ -407,63 +397,74 @@ function PlayerRow({
       ) : (
         <span className="text-sm text-muted">?</span>
       )}
-      <span className="text-sm tabular-nums">{score != null ? score : '–'}</span>
+      <span className={`text-sm tabular-nums ${score != null && score < 0 ? 'text-red' : ''}`}>
+        {score != null ? score : '–'}
+      </span>
     </div>
   );
 }
 
 function RecordBracketForm({
-  m,
+  match,
   onSubmit,
   onCancel,
 }: {
-  m: TournamentMatch;
-  onSubmit: (a: number, b: number) => Promise<void>;
+  match: TournamentMatch;
+  onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [a, setA] = useState('');
-  const [b, setB] = useState('');
+  const [winner, setWinner] = useState<'a' | 'b' | null>(null);
+  const [loserScore, setLoserScore] = useState(0);
   const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!winner) return;
+    setBusy(true);
+    try {
+      const scoreA = winner === 'a' ? WINNING_SCORE : loserScore;
+      const scoreB = winner === 'b' ? WINNING_SCORE : loserScore;
+      await onSubmit(scoreA, scoreB);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!winner) {
+    return (
+      <div className="mt-2 space-y-2">
+        <div className="text-xs text-muted text-center">Qui a gagné ?</div>
+        <div className="grid grid-cols-2 gap-2">
+          <OutcomeButton kind="win" onClick={() => setWinner('a')}>
+            {match.playerALogin ?? 'Joueur A'}
+          </OutcomeButton>
+          <OutcomeButton kind="win" onClick={() => setWinner('b')}>
+            {match.playerBLogin ?? 'Joueur B'}
+          </OutcomeButton>
+        </div>
+        <Button size="sm" variant="ghost" onClick={onCancel} className="w-full">Annuler</Button>
+      </div>
+    );
+  }
+
+  const loserLabel =
+    winner === 'a' ? (match.playerBLogin ?? 'Joueur B') : (match.playerALogin ?? 'Joueur A');
+
   return (
-    <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-1.5 mt-2">
-      <input
-        type="number"
-        min={0}
-        max={10}
-        placeholder={m.playerALogin ?? ''}
-        value={a}
-        onChange={(e) => setA(e.target.value)}
-        className="px-2 py-1 bg-bg-0 border border-border rounded text-xs focus:border-teal outline-none"
+    <div className="mt-2 space-y-2">
+      <div className="text-xs text-muted text-center">
+        Score de <span className="text-text font-semibold">{loserLabel}</span>
+      </div>
+      <AbacusSlider
+        value={loserScore}
+        onChange={setLoserScore}
+        min={LOSER_SCORE_MIN}
+        max={LOSER_SCORE_MAX}
       />
-      <input
-        type="number"
-        min={0}
-        max={10}
-        placeholder={m.playerBLogin ?? ''}
-        value={b}
-        onChange={(e) => setB(e.target.value)}
-        className="px-2 py-1 bg-bg-0 border border-border rounded text-xs focus:border-teal outline-none"
-      />
-      <Button
-        size="sm"
-        loading={busy}
-        onClick={async () => {
-          const sa = Number(a);
-          const sb = Number(b);
-          if (!Number.isFinite(sa) || !Number.isFinite(sb)) return;
-          setBusy(true);
-          try {
-            await onSubmit(sa, sb);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        OK
-      </Button>
-      <Button size="sm" variant="ghost" onClick={onCancel}>
-        ×
-      </Button>
+      <div className="flex gap-1.5 pt-1">
+        <Button size="sm" variant="ghost" onClick={() => setWinner(null)} className="flex-none">←</Button>
+        <Button size="sm" loading={busy} onClick={submit} className="flex-1">OK</Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} className="flex-none">×</Button>
+      </div>
     </div>
   );
 }

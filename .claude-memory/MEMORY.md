@@ -1,0 +1,3 @@
+- [Projet 42_League — vision & stack](project_42_league.md) — PWA mobile premium en cours de construction, base React/Vite/Tailwind monorepo
+- [User — rôle & ambition](user_role.md) — Dev qui pousse la qualité au niveau Vercel/Linear/Apple, vise une expérience "app native" sur mobile
+- [Feedback — flow Déclarer game](feedback_declare_game.md) — Le flow actuel (search + outcome + abacus) est la référence d'intuitivité à propager partout

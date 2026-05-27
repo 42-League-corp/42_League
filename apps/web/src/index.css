@@ -8,6 +8,13 @@
   #root {
     height: 100%;
   }
+
+  html {
+    /* Empêche iOS Safari de zoomer le texte en mode paysage et au focus input. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     margin: 0;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -17,16 +24,61 @@
     color: #e6ecf5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Coupe l'effet "bounce" iOS qui révèle un fond blanc au scroll. */
+    overscroll-behavior-y: none;
+    /* Vire le délai 300ms du tap sur mobile et donne un feedback instantané. */
+    touch-action: manipulation;
+  }
+
+  /* Anti tap-highlight global — sera réactivé localement si besoin. */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Sur mobile uniquement (touch primary), désactive la sélection de texte par défaut.
+     Les inputs/textarea/[contenteditable] restent sélectionnables. */
+  @media (pointer: coarse) {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    input,
+    textarea,
+    [contenteditable='true'],
+    .allow-select {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+  }
+
+  /* Focus ring uniquement quand on navigue au clavier — pas au tap. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Empêche les images d'être drag-able sur mobile (sensation native). */
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  /* Pour les inputs : empêche iOS de zoomer si font-size < 16px. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
   }
 }
 
 @layer utilities {
+  /* Scrollbar custom — invisible sur mobile, fine et teal sur desktop. */
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(0, 217, 220, 0.25) transparent;
   }
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
@@ -37,5 +89,73 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: rgba(0, 217, 220, 0.45);
+  }
+
+  /* Scrollbar totalement invisible — utile pour les listes mobiles. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth scroll partout. */
+  .scroll-smooth-touch {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Glass effect — pour TabBar, Header, Sheets. */
+  .glass {
+    background: rgba(17, 24, 39, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .glass-strong {
+    background: rgba(11, 15, 23, 0.85);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+  }
+
+  /* Gradient text réutilisable — branding 42 League. */
+  .gradient-text-brand {
+    background: linear-gradient(135deg, #00d9dc 0%, #ffffff 50%, #ffb71b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Effet "néon" sur un border — pour les cartes hero. */
+  .neon-border {
+    box-shadow:
+      0 0 0 1px rgba(0, 217, 220, 0.3),
+      0 0 24px rgba(0, 217, 220, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Shimmer loading effect. */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.02) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.02) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+  }
+
+  /* Force GPU acceleration sur les éléments animés — évite le flicker mobile. */
+  .gpu {
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+  }
+
+  /* Désactive la sélection — utile localement (titres, bottom nav, etc.) */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
   }
 }

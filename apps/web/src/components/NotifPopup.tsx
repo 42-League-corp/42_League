@@ -1,14 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
-import { useAuth } from '../hooks/useAuth';
 import { api, type PendingMatch } from '../lib/api';
 import { Avatar } from './Avatar';
 import { ContestModal } from './ContestModal';
 
 export function NotifPopup() {
   const { me, pending, refresh } = useLeagueData();
-  const { login } = useAuth();
   const flash = useFlash();
 
   // Matches waiting for ME to confirm
@@ -93,7 +91,7 @@ export function NotifPopup() {
                 <div key={p.id} className="px-3 py-3">
                   {/* Declarer + score */}
                   <div className="flex items-center gap-2 mb-2.5">
-                    <Avatar login={p.declarerLogin} size="xs" />
+                    <Avatar login={p.declarerLogin} imageUrl={null} size="xs" />
                     <div className="min-w-0 flex-1">
                       <div className="text-[11px] text-muted-2">
                         <span className="font-semibold text-gold">{p.declarerLogin}</span>

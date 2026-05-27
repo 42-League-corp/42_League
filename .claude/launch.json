@@ -15,6 +15,19 @@
       "port": 5173
     },
     {
+      "name": "web-preview",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-d",
+        "Ubuntu",
+        "--",
+        "bash",
+        "-lc",
+        "cd /home/adrien/projects/42_League/apps/web && npx vite --port 5179 --strictPort"
+      ],
+      "port": 5179
+    },
+    {
       "name": "extension",
       "runtimeExecutable": "wsl",
       "runtimeArgs": [

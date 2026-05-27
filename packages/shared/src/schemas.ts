@@ -6,6 +6,9 @@ export const LoginSchema = z
   .max(32)
   .regex(/^[a-z0-9_-]+$/, 'login must match the 42 intra login format');
 
+// Foosball score : le perdant peut descendre sous 0 à cause des gamelles
+// (penalty d'auto-but). Borne inférieure -10 = 10 gamelles avant que le
+// gagnant n'atteigne 10. Borne supérieure 10 = victoire stricte d'un seul camp.
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
 export const DeclareMatchSchema = z
