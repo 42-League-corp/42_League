@@ -28,8 +28,9 @@ export function ReglagesPage() {
           />
         </div>
 
-        <div className="border-t border-border/60 pt-5">
-          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-text-strong mb-3">
+        <div className="border-t border-gold/20 pt-5">
+          <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-3 flex items-center gap-2">
+            <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
             {t('settings.account')}
           </div>
           {login && (

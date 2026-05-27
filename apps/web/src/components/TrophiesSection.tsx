@@ -19,13 +19,13 @@ const COLOR_BORDER: Record<TrophyColor, string> = {
 const COLOR_TEXT: Record<TrophyColor, string> = {
   gold: 'text-gold',
   red: 'text-red',
-  cyan: 'text-teal',
-  violet: 'text-[#a259ff]',
-  magenta: 'text-[#ff3bd9]',
+  cyan: 'text-[#f5b942]',
+  violet: 'text-[#c97bff]',
+  magenta: 'text-[#ff5bb0]',
   bronze: 'text-[#cd7f32]',
   crimson: 'text-[#dc143c]',
-  green: 'text-[#10b981]',
-  sapphire: 'text-[#3b82f6]',
+  green: 'text-[#7fd66e]',
+  sapphire: 'text-[#7aa8ff]',
 };
 
 interface TrophiesSectionProps {
@@ -41,8 +41,8 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
 
   if (trophies.length === 0) {
     return (
-      <section className="mt-8 pt-6 border-t border-border">
-        <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-text-strong mb-2 flex items-center gap-2">
+      <section className="mt-8 pt-6 border-t border-gold/15">
+        <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-2 flex items-center gap-2">
           <span>🏆</span>
           <span>{title}</span>
         </div>
@@ -54,19 +54,20 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   }
 
   return (
-    <section className="mt-8 pt-6 border-t border-border">
-      <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-text-strong mb-3 flex items-center gap-2">
-        <span>🏆</span>
+    <section className="mt-8 pt-6 border-t border-gold/15">
+      <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-3 flex items-center gap-2">
+        <span className="text-base">🏆</span>
         <span>{title}</span>
         <span className="text-[10px] text-muted font-semibold normal-case tracking-[0.12em]">
           · récompenses légendaires
         </span>
+        <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/10 to-transparent ml-2" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {trophies.map((t) => (
           <div
             key={t.title}
-            className={`bg-bg-2/60 border ${COLOR_BORDER[t.color]} rounded p-4 flex flex-col gap-2`}
+            className={`relative card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2`}
           >
             <div className="flex items-center gap-3">
               <div className="text-3xl leading-none">{t.emoji}</div>

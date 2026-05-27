@@ -75,25 +75,27 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
         initial={{ opacity: 0, y: 8, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        className="relative overflow-hidden rounded-2xl border-2 border-gold/50 bg-gradient-to-br from-gold/[0.08] to-bg-1/80 backdrop-blur-md shadow-lg"
-        style={{ boxShadow: '0 4px 24px -8px rgba(255,183,27,0.3)' }}
+        className="relative overflow-hidden rounded-2xl border-2 border-gold/60 bg-gradient-to-br from-gold/[0.10] to-bg-1/85 backdrop-blur-md shadow-lg"
+        style={{ boxShadow: '0 6px 28px -8px rgba(255,201,74,0.35), inset 0 1px 0 rgba(255,215,120,0.12)' }}
       >
         {/* Liseré animé en haut */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent animate-pulse" />
+        {/* Petite trame HUD */}
+        <div className="absolute inset-0 hud-diag opacity-40 pointer-events-none" />
 
         <div className="p-4">
           <div className="flex items-center gap-2 text-xs mb-3">
-            <Zap className="w-4 h-4 text-gold" strokeWidth={2.5} fill="rgba(255,183,27,0.3)" />
+            <Zap className="w-4 h-4 text-gold animate-ember" strokeWidth={2.5} fill="rgba(255,201,74,0.35)" />
             <PlayerLink login={match.declarerLogin} className="font-bold text-gold">
               {match.declarerLogin}
             </PlayerLink>
             <span className="text-muted-2">a déclaré :</span>
           </div>
 
-          <div className="flex items-baseline justify-center gap-2 mb-4 font-mono">
+          <div className="relative flex items-baseline justify-center gap-2 mb-4 font-display">
             <span
               className={`text-4xl font-black tabular-nums ${
-                match.scoreDeclarer === WINNING_SCORE ? 'text-gold' : 'text-text-strong'
+                match.scoreDeclarer === WINNING_SCORE ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
               {match.scoreDeclarer}
@@ -101,7 +103,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             <span className="text-2xl text-muted">–</span>
             <span
               className={`text-4xl font-black tabular-nums ${
-                match.scoreOpponent === WINNING_SCORE ? 'text-teal' : 'text-text-strong'
+                match.scoreOpponent === WINNING_SCORE ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
               {match.scoreOpponent}
@@ -147,8 +149,8 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
               <div
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-semibold ${
                   iWon
-                    ? 'bg-teal/10 text-teal border border-teal/20'
-                    : 'bg-red/10 text-red border border-red/20'
+                    ? 'bg-gold/10 text-gold border border-gold/30'
+                    : 'bg-red/10 text-red border border-red/30'
                 }`}
               >
                 <span aria-hidden>{iWon ? '🏆' : '💀'}</span>

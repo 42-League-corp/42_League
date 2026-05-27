@@ -77,7 +77,7 @@ export function LeaderboardMobile() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex items-center justify-around py-2 px-3 rounded-2xl bg-bg-1/60 border border-border/40"
+          className="flex items-center justify-around py-2 px-3 rounded-2xl card-hud"
         >
           <Stat label="Joueurs" value={leaderboard.length} />
           <div className="w-px h-8 bg-border" />
@@ -103,7 +103,7 @@ export function LeaderboardMobile() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Chercher un joueur…"
-              className="w-full pl-11 pr-10 py-3 bg-bg-1 border border-border rounded-xl text-sm font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted tap-transparent allow-select"
+              className="w-full pl-11 pr-10 py-3 bg-bg-1 border border-border rounded-xl text-sm font-medium focus:border-gold focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
             />
             {query && (
               <button
@@ -156,13 +156,13 @@ function Stat({
   value: number | string;
   tone?: 'default' | 'teal';
 }) {
-  const toneCls = tone === 'teal' ? 'text-teal' : 'text-text-strong';
+  const toneCls = tone === 'teal' ? 'text-gold' : 'text-text-strong';
   return (
     <div className="flex flex-col items-center gap-0.5 flex-1">
-      <div className={`text-base font-extrabold font-mono tabular-nums leading-none ${toneCls}`}>
+      <div className={`font-display text-base font-black tabular-nums leading-none ${toneCls}`}>
         {value}
       </div>
-      <div className="text-[9px] text-muted uppercase tracking-wider font-bold leading-none">
+      <div className="text-[9px] text-muted uppercase tracking-[0.16em] font-extrabold leading-none">
         {label}
       </div>
     </div>

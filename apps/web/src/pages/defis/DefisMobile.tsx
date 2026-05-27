@@ -59,7 +59,7 @@ export function DefisMobile() {
         {/* Hero player card */}
         <HeroPlayerCard />
 
-        {/* CTA principal sticky — "Déclarer une game" */}
+        {/* CTA principal sticky — "Déclarer une game" (style screenshot 42L) */}
         <motion.button
           type="button"
           onClick={() => {
@@ -67,23 +67,46 @@ export function DefisMobile() {
             setDeclareOpen(true);
           }}
           whileTap={{ scale: 0.98 }}
-          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-gradient-to-br from-bg-1 to-bg-2 border border-teal/30 active:border-teal active:bg-teal/5 transition-all tap-transparent"
-          style={{ boxShadow: '0 8px 24px -12px rgba(0,217,220,0.4)' }}
+          whileHover={{ y: -2 }}
+          className="shine group relative w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl overflow-hidden tap-transparent transition-all border border-gold/30 active:border-gold"
+          style={{
+            background:
+              'linear-gradient(135deg, #2a241c 0%, #1d1914 60%, #15120e 100%)',
+            boxShadow:
+              'inset 0 1px 0 rgba(255,215,120,0.10), 0 8px 24px -12px rgba(255,201,74,0.4), 0 1px 0 rgba(255,201,74,0.06)',
+          }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-teal/15 flex items-center justify-center">
-              <Plus className="w-4 h-4 text-teal" strokeWidth={3} />
+          {/* Filigrane diagonale */}
+          <div className="absolute inset-0 hud-diag opacity-50 pointer-events-none" />
+
+          <div className="relative flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center border border-gold/50 group-hover:scale-110 transition-transform"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(255,201,74,0.25), rgba(255,201,74,0.08))',
+                boxShadow:
+                  'inset 0 1px 0 rgba(255,247,228,0.2), 0 0 12px rgba(255,201,74,0.25)',
+              }}
+            >
+              <Plus className="w-4 h-4 text-gold" strokeWidth={3} />
             </div>
             <div className="text-left">
-              <div className="text-sm font-extrabold text-text-strong tracking-wide">
+              <div className="font-gaming text-sm font-extrabold text-text-strong tracking-wide uppercase">
                 Déclarer une game
               </div>
-              <div className="text-[10px] text-muted uppercase tracking-wider font-bold">
+              <div className="text-[10px] text-muted uppercase tracking-[0.16em] font-extrabold">
                 Game passée · 2 clics
               </div>
             </div>
           </div>
-          <div className="text-teal text-lg">→</div>
+
+          {/* Icônes décoratives à droite (banane + carapace, comme le screenshot) */}
+          <div className="relative flex items-center gap-1.5 text-base opacity-90">
+            <span aria-hidden className="text-gold/80">🍌</span>
+            <span aria-hidden className="text-muted-2">🐢</span>
+            <span className="text-gold text-lg group-hover:translate-x-1 transition-transform">→</span>
+          </div>
         </motion.button>
 
         {/* Pending — à confirmer (CTA urgent) */}
@@ -108,19 +131,43 @@ export function DefisMobile() {
             <SectionHeader title="En attente de confirmation" />
             <div className="space-y-2">
               {pendingWaiting.map((p) => (
-                <div
+                <motion.div
                   key={p.id}
-                  className="px-4 py-3 rounded-xl border border-border bg-bg-2/40 flex items-center gap-2.5 text-xs"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group"
                 >
-                  <span aria-hidden className="text-base opacity-50">⏳</span>
+                  {/* Silhouette trophée à gauche */}
+                  <div className="relative flex-shrink-0 w-9 h-9 rounded-lg metal-plate flex items-center justify-center">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-5 h-5 text-gold/70 group-hover:text-gold transition-colors"
+                      fill="currentColor"
+                      aria-hidden
+                    >
+                      <path d="M7 4h10v2h3a1 1 0 0 1 1 1v2c0 2.2-1.8 4-4 4h-.3c-.7 1.7-2.1 3-3.7 3.4V19h3v2H8v-2h3v-2.6c-1.6-.4-3-1.7-3.7-3.4H7c-2.2 0-4-1.8-4-4V7a1 1 0 0 1 1-1h3V4Zm0 4H5v1c0 1.1.9 2 2 2V8Zm10 0v3c1.1 0 2-.9 2-2V8h-2Z" />
+                    </svg>
+                  </div>
+
                   <div className="flex-1 min-w-0">
-                    <div className="text-muted-2">En attente de</div>
-                    <div className="font-bold text-text-strong truncate">{p.opponentLogin}</div>
+                    <div className="text-[10px] text-muted-2 uppercase tracking-[0.12em] font-bold">
+                      En attente de
+                    </div>
+                    <div className="font-display font-bold text-text-strong truncate text-sm tracking-wide">
+                      {p.opponentLogin}
+                    </div>
                   </div>
-                  <div className="font-mono tabular-nums font-bold text-text-strong">
-                    {p.scoreDeclarer}<span className="text-muted mx-1">–</span>{p.scoreOpponent}
+
+                  <div className="font-display tabular-nums font-black text-text-strong text-sm flex items-center gap-1">
+                    <span className={p.scoreDeclarer === 10 ? 'text-gold' : 'text-muted-2'}>
+                      {p.scoreDeclarer}
+                    </span>
+                    <span className="text-muted mx-0.5">–</span>
+                    <span className={p.scoreOpponent === 10 ? 'text-gold' : 'text-red'}>
+                      {p.scoreOpponent}
+                    </span>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </section>
@@ -256,17 +303,18 @@ interface SectionHeaderProps {
 
 function SectionHeader({ title, icon, badge, tone = 'muted' }: SectionHeaderProps) {
   const toneCls =
-    tone === 'gold' ? 'text-gold' : tone === 'teal' ? 'text-teal' : 'text-muted';
+    tone === 'gold' ? 'text-gold' : tone === 'teal' ? 'text-gold' : 'text-gold/80';
   return (
     <div className="flex items-center gap-2 mb-3 px-1">
+      <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
       {icon}
-      <span className={`text-[10px] uppercase tracking-[0.18em] font-extrabold ${toneCls}`}>
+      <span className={`font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold ${toneCls}`}>
         {title}
       </span>
       {badge !== undefined && badge > 0 && (
         <span className="font-mono text-[10px] text-muted tabular-nums">· {badge}</span>
       )}
-      <div className="flex-1 h-px bg-border/40 ml-2" />
+      <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
     </div>
   );
 }
