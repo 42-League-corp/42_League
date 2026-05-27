@@ -22,13 +22,19 @@ export function OpsCard() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden rounded-2xl border border-red/40 bg-gradient-to-br from-red/[0.08] to-bg-1/80 p-4"
+      className="relative overflow-hidden rounded-2xl border border-red/50 bg-gradient-to-br from-red/[0.10] to-bg-1/85 p-4"
+      style={{
+        boxShadow:
+          'inset 0 1px 0 rgba(255,255,255,0.05), 0 6px 22px -8px rgba(255,83,102,0.3)',
+      }}
     >
       {/* Scanline rouge top */}
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red to-transparent animate-pulse" />
+      <div className="absolute inset-0 hud-diag opacity-30 pointer-events-none" />
 
-      <div className="flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.18em]">
-        <Skull className="w-4 h-4" strokeWidth={2.5} fill="rgba(255,59,92,0.2)" />
+      <div className="font-gaming relative flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.18em]">
+        <span className="inline-block w-1 h-3 bg-red rounded-sm" />
+        <Skull className="w-4 h-4 animate-pulse" strokeWidth={2.5} fill="rgba(255,83,102,0.25)" />
         <span>Ops · Ennemi juré</span>
       </div>
 

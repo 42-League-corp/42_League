@@ -79,7 +79,7 @@ export function TournamentCard({ tournament: t, delay = 0 }: TournamentCardProps
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
-                {isOfficial && <Crown className="w-3.5 h-3.5 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,183,27,0.3)" />}
+                {isOfficial && <Crown className="w-3.5 h-3.5 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.35)" />}
                 <h3 className="font-extrabold text-text-strong text-base truncate">
                   {t.name}
                 </h3>
@@ -127,7 +127,7 @@ export function TournamentCard({ tournament: t, delay = 0 }: TournamentCardProps
           {/* Winner pour les tournois terminés */}
           {t.winner && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-gold/10 border border-gold/30">
-              <Crown className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,183,27,0.5)" />
+              <Crown className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.55)" />
               <div className="text-xs">
                 <span className="text-muted-2">Vainqueur · </span>
                 <span className="font-extrabold text-gold">{t.winner.login}</span>

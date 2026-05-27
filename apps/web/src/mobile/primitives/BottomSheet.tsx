@@ -120,16 +120,19 @@ export function BottomSheet({
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={handleDragEnd}
             style={{ y, ...sheetStyle }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-bg-1/95 backdrop-blur-xl rounded-t-3xl shadow-sheet border-t border-border/60 flex flex-col overflow-hidden"
+            className="fixed bottom-0 left-0 right-0 z-50 glass-strong rounded-t-3xl shadow-sheet border-t border-gold/30 flex flex-col overflow-hidden"
           >
+            {/* Reflet doré en haut de la sheet */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent pointer-events-none" />
+
             {/* Drag handle */}
             <div className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing">
-              <div className="w-10 h-1 rounded-full bg-muted/40" />
+              <div className="w-10 h-1 rounded-full bg-gradient-to-r from-gold/30 via-gold/60 to-gold/30" />
             </div>
 
             {title && (
-              <div className="px-5 pt-1 pb-3 border-b border-border/40">
-                <div className="text-base font-extrabold text-text-strong tracking-wide">
+              <div className="px-5 pt-1 pb-3 border-b border-gold/15">
+                <div className="font-gaming text-base font-extrabold text-text-strong tracking-wide uppercase">
                   {title}
                 </div>
               </div>

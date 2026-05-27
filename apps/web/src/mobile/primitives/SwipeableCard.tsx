@@ -22,9 +22,9 @@ interface SwipeableCardProps {
 }
 
 const COLOR_BG: Record<SwipeAction['color'], string> = {
-  teal: 'bg-teal text-[#001416]',
-  red: 'bg-red text-white',
-  gold: 'bg-gold text-[#1a1100]',
+  teal: 'bg-gradient-to-r from-gold to-gold-dim text-[#1a0d00]',
+  red: 'bg-gradient-to-r from-red to-red-deep text-white',
+  gold: 'metal-plate-gold text-[#1a1100]',
 };
 
 /**
@@ -109,7 +109,7 @@ export function SwipeableCard({
               : undefined
         }
         style={{ x, rotate }}
-        className="relative bg-bg-1 rounded-2xl touch-pan-y"
+        className="relative card-hud rounded-2xl touch-pan-y"
       >
         {children}
       </motion.div>

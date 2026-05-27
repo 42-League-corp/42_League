@@ -36,13 +36,18 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
       initial={{ opacity: 0, y: -8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden rounded-3xl border border-teal/40 neon-border no-select gpu"
+      className="relative overflow-hidden rounded-3xl no-select gpu"
       style={{
         background:
-          'linear-gradient(135deg, rgba(0,217,220,0.06) 0%, rgba(17,24,39,0.95) 50%, rgba(255,183,27,0.04) 100%)',
-        boxShadow: '0 12px 32px -8px rgba(0,217,220,0.25), 0 0 0 1px rgba(0,217,220,0.15)',
+          'linear-gradient(180deg, #2a241c 0%, #1d1914 18%, #15120e 50%, #1d1914 82%, #2a241c 100%)',
+        border: '1px solid rgba(255, 201, 74, 0.4)',
+        boxShadow:
+          'inset 0 1px 0 rgba(255, 215, 120, 0.18), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 36px -8px rgba(255, 201, 74, 0.22)',
       }}
     >
+      {/* Tubes laiton décoratifs */}
+      <div className="absolute top-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
+      <div className="absolute bottom-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
       {/* Holographic conic — gated on prefers-reduced-motion (perf + a11y + batterie) */}
       {!reducedMotion && (
         <motion.div
@@ -52,8 +57,8 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           transition={{ duration: 30, ease: 'linear', repeat: Infinity }}
           style={{
             background:
-              'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(0,217,220,0.3) 60deg, transparent 120deg, rgba(255,183,27,0.2) 200deg, transparent 260deg, rgba(0,217,220,0.2) 340deg, transparent 360deg)',
-            filter: 'blur(40px)',
+              'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,201,74,0.35) 60deg, transparent 120deg, rgba(192,138,74,0.25) 200deg, transparent 260deg, rgba(255,201,74,0.25) 340deg, transparent 360deg)',
+            filter: 'blur(50px)',
             willChange: 'transform',
           }}
         />
@@ -62,12 +67,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
       {/* Grille cyber */}
       <div
         aria-hidden
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(0,217,220,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,217,220,1) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        }}
+        className="absolute inset-0 hud-grid opacity-50 pointer-events-none"
       />
 
       <div className="relative z-10 px-5 pt-5 pb-5">
@@ -78,15 +78,15 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               className="absolute -inset-1 rounded-full pointer-events-none"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(0,217,220,0.4) 0%, transparent 70%)',
-                filter: 'blur(8px)',
+                  'radial-gradient(circle, rgba(255,201,74,0.4) 0%, transparent 70%)',
+                filter: 'blur(10px)',
               }}
             />
             <Avatar
               login={user.login}
               imageUrl={user.imageUrl}
               size="lg"
-              className="relative ring-2 ring-teal/60 ring-offset-2 ring-offset-bg-1"
+              className="relative"
             />
           </div>
 
@@ -114,11 +114,11 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide flex-shrink-0 ${
                 isTop1
-                  ? 'bg-gradient-to-br from-gold to-[#d6920b] text-[#1a1100] shadow-gold-glow'
+                  ? 'metal-plate-gold shadow-gold-glow'
                   : isTop3
-                    ? 'bg-bg-1/80 text-gold border border-gold/40'
+                    ? 'bg-bg-1/80 text-gold border border-gold/50'
                     : isTop10
-                      ? 'bg-bg-1/80 text-teal border border-teal/40'
+                      ? 'bg-bg-1/80 text-gold border border-gold/30'
                       : 'bg-bg-1/80 text-muted-2 border border-border'
               }`}
             >
@@ -131,12 +131,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
         {/* ELO bloc */}
         <div className="flex items-baseline justify-between gap-4 mb-2 px-1">
           <div>
-            <div
-              className="font-mono text-[56px] font-black leading-none tabular-nums tracking-tighter text-teal"
-              style={{
-                textShadow: '0 0 24px rgba(0,217,220,0.5), 0 2px 0 rgba(0,0,0,0.4)',
-              }}
-            >
+            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
             <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5">
@@ -147,7 +142,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           {/* Delta 7j */}
           {stats.delta7d !== 0 && (
             <div
-              className={`flex flex-col items-end ${stats.delta7d > 0 ? 'text-teal' : 'text-red'}`}
+              className={`flex flex-col items-end ${stats.delta7d > 0 ? 'text-gold' : 'text-red'}`}
             >
               <div className="flex items-center gap-1 font-mono text-lg font-extrabold tabular-nums">
                 {stats.delta7d > 0 ? (
@@ -216,14 +211,15 @@ const TONE_PILL: Record<StatPillProps['tone'], string> = {
 
 function StatPill({ label, value, tone, icon }: StatPillProps) {
   return (
-    <div className="flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg bg-bg-1/40 border border-border/40">
+    <div className="relative metal-plate rounded-lg px-1 py-2 flex flex-col items-center gap-0.5">
       <div
-        className={`text-base font-extrabold tabular-nums font-mono leading-none flex items-center gap-1 ${TONE_PILL[tone]}`}
+        className={`relative z-10 font-display text-base font-black tabular-nums leading-none flex items-center gap-1 ${TONE_PILL[tone]}`}
+        style={{ textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 10px currentColor' }}
       >
         {icon}
         <span>{value}</span>
       </div>
-      <div className="text-[9px] text-muted uppercase tracking-wider font-bold leading-none">
+      <div className="relative z-10 text-[9px] text-muted-2 uppercase tracking-[0.16em] font-extrabold leading-none">
         {label}
       </div>
     </div>

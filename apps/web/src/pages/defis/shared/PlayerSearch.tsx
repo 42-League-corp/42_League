@@ -13,12 +13,13 @@ interface PlayerSearchProps {
   variant?: 'desktop' | 'mobile';
 }
 
+const GOLD_BG_STYLE = {
+  background:
+    'linear-gradient(135deg, #d4a04a 0%, #8a5e10 50%, #c79122 100%)',
+} as const;
+
 /**
  * Combobox de recherche d'adversaire, partagé Desktop/Mobile.
- * - Tri par récents (fréquence) en tête, puis le reste
- * - Filtre par préfixe sur le login
- * - Navigation clavier (↑ ↓ Enter Esc)
- * - Highlight des matches dans le nom
  */
 export function PlayerSearch({
   players,
@@ -88,18 +89,21 @@ export function PlayerSearch({
 
   if (selected) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 bg-bg-1 border-2 border-teal/40 rounded-xl animate-pop shadow-sm">
-        <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border-2 border-teal/50 shadow-sm">
+      <div className="flex items-center gap-3 px-4 py-3 bg-bg-1 border-2 border-gold/50 rounded-xl animate-pop shadow-[0_0_20px_rgba(255,201,74,0.18),inset_0_1px_0_rgba(255,215,120,0.12)]">
+        <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border-2 border-gold/60 shadow-sm">
           {selected.imageUrl ? (
             <img src={selected.imageUrl} alt={selected.login} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-teal-deep flex items-center justify-center text-sm font-bold text-[#001416]">
+            <div
+              className="w-full h-full flex items-center justify-center text-sm font-display font-black text-[#1a1100]"
+              style={GOLD_BG_STYLE}
+            >
               {selected.login[0]?.toUpperCase()}
             </div>
           )}
         </div>
         <span className="font-extrabold text-base text-text-strong flex-1 truncate">{selected.login}</span>
-        <span className="text-teal text-sm font-bold bg-teal/10 px-2 py-1 rounded-md font-mono tabular-nums">{selected.elo}</span>
+        <span className="text-gold text-sm font-extrabold bg-gold/10 px-2 py-1 rounded-md font-mono tabular-nums border border-gold/20">{selected.elo}</span>
         <button
           type="button"
           aria-label="Changer d'adversaire"
@@ -131,17 +135,17 @@ export function PlayerSearch({
           onKeyDown={handleKeyDown}
           placeholder="Tape un pseudo…"
           aria-label="Rechercher un adversaire"
-          className="w-full pl-11 pr-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-base font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-md tap-transparent allow-select"
+          className="w-full pl-11 pr-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-base font-medium focus:border-gold outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] tap-transparent allow-select"
         />
       </div>
 
       {open && visibleList.length > 0 && (
         <div
-          className={`${isMobile ? 'relative w-full mt-3' : 'absolute z-50 w-full mt-2'} bg-bg-1 border border-border rounded-xl shadow-2xl overflow-hidden animate-pop`}
+          className={`${isMobile ? 'relative w-full mt-3' : 'absolute z-50 w-full mt-2'} card-hud rounded-xl shadow-2xl overflow-hidden animate-pop`}
         >
           {showingRecents && (
-            <div className="flex items-center justify-between px-4 py-2 bg-bg-2/50 border-b border-border">
-              <span className="text-[10px] uppercase tracking-wider text-muted font-bold">
+            <div className="flex items-center justify-between px-4 py-2 bg-bg-2/50 border-b border-gold/15">
+              <span className="text-[10px] uppercase tracking-wider text-gold font-extrabold">
                 Tes adversaires
               </span>
               <span className="text-[10px] text-muted-2 font-mono">
@@ -161,15 +165,18 @@ export function PlayerSearch({
                   onMouseEnter={() => setActiveIdx(i)}
                   className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors tap-transparent ${
                     i === activeIdx
-                      ? 'bg-teal/10 text-text-strong border-l-2 border-teal'
+                      ? 'bg-gold/10 text-text-strong border-l-2 border-gold'
                       : 'hover:bg-bg-2 text-muted-2 border-l-2 border-transparent'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-border shadow-sm">
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gold/30 shadow-sm">
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-teal-deep flex items-center justify-center text-sm font-bold text-[#001416]">
+                      <div
+                        className="w-full h-full flex items-center justify-center text-sm font-display font-black text-[#1a1100]"
+                        style={GOLD_BG_STYLE}
+                      >
                         {p.login[0]?.toUpperCase()}
                       </div>
                     )}
@@ -180,7 +187,7 @@ export function PlayerSearch({
                     </div>
                     <div className="text-[11px] text-muted font-medium">
                       {played ? (
-                        <span className="text-teal/80">
+                        <span className="text-gold/80">
                           {count} game{count > 1 ? 's' : ''} jouée{count > 1 ? 's' : ''}
                         </span>
                       ) : (
@@ -189,7 +196,7 @@ export function PlayerSearch({
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 flex-shrink-0 font-mono">
-                    <span className="text-sm text-teal font-extrabold leading-none tabular-nums">{p.elo}</span>
+                    <span className="text-sm text-gold font-extrabold leading-none tabular-nums">{p.elo}</span>
                     <span className="text-[10px] text-muted font-medium leading-none tabular-nums">#{p.rank}</span>
                   </div>
                 </button>
@@ -200,7 +207,7 @@ export function PlayerSearch({
       )}
 
       {open && normalizedQuery.length > 0 && visibleList.length === 0 && (
-        <div className="absolute z-50 w-full mt-2 bg-bg-1 border border-border rounded-xl shadow-2xl px-4 py-4 text-sm text-muted font-medium text-center animate-pop">
+        <div className="absolute z-50 w-full mt-2 card-hud rounded-xl shadow-2xl px-4 py-4 text-sm text-muted font-medium text-center animate-pop">
           Aucun joueur trouvé
         </div>
       )}
@@ -216,7 +223,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <span className="text-teal">{text.slice(idx, idx + trimmed.length)}</span>
+      <span className="text-gold">{text.slice(idx, idx + trimmed.length)}</span>
       {text.slice(idx + trimmed.length)}
     </>
   );

@@ -74,7 +74,7 @@ export function PullToRefresh({
         <motion.div
           style={{ y, scale }}
           className={`flex items-center justify-center w-10 h-10 rounded-full glass-strong shadow-lg border ${
-            primed ? 'border-teal text-teal' : 'border-border text-muted-2'
+            primed ? 'border-gold text-gold shadow-gold-glow' : 'border-gold/20 text-muted-2'
           }`}
         >
           <AnimatePresence mode="wait">

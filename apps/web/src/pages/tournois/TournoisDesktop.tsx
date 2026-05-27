@@ -26,8 +26,9 @@ export function TournoisDesktop() {
 
   return (
     <Panel title="Tournois" sub="Brackets · single-élim">
-      <div className="mb-6 border-b border-border pb-6">
-        <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+      <div className="mb-6 border-b border-gold/15 pb-6">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-2 flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
           Créer un tournoi
         </div>
         <div className="flex flex-wrap gap-3 mb-3 items-center">
@@ -54,12 +55,12 @@ export function TournoisDesktop() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du tournoi (ex. Coupe du Havre)"
-            className="px-3 py-2 bg-bg-2 border border-border rounded text-sm focus:border-teal outline-none"
+            className="px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           />
           <select
             value={capacity}
             onChange={(e) => setCapacity(Number(e.target.value) as Capacity)}
-            className="px-3 py-2 bg-bg-2 border border-border rounded text-sm focus:border-teal outline-none"
+            className="px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           >
             <option value={4}>4 joueurs</option>
             <option value={8}>8 joueurs</option>
@@ -122,7 +123,7 @@ function TournoiCard({ t }: { t: Tournament }) {
   return (
     <Link
       to={`/tournois/${encodeURIComponent(t.id)}`}
-      className="block p-4 border border-border bg-bg-2/40 rounded hover:border-teal/60 hover:bg-bg-2/70 transition"
+      className="block card-hud p-4 rounded-xl hover-glow transition-all"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

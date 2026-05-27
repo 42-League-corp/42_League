@@ -42,7 +42,7 @@ export function LeaderboardDesktop() {
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-muted">
+              <tr className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold border-b border-gold/20">
                 <th className="text-left px-2 sm:px-3 py-2">#</th>
                 <th className="text-left px-2 sm:px-3 py-2">{t('lb.col.player')}</th>
                 <th className="text-right px-2 sm:px-3 py-2">{t('lb.col.elo')}</th>
@@ -67,11 +67,11 @@ export function LeaderboardDesktop() {
                   <tr
                     key={u.login}
                     className={
-                      'border-t border-border/50 ' +
-                      (isMe ? 'bg-teal/[0.04]' : 'hover:bg-bg-2/40')
+                      'border-t border-gold/10 transition-colors ' +
+                      (isMe ? 'bg-gold/[0.06] shadow-[inset_3px_0_0_0_rgba(255,201,74,0.7)]' : 'hover:bg-gold/[0.04]')
                     }
                   >
-                    <td className={`px-2 sm:px-3 py-2.5 font-extrabold tabular-nums ${rankCls}`}>
+                    <td className={`px-2 sm:px-3 py-2.5 font-display font-black tabular-nums ${rankCls}`}>
                       #{u.rank}
                     </td>
                     <td className="px-2 sm:px-3 py-2.5">
@@ -95,7 +95,7 @@ export function LeaderboardDesktop() {
                         </div>
                       )}
                     </td>
-                    <td className="px-2 sm:px-3 py-2.5 text-right tabular-nums text-teal font-bold">
+                    <td className="px-2 sm:px-3 py-2.5 text-right tabular-nums font-display font-extrabold text-gold" style={{ textShadow: '0 0 10px rgba(255,201,74,0.25)' }}>
                       {u.elo}
                     </td>
                     <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-gold">
