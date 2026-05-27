@@ -31,7 +31,7 @@ export function SegmentedControl<T extends string>({
   return (
     <div
       role="tablist"
-      className={`relative inline-flex w-full p-1 rounded-full bg-bg-2/80 border border-border/60 backdrop-blur-md no-select ${className}`}
+      className={`relative inline-flex w-full p-1 rounded-full bg-bg-1/80 border border-gold/20 backdrop-blur-md no-select shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)] ${className}`}
     >
       {choices.map((c) => {
         const active = c.value === value;
@@ -46,22 +46,22 @@ export function SegmentedControl<T extends string>({
               haptic('selection');
               onChange(c.value);
             }}
-            className={`relative flex-1 flex items-center justify-center gap-1.5 h-9 px-3 text-xs font-bold uppercase tracking-wider rounded-full tap-transparent transition-colors z-10 ${
-              active ? 'text-[#001416]' : 'text-muted-2 active:text-text'
+            className={`relative flex-1 flex items-center justify-center gap-1.5 h-9 px-3 text-xs font-extrabold uppercase tracking-wider rounded-full tap-transparent transition-colors z-10 ${
+              active ? 'text-[#1a0d00]' : 'text-muted-2 active:text-text'
             }`}
           >
             {active && (
               <motion.span
                 layoutId="segmented-bg"
                 transition={{ type: 'spring', stiffness: 520, damping: 38 }}
-                className="absolute inset-0 rounded-full bg-gradient-to-br from-teal to-teal-dim shadow-teal-glow -z-10"
+                className="absolute inset-0 rounded-full metal-plate-gold -z-10"
               />
             )}
-            <span>{c.label}</span>
+            <span className="relative z-10">{c.label}</span>
             {c.badge !== undefined && c.badge > 0 && (
               <span
-                className={`min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center tabular-nums ${
-                  active ? 'bg-[#001416]/80 text-teal' : 'bg-red text-white'
+                className={`relative z-10 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center tabular-nums ${
+                  active ? 'bg-[#1a0d00]/80 text-gold' : 'bg-red text-white'
                 }`}
               >
                 {c.badge}

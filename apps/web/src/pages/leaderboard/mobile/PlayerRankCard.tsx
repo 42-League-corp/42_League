@@ -52,10 +52,10 @@ export function PlayerRankCard({
         navigate(`/joueur/${entry.login}`);
       }}
       whileTap={{ scale: 0.98 }}
-      className={`relative w-full flex items-center gap-3 p-3.5 rounded-2xl border tap-transparent text-left transition-colors ${
+      className={`relative w-full flex items-center gap-3 p-3.5 rounded-2xl border tap-transparent text-left transition-all hover-glow ${
         isMe
-          ? 'border-teal/50 bg-teal/[0.06] shadow-teal-glow'
-          : 'border-border bg-bg-1 active:bg-bg-2'
+          ? 'border-gold/60 bg-gold/[0.08] shadow-gold-glow'
+          : 'border-gold/15 card-hud active:bg-bg-2'
       }`}
     >
       {/* Rank */}
@@ -85,7 +85,7 @@ export function PlayerRankCard({
             {entry.login}
           </span>
           {isMe && (
-            <span className="text-[8px] font-extrabold text-teal bg-teal/15 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+            <span className="text-[8px] font-extrabold text-[#1a1100] metal-plate-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
               Toi
             </span>
           )}
@@ -111,7 +111,7 @@ export function PlayerRankCard({
 
       {/* ELO */}
       <div className="text-right flex-shrink-0">
-        <div className="text-base font-extrabold font-mono tabular-nums text-teal leading-none">
+        <div className="font-display text-base font-black tabular-nums text-gold leading-none" style={{ textShadow: '0 0 12px rgba(255,201,74,0.35)' }}>
           {entry.elo}
         </div>
         <div className="text-[9px] text-muted uppercase tracking-wider font-bold mt-0.5">

@@ -17,7 +17,12 @@ export function Pills<V extends string>({
   className = '',
 }: PillsProps<V>) {
   return (
-    <div className={`inline-flex bg-bg-2 rounded p-0.5 ${className}`}>
+    <div
+      className={`inline-flex rounded-lg p-0.5 border border-gold/20 bg-bg-1/80 ${className}`}
+      style={{
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,201,74,0.04)',
+      }}
+    >
       {choices.map((c) => {
         const active = c.value === value;
         return (
@@ -26,10 +31,10 @@ export function Pills<V extends string>({
             type="button"
             onClick={() => onChange(c.value)}
             className={
-              'px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded transition ' +
+              'relative px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider rounded-md transition-all duration-200 ' +
               (active
-                ? 'bg-teal-deep/40 text-teal shadow-inner'
-                : 'text-muted-2 hover:text-text')
+                ? 'bg-gradient-to-b from-gold/25 to-gold/10 text-gold border border-gold/40 shadow-[inset_0_1px_0_rgba(255,247,228,0.18)]'
+                : 'text-muted-2 hover:text-gold/90 border border-transparent')
             }
           >
             {c.label}

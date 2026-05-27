@@ -79,17 +79,17 @@ export function PlayerPage() {
 
   return (
     <Panel title={p.user.login} sub="Profil 42 League">
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-5 mb-6">
         <Avatar login={p.user.login} imageUrl={p.user.imageUrl} size="xl" />
         <div className="min-w-0">
-          <div className="text-2xl font-extrabold text-text-strong truncate">
+          <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
             {p.user.login}
           </div>
           <div className="text-xs text-muted-2 mt-1 flex flex-wrap items-center gap-2">
-            <span>
+            <span className="font-bold uppercase tracking-wider text-[10px]">
               {t('profil.campus')} · {p.user.campus ?? '—'}
             </span>
-            <span className="px-2 py-0.5 bg-gold/10 border border-gold rounded text-gold text-[10px] font-bold uppercase tracking-wider">
+            <span className="metal-plate-gold px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
               {p.user.elo} ELO
             </span>
           </div>
@@ -109,7 +109,7 @@ export function PlayerPage() {
             onChange={(e) => setTitleDraft(e.target.value)}
             maxLength={40}
             placeholder="ex. Le Maître"
-            className="flex-1 min-w-[160px] px-3 py-1.5 bg-bg-0 border border-border rounded text-sm focus:border-teal outline-none"
+            className="flex-1 min-w-[160px] px-3 py-1.5 bg-bg-0 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           />
           <Button
             size="sm"
@@ -176,18 +176,18 @@ export function PlayerPage() {
         />
       </div>
 
-      <div className="space-y-1.5 mb-6 text-sm">
-        <div className="flex justify-between border-b border-border/40 pb-1.5">
-          <span className="text-muted-2">Victoires</span>
-          <span className="text-gold font-bold tabular-nums">{p.wins}</span>
+      <div className="space-y-1.5 mb-6 text-sm card-hud rounded-xl px-4 py-3">
+        <div className="flex justify-between border-b border-gold/10 pb-1.5">
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Victoires</span>
+          <span className="text-gold font-display font-extrabold tabular-nums">{p.wins}</span>
         </div>
-        <div className="flex justify-between border-b border-border/40 pb-1.5">
-          <span className="text-muted-2">Défaites</span>
-          <span className="text-red font-bold tabular-nums">{p.losses}</span>
+        <div className="flex justify-between border-b border-gold/10 pb-1.5">
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Défaites</span>
+          <span className="text-red font-display font-extrabold tabular-nums">{p.losses}</span>
         </div>
-        <div className="flex justify-between border-b border-border/40 pb-1.5">
-          <span className="text-muted-2">Inscrit depuis</span>
-          <span className="text-text">
+        <div className="flex justify-between">
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Inscrit depuis</span>
+          <span className="text-text font-mono">
             {new Date(p.user.createdAt).toLocaleDateString(locale, {
               day: '2-digit',
               month: '2-digit',

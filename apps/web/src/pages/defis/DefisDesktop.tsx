@@ -165,7 +165,7 @@ function DeclareGameSection({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full group flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-border hover:border-teal hover:bg-teal/5 transition-all duration-300 text-muted-2 hover:text-teal text-xs font-bold uppercase tracking-wider shadow-sm hover:shadow-md"
+          className="shine w-full group flex items-center justify-center gap-2 py-5 rounded-2xl border border-dashed border-gold/30 hover:border-gold hover:bg-gold/8 transition-all duration-300 text-muted-2 hover:text-gold text-xs font-extrabold uppercase tracking-[0.16em] shadow-sm hover:shadow-gold-glow font-gaming"
         >
           <span className="text-lg transition-transform duration-300 group-hover:rotate-90">+</span>
           Déclarer une game passée
@@ -177,14 +177,17 @@ function DeclareGameSection({
   return (
     <div className="mb-6">
       <div
-        className="relative border border-teal/30 rounded-2xl p-6 shadow-2xl bg-bg-0/80 backdrop-blur-md min-h-[460px] flex flex-col animate-pop"
+        className="relative card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col animate-pop overflow-hidden"
         style={{
           backgroundImage:
-            'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,217,220,0.15), transparent 70%)',
+            'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,201,74,0.18), transparent 70%)',
+          boxShadow:
+            '0 18px 48px rgba(0,0,0,0.5), 0 0 36px rgba(255,201,74,0.15), inset 0 1px 0 rgba(255,215,120,0.1)',
         }}
       >
         <div className="relative flex items-center justify-between mb-6">
-          <span className="text-xs font-extrabold uppercase tracking-widest text-teal">
+          <span className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold flex items-center gap-2">
+            <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
             Déclarer une game passée
           </span>
           <button
@@ -265,7 +268,7 @@ function PendingConfirmRow({
 
   return (
     <>
-      <div className="p-3 border border-gold/30 bg-gold/5 rounded-lg animate-pop">
+      <div className="relative card-hud border-gold/50 rounded-xl p-3 animate-pop hover-glow">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span aria-hidden className="text-base">⚡</span>
           <PlayerLink login={match.declarerLogin} className="font-semibold text-gold">
@@ -297,8 +300,8 @@ function PendingConfirmRow({
             <div
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold ${
                 iWon
-                  ? 'bg-teal/10 text-teal border border-teal/20'
-                  : 'bg-red/10 text-red border border-red/20'
+                  ? 'bg-gold/10 text-gold border border-gold/30'
+                  : 'bg-red/10 text-red border border-red/30'
               }`}
             >
               <span aria-hidden>{iWon ? '🏆' : '💀'}</span>
@@ -338,7 +341,7 @@ function PendingConfirmRow({
 
 function PendingWaitRow({ match }: { match: PendingMatch }) {
   return (
-    <div className="p-3 border border-border bg-bg-2/40 rounded flex flex-wrap items-center gap-2 text-sm">
+    <div className="card-hud rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm">
       <span aria-hidden className="text-base opacity-50">⏳</span>
       <span className="text-muted-2">En attente de</span>
       <PlayerLink login={match.opponentLogin} className="font-semibold">
@@ -360,8 +363,10 @@ function PendingWaitRow({ match }: { match: PendingMatch }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+      <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-2 flex items-center gap-2">
+        <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
         {title}
+        <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
       </div>
       <div className="space-y-2">{children}</div>
     </div>
@@ -390,9 +395,9 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
   const [recording, setRecording] = useState(false);
 
   return (
-    <div className="p-3 border border-border bg-bg-2/40 rounded">
+    <div className="card-hud rounded-xl p-3 hover-glow">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span aria-hidden className="text-base">⚔</span>
+        <span aria-hidden className="text-base text-gold">⚔</span>
         <span className="text-muted-2">{KIND_LABEL[kind]}</span>
         <PlayerLink login={opponent} className="font-semibold">
           {opponent}
@@ -520,14 +525,14 @@ function ChallengeCard({ login, imageUrl, elo, rank, onSent }: ChallengeCardProp
   };
 
   return (
-    <div className="p-3 border border-border bg-bg-2/40 rounded">
+    <div className="card-hud rounded-xl p-3 hover-glow">
       <div className="flex items-center gap-2.5">
         <PlayerLink login={login} className="flex-1 min-w-0">
           <Avatar login={login} imageUrl={imageUrl} size="md" />
           <div className="min-w-0">
-            <div className="font-bold truncate text-text-strong">{login}</div>
+            <div className="font-display font-bold truncate text-text-strong">{login}</div>
             <div className="text-[11px] text-muted-2">
-              <span className="text-teal font-bold">{elo}</span> ELO · #{rank}
+              <span className="text-gold font-extrabold font-mono tabular-nums">{elo}</span> ELO · #{rank}
             </div>
           </div>
         </PlayerLink>
@@ -540,7 +545,7 @@ function ChallengeCard({ login, imageUrl, elo, rank, onSent }: ChallengeCardProp
             value={when}
             onChange={(e) => setWhen(e.target.value)}
             aria-label="Date et heure du défi"
-            className="flex-1 min-w-[180px] px-3 py-2 bg-bg-0 border border-border rounded text-sm focus:border-teal outline-none"
+            className="flex-1 min-w-[180px] px-3 py-2 bg-bg-0 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           />
           <Button size="sm" loading={busy} onClick={sendChallenge}>Envoyer</Button>
           <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>

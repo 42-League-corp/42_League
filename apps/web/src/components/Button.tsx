@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-type Variant = 'primary' | 'ghost' | 'danger';
-type Size = 'sm' | 'md';
+type Variant = 'primary' | 'ghost' | 'danger' | 'gold';
+type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -12,17 +12,33 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT: Record<Variant, string> = {
+  // Primary = bouton "+ GAME" orange/ambre du screenshot.
   primary:
-    'bg-gradient-to-b from-teal to-teal-dim text-[#001416] hover:brightness-110 hover:shadow-teal-glow',
+    'shine bg-gradient-to-b from-[#ffa83a] via-[#f08020] to-[#c5520a] text-[#1a0d00] ' +
+    'border border-[#ffc966]/60 ' +
+    'shadow-[inset_0_1px_0_rgba(255,247,228,0.5),inset_0_-1px_0_rgba(0,0,0,0.35),0_4px_14px_rgba(255,128,32,0.4)] ' +
+    'hover:from-[#ffb84a] hover:via-[#ff8830] hover:to-[#d65a10] hover:shadow-[inset_0_1px_0_rgba(255,247,228,0.6),0_8px_22px_rgba(255,128,32,0.55)] ' +
+    'hover:brightness-[1.05]',
+  // Gold = bouton or pur (premium).
+  gold:
+    'shine metal-plate-gold font-black ' +
+    'hover:brightness-110 hover:shadow-gold-glow',
+  // Ghost = bouton outline doré.
   ghost:
-    'bg-transparent text-muted-2 border border-border hover:text-teal hover:border-teal hover:bg-teal/5',
+    'bg-transparent text-muted-2 border border-border ' +
+    'hover:text-gold hover:border-gold/60 hover:bg-gold/5 hover:shadow-[inset_0_0_0_1px_rgba(255,201,74,0.15)]',
+  // Danger = bouton rouge sang séché.
   danger:
-    'bg-gradient-to-b from-red to-[#c8203f] text-white hover:shadow-[0_0_14px_rgba(255,59,92,0.5)]',
+    'shine bg-gradient-to-b from-red to-red-deep text-white ' +
+    'border border-red/60 ' +
+    'shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_4px_14px_rgba(255,83,102,0.35)] ' +
+    'hover:brightness-110 hover:shadow-red-glow',
 };
 
 const SIZE: Record<Size, string> = {
   sm: 'px-3 py-1.5 text-[10px]',
   md: 'px-4 py-2.5 text-xs',
+  lg: 'px-5 py-3 text-sm',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -34,8 +50,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       className={
-        `inline-flex items-center justify-center gap-1.5 font-bold uppercase tracking-wider rounded transition active:scale-[0.97] ` +
-        `disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:filter-none disabled:hover:shadow-none ` +
+        `relative overflow-hidden inline-flex items-center justify-center gap-1.5 font-extrabold uppercase tracking-wider rounded-lg ` +
+        `transition-all duration-200 active:scale-[0.97] tap-transparent ` +
+        `disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:hover:shadow-none ` +
         `${VARIANT[variant]} ${SIZE[size]} ${full ? 'w-full' : ''} ${className}`
       }
       {...rest}
@@ -43,7 +60,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {loading && (
         <span className="inline-block w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
       )}
-      {children}
+      <span className="relative z-10">{children}</span>
     </button>
   );
 });

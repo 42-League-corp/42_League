@@ -41,18 +41,23 @@ export function MobileHeader() {
 
   return (
     <header
-      className="sticky top-0 z-40 w-full glass border-b border-border/60 no-select"
+      className="sticky top-0 z-40 w-full glass border-b border-gold/20 no-select"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="flex items-center gap-3 px-4 h-14">
-        {/* Brand compact */}
+      {/* Filet doré décoratif en bas (effet HUD) */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent pointer-events-none" />
+
+      <div className="relative flex items-center gap-3 px-4 h-14">
+        {/* Brand compact — plaque dorée mini */}
         <NavLink
           to="/defis"
           onClick={() => haptic('selection')}
-          className="flex items-baseline gap-1.5 active:opacity-70 transition-opacity tap-transparent"
+          className="flex items-center gap-1.5 active:opacity-70 transition-opacity tap-transparent"
         >
-          <span className="text-base font-extrabold tracking-[0.18em] uppercase gradient-text-brand">
-            42·L
+          <span className="relative inline-flex items-center justify-center w-7 h-7 rounded-md metal-plate-gold">
+            <span className="font-display font-black text-[10px] tracking-tight text-[#3a1e00]">
+              42L
+            </span>
           </span>
         </NavLink>
 
@@ -62,7 +67,7 @@ export function MobileHeader() {
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="text-sm font-bold text-text-strong tracking-wide flex-1 truncate ml-1"
+          className="font-gaming text-base font-extrabold text-text-strong tracking-wide flex-1 truncate ml-1 uppercase"
         >
           {title}
         </motion.h1>
@@ -79,9 +84,9 @@ export function MobileHeader() {
               navigate('/defis');
             }}
             aria-label={`${pendingCount} game${pendingCount > 1 ? 's' : ''} à confirmer`}
-            className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gold/15 active:bg-gold/25 active:scale-90 transition-transform tap-transparent"
+            className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-gold/25 to-gold/10 border border-gold/40 active:bg-gold/30 active:scale-90 transition-transform tap-transparent shadow-[inset_0_1px_0_rgba(255,247,228,0.18),0_2px_8px_rgba(255,201,74,0.15)]"
           >
-            <Bell className="w-4 h-4 text-gold" strokeWidth={2.5} />
+            <Bell className="w-4 h-4 text-gold animate-ember" strokeWidth={2.5} />
             <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-bg-0 tabular-nums">
               {pendingCount}
             </span>

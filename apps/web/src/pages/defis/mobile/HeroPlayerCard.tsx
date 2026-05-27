@@ -1,22 +1,22 @@
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Crown, Flame, MapPin, Trophy, Zap } from 'lucide-react';
+import { Crown, Flame, MapPin, Trophy, Zap, Cog } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 
 /**
- * Hero card "NBA 2K" du joueur — pièce maîtresse de la page Défis mobile.
+ * Hero card "RPG / Esport" du joueur — pièce maîtresse de la page Défis.
  *
- * Features visuelles :
- * - Background holographique animé (conic gradient qui tourne)
- * - Shimmer layer en surimpression
- * - Border néon teal avec glow
- * - Rank badge (couronne/médaille/star) en haut à droite
- * - Avatar XL avec ring néon
- * - ELO en monospace géant avec count-up à l'apparition
- * - Stats row : W / L / WIN% + streak en feu
- * - Footer : trophées débloqués, % du top
+ * Inspirée du screenshot 42 League cible :
+ * - Cartouche dorée avec rivets et tuyaux en laiton
+ * - Plaques d'acier brossé pour les 4 stats (W/L/WR%/STREAK)
+ * - ELO en typo display (Orbitron) ultra-gros avec relief doré
+ * - Badge "TOP X%" en vert
+ * - Silhouettes de personnages stylisées en arrière-plan
+ * - Mini rouage qui tourne en haut à droite
+ *
+ * Animations conservées : rotation du conic gradient, shimmer, count-up.
  */
 export function HeroPlayerCard() {
   const { me, matches, leaderboard } = useLeagueData();
@@ -65,63 +65,84 @@ export function HeroPlayerCard() {
       initial={{ opacity: 0, y: -8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden rounded-3xl border border-teal/40 neon-border no-select gpu"
+      className="relative overflow-hidden rounded-3xl no-select gpu"
       style={{
         background:
-          'linear-gradient(135deg, rgba(0,217,220,0.06) 0%, rgba(17,24,39,0.95) 50%, rgba(255,183,27,0.04) 100%)',
+          'linear-gradient(180deg, #2a241c 0%, #1d1914 18%, #15120e 50%, #1d1914 82%, #2a241c 100%)',
+        border: '1px solid rgba(255, 201, 74, 0.4)',
         boxShadow:
-          '0 12px 32px -8px rgba(0,217,220,0.25), 0 0 0 1px rgba(0,217,220,0.15), inset 0 1px 0 rgba(255,255,255,0.05)',
+          'inset 0 1px 0 rgba(255, 215, 120, 0.18), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 36px -8px rgba(255, 201, 74, 0.22), 0 0 0 1px rgba(0,0,0,0.5)',
       }}
     >
-      {/* Couche 1 : conic gradient qui tourne très lentement (effet holographique).
-          Désactivé en prefers-reduced-motion pour la batterie + accessibilité. */}
+      {/* Couche 0 : tuyaux en laiton en haut et en bas du cartouche */}
+      <div className="absolute top-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
+      <div className="absolute bottom-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
+
+      {/* Couche 1 : conic gradient lent (effet RPG) */}
       {!reducedMotion && (
         <motion.div
           aria-hidden
-          className="absolute inset-0 opacity-30 pointer-events-none gpu"
+          className="absolute inset-0 opacity-25 pointer-events-none gpu"
           animate={{ rotate: 360 }}
-          transition={{ duration: 30, ease: 'linear', repeat: Infinity }}
+          transition={{ duration: 40, ease: 'linear', repeat: Infinity }}
           style={{
             background:
-              'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(0,217,220,0.3) 60deg, transparent 120deg, rgba(255,183,27,0.2) 200deg, transparent 260deg, rgba(0,217,220,0.2) 340deg, transparent 360deg)',
-            filter: 'blur(40px)',
+              'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,201,74,0.35) 60deg, transparent 120deg, rgba(192,138,74,0.25) 200deg, transparent 260deg, rgba(255,201,74,0.25) 340deg, transparent 360deg)',
+            filter: 'blur(50px)',
             willChange: 'transform',
           }}
         />
       )}
 
-      {/* Couche 2 : shimmer subtil */}
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-20 pointer-events-none shimmer"
-      />
+      {/* Couche 2 : shimmer doré */}
+      <div aria-hidden className="absolute inset-0 opacity-25 pointer-events-none shimmer" />
 
-      {/* Couche 3 : grille technique (cyber feel) */}
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(0,217,220,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,217,220,1) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        }}
-      />
+      {/* Couche 3 : grille HUD très subtile */}
+      <div aria-hidden className="absolute inset-0 hud-grid opacity-50 pointer-events-none" />
+
+      {/* Couche 4 : silhouettes de personnages décoratives (gauche/droite, très estompées) */}
+      <div aria-hidden className="absolute inset-y-4 left-2 w-20 opacity-[0.06] pointer-events-none flex items-center">
+        <svg viewBox="0 0 80 100" className="w-full h-full text-gold">
+          <ellipse cx="40" cy="22" rx="14" ry="16" fill="currentColor" />
+          <path
+            d="M40 38 C 20 38 14 60 14 78 L 14 98 L 66 98 L 66 78 C 66 60 60 38 40 38 Z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+      <div aria-hidden className="absolute inset-y-4 right-2 w-20 opacity-[0.06] pointer-events-none flex items-center">
+        <svg viewBox="0 0 80 100" className="w-full h-full text-gold">
+          <ellipse cx="40" cy="22" rx="14" ry="16" fill="currentColor" />
+          <path
+            d="M40 38 C 20 38 14 60 14 78 L 14 98 L 66 98 L 66 78 C 66 60 60 38 40 38 Z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+
+      {/* Cog décoratif en haut à droite */}
+      {!reducedMotion && (
+        <Cog
+          className="absolute top-3 right-3 w-5 h-5 text-gold/45 animate-gear-spin pointer-events-none"
+          strokeWidth={2}
+        />
+      )}
 
       {/* CONTENU */}
       <div className="relative z-10 px-5 pt-5 pb-4 flex flex-col items-center text-center">
-        {/* Rank badge top-right */}
+        {/* Rank badge top-left (à l'opposé du cog) */}
         {stats.rank > 0 && (
           <motion.div
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
-            className={`absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
+            className={`absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
               isTop1
-                ? 'bg-gradient-to-br from-gold to-[#d6920b] text-[#1a1100] shadow-gold-glow'
+                ? 'metal-plate-gold shadow-gold-glow'
                 : isTop3
-                  ? 'bg-bg-1/80 text-gold border border-gold/40 backdrop-blur'
+                  ? 'bg-bg-1/80 text-gold border border-gold/50 backdrop-blur'
                   : isTop10
-                    ? 'bg-bg-1/80 text-teal border border-teal/40 backdrop-blur'
+                    ? 'bg-bg-1/80 text-gold border border-gold/30 backdrop-blur'
                     : 'bg-bg-1/80 text-muted-2 border border-border backdrop-blur'
             }`}
           >
@@ -131,26 +152,26 @@ export function HeroPlayerCard() {
         )}
 
         {/* Avatar XL avec ring */}
-        <div className="relative mb-3">
+        <div className="relative mb-3 mt-2">
           <div
             className="absolute -inset-2 rounded-full pointer-events-none"
             style={{
               background:
-                'radial-gradient(circle, rgba(0,217,220,0.3) 0%, transparent 70%)',
-              filter: 'blur(8px)',
+                'radial-gradient(circle, rgba(255,201,74,0.35) 0%, transparent 70%)',
+              filter: 'blur(10px)',
             }}
           />
           <Avatar
             login={user.login}
             imageUrl={user.imageUrl}
             size="xl"
-            className="relative ring-2 ring-teal/60 ring-offset-2 ring-offset-bg-1"
+            className="relative"
           />
         </div>
 
         {/* Login + title + campus */}
         <div className="mb-4">
-          <h2 className="text-xl font-extrabold text-text-strong tracking-tight">
+          <h2 className="font-display text-2xl font-black text-text-strong tracking-tight">
             {user.login}
           </h2>
           {user.title && (
@@ -159,7 +180,7 @@ export function HeroPlayerCard() {
             </div>
           )}
           {user.campus && (
-            <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
+            <div className="inline-flex items-center gap-1 text-[10px] text-muted-2 mt-1 font-bold uppercase tracking-[0.18em]">
               <MapPin className="w-3 h-3" strokeWidth={2.5} />
               <span>{user.campus}</span>
             </div>
@@ -169,22 +190,18 @@ export function HeroPlayerCard() {
         {/* ELO géant */}
         <div className="relative mb-1">
           <div
-            className="font-mono text-[64px] font-black leading-none tabular-nums tracking-tighter text-teal"
-            style={{
-              textShadow:
-                '0 0 24px rgba(0,217,220,0.5), 0 0 48px rgba(0,217,220,0.3), 0 2px 0 rgba(0,0,0,0.4)',
-            }}
+            className="font-display text-[68px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss"
           >
             <AnimatedCounter value={user.elo} duration={1.4} />
           </div>
-          <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5">
+          <div className="text-[10px] text-muted uppercase tracking-[0.36em] font-extrabold mt-0.5">
             ELO
           </div>
         </div>
 
-        {/* Stats row */}
+        {/* Stats row — plaques en acier */}
         <div className="mt-5 w-full grid grid-cols-4 gap-2">
-          <StatBlock label="W" value={stats.wins} tone="teal" />
+          <StatBlock label="W" value={stats.wins} tone="gold" />
           <StatBlock label="L" value={stats.losses} tone="red" />
           <StatBlock label="WR" value={`${stats.winRate}%`} tone="gold" />
           <StatBlock
@@ -195,20 +212,25 @@ export function HeroPlayerCard() {
           />
         </div>
 
-        {/* Footer infos */}
+        {/* Footer — badge TOP X% en vert + trophées */}
         {(user.tournamentsWon > 0 || topPercent > 0) && (
-          <div className="mt-4 flex items-center justify-center gap-3 text-[10px] text-muted-2 font-medium uppercase tracking-wider w-full pt-3 border-t border-border/40">
+          <div className="mt-4 flex items-center justify-center gap-2 w-full">
+            {topPercent > 0 && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.4, type: 'spring', stiffness: 360, damping: 20 }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#7fd66e]/50 bg-[#7fd66e]/10 text-[#7fd66e] font-gaming text-[10px] font-extrabold uppercase tracking-wider shadow-[inset_0_1px_0_rgba(127,214,110,0.18),0_0_14px_rgba(127,214,110,0.18)]"
+              >
+                <Zap className="w-3 h-3" strokeWidth={2.5} />
+                <span className="tabular-nums">TOP {topPercent}%</span>
+              </motion.div>
+            )}
             {user.tournamentsWon > 0 && (
-              <div className="flex items-center gap-1 text-gold">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gold/40 bg-gold/10 text-gold font-gaming text-[10px] font-extrabold uppercase tracking-wider">
                 <Trophy className="w-3 h-3" strokeWidth={2.5} />
                 <span className="font-mono tabular-nums">{user.tournamentsWon}</span>
                 <span>tournoi{user.tournamentsWon > 1 ? 's' : ''}</span>
-              </div>
-            )}
-            {topPercent > 0 && (
-              <div className="flex items-center gap-1 text-teal">
-                <Zap className="w-3 h-3" strokeWidth={2.5} />
-                <span>Top {topPercent}%</span>
               </div>
             )}
           </div>
@@ -221,26 +243,39 @@ export function HeroPlayerCard() {
 interface StatBlockProps {
   label: string;
   value: number | string;
-  tone: 'teal' | 'red' | 'gold' | 'fire' | 'muted';
+  tone: 'gold' | 'red' | 'fire' | 'muted';
   icon?: React.ReactNode;
 }
 
 const TONE: Record<StatBlockProps['tone'], string> = {
-  teal: 'text-teal',
-  red: 'text-red',
   gold: 'text-gold',
-  fire: 'text-gold animate-pulse',
+  red: 'text-red',
+  fire: 'text-gold animate-ember',
   muted: 'text-muted-2',
 };
 
+/**
+ * Plaque d'acier brossé pour une stat — réplique exacte des plaques du screenshot
+ * (W/L/WR%/STREAK).
+ */
 function StatBlock({ label, value, tone, icon }: StatBlockProps) {
   return (
-    <div className="flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg bg-bg-1/40 border border-border/40">
-      <div className={`text-base font-extrabold tabular-nums font-mono leading-none flex items-center gap-1 ${TONE[tone]}`}>
+    <div className="relative metal-plate rounded-lg px-1 py-2 flex flex-col items-center gap-0.5">
+      <div
+        className={`relative z-10 font-display text-base font-black tabular-nums leading-none flex items-center gap-1 ${TONE[tone]}`}
+        style={{
+          textShadow:
+            tone === 'red'
+              ? '0 1px 0 rgba(0,0,0,0.6), 0 0 10px rgba(255,83,102,0.4)'
+              : tone === 'muted'
+                ? '0 1px 0 rgba(0,0,0,0.6)'
+                : '0 1px 0 rgba(0,0,0,0.6), 0 0 10px rgba(255,201,74,0.4)',
+        }}
+      >
         {icon}
         <span>{value}</span>
       </div>
-      <div className="text-[9px] text-muted uppercase tracking-wider font-bold leading-none">
+      <div className="relative z-10 text-[9px] text-muted-2 uppercase tracking-[0.16em] font-extrabold leading-none">
         {label}
       </div>
     </div>

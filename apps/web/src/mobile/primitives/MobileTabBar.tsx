@@ -64,15 +64,18 @@ export function MobileTabBar() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Navigation principale"
     >
+      {/* Filet doré décoratif en haut */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none" />
+
       {/* Indicateur fluide qui se déplace */}
       {idx >= 0 && tabWidth > 0 && (
         <motion.div
-          className="absolute top-0 h-[2px] bg-teal"
+          className="absolute top-0 h-[2px] bg-gradient-to-r from-gold via-gold to-gold-dim"
           initial={false}
           animate={{ x: idx * tabWidth, width: tabWidth }}
           transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.6 }}
           style={{
-            boxShadow: '0 0 12px rgba(0,217,220,0.6), 0 0 24px rgba(0,217,220,0.3)',
+            boxShadow: '0 0 14px rgba(255,201,74,0.7), 0 0 28px rgba(255,201,74,0.35)',
           }}
         />
       )}
@@ -87,7 +90,7 @@ export function MobileTabBar() {
               to={tab.to}
               onClick={() => haptic(active ? 'selection' : 'light')}
               className={`relative flex flex-col items-center justify-center flex-1 gap-0.5 tap-transparent transition-colors ${
-                active ? 'text-teal' : 'text-muted-2 active:text-text'
+                active ? 'text-gold' : 'text-muted-2 active:text-text'
               }`}
               aria-label={t(tab.labelKey)}
             >
@@ -95,8 +98,9 @@ export function MobileTabBar() {
               {active && (
                 <motion.div
                   layoutId="tab-halo"
-                  className="absolute inset-x-3 inset-y-1.5 rounded-xl bg-teal/8"
+                  className="absolute inset-x-3 inset-y-1.5 rounded-xl bg-gradient-to-b from-gold/15 to-gold/5 border border-gold/25"
                   transition={{ type: 'spring', stiffness: 520, damping: 38 }}
+                  style={{ boxShadow: 'inset 0 1px 0 rgba(255,215,120,0.15)' }}
                 />
               )}
 
@@ -111,7 +115,7 @@ export function MobileTabBar() {
                 <tab.Icon
                   className="w-[22px] h-[22px]"
                   strokeWidth={active ? 2.5 : 2}
-                  fill={active ? 'rgba(0,217,220,0.18)' : 'transparent'}
+                  fill={active ? 'rgba(255,201,74,0.22)' : 'transparent'}
                 />
                 <AnimatePresence>
                   {showBadge && (
@@ -131,7 +135,7 @@ export function MobileTabBar() {
 
               {/* Label */}
               <span
-                className={`text-[9px] uppercase tracking-[0.12em] font-extrabold leading-none transition-all ${
+                className={`font-gaming text-[9px] uppercase tracking-[0.14em] font-extrabold leading-none transition-all ${
                   active ? 'opacity-100' : 'opacity-70'
                 }`}
               >

@@ -21,7 +21,7 @@ export function HistoriquePage() {
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-muted">
+              <tr className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold border-b border-gold/20">
                 <th className="text-left px-2 sm:px-3 py-2">{t('history.col.date')}</th>
                 <th className="text-left px-2 sm:px-3 py-2">{t('history.col.opp')}</th>
                 <th className="text-right px-2 sm:px-3 py-2">{t('history.col.score')}</th>
@@ -43,7 +43,7 @@ export function HistoriquePage() {
                   <tr
                     key={m.id}
                     className={
-                      'border-t border-border/50 ' +
+                      'border-t border-gold/10 hover:bg-gold/[0.03] transition-colors ' +
                       (m.countedForElo ? '' : 'opacity-60')
                     }
                   >
