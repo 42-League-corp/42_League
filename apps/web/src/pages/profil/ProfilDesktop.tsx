@@ -55,15 +55,17 @@ export function ProfilDesktop() {
 
   return (
     <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')}>
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-5 mb-6">
         <Avatar login={u.login} imageUrl={u.imageUrl} size="xl" />
         <div className="min-w-0">
-          <div className="text-2xl font-extrabold text-text-strong truncate">{u.login}</div>
+          <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
+            {u.login}
+          </div>
           <div className="text-xs text-muted-2 mt-1 flex flex-wrap items-center gap-2">
-            <span>
+            <span className="font-bold uppercase tracking-wider text-[10px]">
               {t('profil.campus')} · {u.campus ?? '—'}
             </span>
-            <span className="px-2 py-0.5 bg-gold/10 border border-gold rounded text-gold text-[10px] font-bold uppercase tracking-wider">
+            <span className="metal-plate-gold px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
               {stats.elo} ELO
             </span>
           </div>
@@ -88,7 +90,7 @@ export function ProfilDesktop() {
         />
       </div>
 
-      <div className="space-y-1.5 mb-6">
+      <div className="space-y-1.5 mb-6 card-hud rounded-xl px-4 py-3">
         <KV label={t('profil.wins')} value={String(stats.wins)} tone="win" />
         <KV label={t('profil.losses')} value={String(stats.losses)} tone="loss" />
       </div>
@@ -100,9 +102,9 @@ export function ProfilDesktop() {
 
 function KV({ label, value, tone }: { label: string; value: string; tone: 'win' | 'loss' }) {
   return (
-    <div className="flex items-center justify-between text-sm border-b border-border/40 pb-1.5">
-      <span className="text-muted-2">{label}</span>
-      <span className={`font-bold tabular-nums ${tone === 'win' ? 'text-gold' : 'text-red'}`}>
+    <div className="flex items-center justify-between text-sm border-b border-gold/10 last:border-0 pb-1.5 last:pb-0">
+      <span className="text-muted-2 font-medium uppercase tracking-wider text-xs">{label}</span>
+      <span className={`font-display font-extrabold tabular-nums ${tone === 'win' ? 'text-gold' : 'text-red'}`}>
         {value}
       </span>
     </div>
@@ -116,8 +118,9 @@ interface OpsWidgetProps {
 
 function OpsWidget({ opsMe, locale }: OpsWidgetProps) {
   return (
-    <div className="mt-4 p-4 border border-red/40 bg-red/5 rounded">
-      <div className="flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.14em]">
+    <div className="mt-4 card-hud rounded-xl p-4 border-red/45">
+      <div className="font-gaming flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.16em]">
+        <span className="inline-block w-1 h-3 bg-red rounded-sm" />
         <span className="text-base">☠</span>
         <span>OPS · ton ennemi juré</span>
       </div>

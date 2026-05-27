@@ -20,36 +20,36 @@ function toneFor(value: number): BeadTone {
 }
 
 const BEAD_GRADIENT: Record<BeadTone, string> = {
-  neg: 'radial-gradient(circle at 32% 28%, #ffd5dd 0%, #ff7a91 28%, #ff3b5c 55%, #8a0a23 100%)',
-  zero: 'radial-gradient(circle at 32% 28%, #ffffff 0%, #d8e0eb 30%, #8d9aae 60%, #3a4459 100%)',
-  pos: 'radial-gradient(circle at 32% 28%, #d6ffff 0%, #7af0f2 25%, #00d9dc 55%, #014a4c 100%)',
+  neg: 'radial-gradient(circle at 32% 28%, #ffd5dd 0%, #ff7a91 28%, #ff5366 55%, #8a0a23 100%)',
+  zero: 'radial-gradient(circle at 32% 28%, #fff7e4 0%, #c9bda6 30%, #7d6e54 60%, #2a241c 100%)',
+  pos: 'radial-gradient(circle at 32% 28%, #fff7c8 0%, #ffc94a 25%, #d49620 55%, #4a3010 100%)',
 };
 
 const BEAD_HALO: Record<BeadTone, string> = {
-  neg: 'radial-gradient(circle, rgba(255,59,92,0.25) 0%, transparent 70%)',
-  zero: 'radial-gradient(circle, rgba(150,164,180,0.2) 0%, transparent 70%)',
-  pos: 'radial-gradient(circle, rgba(0,217,220,0.25) 0%, transparent 70%)',
+  neg: 'radial-gradient(circle, rgba(255,83,102,0.28) 0%, transparent 70%)',
+  zero: 'radial-gradient(circle, rgba(168,152,128,0.22) 0%, transparent 70%)',
+  pos: 'radial-gradient(circle, rgba(255,201,74,0.32) 0%, transparent 70%)',
 };
 
 const READOUT_COLOR: Record<BeadTone, string> = {
   neg: 'text-red',
   zero: 'text-muted-2',
-  pos: 'text-teal',
+  pos: 'text-gold',
 };
 
 const READOUT_GLOW: Record<BeadTone, string> = {
-  neg: '0 0 24px rgba(255,59,92,0.35)',
+  neg: '0 0 24px rgba(255,83,102,0.45)',
   zero: 'none',
-  pos: '0 0 24px rgba(0,217,220,0.35)',
+  pos: '0 0 24px rgba(255,201,74,0.5)',
 };
 
 function beadShadow(tone: BeadTone, dragging: boolean): string {
   const glow =
     tone === 'neg'
-      ? `0 0 ${dragging ? 30 : 18}px rgba(255,59,92,${dragging ? 0.65 : 0.45})`
+      ? `0 0 ${dragging ? 30 : 18}px rgba(255,83,102,${dragging ? 0.7 : 0.5})`
       : tone === 'zero'
-        ? `0 0 ${dragging ? 20 : 12}px rgba(150,164,180,${dragging ? 0.4 : 0.25})`
-        : `0 0 ${dragging ? 30 : 18}px rgba(0,217,220,${dragging ? 0.65 : 0.45})`;
+        ? `0 0 ${dragging ? 20 : 12}px rgba(168,152,128,${dragging ? 0.42 : 0.28})`
+        : `0 0 ${dragging ? 30 : 18}px rgba(255,201,74,${dragging ? 0.75 : 0.55})`;
   const inner =
     tone === 'zero'
       ? 'inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.45)'
@@ -153,7 +153,7 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
         aria-valuemax={max}
         aria-valuenow={value}
         aria-label="Score du perdant (gamelles autorisées)"
-        className={`relative h-16 px-7 touch-none outline-none rounded focus-visible:ring-2 focus-visible:ring-teal/60 ${
+        className={`relative h-16 px-7 touch-none outline-none rounded focus-visible:ring-2 focus-visible:ring-gold/60 ${
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
       >
@@ -161,9 +161,9 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
           className="absolute top-1/2 left-7 right-7 h-[6px] -translate-y-1/2 rounded-full"
           style={{
             background:
-              'linear-gradient(to bottom, #0c1118 0%, #2a3548 18%, #6b7689 45%, #b0bccd 52%, #6b7689 60%, #1f2737 82%, #0a0e15 100%)',
+              'linear-gradient(to bottom, #0c0a08 0%, #3a3022 18%, #7d7468 45%, #a8a094 52%, #7d7468 60%, #2a241c 82%, #0c0a08 100%)',
             boxShadow:
-              '0 1px 0 rgba(255,255,255,0.18) inset, 0 -1px 0 rgba(0,0,0,0.6) inset, 0 8px 14px rgba(0,0,0,0.55), 0 0 22px rgba(0,217,220,0.08)',
+              '0 1px 0 rgba(255,247,228,0.16) inset, 0 -1px 0 rgba(0,0,0,0.65) inset, 0 8px 14px rgba(0,0,0,0.6), 0 0 22px rgba(255,201,74,0.1)',
           }}
         />
         {(['left-6', 'right-6'] as const).map((side) => (
@@ -171,8 +171,8 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
             key={side}
             className={`absolute top-1/2 ${side} w-2 h-3 -translate-y-1/2 rounded-sm`}
             style={{
-              background: 'linear-gradient(to bottom, #243044, #0c1118 60%, #1a2233)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.5)',
+              background: 'linear-gradient(to bottom, #3a3022, #0c0a08 60%, #1d1914)',
+              boxShadow: 'inset 0 1px 0 rgba(255,215,120,0.18), 0 2px 4px rgba(0,0,0,0.55)',
             }}
           />
         ))}

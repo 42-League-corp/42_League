@@ -58,27 +58,35 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       {active && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 backdrop-blur-sm animate-fade-in p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) finish(false);
           }}
         >
-          <div className="bg-bg-0 border border-border rounded p-5 sm:p-6 w-full max-w-md shadow-[0_18px_48px_rgba(0,0,0,0.5),0_0_32px_rgba(0,217,220,0.18)] animate-pop">
-            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-teal mb-3">
+          <div
+            className="card-hud relative rounded-2xl p-5 sm:p-6 w-full max-w-md animate-pop"
+            style={{
+              boxShadow:
+                '0 18px 48px rgba(0,0,0,0.65), 0 0 36px rgba(255,201,74,0.18), inset 0 1px 0 rgba(255,215,120,0.1)',
+              border: '1px solid rgba(255,201,74,0.3)',
+            }}
+          >
+            <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-3 flex items-center gap-2">
+              <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
               {active.opts.title}
             </div>
             <div className="text-sm leading-relaxed text-text">
               {active.opts.message}
             </div>
             {active.opts.warning && (
-              <div className="mt-3 bg-red/[0.08] border border-red/45 text-[#ff8095] px-3 py-2.5 rounded text-xs leading-snug">
+              <div className="mt-3 bg-red/[0.08] border border-red/45 text-[#ffb3bf] px-3 py-2.5 rounded-lg text-xs leading-snug">
                 {active.opts.warning}
               </div>
             )}
             <div className="flex gap-2.5 justify-end mt-5">
               <button
                 onClick={() => finish(false)}
-                className="font-bold text-xs uppercase tracking-wider px-4 py-2 rounded border border-border text-muted-2 hover:text-white hover:border-muted transition"
+                className="font-extrabold text-xs uppercase tracking-wider px-4 py-2 rounded-lg border border-border text-muted-2 hover:text-gold hover:border-gold/50 hover:bg-gold/5 transition-all"
               >
                 {active.opts.cancelLabel ?? 'Annuler'}
               </button>
@@ -86,13 +94,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 ref={okRef}
                 onClick={() => finish(true)}
                 className={
-                  'font-bold text-xs uppercase tracking-wider px-4 py-2 rounded transition ' +
+                  'shine relative overflow-hidden font-extrabold text-xs uppercase tracking-wider px-4 py-2 rounded-lg transition-all border ' +
                   (active.opts.danger
-                    ? 'bg-gradient-to-b from-red to-[#c8203f] text-white hover:shadow-[0_0_14px_rgba(255,59,92,0.5)]'
-                    : 'bg-gradient-to-b from-teal to-teal-dim text-[#001416] hover:brightness-110 hover:shadow-teal-glow')
+                    ? 'bg-gradient-to-b from-red to-red-deep text-white border-red/50 hover:shadow-red-glow'
+                    : 'bg-gradient-to-b from-[#ffa83a] to-[#c5520a] text-[#1a0d00] border-[#ffc966]/60 hover:brightness-105 hover:shadow-[0_0_18px_rgba(255,128,32,0.5)]')
                 }
               >
-                {active.opts.confirmLabel ?? 'Confirmer'}
+                <span className="relative z-10">{active.opts.confirmLabel ?? 'Confirmer'}</span>
               </button>
             </div>
           </div>

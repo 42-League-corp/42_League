@@ -18,12 +18,15 @@ interface MobileShellProps {
  */
 export function MobileShell({ children }: MobileShellProps) {
   return (
-    <div className="relative flex flex-col min-h-dvh bg-bg-0">
+    <div className="relative flex flex-col min-h-dvh">
+      {/* Vignette dorée subtile en arrière-plan (par-dessus le bg global du body). */}
+      <div className="fixed inset-0 bg-gold-vignette pointer-events-none z-0" />
+
       <MobileHeader />
 
       {/* Scroll container — padding bottom inclut safe-area + tabbar height */}
       <main
-        className="flex-1 min-w-0 w-full px-4 pt-3 overflow-x-hidden"
+        className="flex-1 min-w-0 w-full px-4 pt-3 overflow-x-hidden relative z-[1]"
         style={{
           paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 16px)',
         }}

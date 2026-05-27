@@ -23,22 +23,26 @@ export function AuthReturnPage() {
 
   if (!error) {
     return (
-      <main className="min-h-screen flex items-center justify-center text-muted-2">
-        Connexion…
+      <main className="min-h-screen flex items-center justify-center text-muted-2 gap-3">
+        <span className="inline-block w-4 h-4 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+        <span className="font-gaming uppercase tracking-[0.18em] text-gold text-sm font-bold">
+          Connexion…
+        </span>
       </main>
     );
   }
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-bg-1/70 border border-red/40 rounded-lg p-6 text-center">
-        <div className="text-red text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
+      <div className="max-w-md w-full card-hud border-red/45 rounded-2xl p-6 text-center">
+        <div className="font-gaming text-red text-xs uppercase tracking-[0.18em] font-extrabold mb-3 flex items-center justify-center gap-2">
+          <span className="inline-block w-1 h-3 bg-red rounded-sm" />
           ⛔ Connexion refusée
         </div>
         {error === 'not_whitelisted' ? (
           <p className="text-sm text-text leading-relaxed">
             Le compte{' '}
-            <code className="bg-bg-2 px-1.5 py-0.5 rounded text-teal text-xs">
+            <code className="bg-bg-2 px-1.5 py-0.5 rounded text-gold text-xs font-mono">
               {errorLogin}
             </code>{' '}
             n'est pas autorisé sur cette instance 42 League.

@@ -12,10 +12,10 @@ export function OutcomeButton({ kind, onClick, children }: OutcomeButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden py-6 rounded-xl border-2 transition-all duration-300 active:scale-[0.97] shadow-sm hover:shadow-xl ${
+      className={`shine group relative overflow-hidden py-6 rounded-2xl border-2 transition-all duration-300 active:scale-[0.97] hover:-translate-y-0.5 ${
         isWin
-          ? 'border-teal/30 bg-teal/5 hover:border-teal hover:bg-teal/10 hover:shadow-teal/20'
-          : 'border-red/30 bg-red/5 hover:border-red hover:bg-red/10 hover:shadow-red/20'
+          ? 'border-gold/40 bg-gradient-to-br from-gold/8 to-gold/[0.02] hover:border-gold hover:bg-gold/15 hover:shadow-gold-glow-lg'
+          : 'border-red/40 bg-gradient-to-br from-red/8 to-red/[0.02] hover:border-red hover:bg-red/15 hover:shadow-[0_0_30px_rgba(255,83,102,0.4)]'
       }`}
     >
       <div className="relative flex flex-col items-center gap-2">
@@ -28,9 +28,14 @@ export function OutcomeButton({ kind, onClick, children }: OutcomeButtonProps) {
           {isWin ? '🏆' : '💀'}
         </span>
         <span
-          className={`text-sm font-extrabold uppercase tracking-widest ${
-            isWin ? 'text-teal' : 'text-red'
+          className={`font-gaming text-sm font-extrabold uppercase tracking-widest ${
+            isWin ? 'text-gold' : 'text-red'
           }`}
+          style={{
+            textShadow: isWin
+              ? '0 0 16px rgba(255, 201, 74, 0.5)'
+              : '0 0 12px rgba(255, 83, 102, 0.5)',
+          }}
         >
           {children}
         </span>
