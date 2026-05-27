@@ -65,18 +65,18 @@ export function NotifPopup() {
         className="fixed top-4 right-4 z-[90] w-80 max-w-[calc(100vw-2rem)] animate-pop"
         style={{ filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.5))' }}
       >
-        <div className="rounded-xl border border-gold/50 bg-bg-0/95 backdrop-blur-md overflow-hidden"
-          style={{ boxShadow: '0 0 0 1px rgba(255,183,27,0.15), 0 16px 40px rgba(0,0,0,0.5)' }}
+        <div className="rounded-2xl border border-gold/50 glass-strong overflow-hidden"
+          style={{ boxShadow: '0 0 0 1px rgba(255,201,74,0.18), 0 16px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,215,120,0.08)' }}
         >
           {/* Header */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border bg-gold/[0.06]">
-            <span className="text-base animate-pulse">⚡</span>
-            <span className="flex-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-gold">
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gold/20 bg-gradient-to-r from-gold/[0.12] via-gold/[0.06] to-transparent">
+            <span className="text-base text-gold animate-ember">⚡</span>
+            <span className="flex-1 font-gaming text-[11px] font-extrabold uppercase tracking-[0.18em] text-gold">
               {toConfirm.length} game{toConfirm.length > 1 ? 's' : ''} à confirmer
             </span>
             <button
               onClick={() => setDismissed(true)}
-              className="text-muted hover:text-text-strong transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-white/10"
+              className="text-muted hover:text-gold transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center rounded-full hover:bg-gold/10"
               title="Fermer"
             >
               ×
@@ -94,10 +94,10 @@ export function NotifPopup() {
                     <Avatar login={p.declarerLogin} imageUrl={null} size="xs" />
                     <div className="min-w-0 flex-1">
                       <div className="text-[11px] text-muted-2">
-                        <span className="font-semibold text-gold">{p.declarerLogin}</span>
+                        <span className="font-bold text-gold">{p.declarerLogin}</span>
                         {' '}a déclaré
                       </div>
-                      <div className="text-xl font-extrabold tabular-nums text-text-strong leading-tight">
+                      <div className="font-display text-xl font-black tabular-nums text-text-strong leading-tight">
                         {p.scoreDeclarer}
                         <span className="text-muted mx-1 text-base font-normal">–</span>
                         {p.scoreOpponent}
@@ -111,15 +111,20 @@ export function NotifPopup() {
                     <button
                       onClick={() => handleConfirm(p)}
                       disabled={busy}
-                      className="flex-1 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider text-white transition-all disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg, #00b8ba, #00d9dc)' }}
+                      className="shine relative overflow-hidden flex-1 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-wider text-[#1a0d00] transition-all active:scale-[0.97] disabled:opacity-50 border border-[#ffc966]/60"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, #ffa83a, #f08020 60%, #c5520a)',
+                        boxShadow:
+                          'inset 0 1px 0 rgba(255,247,228,0.5), 0 4px 12px rgba(255,128,32,0.35)',
+                      }}
                     >
-                      {busy ? '…' : '✓ Confirmer'}
+                      <span className="relative z-10">{busy ? '…' : '✓ Confirmer'}</span>
                     </button>
                     <button
                       onClick={() => setContesting(p)}
                       disabled={busy}
-                      className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border border-border text-muted-2 hover:border-red/60 hover:text-red hover:bg-red/5 transition-all disabled:opacity-50"
+                      className="px-3 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-wider border border-border text-muted-2 hover:border-red/60 hover:text-red hover:bg-red/5 transition-all disabled:opacity-50"
                     >
                       Contester
                     </button>
@@ -130,10 +135,10 @@ export function NotifPopup() {
           </div>
 
           {/* Footer hint */}
-          <div className="px-3 py-2 border-t border-border/50 bg-bg-2/40">
+          <div className="px-3 py-2 border-t border-gold/15 bg-bg-2/40">
             <p className="text-[10px] text-muted text-center">
               Visible aussi sur la page{' '}
-              <a href="/defis" className="text-teal hover:underline">Défis</a>
+              <a href="/defis" className="text-gold hover:underline">Défis</a>
             </p>
           </div>
         </div>

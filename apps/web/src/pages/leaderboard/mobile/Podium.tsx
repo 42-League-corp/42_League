@@ -29,11 +29,11 @@ export function Podium({ top3 }: PodiumProps) {
     <div className="relative">
       {/* Glow de fond */}
       <div
-        className="absolute inset-x-4 top-4 bottom-0 rounded-3xl opacity-40 pointer-events-none"
+        className="absolute inset-x-4 top-4 bottom-0 rounded-3xl opacity-50 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255,183,27,0.25), transparent 60%)',
-          filter: 'blur(24px)',
+            'radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255,201,74,0.35), transparent 60%)',
+          filter: 'blur(28px)',
         }}
       />
 
@@ -108,8 +108,8 @@ const COLOR_TEXT: Record<PodiumColor, string> = {
 };
 
 const COLOR_RANK: Record<PodiumColor, string> = {
-  gold: 'bg-gradient-to-br from-gold to-[#d6920b] text-[#1a1100] shadow-gold-glow',
-  silver: 'bg-gradient-to-br from-muted-2 to-muted text-bg-0',
+  gold: 'metal-plate-gold shadow-gold-glow',
+  silver: 'bg-gradient-to-br from-[#d6d2c8] to-[#7d7468] text-bg-0',
   bronze: 'bg-gradient-to-br from-[#cd7f32] to-[#8b5722] text-white',
 };
 

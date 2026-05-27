@@ -15,6 +15,10 @@ const SIZE = {
   xl: 'w-24 h-24 text-4xl',
 };
 
+/**
+ * Avatar rond — bordure dorée premium, lueur subtile, fallback initiale sur or fondu.
+ * Inspiré du portrait central du screenshot 42 League.
+ */
 export function Avatar({ login, imageUrl, size = 'md', className = '' }: AvatarProps) {
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
@@ -22,7 +26,14 @@ export function Avatar({ login, imageUrl, size = 'md', className = '' }: AvatarP
 
   return (
     <div
-      className={`flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-extrabold uppercase border-2 border-teal bg-gradient-to-br from-teal-deep to-teal text-[#001416] shadow-[0_0_12px_rgba(0,217,220,0.4)] ${SIZE[size]} ${className}`}
+      className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-black uppercase ${SIZE[size]} ${className}`}
+      style={{
+        background:
+          'linear-gradient(135deg, #d4a04a 0%, #8a5e10 50%, #c79122 100%)',
+        boxShadow:
+          '0 0 0 2px #ffc94a, 0 0 0 3px rgba(0,0,0,0.6), 0 0 18px rgba(255, 201, 74, 0.4), inset 0 1px 0 rgba(255, 247, 228, 0.4)',
+        color: '#1a1100',
+      }}
     >
       {showImg ? (
         <img
@@ -32,7 +43,7 @@ export function Avatar({ login, imageUrl, size = 'md', className = '' }: AvatarP
           onError={() => setBroken(true)}
         />
       ) : (
-        <span>{initial}</span>
+        <span className="relative z-10">{initial}</span>
       )}
     </div>
   );

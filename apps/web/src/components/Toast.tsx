@@ -5,17 +5,23 @@ export function Toast() {
   if (!flash.message) return null;
   const isError = flash.kind === 'error';
   return (
-    <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+    <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in pointer-events-none">
       <div
         className={
-          'flex items-center gap-2 px-4 py-2.5 rounded shadow-2xl border max-w-[90vw] sm:max-w-md text-sm ' +
+          'pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-2xl border max-w-[90vw] sm:max-w-md text-sm font-semibold backdrop-blur-md ' +
           (isError
-            ? 'bg-red/10 border-red text-[#ff8095]'
-            : 'bg-bg-1 border-teal text-text')
+            ? 'bg-red/15 border-red/70 text-[#ffb3bf] shadow-red-glow'
+            : 'glass-strong border-gold/60 text-text-strong shadow-gold-glow')
         }
         onClick={clear}
         role="status"
       >
+        <span
+          aria-hidden
+          className={`inline-block w-1.5 h-1.5 rounded-full ${
+            isError ? 'bg-red animate-pulse' : 'bg-gold animate-pulse'
+          }`}
+        />
         {flash.message}
       </div>
     </div>

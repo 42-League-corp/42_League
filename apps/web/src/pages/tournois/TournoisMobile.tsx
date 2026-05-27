@@ -111,7 +111,7 @@ function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
           </span>
         </div>
         <div className="flex items-center gap-2 mb-1">
-          <Trophy className="w-5 h-5 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,183,27,0.3)" />
+          <Trophy className="w-5 h-5 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.35)" />
           <h3 className="text-xl font-extrabold text-text-strong tracking-tight truncate">
             {tournament.name}
           </h3>
@@ -121,7 +121,7 @@ function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
         </div>
         <a
           href={`/tournois/${encodeURIComponent(tournament.id)}`}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider active:scale-95 transition-transform tap-transparent"
+          className="shine inline-flex items-center gap-1.5 px-4 py-2 rounded-xl metal-plate-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider active:scale-95 transition-transform tap-transparent"
         >
           Voir le bracket
           <span>→</span>

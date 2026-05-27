@@ -73,10 +73,10 @@ interface QuickActionProps {
 }
 
 const TONE_BG: Record<QuickActionProps['tone'], string> = {
-  gold: 'bg-gold/10 text-gold border-gold/20 active:bg-gold/15',
-  teal: 'bg-teal/10 text-teal border-teal/20 active:bg-teal/15',
-  red: 'bg-red/10 text-red border-red/20 active:bg-red/15',
-  muted: 'bg-bg-2 text-muted-2 border-border active:bg-bg-3',
+  gold: 'bg-gradient-to-b from-gold/15 to-gold/5 text-gold border-gold/40 active:bg-gold/20 shadow-[inset_0_1px_0_rgba(255,215,120,0.18)]',
+  teal: 'bg-gradient-to-b from-gold/12 to-gold/4 text-gold border-gold/30 active:bg-gold/15',
+  red: 'bg-red/10 text-red border-red/30 active:bg-red/15',
+  muted: 'metal-plate text-muted-2 active:bg-bg-3',
 };
 
 function QuickAction({ to, Icon, label, tone }: QuickActionProps) {
@@ -97,13 +97,14 @@ function QuickAction({ to, Icon, label, tone }: QuickActionProps) {
 function SectionHeader({ title, badge }: { title: string; badge?: number }) {
   return (
     <div className="flex items-center gap-2 mb-3 px-1">
-      <span className="text-[10px] uppercase tracking-[0.18em] font-extrabold text-muted">
+      <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+      <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90">
         {title}
       </span>
       {badge !== undefined && badge > 0 && (
         <span className="font-mono text-[10px] text-muted tabular-nums">· {badge}</span>
       )}
-      <div className="flex-1 h-px bg-border/40 ml-2" />
+      <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
     </div>
   );
 }

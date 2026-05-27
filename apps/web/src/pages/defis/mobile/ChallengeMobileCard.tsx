@@ -27,18 +27,18 @@ const KIND_LABEL: Record<Kind, string> = {
 
 const KIND_TONE: Record<Kind, { border: string; badge: string; icon: string }> = {
   incoming: {
-    border: 'border-teal/40',
-    badge: 'bg-teal/15 text-teal',
-    icon: 'text-teal',
+    border: 'border-gold/50',
+    badge: 'bg-gold/15 text-gold border border-gold/30',
+    icon: 'text-gold',
   },
   outgoing: {
     border: 'border-border',
-    badge: 'bg-bg-2 text-muted-2',
+    badge: 'bg-bg-2 text-muted-2 border border-border',
     icon: 'text-muted-2',
   },
   accepted: {
     border: 'border-gold/40',
-    badge: 'bg-gold/15 text-gold',
+    badge: 'bg-gold/15 text-gold border border-gold/30',
     icon: 'text-gold',
   },
 };
@@ -67,7 +67,7 @@ export function ChallengeMobileCard({
       layout
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`relative bg-bg-1 border ${tone.border} rounded-2xl p-3.5 flex items-center gap-3`}
+      className={`relative card-hud border ${tone.border} rounded-2xl p-3.5 flex items-center gap-3 hover-glow`}
     >
       <Avatar login={opponent} imageUrl={imageUrl ?? null} size="md" />
 
@@ -78,7 +78,7 @@ export function ChallengeMobileCard({
             {KIND_LABEL[kind]}
           </span>
         </div>
-        <PlayerLink login={opponent} className="font-bold text-text-strong text-sm">
+        <PlayerLink login={opponent} className="font-display font-bold text-text-strong text-sm">
           {opponent}
         </PlayerLink>
         <div className={`text-[11px] mt-0.5 flex items-center gap-1 ${when.late ? 'text-red' : 'text-muted-2'}`}>

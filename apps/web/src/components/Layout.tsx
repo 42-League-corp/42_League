@@ -41,8 +41,8 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Topbar mobile */}
-      <header className="sticky top-0 z-30 lg:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-bg-1/95 backdrop-blur">
-        <h1 className="text-sm font-extrabold tracking-[0.22em] uppercase bg-gradient-to-r from-teal via-white to-gold bg-clip-text text-transparent">
+      <header className="sticky top-0 z-30 lg:hidden flex items-center gap-3 px-4 py-3 border-b border-gold/20 glass">
+        <h1 className="text-sm font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
           42 League
         </h1>
         <div className="flex-1" />
@@ -57,12 +57,12 @@ export function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Sidebar desktop */}
-      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-border bg-bg-1/60 sticky top-0 h-screen">
-        <div className="px-5 py-5 border-b border-border">
-          <div className="text-base font-extrabold tracking-[0.22em] uppercase bg-gradient-to-r from-teal via-white to-gold bg-clip-text text-transparent">
+      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-gold/20 bg-bg-1/80 sticky top-0 h-screen hud-grid">
+        <div className="px-5 py-5 border-b border-gold/20">
+          <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
             42 League
           </div>
-          <div className="text-[10px] text-muted-2 mt-1 uppercase tracking-[0.2em]">
+          <div className="text-[10px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
             Babyfoot · Ranked
           </div>
         </div>
@@ -136,7 +136,7 @@ export function Layout({ children }: LayoutProps) {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 border-t border-border bg-bg-1/95 backdrop-blur">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 border-t border-gold/20 glass-strong">
         {NAV.map((n) => {
           const active =
             location.pathname === n.to || location.pathname.startsWith(`${n.to}/`);
