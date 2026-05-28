@@ -1,0 +1,7 @@
+http://163.172.141.178:80 {
+    reverse_proxy frontend:80
+}
+
+http://163.172.141.178:3000 {
+    reverse_proxy backend:3000
+}
