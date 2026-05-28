@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
+import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -67,8 +68,9 @@ export function LeaderboardMobile() {
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
-        {/* Podium top 3 — seulement si on est en mode 'all' ou 'top10' sans recherche */}
-        {top3.length > 0 && filter !== 'around' && !query && (
+        {/* Podium top 3 — uniquement sur le filtre "Tous" sans recherche.
+            Sur Top 10/Moi, le podium dupliquerait les 3 premiers de la liste. */}
+        {top3.length > 0 && filter === 'all' && !query && (
           <Podium top3={top3} />
         )}
 
@@ -119,29 +121,30 @@ export function LeaderboardMobile() {
         </div>
 
         {/* Liste des joueurs */}
-        <div className="space-y-2">
-          {filtered.length === 0 ? (
-            <div className="text-center py-10 text-sm text-muted-2">
-              {query ? `Aucun joueur trouvé pour "${query}"` : 'Aucun joueur'}
-            </div>
-          ) : (
-            filtered.map((entry) => {
+        {filtered.length === 0 ? (
+          <div className="text-center py-10 text-sm text-muted-2">
+            {query ? `Aucun joueur trouvé pour "${query}"` : 'Aucun joueur'}
+          </div>
+        ) : (
+          <StaggerList className="space-y-2" stagger={0.03}>
+            {filtered.map((entry) => {
               const wl = winsLossesByLogin.get(entry.login) ?? { wins: 0, losses: 0 };
               const isMe = entry.login === myLogin;
               const targetedBy = allOps.find((o) => o.targetLogin === entry.login);
               return (
-                <PlayerRankCard
-                  key={entry.login}
-                  entry={entry}
-                  wins={wl.wins}
-                  losses={wl.losses}
-                  isMe={isMe}
-                  targetedBy={targetedBy}
-                />
+                <StaggerItem key={entry.login}>
+                  <PlayerRankCard
+                    entry={entry}
+                    wins={wl.wins}
+                    losses={wl.losses}
+                    isMe={isMe}
+                    targetedBy={targetedBy}
+                  />
+                </StaggerItem>
               );
-            })
-          )}
-        </div>
+            })}
+          </StaggerList>
+        )}
       </div>
     </PullToRefresh>
   );

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { motion } from 'framer-motion';
 import { haptic } from '../feedback/useHaptic';
 
@@ -28,6 +29,9 @@ export function SegmentedControl<T extends string>({
   choices,
   className = '',
 }: SegmentedControlProps<T>) {
+  // layoutId unique par instance — sinon deux SegmentedControls montés en
+  // simultané (transition de page popLayout) se battent pour la même bulle.
+  const layoutKey = useId();
   return (
     <div
       role="tablist"
@@ -46,22 +50,24 @@ export function SegmentedControl<T extends string>({
               haptic('selection');
               onChange(c.value);
             }}
-            className={`relative flex-1 flex items-center justify-center gap-1.5 h-9 px-3 text-xs font-extrabold uppercase tracking-wider rounded-full tap-transparent transition-colors z-10 ${
-              active ? 'text-[#1a0d00]' : 'text-muted-2 active:text-text'
+            className={`relative flex-1 flex items-center justify-center gap-1 h-9 px-1.5 text-[11px] font-extrabold uppercase tracking-wider rounded-full tap-transparent transition-colors z-10 min-w-0 ${
+              active ? 'text-[#1a0d00]' : 'text-text/80 active:text-text'
             }`}
           >
             {active && (
               <motion.span
-                layoutId="segmented-bg"
+                layoutId={`segmented-bg-${layoutKey}`}
                 transition={{ type: 'spring', stiffness: 520, damping: 38 }}
                 className="absolute inset-0 rounded-full metal-plate-gold -z-10"
               />
             )}
-            <span className="relative z-10">{c.label}</span>
+            <span className="relative z-10 truncate">{c.label}</span>
             {c.badge !== undefined && c.badge > 0 && (
               <span
                 className={`relative z-10 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center tabular-nums ${
-                  active ? 'bg-[#1a0d00]/80 text-gold' : 'bg-red text-white'
+                  active
+                    ? 'bg-[#1a0d00]/85 text-gold'
+                    : 'bg-gold/15 text-gold border border-gold/30'
                 }`}
               >
                 {c.badge}

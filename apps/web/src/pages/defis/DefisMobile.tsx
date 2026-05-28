@@ -266,8 +266,6 @@ export function DefisMobile() {
             </div>
           )}
 
-        {/* Espace pour le FAB */}
-        <div className="h-4" />
       </div>
 
       {/* FAB → ouvre la BottomSheet de déclaration */}
@@ -314,7 +312,7 @@ function SectionHeader({ title, icon, badge, tone = 'muted' }: SectionHeaderProp
       {badge !== undefined && badge > 0 && (
         <span className="font-mono text-[10px] text-muted tabular-nums">· {badge}</span>
       )}
-      <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
+      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent ml-2" />
     </div>
   );
 }
