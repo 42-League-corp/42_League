@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
@@ -81,7 +82,33 @@ export function DeclareGameFlow({
   const loserLogin = iWon ? (opponent?.login ?? '') : (myLogin ?? 'Moi');
 
   return (
-    <div className={`relative flex flex-col ${sending ? 'animate-send-away pointer-events-none' : ''}`}>
+    <div className="relative">
+      {/* Gold flash overlay on send */}
+      <AnimatePresence>
+        {sending && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.55, 0] }}
+            transition={{ duration: 0.4, times: [0, 0.2, 1] }}
+            className="absolute inset-0 rounded-xl pointer-events-none z-30"
+            style={{ background: 'radial-gradient(ellipse at center, rgba(255,201,74,0.35) 0%, transparent 70%)' }}
+          />
+        )}
+      </AnimatePresence>
+    <motion.div
+      className="flex flex-col"
+      animate={
+        sending
+          ? { opacity: 0, y: -36, scale: 0.94, filter: 'blur(5px)' }
+          : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }
+      }
+      transition={
+        sending
+          ? { duration: 0.32, ease: [0.55, 0, 1, 0.45] }
+          : { duration: 0.28, ease: [0.16, 1, 0.3, 1] }
+      }
+      style={{ pointerEvents: sending ? 'none' : undefined }}
+    >
       <div className="relative z-20">
         <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
           Adversaire
@@ -168,6 +195,7 @@ export function DeclareGameFlow({
           </p>
         </div>
       )}
+    </motion.div>
     </div>
   );
 }

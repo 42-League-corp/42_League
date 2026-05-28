@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
+import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
@@ -93,6 +94,22 @@ export function ProfilDesktop() {
       <div className="space-y-1.5 mb-6 card-hud rounded-xl px-4 py-3">
         <KV label={t('profil.wins')} value={String(stats.wins)} tone="win" />
         <KV label={t('profil.losses')} value={String(stats.losses)} tone="loss" />
+      </div>
+
+      {/* ELO progression chart */}
+      <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
+          Évolution ELO
+          <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
+        </div>
+        <EloChart
+          matches={matches}
+          myLogin={u.login}
+          currentElo={stats.elo}
+          height={80}
+          maxPoints={25}
+        />
       </div>
 
       <OpsWidget opsMe={opsMe} locale={locale} />

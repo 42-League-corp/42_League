@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, Crown, Users } from 'lucide-react';
 import type { Tournament } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 
 interface TournamentCardProps {
   tournament: Tournament;
-  delay?: number;
 }
 
 const STATUS_LABEL: Record<Tournament['status'], string> = {
@@ -50,7 +50,7 @@ const STATUS_STYLE: Record<Tournament['status'], { ring: string; bg: string; chi
  * - Tap → page détail
  * - Mise en avant du vainqueur si terminé
  */
-export function TournamentCard({ tournament: t, delay = 0 }: TournamentCardProps) {
+export function TournamentCard({ tournament: t }: TournamentCardProps) {
   const count = t.entries?.length ?? 0;
   const fillPct = Math.min(100, Math.round((count / t.capacity) * 100));
   const isOfficial = t.kind === 'official';
@@ -59,17 +59,19 @@ export function TournamentCard({ tournament: t, delay = 0 }: TournamentCardProps
   const style = STATUS_STYLE[t.status];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay, duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-      layout
-    >
+    <motion.div layout>
       <Link
         to={`/tournois/${encodeURIComponent(t.id)}`}
         onClick={() => haptic('selection')}
-        className={`block relative overflow-hidden rounded-2xl border ${style.ring} ${style.bg} ${isLive ? style.glow : ''} active:scale-[0.98] transition-transform tap-transparent`}
+        className={`block relative overflow-hidden rounded-2xl border ${style.ring} ${style.bg} ${isLive ? style.glow : ''} active:scale-[0.98] transition-transform tap-transparent shadow-[inset_0_1px_0_rgba(255,215,120,0.10),0_4px_14px_rgba(0,0,0,0.35)]`}
       >
+        {/* Filets laiton décoratifs en haut/bas (côté HUD) */}
+        <div className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-gold/25 to-transparent pointer-events-none" />
+
+        {/* Rivets — uniquement pour les tournois "à action" (live/reg) */}
+        {(isLive || isReg) && <RivetCorners size={6} inset={4} />}
+
         {/* Scanline pour les tournois en cours */}
         {isLive && (
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent animate-pulse" />
@@ -117,7 +119,7 @@ export function TournamentCard({ tournament: t, delay = 0 }: TournamentCardProps
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${fillPct}%` }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: delay + 0.1 }}
+                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.12 }}
                   className={`h-full rounded-full ${isLive ? 'bg-gradient-to-r from-gold to-[#ffdb8a]' : 'bg-gradient-to-r from-teal to-teal-dim'}`}
                 />
               </div>

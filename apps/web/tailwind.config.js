@@ -214,12 +214,12 @@ export default {
         // Nouveau : ember (flamme/braise subtile pour les éléments en feu).
         ember: {
           '0%, 100%': {
-            opacity: '0.6',
-            filter: 'brightness(1) drop-shadow(0 0 6px rgba(255, 138, 30, 0.6))',
+            opacity: '0.7',
+            filter: 'brightness(1) drop-shadow(0 0 6px rgba(255, 201, 74, 0.55))',
           },
           '50%': {
             opacity: '1',
-            filter: 'brightness(1.2) drop-shadow(0 0 14px rgba(255, 138, 30, 0.85))',
+            filter: 'brightness(1.15) drop-shadow(0 0 14px rgba(255, 201, 74, 0.85))',
           },
         },
       },
@@ -231,7 +231,6 @@ export default {
         'sheet-up': 'sheet-up 280ms cubic-bezier(0.32, 0.72, 0, 1)',
         'sheet-down': 'sheet-down 220ms cubic-bezier(0.32, 0.72, 0, 1)',
         'bead-pulse': 'bead-pulse 180ms ease-out',
-        'send-away': 'send-away 280ms cubic-bezier(0.4, 0, 0.8, 0.6) forwards',
         spin: 'spin 0.7s linear infinite',
         shimmer: 'shimmer 2.5s linear infinite',
         'glow-pulse': 'glow-pulse 2.2s ease-in-out infinite',

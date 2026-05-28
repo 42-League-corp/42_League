@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Skull, Swords, Trophy } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { SwipeableCard } from '../../../mobile/primitives/SwipeableCard';
+import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
@@ -52,12 +53,17 @@ export function PlayerRankCard({
         navigate(`/joueur/${entry.login}`);
       }}
       whileTap={{ scale: 0.98 }}
-      className={`relative w-full flex items-center gap-3 p-3.5 rounded-2xl border tap-transparent text-left transition-all hover-glow ${
+      className={`relative w-full flex items-center gap-3 p-3.5 rounded-2xl border tap-transparent text-left transition-all hover-glow overflow-hidden ${
         isMe
           ? 'border-gold/60 bg-gold/[0.08] shadow-gold-glow'
           : 'border-gold/15 card-hud active:bg-bg-2'
       }`}
     >
+      {/* Filets HUD haut/bas pour l'aspect cartouche */}
+      <span className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-gold/35 to-transparent pointer-events-none" />
+      <span className="absolute bottom-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-gold/20 to-transparent pointer-events-none" />
+      {/* Rivets uniquement sur ma propre carte (signature visuelle) */}
+      {isMe && <RivetCorners size={6} inset={4} />}
       {/* Rank */}
       <div
         className={`w-10 flex-shrink-0 text-center font-mono font-black tabular-nums leading-none ${rankColor}`}

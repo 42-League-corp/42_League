@@ -54,9 +54,9 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
 
   return (
-    <div className="min-h-dvh flex flex-row relative">
+    <div className="h-dvh flex flex-row relative overflow-hidden">
       {/* ─── Sidebar ─────────────────────────────────────────────────── */}
-      <aside className="relative flex flex-col w-64 sticky top-0 h-screen z-20 no-select">
+      <aside className="relative flex flex-col w-64 h-dvh z-20 no-select">
         {/* Fond + grille HUD */}
         <div className="absolute inset-0 bg-gradient-to-b from-bg-1 via-bg-1/95 to-bg-0 hud-grid" />
         {/* Bordure droite « tube laiton » */}
@@ -156,7 +156,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
       </aside>
 
       {/* ─── Main ────────────────────────────────────────────────────── */}
-      <main className="flex-1 min-w-0 relative">
+      <main className="flex-1 min-w-0 relative overflow-y-auto custom-scrollbar">
         {/* Vignette dorée derrière le contenu */}
         <div className="absolute inset-0 bg-gold-vignette pointer-events-none" />
         <div className="relative px-6 lg:px-10 py-8 max-w-5xl mx-auto w-full">
@@ -181,37 +181,51 @@ function NavItem({ to, label, Icon, badge = 0 }: NavItemProps) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold tracking-wide group transition-all duration-200 ${
-          isActive
-            ? 'text-gold bg-gold/8'
-            : 'text-muted-2 hover:text-text hover:bg-bg-2/60'
+        `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold tracking-wide group transition-colors duration-150 ${
+          isActive ? 'text-gold' : 'text-muted-2 hover:text-text'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          {/* Indicateur gauche actif */}
+          {/* Smooth sliding background pill — motion.dev tabs pattern */}
           {isActive && (
             <motion.span
-              layoutId="desktop-nav-indicator"
-              className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-gradient-to-b from-gold via-gold to-gold-dim"
-              style={{ boxShadow: '0 0 12px rgba(255, 201, 74, 0.55)' }}
-              transition={{ type: 'spring', stiffness: 520, damping: 38 }}
+              layoutId="desktop-nav-bg"
+              className="absolute inset-0 rounded-lg"
+              style={{
+                background: 'rgba(255,201,74,0.09)',
+                border: '1px solid rgba(255,201,74,0.22)',
+                boxShadow: 'inset 0 1px 0 rgba(255,215,120,0.10)',
+              }}
+              transition={{ type: 'spring', stiffness: 500, damping: 38, mass: 0.7 }}
+            />
+          )}
+          {/* Left accent bar (slides with the bg pill) */}
+          {isActive && (
+            <motion.span
+              layoutId="desktop-nav-bar"
+              className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r"
+              style={{
+                background: 'linear-gradient(to bottom, #ffc94a, #e0a82a)',
+                boxShadow: '0 0 10px rgba(255,201,74,0.6)',
+              }}
+              transition={{ type: 'spring', stiffness: 500, damping: 38, mass: 0.7 }}
             />
           )}
           <Icon
-            className={`w-[18px] h-[18px] transition-all ${
+            className={`relative w-[18px] h-[18px] transition-all duration-150 ${
               isActive ? 'text-gold' : 'text-muted-2 group-hover:text-text'
             }`}
             strokeWidth={isActive ? 2.5 : 2}
           />
-          <span className="flex-1">{label}</span>
+          <span className="relative flex-1">{label}</span>
           {badge > 0 && (
             <motion.span
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-              className="min-w-[18px] h-[18px] px-1 rounded-full bg-red text-white text-[10px] font-extrabold flex items-center justify-center ring-2 ring-bg-1 tabular-nums"
+              className="relative min-w-[18px] h-[18px] px-1 rounded-full bg-red text-white text-[10px] font-extrabold flex items-center justify-center ring-2 ring-bg-1 tabular-nums"
             >
               {badge}
             </motion.span>

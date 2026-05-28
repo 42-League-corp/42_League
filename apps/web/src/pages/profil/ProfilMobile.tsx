@@ -5,6 +5,7 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
 import { RecentMatchesList } from './mobile/RecentMatchesList';
 import { OpsCard } from './mobile/OpsCard';
+import { EloChart } from '../../components/EloChart';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,7 +13,7 @@ import { haptic } from '../../mobile/feedback/useHaptic';
 
 export function ProfilMobile() {
   const { stats, recentMatches, myLogin } = useProfilLogic();
-  const { me, refresh } = useLeagueData();
+  const { me, matches, refresh } = useLeagueData();
   const { signOut } = useAuth();
 
   if (!me?.user) {
@@ -34,6 +35,20 @@ export function ProfilMobile() {
           <QuickAction to="/historique" Icon={History} label="Historique" tone="teal" />
           <QuickAction to="/reglages" Icon={Settings} label="Réglages" tone="muted" />
         </div>
+
+        {/* ELO evolution chart */}
+        {myLogin && (
+          <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
+            <SectionHeader title="Évolution ELO" />
+            <EloChart
+              matches={matches}
+              myLogin={myLogin}
+              currentElo={stats.elo}
+              height={72}
+              maxPoints={20}
+            />
+          </div>
+        )}
 
         {/* Ops card (urgent rouge) */}
         <OpsCard />
@@ -57,7 +72,6 @@ export function ProfilMobile() {
           <span>Se déconnecter</span>
         </button>
 
-        <div className="h-2" />
       </div>
     </PullToRefresh>
   );
@@ -104,7 +118,7 @@ function SectionHeader({ title, badge }: { title: string; badge?: number }) {
       {badge !== undefined && badge > 0 && (
         <span className="font-mono text-[10px] text-muted tabular-nums">· {badge}</span>
       )}
-      <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
+      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent ml-2" />
     </div>
   );
 }

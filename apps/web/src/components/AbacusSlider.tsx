@@ -3,9 +3,7 @@ import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } 
 interface AbacusSliderProps {
   value: number;
   onChange: (value: number) => void;
-  /** Score minimum atteignable par le perdant (gamelles autorisées → négatif possible). */
   min?: number;
-  /** Score maximum atteignable par le perdant : strictement inférieur au seuil de victoire (10). */
   max?: number;
 }
 
@@ -19,16 +17,17 @@ function toneFor(value: number): BeadTone {
   return 'pos';
 }
 
+// Gradient de sphère 3D — highlight à 30% 22% pour un éclairage top-left premium
 const BEAD_GRADIENT: Record<BeadTone, string> = {
-  neg: 'radial-gradient(circle at 32% 28%, #ffd5dd 0%, #ff7a91 28%, #ff5366 55%, #8a0a23 100%)',
-  zero: 'radial-gradient(circle at 32% 28%, #fff7e4 0%, #c9bda6 30%, #7d6e54 60%, #2a241c 100%)',
-  pos: 'radial-gradient(circle at 32% 28%, #fff7c8 0%, #ffc94a 25%, #d49620 55%, #4a3010 100%)',
+  neg: 'radial-gradient(circle at 30% 22%, #ffcdd5 0%, #ff6878 22%, #e8263c 52%, #7a0618 100%)',
+  zero: 'radial-gradient(circle at 30% 22%, #f0ebe0 0%, #bfb49e 28%, #7a6e58 58%, #241e14 100%)',
+  pos: 'radial-gradient(circle at 30% 22%, #fff6cc 0%, #ffd34a 22%, #c88c10 52%, #3e2600 100%)',
 };
 
 const BEAD_HALO: Record<BeadTone, string> = {
-  neg: 'radial-gradient(circle, rgba(255,83,102,0.28) 0%, transparent 70%)',
-  zero: 'radial-gradient(circle, rgba(168,152,128,0.22) 0%, transparent 70%)',
-  pos: 'radial-gradient(circle, rgba(255,201,74,0.32) 0%, transparent 70%)',
+  neg: 'radial-gradient(circle, rgba(232,38,60,0.30) 0%, transparent 68%)',
+  zero: 'radial-gradient(circle, rgba(120,108,90,0.22) 0%, transparent 68%)',
+  pos: 'radial-gradient(circle, rgba(255,201,74,0.34) 0%, transparent 68%)',
 };
 
 const READOUT_COLOR: Record<BeadTone, string> = {
@@ -38,23 +37,21 @@ const READOUT_COLOR: Record<BeadTone, string> = {
 };
 
 const READOUT_GLOW: Record<BeadTone, string> = {
-  neg: '0 0 24px rgba(255,83,102,0.45)',
+  neg: '0 0 28px rgba(255,83,102,0.50)',
   zero: 'none',
-  pos: '0 0 24px rgba(255,201,74,0.5)',
+  pos: '0 0 28px rgba(255,201,74,0.55)',
 };
 
 function beadShadow(tone: BeadTone, dragging: boolean): string {
+  const r = dragging ? 32 : 20;
+  const a = dragging ? 0.75 : 0.55;
   const glow =
     tone === 'neg'
-      ? `0 0 ${dragging ? 30 : 18}px rgba(255,83,102,${dragging ? 0.7 : 0.5})`
+      ? `0 0 ${r}px rgba(232,38,60,${a})`
       : tone === 'zero'
-        ? `0 0 ${dragging ? 20 : 12}px rgba(168,152,128,${dragging ? 0.42 : 0.28})`
-        : `0 0 ${dragging ? 30 : 18}px rgba(255,201,74,${dragging ? 0.75 : 0.55})`;
-  const inner =
-    tone === 'zero'
-      ? 'inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.45)'
-      : 'inset -3px -4px 7px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.35)';
-  return `${glow}, 0 8px 14px rgba(0,0,0,0.55), ${inner}`;
+        ? `0 0 ${dragging ? 22 : 14}px rgba(120,108,90,${dragging ? 0.42 : 0.28})`
+        : `0 0 ${r}px rgba(255,193,50,${a})`;
+  return `${glow}, 0 ${dragging ? 12 : 8}px ${dragging ? 20 : 14}px rgba(0,0,0,0.60), inset -3px -4px 8px rgba(0,0,0,0.38), inset 2px 2px 5px rgba(255,255,255,0.32)`;
 }
 
 export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSliderProps) {
@@ -63,10 +60,7 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
   const [dragging, setDragging] = useState(false);
 
   const ticks = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const clamp = useCallback(
-    (n: number) => Math.max(min, Math.min(max, n)),
-    [min, max],
-  );
+  const clamp = useCallback((n: number) => Math.max(min, Math.min(max, n)), [min, max]);
 
   const valueFromPointer = useCallback(
     (clientX: number) => {
@@ -101,18 +95,13 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
   const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
     draggingRef.current = false;
     setDragging(false);
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* pointer déjà libéré */
-    }
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step =
       e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 :
-      e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 :
-      0;
+      e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
     if (step !== 0) {
       e.preventDefault();
       const next = clamp(value + step);
@@ -157,15 +146,17 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
       >
+        {/* Tige */}
         <div
           className="absolute top-1/2 left-7 right-7 h-[6px] -translate-y-1/2 rounded-full"
           style={{
             background:
               'linear-gradient(to bottom, #0c0a08 0%, #3a3022 18%, #7d7468 45%, #a8a094 52%, #7d7468 60%, #2a241c 82%, #0c0a08 100%)',
             boxShadow:
-              '0 1px 0 rgba(255,247,228,0.16) inset, 0 -1px 0 rgba(0,0,0,0.65) inset, 0 8px 14px rgba(0,0,0,0.6), 0 0 22px rgba(255,201,74,0.1)',
+              '0 1px 0 rgba(255,247,228,0.16) inset, 0 -1px 0 rgba(0,0,0,0.65) inset, 0 8px 14px rgba(0,0,0,0.6), 0 0 22px rgba(255,201,74,0.08)',
           }}
         />
+        {/* Embouts */}
         {(['left-6', 'right-6'] as const).map((side) => (
           <div
             key={side}
@@ -177,6 +168,7 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
           />
         ))}
 
+        {/* Repères de valeur */}
         {ticks.map((tick) => {
           const tickRatio = (tick - min) / (max - min);
           const isMajor = tick === min || tick === max || tick === 0;
@@ -207,45 +199,63 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
           );
         })}
 
+        {/* Perle */}
         <div
           className="absolute top-1/2 pointer-events-none z-10"
           style={{
             left: `calc(${TRACK_PADDING_PX}px + ${ratio} * (100% - ${TRACK_PADDING_PX * 2}px))`,
             transform: 'translate(-50%, -50%)',
             transition: dragging
-              ? 'left 90ms cubic-bezier(0.22, 1, 0.36, 1)'
-              : 'left 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+              ? 'left 80ms cubic-bezier(0.22, 1, 0.36, 1)'
+              : 'left 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
         >
+          {/* Halo */}
           <div
             className={`absolute inset-0 rounded-full transition-all duration-300 ${
-              dragging ? 'scale-150 opacity-100' : 'scale-100 opacity-0'
+              dragging ? 'scale-[1.65] opacity-100' : 'scale-100 opacity-0'
             }`}
             style={{ background: BEAD_HALO[tone] }}
           />
+          {/* Sphère */}
           <div
             className={`relative w-11 h-11 rounded-full transition-transform duration-150 ${
-              dragging ? 'scale-[1.08]' : 'scale-100'
+              dragging ? 'scale-[1.10]' : 'scale-100'
             }`}
-            style={{ background: BEAD_GRADIENT[tone], boxShadow: beadShadow(tone, dragging) }}
+            style={{
+              background: BEAD_GRADIENT[tone],
+              boxShadow: beadShadow(tone, dragging),
+            }}
           >
+            {/* Highlight spéculaire */}
             <div
               className="absolute rounded-full pointer-events-none"
               style={{
-                top: 5,
-                left: 7,
-                width: 12,
-                height: 8,
-                background:
-                  'radial-gradient(ellipse, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 70%)',
-                filter: 'blur(0.5px)',
+                top: 6,
+                left: 8,
+                width: 13,
+                height: 9,
+                background: 'radial-gradient(ellipse, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 70%)',
+                filter: 'blur(0.4px)',
+              }}
+            />
+            {/* Reflet secondaire bas-droit (donne le volume) */}
+            <div
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                bottom: 7,
+                right: 7,
+                width: 6,
+                height: 4,
+                background: 'radial-gradient(ellipse, rgba(255,255,255,0.18) 0%, transparent 100%)',
+                filter: 'blur(0.8px)',
               }}
             />
           </div>
         </div>
       </div>
 
-      {/* Repères -10 / 0 / 9 */}
+      {/* Repères min / 0 / max */}
       <div className="flex justify-between text-[10px] text-muted mt-2 px-5 font-mono font-bold opacity-70 tracking-wider">
         <span>{min}</span>
         {min < 0 && max > 0 && (

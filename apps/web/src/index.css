@@ -12,6 +12,11 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Verrou : seul <main> scrolle dans le shell mobile. html/body restent
+       figés sur le viewport pour éviter le « double scroll » où l'utilisateur
+       pouvait descendre sous le contenu. */
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   body {
@@ -30,7 +35,8 @@
     color: #ede4d3;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overscroll-behavior-y: none;
+    overflow: hidden;
+    overscroll-behavior: none;
     touch-action: manipulation;
   }
 
