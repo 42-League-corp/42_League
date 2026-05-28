@@ -1,26 +1,40 @@
-import { useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  useTransform,
+  type AnimationPlaybackControls,
+} from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { haptic } from '../feedback/useHaptic';
+import { useScrollRoot } from '../../shell/scrollRoot';
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void> | void;
   children: ReactNode;
-  /** Distance en pixels à tirer avant déclenchement. */
+  /** Distance en pixels (après résistance) à atteindre pour armer le refresh. */
   threshold?: number;
   className?: string;
 }
 
 const MAX_PULL = 120;
+const RESISTANCE = 0.5;
+const ENGAGE_PX = 4;
+const SPRING_BACK = { type: 'spring' as const, stiffness: 380, damping: 30, mass: 0.7 };
+const SPRING_HOLD = { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.7 };
 
 /**
- * Pull-to-refresh tactile :
- * - Quand le scroll est au top, tirer vers le bas révèle un loader
- * - Au-delà du seuil, relâcher déclenche onRefresh
- * - Haptique au passage du seuil et au déclenchement
- *
- * NOTE : ce composant ne marche que si on est en haut du scroll (scrollTop === 0).
- * Le scroll natif reprend dès qu'on commence à scroller normalement.
+ * Pull-to-refresh natif premium :
+ * - **N'interfère JAMAIS avec le scroll natif** : on attache des listeners touch
+ *   au vrai conteneur scrollable (<main> du MobileShell, fourni via ScrollRootContext)
+ *   et on ne préventDefault que quand on contrôle activement le pull.
+ * - Le geste ne s'arme que si `scrollTop === 0` au touchstart. Au moindre scroll
+ *   vertical vers le haut, ou au moindre geste horizontal dominant, on relâche.
+ * - Élastique iOS : la résistance grandit avec la distance (atténuée à 50%).
+ * - Haptique au passage du seuil + au déclenchement.
+ * - Loader doré qui descend du header, rotation de la flèche, swap loader.
  */
 export function PullToRefresh({
   onRefresh,
@@ -28,45 +42,159 @@ export function PullToRefresh({
   threshold = 70,
   className = '',
 }: PullToRefreshProps) {
+  const scrollRoot = useScrollRoot();
   const y = useMotionValue(0);
   const [refreshing, setRefreshing] = useState(false);
   const [primed, setPrimed] = useState(false);
+
+  // Refs pour ne pas re-créer les listeners à chaque render.
+  const refreshingRef = useRef(false);
+  const primedRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
+  const animRef = useRef<AnimationPlaybackControls | null>(null);
+
+  refreshingRef.current = refreshing;
+  primedRef.current = primed;
+  onRefreshRef.current = onRefresh;
 
   const progress = useTransform(y, [0, threshold], [0, 1]);
   const rotation = useTransform(progress, [0, 1], [0, 180]);
   const scale = useTransform(progress, [0, 1], [0.6, 1]);
 
-  const handleDrag = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (refreshing) return;
-    const next = primed || info.offset.y > threshold;
-    if (next !== primed) {
-      setPrimed(next);
-      haptic('selection');
-    }
-  };
+  useEffect(() => {
+    const root = scrollRoot?.current;
+    if (!root) return;
 
-  const handleEnd = async (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (refreshing) return;
-    if (info.offset.y > threshold) {
-      haptic('medium');
-      setRefreshing(true);
-      y.set(threshold);
-      try {
-        await onRefresh();
-      } finally {
-        setRefreshing(false);
-        setPrimed(false);
-        y.set(0);
+    const cancelAnim = () => {
+      animRef.current?.stop();
+      animRef.current = null;
+    };
+    const springTo = (target: number, opts = SPRING_BACK) => {
+      cancelAnim();
+      animRef.current = animate(y, target, opts);
+    };
+
+    let startY = 0;
+    let startX = 0;
+    let armed = false;
+    let pulling = false;
+    let canceled = false;
+
+    const reset = () => {
+      armed = false;
+      pulling = false;
+      canceled = false;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (refreshingRef.current) {
+        reset();
+        return;
       }
-    } else {
-      setPrimed(false);
-      y.set(0);
-    }
-  };
+      if (e.touches.length !== 1) {
+        reset();
+        return;
+      }
+      if (root.scrollTop > 0) {
+        reset();
+        return;
+      }
+      cancelAnim();
+      armed = true;
+      pulling = false;
+      canceled = false;
+      startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!armed || canceled || refreshingRef.current) return;
+      const t = e.touches[0];
+      const dy = t.clientY - startY;
+      const dx = t.clientX - startX;
+
+      // Le scroll natif a repris la main (l'utilisateur scrolle vers le haut du contenu)
+      // ou il essaie de remonter — on abandonne immédiatement le pull.
+      if (dy <= 0 || root.scrollTop > 0) {
+        if (pulling) springTo(0);
+        canceled = true;
+        return;
+      }
+
+      // Geste horizontal dominant → laisse le scroll-x ou les swipers faire leur job.
+      if (!pulling && Math.abs(dx) > Math.abs(dy)) {
+        canceled = true;
+        return;
+      }
+
+      // On engage le pull seulement au-delà de ENGAGE_PX pour ignorer le micro-jitter.
+      if (dy > ENGAGE_PX) pulling = true;
+      if (!pulling) return;
+
+      const pulled = Math.min(MAX_PULL, dy * RESISTANCE);
+      y.set(pulled);
+
+      // Tant qu'on pull, on bloque le scroll natif (sinon iOS rubber-band fight).
+      if (e.cancelable) e.preventDefault();
+
+      const next = pulled > threshold;
+      if (next !== primedRef.current) {
+        primedRef.current = next;
+        setPrimed(next);
+        haptic('selection');
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!armed) return;
+      const wasPulling = pulling;
+      const current = y.get();
+      reset();
+      if (!wasPulling) return;
+
+      if (current > threshold) {
+        haptic('medium');
+        setRefreshing(true);
+        refreshingRef.current = true;
+        springTo(threshold, SPRING_HOLD);
+        const run = async () => {
+          try {
+            await onRefreshRef.current();
+          } finally {
+            setRefreshing(false);
+            refreshingRef.current = false;
+            setPrimed(false);
+            primedRef.current = false;
+            springTo(0);
+          }
+        };
+        void run();
+      } else {
+        setPrimed(false);
+        primedRef.current = false;
+        springTo(0);
+      }
+    };
+
+    // touchstart + touchend peuvent rester passifs ; seul touchmove doit pouvoir
+    // preventDefault() (non passif). On garde le coût perf sur le seul listener concerné.
+    root.addEventListener('touchstart', onTouchStart, { passive: true });
+    root.addEventListener('touchmove', onTouchMove, { passive: false });
+    root.addEventListener('touchend', onTouchEnd, { passive: true });
+    root.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      cancelAnim();
+      root.removeEventListener('touchstart', onTouchStart);
+      root.removeEventListener('touchmove', onTouchMove);
+      root.removeEventListener('touchend', onTouchEnd);
+      root.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [scrollRoot, threshold, y]);
 
   return (
     <div className={`relative ${className}`}>
-      {/* Loader indicateur — fixé en haut du conteneur */}
+      {/* Loader doré — translaté depuis -100% du conteneur via y, suit le doigt. */}
       <div
         className="absolute top-0 left-0 right-0 flex items-center justify-center pointer-events-none z-10"
         style={{ height: MAX_PULL, transform: 'translateY(-100%)' }}
@@ -104,17 +232,8 @@ export function PullToRefresh({
         </motion.div>
       </div>
 
-      <motion.div
-        drag="y"
-        dragConstraints={{ top: 0, bottom: refreshing ? threshold : MAX_PULL }}
-        dragElastic={{ top: 0, bottom: 0.5 }}
-        onDrag={handleDrag}
-        onDragEnd={handleEnd}
-        style={{ y }}
-        className="touch-pan-y"
-      >
-        {children}
-      </motion.div>
+      {/* Contenu — translaté pour l'élastique iOS. Le scroll vit sur <main>, pas ici. */}
+      <motion.div style={{ y }}>{children}</motion.div>
     </div>
   );
 }
