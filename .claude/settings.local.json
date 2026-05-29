@@ -49,7 +49,15 @@
       "Bash(wsl -d Ubuntu grep -r \"prisma migrate\" /home/adrien/projects/42_League --include=\"Dockerfile*\" --include=\"*.sh\")",
       "Bash(wsl -d Ubuntu find /home/adrien/projects/42_League -name \".env*\" -o -name \"*.env.example\")",
       "Bash(npx --no-install tsc -b)",
-      "Bash(grep -E \"\\\\.\\(yml|yaml\\)$\")"
+      "Bash(grep -E \"\\\\.\\(yml|yaml\\)$\")",
+      "Bash(awk '/^app\\\\.\\(post|patch|delete|put\\)/{name=$0; route=name; lineno=NR; next} /safeParse|Schema\\\\.parse|z\\\\.object/{if\\(route\\){print lineno\": \"route; route=\"\"}}' apps/backend/src/index.ts)",
+      "Bash(git commit *)",
+      "Bash(ssh *)",
+      "Bash(curl *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }
