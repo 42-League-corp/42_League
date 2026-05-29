@@ -435,7 +435,7 @@ app.post('/matches/:id/confirm', async (c) => {
   }
   const { scoreSelf: confirmedSelf, scoreOpponent: confirmedOpponent } = parsed.data;
 
-  const match = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
       throw new HTTPException(404, { message: 'pending match not found' });
@@ -450,11 +450,15 @@ app.post('/matches/:id/confirm', async (c) => {
       confirmedSelf !== p.scoreOpponent ||
       confirmedOpponent !== p.scoreDeclarer
     ) {
-      // Bilateral validation failed → both must redo. Delete the pending entirely.
+      // Validation bilatérale échouée → les deux doivent recommencer : on
+      // supprime le pending. ⚠️ Ne PAS `throw` ici : une exception ferait
+      // rollback de la transaction et annulerait ce delete. On renvoie un
+      // marqueur et on lève le 409 APRÈS le commit de la transaction.
       await tx.pendingMatch.delete({ where: { id } });
-      throw new HTTPException(409, {
+      return {
+        mismatch: true as const,
         message: `Scores différents — ${p.declarerLogin} a déclaré ${p.scoreDeclarer}-${p.scoreOpponent}, tu as soumis ${confirmedOpponent}-${confirmedSelf}. Match annulé, à redéclarer.`,
-      });
+      };
     }
 
     const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
@@ -497,7 +501,7 @@ app.post('/matches/:id/confirm', async (c) => {
 
     await tx.pendingMatch.delete({ where: { id } });
 
-    return tx.playedMatch.create({
+    const created = await tx.playedMatch.create({
       data: {
         id,
         playerALogin: a,
@@ -511,7 +515,14 @@ app.post('/matches/:id/confirm', async (c) => {
         deltaB,
       },
     });
+    return { mismatch: false as const, match: created };
   });
+
+  // Le 409 est levé hors transaction : le delete du pending est ainsi committé.
+  if (result.mismatch) {
+    throw new HTTPException(409, { message: result.message });
+  }
+  const match = result.match;
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
