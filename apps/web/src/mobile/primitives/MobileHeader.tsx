@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Bell } from 'lucide-react';
+import { Bell, Shield } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../hooks/useAuth';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -91,6 +91,18 @@ export function MobileHeader() {
               {pendingCount}
             </span>
           </motion.button>
+        )}
+
+        {/* GOD shortcut — admins uniquement */}
+        {(me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') && (
+          <NavLink
+            to="/GOD"
+            onClick={() => haptic('selection')}
+            aria-label="GOD"
+            className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-red/20 to-red/5 border border-red/40 active:scale-90 transition-transform tap-transparent"
+          >
+            <Shield className="w-4 h-4 text-red" strokeWidth={2.5} />
+          </NavLink>
         )}
 
         {/* Avatar utilisateur */}

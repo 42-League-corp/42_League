@@ -8,9 +8,11 @@ import {
   type FeatureRequestWithAuthor,
   type PlayedMatch,
   type SuspiciousFlag,
+  type AdminAuditEntry,
+  type AdminAuditAction,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'ideas' | 'alertes';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'ideas' | 'alertes' | 'audit';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // ── Shared primitives ──────────────────────────────────────────────────────
@@ -953,6 +955,111 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
   );
 }
 
+// ── Tab: AUDIT ─────────────────────────────────────────────────────────────
+
+const AUDIT_ACTIONS: AdminAuditAction[] = [
+  'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES',
+];
+
+const ACTION_COLOR: Record<AdminAuditAction, string> = {
+  SET_ROLE: 'text-amber-400',
+  BAN_USER: 'text-red-400',
+  UNBAN_USER: 'text-emerald-400',
+  EDIT_STATS: 'text-blue-400',
+  EDIT_TITLE: 'text-purple-400',
+  DELETE_MATCH: 'text-red-400',
+  EDIT_MATCH: 'text-blue-400',
+  REFRESH_IMAGES: 'text-zinc-400',
+};
+
+function AuditTab() {
+  const [entries, setEntries] = useState<AdminAuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
+  const [targetFilter, setTargetFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState<AdminAuditAction | 'all'>('all');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await api.adminAuditLog({
+        actor: actorFilter || undefined,
+        target: targetFilter || undefined,
+        action: actionFilter === 'all' ? undefined : actionFilter,
+        limit: 200,
+      });
+      setEntries(list);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }, [actorFilter, targetFilter, actionFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="p-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input value={actorFilter} onChange={setActorFilter} placeholder="Filtre acteur…" className="w-44" />
+        <Input value={targetFilter} onChange={setTargetFilter} placeholder="Filtre cible…" className="w-44" />
+        <select
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value as AdminAuditAction | 'all')}
+          className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono px-2 py-1.5 rounded cursor-pointer"
+        >
+          <option value="all">Toutes actions</option>
+          {AUDIT_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <span className="text-zinc-500 text-xs font-mono ml-auto">{entries.length} entrées</span>
+      </div>
+      {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-xs font-mono">Chargement…</div>
+      ) : entries.length === 0 ? (
+        <div className="text-zinc-500 text-xs font-mono">Aucune entrée.</div>
+      ) : (
+        <table className="w-full text-xs font-mono border-collapse">
+          <thead>
+            <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+              <th className="text-left py-1.5 px-2">Date</th>
+              <th className="text-left py-1.5 px-2">Acteur</th>
+              <th className="text-left py-1.5 px-2">Rôle</th>
+              <th className="text-left py-1.5 px-2">Action</th>
+              <th className="text-left py-1.5 px-2">Cible</th>
+              <th className="text-left py-1.5 px-2">Détails</th>
+              <th className="text-left py-1.5 px-2">IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e) => (
+              <tr key={e.id} className="border-b border-zinc-900 hover:bg-zinc-900/30">
+                <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">
+                  {new Date(e.createdAt).toLocaleString('fr-FR')}
+                </td>
+                <td className="py-2 px-2 text-zinc-200 font-medium">{e.actorLogin}</td>
+                <td className="py-2 px-2"><RoleBadge role={e.actorRole} /></td>
+                <td className={`py-2 px-2 font-bold ${ACTION_COLOR[e.action] ?? 'text-zinc-300'}`}>{e.action}</td>
+                <td className="py-2 px-2 text-zinc-300">{e.targetLogin ?? '—'}</td>
+                <td className="py-2 px-2 text-zinc-500 max-w-[400px]">
+                  {e.payload ? (
+                    <code className="text-[10px] text-zinc-400 break-all">
+                      {JSON.stringify(e.payload).slice(0, 200)}
+                    </code>
+                  ) : '—'}
+                </td>
+                <td className="py-2 px-2 text-zinc-600 text-[10px]">{e.ipAddress ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
@@ -962,6 +1069,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'matches', label: 'MATCHES' },
   { id: 'ideas', label: 'IDÉES' },
   { id: 'alertes', label: 'ALERTES' },
+  { id: 'audit', label: 'AUDIT' },
 ];
 
 export function GODPage() {
@@ -1054,6 +1162,7 @@ export function GODPage() {
           {activeTab === 'matches' && <MatchesTab />}
           {activeTab === 'ideas' && <IdeasTab />}
           {activeTab === 'alertes' && <AlertesTab />}
+          {activeTab === 'audit' && <AuditTab />}
         </div>
       </div>
     </div>

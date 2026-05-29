@@ -32,6 +32,7 @@ import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit } from './sse.js';
+import { logAdminAction } from './audit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
@@ -162,9 +163,17 @@ app.post('/admin/users/:login/title', async (c) => {
     throw new HTTPException(400, { message: parsed.error.message });
   }
   const cleaned = parsed.data.title?.trim() || null;
+  const before = await prisma.user.findUnique({ where: { login }, select: { title: true } });
   const user = await prisma.user.update({
     where: { login },
     data: { title: cleaned },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_TITLE',
+    target: login,
+    payload: { from: before?.title ?? null, to: cleaned },
   });
   return c.json({ login: user.login, title: user.title });
 });
@@ -896,6 +905,13 @@ app.post('/admin/users/:login/role', async (c) => {
     where: { login: targetLogin },
     data: { role: parsed.data.role },
   });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'SET_ROLE',
+    target: targetLogin,
+    payload: { from: target.role, to: parsed.data.role },
+  });
   return c.json({ login: updated.login, role: updated.role });
 });
 
@@ -1096,8 +1112,19 @@ app.patch('/admin/users/:login/stats', async (c) => {
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const before = await prisma.user.findUnique({
+    where: { login },
+    select: { elo: true, matchesPlayed: true, dodgeCount: true, tournamentsWon: true },
+  });
   const user = await prisma.user.update({ where: { login }, data: parsed.data })
     .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_STATS',
+    target: login,
+    payload: { before, after: parsed.data },
+  });
   return c.json(user);
 });
 
@@ -1110,6 +1137,12 @@ app.post('/admin/users/:login/ban', async (c) => {
   }
   const user = await prisma.user.update({ where: { login }, data: { bannedAt: new Date() } })
     .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'BAN_USER',
+    target: login,
+  });
   return c.json({ login: user.login, bannedAt: user.bannedAt });
 });
 
@@ -1119,6 +1152,12 @@ app.post('/admin/users/:login/unban', async (c) => {
   const login = c.req.param('login');
   const user = await prisma.user.update({ where: { login }, data: { bannedAt: null } })
     .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'UNBAN_USER',
+    target: login,
+  });
   return c.json({ login: user.login, bannedAt: null });
 });
 
@@ -1178,6 +1217,19 @@ app.delete('/admin/matches/:id', async (c) => {
     }
     await tx.playedMatch.delete({ where: { id } });
   });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'DELETE_MATCH',
+    payload: {
+      matchId: id,
+      playerA: match.playerALogin,
+      playerB: match.playerBLogin,
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+      countedForElo: match.countedForElo,
+    },
+  });
   return c.json({ id, deleted: true });
 });
 
@@ -1198,6 +1250,16 @@ app.patch('/admin/matches/:id', async (c) => {
   const updated = await prisma.playedMatch.update({
     where: { id },
     data: { scoreA: parsed.data.scoreA, scoreB: parsed.data.scoreB, winner },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    payload: {
+      matchId: id,
+      before: { scoreA: match.scoreA, scoreB: match.scoreB, winner: match.winner },
+      after: { scoreA: parsed.data.scoreA, scoreB: parsed.data.scoreB, winner },
+    },
   });
   return c.json(updated);
 });
@@ -1370,6 +1432,44 @@ app.get('/admin/suspicious', async (c) => {
   }
 
   return c.json(deduped);
+});
+
+const AuditQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  actor: z.string().min(1).max(64).optional(),
+  target: z.string().min(1).max(64).optional(),
+  action: z
+    .enum([
+      'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS',
+      'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES',
+    ])
+    .optional(),
+});
+
+app.get('/admin/audit-log', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const url = new URL(c.req.url);
+  const parsed = AuditQuerySchema.safeParse({
+    limit: url.searchParams.get('limit') ?? undefined,
+    actor: url.searchParams.get('actor') ?? undefined,
+    target: url.searchParams.get('target') ?? undefined,
+    action: url.searchParams.get('action') ?? undefined,
+  });
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { limit, actor, target, action } = parsed.data;
+  const entries = await prisma.adminAuditLog.findMany({
+    where: {
+      ...(actor ? { actorLogin: actor } : {}),
+      ...(target ? { targetLogin: target } : {}),
+      ...(action ? { action } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+  return c.json(entries);
 });
 
 const port = Number(process.env.PORT ?? 3000);

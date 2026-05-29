@@ -11,6 +11,7 @@ import {
   Settings,
   Zap,
   Cog,
+  Shield,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../hooks/useAuth';
@@ -35,6 +36,8 @@ const NAV_SECONDARY: NavDef[] = [
   { to: '/historique', labelKey: 'nav.historique', Icon: History },
   { to: '/reglages', labelKey: 'nav.reglages', Icon: Settings },
 ];
+
+const NAV_ADMIN: NavDef = { to: '/GOD', labelKey: 'nav.god', Icon: Shield };
 
 interface DesktopShellProps {
   children: ReactNode;
@@ -102,6 +105,16 @@ export function DesktopShell({ children }: DesktopShellProps) {
               Icon={n.Icon}
             />
           ))}
+          {(me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') && (
+            <>
+              <div className="my-2 h-px bg-gradient-to-r from-transparent via-red/30 to-transparent" />
+              <NavItem
+                to={NAV_ADMIN.to}
+                label={t(NAV_ADMIN.labelKey)}
+                Icon={NAV_ADMIN.Icon}
+              />
+            </>
+          )}
         </nav>
 
         {/* Bannière "à confirmer" */}
