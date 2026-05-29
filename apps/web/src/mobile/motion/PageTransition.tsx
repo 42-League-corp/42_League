@@ -15,11 +15,11 @@ interface PageTransitionProps {
  * et garder le bundle initial plus léger.
  */
 const TAB_ORDER = [
-  '/defis',
-  '/tournois',
+  '/challenges',
+  '/tournaments',
   '/leaderboard',
-  '/trophees',
-  '/profil',
+  '/trophies',
+  '/profile',
 ] as const;
 
 function tabIndex(pathname: string): number {

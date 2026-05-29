@@ -12,17 +12,17 @@ import { haptic } from '../feedback/useHaptic';
  * `null` ⇒ on n'affiche que le brand (fallback).
  */
 const ROUTE_TITLE: Record<string, string> = {
-  '/defis': 'Défis',
-  '/tournois': 'Tournois',
+  '/challenges': 'Défis',
+  '/tournaments': 'Tournois',
   '/leaderboard': 'Classement',
-  '/trophees': 'Trophées',
-  '/profil': 'Profil',
-  '/historique': 'Historique',
-  '/reglages': 'Réglages',
+  '/trophies': 'Trophées',
+  '/profile': 'Profil',
+  '/history': 'Historique',
+  '/settings': 'Réglages',
 };
 
 function titleFor(pathname: string): string {
-  // Match exact d'abord, sinon préfixe (tournois/:id → Tournois)
+  // Match exact d'abord, sinon préfixe (tournaments/:id → Tournois)
   if (ROUTE_TITLE[pathname]) return ROUTE_TITLE[pathname];
   for (const [route, title] of Object.entries(ROUTE_TITLE)) {
     if (pathname.startsWith(`${route}/`)) return title;
@@ -50,7 +50,7 @@ export function MobileHeader() {
       <div className="relative flex items-center gap-3 px-4 h-14">
         {/* Brand compact — plaque dorée mini */}
         <NavLink
-          to="/defis"
+          to="/"
           onClick={() => haptic('selection')}
           className="flex items-center gap-1.5 active:opacity-70 transition-opacity tap-transparent"
         >
@@ -81,7 +81,7 @@ export function MobileHeader() {
             type="button"
             onClick={() => {
               haptic('selection');
-              navigate('/defis');
+              navigate('/challenges');
             }}
             aria-label={`${pendingCount} game${pendingCount > 1 ? 's' : ''} à confirmer`}
             className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-gold/25 to-gold/10 border border-gold/40 active:bg-gold/30 active:scale-90 transition-transform tap-transparent shadow-[inset_0_1px_0_rgba(255,247,228,0.18),0_2px_8px_rgba(255,201,74,0.15)]"
@@ -108,7 +108,7 @@ export function MobileHeader() {
         {/* Avatar utilisateur */}
         {me?.user && (
           <NavLink
-            to="/profil"
+            to="/profile"
             onClick={() => haptic('selection')}
             className="active:scale-90 transition-transform tap-transparent"
             aria-label={t('nav.profil')}

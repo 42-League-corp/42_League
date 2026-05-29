@@ -194,7 +194,7 @@ export function DefisMobile() {
                     key={p.login}
                     player={p}
                     count={opponentCounts[p.login]}
-                    onClick={() => navigate(`/joueur/${p.login}`)}
+                    onClick={() => navigate(`/player/${p.login}`)}
                   />
                 ))}
               </div>
@@ -237,7 +237,7 @@ export function DefisMobile() {
                       imageUrl={imgByLogin.get(
                         c.challengerLogin === myLogin ? c.opponentLogin : c.challengerLogin,
                       )}
-                      onAccept={() => navigate(`/defis?record=${c.id}`)}
+                      onAccept={() => navigate(`/challenges?record=${c.id}`)}
                       onDecline={() => handleAction(c.id, 'decline')}
                     />
                   ))}

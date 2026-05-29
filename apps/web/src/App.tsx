@@ -64,7 +64,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/auth/return" element={<AuthReturnPage />} />
-      <Route path="/login" element={authenticated ? <Navigate to="/defis" replace /> : <LoginPage />} />
+      <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
       <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
       <Route
         path="*"
@@ -106,17 +106,17 @@ function AuthenticatedShell() {
         <ErrorBoundary>
           <Suspense fallback={<PageSkeleton />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/defis" replace />} />
-              <Route path="/defis" element={<DefisPage />} />
-              <Route path="/tournois" element={<TournoisPage />} />
-              <Route path="/tournois/:id" element={<TournoiDetailPage />} />
+              <Route path="/" element={<Navigate to="/challenges" replace />} />
+              <Route path="/challenges" element={<DefisPage />} />
+              <Route path="/tournaments" element={<TournoisPage />} />
+              <Route path="/tournaments/:id" element={<TournoiDetailPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/trophees" element={<TropheesPage />} />
-              <Route path="/profil" element={<ProfilPage />} />
-              <Route path="/joueur/:login" element={<PlayerPage />} />
-              <Route path="/historique" element={<HistoriquePage />} />
-              <Route path="/reglages" element={<ReglagesPage />} />
-              <Route path="*" element={<Navigate to="/defis" replace />} />
+              <Route path="/trophies" element={<TropheesPage />} />
+              <Route path="/profile" element={<ProfilPage />} />
+              <Route path="/player/:login" element={<PlayerPage />} />
+              <Route path="/history" element={<HistoriquePage />} />
+              <Route path="/settings" element={<ReglagesPage />} />
+              <Route path="*" element={<Navigate to="/challenges" replace />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>
