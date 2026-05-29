@@ -13,6 +13,9 @@ import {
   TournamentRecordSchema,
   SetTitleSchema,
   DeclareOpsSchema,
+  FeatureRequestSchema,
+  SetRoleSchema,
+  SetFeatureRequestStatusSchema,
   applyElo,
   shouldCountForElo,
 } from '@42-league/shared';
@@ -26,22 +29,41 @@ import {
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
 import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
+import { streamSSE } from 'hono/streaming';
+import { registerSse, emit } from './sse.js';
+
+// Hardcoded — immutable. No API can grant or revoke this.
+const SUPERADMINS = new Set(['abidaux', 'throbert']);
+
+async function getUserRole(login: string): Promise<'USER' | 'ADMIN' | 'SUPERADMIN'> {
+  if (SUPERADMINS.has(login.toLowerCase())) return 'SUPERADMIN';
+  const u = await prisma.user.findUnique({ where: { login }, select: { role: true } });
+  return (u?.role as 'USER' | 'ADMIN' | 'SUPERADMIN') ?? 'USER';
+}
+
+async function requireSuperAdmin(login: string): Promise<void> {
+  if (!SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(403, { message: 'superadmins only' });
+  }
+}
 
 async function getOrCreateUser(login: string, profile?: FtProfile) {
+  const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
   const user = await prisma.user.upsert({
     where: { login },
-    update: profile
-      ? {
-          ftId: profile.ftId,
-          campus: profile.campus,
-          imageUrl: profile.imageUrl,
-        }
-      : {},
+    update: {
+      ...(profile
+        ? { ftId: profile.ftId, campus: profile.campus, imageUrl: profile.imageUrl }
+        : {}),
+      // Always re-enforce SUPERADMIN role on login — no one can downgrade it
+      ...(forceSuperAdmin ? { role: 'SUPERADMIN' } : {}),
+    },
     create: {
       login,
       ftId: profile?.ftId ?? null,
       campus: profile?.campus ?? null,
       imageUrl: profile?.imageUrl ?? null,
+      role: forceSuperAdmin ? 'SUPERADMIN' : 'USER',
     },
   });
   if (!user.imageUrl) {
@@ -142,7 +164,31 @@ app.route(
 app.get('/me', async (c) => {
   const login = await getCurrentLogin(c);
   const user = await prisma.user.findUnique({ where: { login } });
-  return c.json({ login, user, isAdmin: isAdmin(login) });
+  const role = await getUserRole(login);
+  return c.json({ login, user, role, isAdmin: isAdmin(login) });
+});
+
+app.get('/events', async (c) => {
+  const me = await getCurrentLogin(c);
+  return streamSSE(c, async (stream) => {
+    const cleanup = registerSse(me, stream);
+    let alive = true;
+    stream.onAbort(() => {
+      alive = false;
+      cleanup();
+    });
+    await stream.writeSSE({ event: 'connected', data: JSON.stringify({ login: me }) });
+    while (alive) {
+      await stream.sleep(25_000);
+      if (!alive) break;
+      try {
+        await stream.writeSSE({ event: 'ping', data: String(Date.now()) });
+      } catch {
+        alive = false;
+      }
+    }
+    cleanup();
+  });
 });
 
 app.get('/users', async (c) =>
@@ -213,6 +259,10 @@ app.post('/matches', async (c) => {
       scoreDeclarer: scoreSelf,
       scoreOpponent,
     },
+  });
+  emit([opponentLogin], {
+    type: 'match:pending',
+    payload: { id: pending.id, declarerLogin: me, scoreDeclarer: scoreSelf, scoreOpponent },
   });
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
@@ -305,6 +355,7 @@ app.post('/matches/:id/confirm', async (c) => {
     });
   });
 
+  emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
   return c.json(match);
 });
 
@@ -319,6 +370,7 @@ app.post('/matches/:id/reject', async (c) => {
 
   const { contestReason, contestMessage } = parsed.data;
 
+  let declarerLogin: string | undefined;
   await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
@@ -329,6 +381,7 @@ app.post('/matches/:id/reject', async (c) => {
         message: 'only the opponent can reject this match',
       });
     }
+    declarerLogin = p.declarerLogin;
     await tx.pendingMatch.delete({ where: { id } });
     console.log(
       `[contest] ${me} a contesté la déclaration de ${p.declarerLogin}` +
@@ -336,6 +389,9 @@ app.post('/matches/:id/reject', async (c) => {
     );
   });
 
+  if (declarerLogin) {
+    emit([declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
+  }
   return c.json({ id, status: 'rejected', contestReason });
 });
 
@@ -373,6 +429,7 @@ app.post('/challenges', async (c) => {
       scheduledAt: new Date(scheduledAt),
     },
   });
+  emit([opponentLogin], { type: 'challenge:received', payload: challenge });
   return c.json(challenge, 201);
 });
 
@@ -393,6 +450,7 @@ app.post('/challenges/:id/accept', async (c) => {
       data: { status: 'accepted', decidedAt: new Date() },
     });
   });
+  emit([challenge.challengerLogin], { type: 'challenge:accepted', payload: challenge });
   return c.json(challenge);
 });
 
@@ -429,7 +487,12 @@ app.post('/challenges/:id/decline', async (c) => {
         },
       });
     }
-    return { status: newStatus, penalty };
+    return { status: newStatus, penalty, challengerLogin: ch.challengerLogin, opponentLogin: ch.opponentLogin };
+  });
+  const otherParty = result.challengerLogin === me ? result.opponentLogin : result.challengerLogin;
+  emit([otherParty], {
+    type: 'challenge:declined',
+    payload: { id, status: result.status, eloPenalty: result.penalty, declinedBy: me },
   });
   return c.json({ id, status: result.status, eloPenalty: result.penalty });
 });
@@ -785,6 +848,80 @@ app.post('/tournaments/:id/matches/:matchId/reject', async (c) => {
     });
   });
   return c.json({ id: matchId, rejected: true });
+});
+
+/* ============ ADMIN — ROLE MANAGEMENT ============ */
+
+// Only SUPERADMINS can promote/demote. SUPERADMIN itself is immutable (hardcoded).
+app.post('/admin/users/:login/role', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const targetLogin = c.req.param('login');
+  if (SUPERADMINS.has(targetLogin.toLowerCase())) {
+    throw new HTTPException(400, { message: 'cannot change role of a superadmin' });
+  }
+  const target = await prisma.user.findUnique({ where: { login: targetLogin } });
+  if (!target) {
+    throw new HTTPException(404, { message: 'user not found' });
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = SetRoleSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const updated = await prisma.user.update({
+    where: { login: targetLogin },
+    data: { role: parsed.data.role },
+  });
+  return c.json({ login: updated.login, role: updated.role });
+});
+
+/* ============ FEATURE REQUESTS ============ */
+
+app.post('/feature-requests', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = FeatureRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  await getOrCreateUser(me);
+  const fr = await prisma.featureRequest.create({
+    data: { id: randomUUID(), text: parsed.data.text, authorId: me },
+  });
+  return c.json(fr, 201);
+});
+
+app.get('/feature-requests', async (c) => {
+  const me = await getCurrentLogin(c);
+  const role = await getUserRole(me);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+  const list = await prisma.featureRequest.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { author: { select: { login: true, imageUrl: true } } },
+  });
+  return c.json(list);
+});
+
+app.patch('/feature-requests/:id/status', async (c) => {
+  const me = await getCurrentLogin(c);
+  const role = await getUserRole(me);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = SetFeatureRequestStatusSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const fr = await prisma.featureRequest.update({
+    where: { id },
+    data: { status: parsed.data.status },
+  }).catch(() => { throw new HTTPException(404, { message: 'feature request not found' }); });
+  return c.json(fr);
 });
 
 /* ============ OPS ============ */
