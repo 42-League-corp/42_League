@@ -10,6 +10,10 @@ on:
         description: 'Force build both images'
         required: false
         default: 'true'
+      deploy_only:
+        description: 'Skip builds and deploy existing :latest images'
+        required: false
+        default: 'false'
 
 env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
@@ -36,7 +40,9 @@ jobs:
 
   build-backend:
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event.inputs.deploy_only != 'true' &&
+      (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,7 +70,9 @@ jobs:
 
   build-frontend:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event.inputs.deploy_only != 'true' &&
+      (needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,13 +103,26 @@ jobs:
     needs: [build-backend, build-frontend]
     if: |
       always() &&
-      (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped') &&
-      (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
-      (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
+      (
+        github.event.inputs.deploy_only == 'true' ||
+        (
+          (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped') &&
+          (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
+          (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
+        )
+      )
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug SSH key
+        run: |
+          echo "Key length: ${#KEY}"
+          echo "First line: $(echo "$KEY" | head -1)"
+          echo "Last line: $(echo "$KEY" | tail -1)"
+        env:
+          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Copy config files to server
         uses: appleboy/scp-action@v0.1.7
