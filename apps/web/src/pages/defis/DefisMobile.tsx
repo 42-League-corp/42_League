@@ -32,7 +32,7 @@ export function DefisMobile() {
     refresh,
     handleAction,
   } = useDefisLogic();
-  const { leaderboard } = useLeagueData();
+  const { leaderboard, locations } = useLeagueData();
   const navigate = useNavigate();
 
   const [declareOpen, setDeclareOpen] = useState(false);
@@ -270,6 +270,7 @@ export function DefisMobile() {
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        locations={locations}
         onDone={refresh}
       />
 
@@ -281,6 +282,7 @@ export function DefisMobile() {
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        locations={locations}
         onDone={refresh}
       />
     </PullToRefresh>

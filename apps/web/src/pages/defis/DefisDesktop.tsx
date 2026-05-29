@@ -27,6 +27,7 @@ type OpenCard = 'declare' | 'challenge' | null;
 export function DefisDesktop() {
   const t = useT();
   const { lang } = useI18n();
+  const { locations } = useLeagueData();
   const {
     myLogin,
     incoming,
@@ -61,6 +62,7 @@ export function DefisDesktop() {
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        locations={locations}
         onOpen={(c) => {
           if (c === 'challenge') setPresetOpp(null);
           setOpenCard(c);
@@ -167,6 +169,7 @@ interface ActionBentoProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  locations: Map<string, string>;
   onOpen: (card: Exclude<OpenCard, null>) => void;
   onClose: () => void;
   onDone: () => Promise<void>;
@@ -184,6 +187,7 @@ function ActionBento({
   recentOpponents,
   opponentCounts,
   myLogin,
+  locations,
   onOpen,
   onClose,
   onDone,
@@ -210,6 +214,7 @@ function ActionBento({
               recentOpponents={recentOpponents}
               opponentCounts={opponentCounts}
               myLogin={myLogin}
+              locations={locations}
               onSubmitted={submitAndClose}
             />
           </ActionCard>
@@ -230,6 +235,7 @@ function ActionBento({
               recentOpponents={recentOpponents}
               opponentCounts={opponentCounts}
               myLogin={myLogin}
+              locations={locations}
               presetOpponent={presetOpp}
               onSubmitted={submitAndClose}
             />
