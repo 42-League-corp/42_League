@@ -17,7 +17,7 @@ import {
   FeatureRequestSchema,
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
-  applyElo,
+  calculateBabyfootElo,
   shouldCountForElo,
 } from '@42-league/shared';
 import { prisma } from './db.js';
@@ -334,12 +334,12 @@ app.post('/matches/:id/confirm', async (c) => {
     let deltaA = 0;
     let deltaB = 0;
     if (countsForElo) {
-      const update = applyElo(
+      const update = calculateBabyfootElo(
         userA.elo,
         userB.elo,
         winner,
-        userA.matchesPlayed,
-        userB.matchesPlayed,
+        scoreA,
+        scoreB,
       );
       deltaA = update.deltaA;
       deltaB = update.deltaB;
