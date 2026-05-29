@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Panel } from '../components/Panel';
-import { Avatar } from '../components/Avatar';
+import { UserBadge } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
@@ -78,13 +78,16 @@ export function PlayerPage() {
   const isMe = myLogin === p.user.login;
 
   return (
-    <Panel title={p.user.login} sub="Profil 42 League">
+    <Panel title={p.user.firstName && p.user.lastName ? `${p.user.firstName} ${p.user.lastName}` : p.user.login} sub="Profil 42 League">
       <div className="flex items-center gap-5 mb-6">
-        <Avatar login={p.user.login} imageUrl={p.user.imageUrl} size="xl" />
+        <UserBadge 
+          login={p.user.login} 
+          imageUrl={p.user.imageUrl} 
+          firstName={p.user.firstName}
+          lastName={p.user.lastName}
+          size="xl" 
+        />
         <div className="min-w-0">
-          <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
-            {p.user.login}
-          </div>
           <div className="text-xs text-muted-2 mt-1 flex flex-wrap items-center gap-2">
             <span className="font-bold uppercase tracking-wider text-[10px]">
               {t('profil.campus')} · {p.user.campus ?? '—'}
