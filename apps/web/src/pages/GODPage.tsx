@@ -1107,7 +1107,7 @@ export function GODPage() {
       <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 overflow-hidden">
         <span className="text-red-400 font-mono text-2xl font-bold">403</span>
         <span className="text-zinc-400 font-mono text-sm">Accès refusé. Admins uniquement.</span>
-        <button onClick={() => navigate('/defis')} className="text-zinc-500 font-mono text-xs hover:text-zinc-300 transition-colors cursor-pointer">
+        <button onClick={() => navigate('/challenges')} className="text-zinc-500 font-mono text-xs hover:text-zinc-300 transition-colors cursor-pointer">
           ← Retour
         </button>
       </div>
@@ -1126,7 +1126,7 @@ export function GODPage() {
             <RoleBadge role={myRole} />
           </div>
           <button
-            onClick={() => navigate('/defis')}
+            onClick={() => navigate('/challenges')}
             className="text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
           >
             ← Retour app

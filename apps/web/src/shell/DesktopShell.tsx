@@ -25,16 +25,16 @@ interface NavDef {
 }
 
 const NAV: NavDef[] = [
-  { to: '/defis', labelKey: 'nav.defis', Icon: Swords },
-  { to: '/tournois', labelKey: 'nav.tournois', Icon: Trophy },
+  { to: '/challenges', labelKey: 'nav.defis', Icon: Swords },
+  { to: '/tournaments', labelKey: 'nav.tournois', Icon: Trophy },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', Icon: BarChart3 },
-  { to: '/trophees', labelKey: 'nav.trophees', Icon: Award },
-  { to: '/profil', labelKey: 'nav.profil', Icon: User },
+  { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
+  { to: '/profile', labelKey: 'nav.profil', Icon: User },
 ];
 
 const NAV_SECONDARY: NavDef[] = [
-  { to: '/historique', labelKey: 'nav.historique', Icon: History },
-  { to: '/reglages', labelKey: 'nav.reglages', Icon: Settings },
+  { to: '/history', labelKey: 'nav.historique', Icon: History },
+  { to: '/settings', labelKey: 'nav.reglages', Icon: Settings },
 ];
 
 const NAV_ADMIN: NavDef = { to: '/GOD', labelKey: 'nav.god', Icon: Shield };
@@ -72,7 +72,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
 
         {/* Brand */}
         <div className="relative px-5 py-5 border-b border-gold/20">
-          <div className="flex items-center gap-2">
+          <NavLink to="/" className="flex items-center gap-2 group" aria-label="42 League">
             <BrandMark />
             <div className="flex-1 min-w-0">
               <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display leading-none">
@@ -82,7 +82,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
                 Babyfoot · Ranked
               </div>
             </div>
-          </div>
+          </NavLink>
         </div>
 
         {/* Navigation principale */}
@@ -93,7 +93,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
               to={n.to}
               label={t(n.labelKey)}
               Icon={n.Icon}
-              badge={n.to === '/defis' ? pendingCount : 0}
+              badge={n.to === '/challenges' ? pendingCount : 0}
             />
           ))}
           <div className="my-2 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
@@ -123,7 +123,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-            onClick={() => navigate('/defis')}
+            onClick={() => navigate('/challenges')}
             className="relative mx-3 mb-3 p-3 rounded-xl text-left group hover-glow"
             style={{
               background:
@@ -149,7 +149,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
         <div className="relative mt-auto p-3 border-t border-gold/20">
           {me?.user ? (
             <NavLink
-              to="/profil"
+              to="/profile"
               className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gold/5 transition-colors group"
             >
               <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />

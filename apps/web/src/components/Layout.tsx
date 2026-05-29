@@ -13,16 +13,16 @@ interface NavDef {
 }
 
 const NAV: NavDef[] = [
-  { to: '/defis', labelKey: 'nav.defis', icon: '⚔' },
-  { to: '/tournois', labelKey: 'nav.tournois', icon: '🏟' },
+  { to: '/challenges', labelKey: 'nav.defis', icon: '⚔' },
+  { to: '/tournaments', labelKey: 'nav.tournois', icon: '🏟' },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', icon: '★' },
-  { to: '/trophees', labelKey: 'nav.trophees', icon: '🏆' },
-  { to: '/profil', labelKey: 'nav.profil', icon: '◆' },
+  { to: '/trophies', labelKey: 'nav.trophees', icon: '🏆' },
+  { to: '/profile', labelKey: 'nav.profil', icon: '◆' },
 ];
 
 const NAV_SECONDARY: NavDef[] = [
-  { to: '/historique', labelKey: 'nav.historique', icon: '▣' },
-  { to: '/reglages', labelKey: 'nav.reglages', icon: '⚙' },
+  { to: '/history', labelKey: 'nav.historique', icon: '▣' },
+  { to: '/settings', labelKey: 'nav.reglages', icon: '⚙' },
 ];
 
 interface LayoutProps {
@@ -42,14 +42,16 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Topbar mobile */}
       <header className="sticky top-0 z-30 lg:hidden flex items-center gap-3 px-4 py-3 border-b border-gold/20 glass">
-        <h1 className="text-sm font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
-          42 League
-        </h1>
+        <NavLink to="/" aria-label="42 League">
+          <h1 className="text-sm font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
+            42 League
+          </h1>
+        </NavLink>
         <div className="flex-1" />
         {/* Notification bell mobile */}
-        <NotifBell count={pendingCount} onClick={() => navigate('/defis')} />
+        <NotifBell count={pendingCount} onClick={() => navigate('/challenges')} />
         {me?.user && (
-          <NavLink to="/profil" className="flex items-center gap-2">
+          <NavLink to="/profile" className="flex items-center gap-2">
             <span className="text-xs text-muted-2 hidden sm:inline">{login}</span>
             <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />
           </NavLink>
@@ -58,14 +60,14 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Sidebar desktop */}
       <aside className="hidden lg:flex lg:flex-col w-60 border-r border-gold/20 bg-bg-1/80 sticky top-0 h-screen hud-grid">
-        <div className="px-5 py-5 border-b border-gold/20">
+        <NavLink to="/" className="block px-5 py-5 border-b border-gold/20" aria-label="42 League">
           <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
             42 League
           </div>
           <div className="text-[10px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
             Babyfoot · Ranked
           </div>
-        </div>
+        </NavLink>
         <nav className="flex flex-col p-3 gap-1">
           {NAV.concat(NAV_SECONDARY).map((n) => (
             <NavLink
@@ -81,7 +83,7 @@ export function Layout({ children }: LayoutProps) {
               <span className="text-base w-5 text-center">{n.icon}</span>
               <span className="flex-1">{t(n.labelKey)}</span>
               {/* Badge sur Défis */}
-              {n.to === '/defis' && pendingCount > 0 && (
+              {n.to === '/challenges' && pendingCount > 0 && (
                 <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red text-white text-[10px] font-bold flex items-center justify-center animate-pop">
                   {pendingCount}
                 </span>
@@ -93,7 +95,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Bannière d'alerte si games à confirmer */}
         {pendingCount > 0 && (
           <button
-            onClick={() => navigate('/defis')}
+            onClick={() => navigate('/challenges')}
             className="mx-3 mb-3 p-3 rounded border border-gold/40 bg-gold/5 text-left hover:bg-gold/10 transition-colors animate-pop group"
           >
             <div className="flex items-center gap-2 mb-1">
@@ -110,7 +112,7 @@ export function Layout({ children }: LayoutProps) {
 
         <div className="mt-auto p-3 border-t border-border">
           {me?.user ? (
-            <NavLink to="/profil" className="flex items-center gap-2.5">
+            <NavLink to="/profile" className="flex items-center gap-2.5">
               <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-text-strong truncate">
@@ -151,7 +153,7 @@ export function Layout({ children }: LayoutProps) {
             >
               <span className="text-lg leading-none relative">
                 {n.icon}
-                {n.to === '/defis' && pendingCount > 0 && (
+                {n.to === '/challenges' && pendingCount > 0 && (
                   <span className="absolute -top-1 -right-2 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red text-white text-[8px] font-bold flex items-center justify-center">
                     {pendingCount}
                   </span>

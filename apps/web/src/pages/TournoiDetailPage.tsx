@@ -197,7 +197,7 @@ export function TournoiDetailPage() {
 function BackLink() {
   return (
     <Link
-      to="/tournois"
+      to="/tournaments"
       className="inline-block text-[11px] uppercase tracking-wider text-muted-2 hover:text-teal mb-3"
     >
       ← Retour aux tournois

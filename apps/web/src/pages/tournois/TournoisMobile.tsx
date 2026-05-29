@@ -140,7 +140,7 @@ function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
             <span className="font-bold text-text-strong">{tournament.createdByLogin}</span>
           </div>
           <a
-            href={`/tournois/${encodeURIComponent(tournament.id)}`}
+            href={`/tournaments/${encodeURIComponent(tournament.id)}`}
             className="shine inline-flex items-center gap-1.5 px-4 py-2 rounded-xl metal-plate-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider active:scale-95 transition-transform tap-transparent"
           >
             Voir le bracket

@@ -13,11 +13,11 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { to: '/defis', labelKey: 'nav.defis', Icon: Swords },
-  { to: '/tournois', labelKey: 'nav.tournois', Icon: Trophy },
+  { to: '/challenges', labelKey: 'nav.defis', Icon: Swords },
+  { to: '/tournaments', labelKey: 'nav.tournois', Icon: Trophy },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', Icon: BarChart3 },
-  { to: '/trophees', labelKey: 'nav.trophees', Icon: Award },
-  { to: '/profil', labelKey: 'nav.profil', Icon: User },
+  { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
+  { to: '/profile', labelKey: 'nav.profil', Icon: User },
 ];
 
 function activeIndex(pathname: string): number {
@@ -83,7 +83,7 @@ export function MobileTabBar() {
       <div className="flex h-[60px] items-stretch">
         {TABS.map((tab, i) => {
           const active = i === idx;
-          const showBadge = tab.to === '/defis' && pendingCount > 0;
+          const showBadge = tab.to === '/challenges' && pendingCount > 0;
           return (
             <NavLink
               key={tab.to}

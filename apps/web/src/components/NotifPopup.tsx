@@ -93,7 +93,7 @@ export function NotifPopup() {
                 onConfirm={() => handleConfirm(match)}
                 onContest={() => setContesting(match)}
                 onDismiss={() => dismiss(id)}
-                onNavigate={() => { dismiss(id); navigate('/defis'); }}
+                onNavigate={() => { dismiss(id); navigate('/challenges'); }}
               />
             );
           })}
