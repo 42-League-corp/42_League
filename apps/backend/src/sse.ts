@@ -18,6 +18,12 @@ export function registerSse(login: string, stream: SSEStreamingApi): () => void 
   };
 }
 
+// Diffuse un événement à TOUS les utilisateurs connectés (ex. mise à jour du
+// classement / des tournois qui concerne tout le monde, pas juste 2 joueurs).
+export function broadcast(event: SseEvent): void {
+  emit([...connections.keys()], event);
+}
+
 export function emit(logins: string[], event: SseEvent): void {
   const data = JSON.stringify(event.payload);
   for (const login of logins) {
