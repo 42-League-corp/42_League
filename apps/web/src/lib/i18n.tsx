@@ -95,6 +95,7 @@ const fr: Dict = {
   'common.toi': 'toi',
 
   'nav.about': 'À propos',
+  'nav.about.short': 'Règles',
 
   'panel.about.title': 'À propos',
   'about.rules.title': 'Règles du jeu',
@@ -197,6 +198,7 @@ const en: Dict = {
   'common.toi': 'you',
 
   'nav.about': 'About',
+  'nav.about.short': 'Rules',
 
   'panel.about.title': 'About',
   'about.rules.title': 'Game rules',
