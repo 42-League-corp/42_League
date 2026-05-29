@@ -99,17 +99,20 @@ export function PullToRefresh({
         reset();
         return;
       }
+      const touch = e.touches[0];
+      if (!touch) { reset(); return; }
       cancelAnim();
       armed = true;
       pulling = false;
       canceled = false;
-      startY = e.touches[0].clientY;
-      startX = e.touches[0].clientX;
+      startY = touch.clientY;
+      startX = touch.clientX;
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (!armed || canceled || refreshingRef.current) return;
       const t = e.touches[0];
+      if (!t) return;
       const dy = t.clientY - startY;
       const dx = t.clientX - startX;
 
