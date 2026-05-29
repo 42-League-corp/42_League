@@ -65,8 +65,10 @@ export function App() {
   return (
     <Routes>
       <Route path="/auth/return" element={<AuthReturnPage />} />
-      {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13) */}
-      <Route path="/about" element={<AboutPage />} />
+      {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
+          Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
+          pour conserver la tab bar en continuité des autres pages. */}
+      {!authenticated && <Route path="/about" element={<AboutPage />} />}
       <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
       <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
       <Route
@@ -115,6 +117,7 @@ function AuthenticatedShell() {
               <Route path="/tournaments/:id" element={<TournoiDetailPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/trophies" element={<TropheesPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="/profile" element={<ProfilPage />} />
               <Route path="/player/:login" element={<PlayerPage />} />
               <Route path="/history" element={<HistoriquePage />} />
