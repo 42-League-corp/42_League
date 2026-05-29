@@ -2,7 +2,7 @@ import { Hono, type Context, type Next } from 'hono';
 import { serve } from '@hono/node-server';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   DeclareMatchSchema,
@@ -238,6 +238,78 @@ app.get('/me', async (c) => {
   return c.json({ login, user, role, isAdmin: isAdmin(login) });
 });
 
+// ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
+app.get('/me/export', async (c) => {
+  const login = await getCurrentLogin(c);
+  const [user, matches, challenges, tournamentEntries, featureRequests, ops] = await Promise.all([
+    prisma.user.findUnique({ where: { login } }),
+    prisma.playedMatch.findMany({
+      where: { OR: [{ playerALogin: login }, { playerBLogin: login }] },
+      orderBy: { playedAt: 'desc' },
+    }),
+    prisma.challenge.findMany({
+      where: { OR: [{ challengerLogin: login }, { opponentLogin: login }] },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.tournamentEntry.findMany({
+      where: { login },
+      include: { tournament: { select: { id: true, name: true, status: true, createdAt: true } } },
+    }),
+    prisma.featureRequest.findMany({
+      where: { authorId: login },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.ops.findMany({
+      where: { OR: [{ ownerLogin: login }, { targetLogin: login }] },
+      orderBy: { declaredAt: 'desc' },
+    }),
+  ]);
+
+  c.header('Content-Disposition', `attachment; filename="42league-export-${login}.json"`);
+  return c.json({
+    exportDate: new Date().toISOString(),
+    profile: user,
+    matchHistory: matches,
+    challenges,
+    tournaments: tournamentEntries,
+    featureRequests,
+    ops,
+  });
+});
+
+// ── RGPD Art. 17 — Droit à l'effacement : anonymisation du compte ──
+app.delete('/me/account', async (c) => {
+  const login = await getCurrentLogin(c);
+
+  if (SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(400, { message: 'superadmin accounts cannot be anonymized' });
+  }
+
+  const anonLogin =
+    'anon_' + createHash('sha256').update(login + Date.now().toString()).digest('hex').slice(0, 8);
+
+  await prisma.$transaction(async (tx) => {
+    // Mise à jour du login (cascade automatique vers toutes les FK ON UPDATE CASCADE)
+    await tx.user.update({
+      where: { login },
+      data: {
+        login: anonLogin,
+        ftId: null,
+        campus: null,
+        imageUrl: null,
+        title: null,
+        anonymizedAt: new Date(),
+      },
+    });
+    // Tables sans FK déclarée : mise à jour manuelle
+    await tx.adminAuditLog.updateMany({ where: { actorLogin: login }, data: { actorLogin: anonLogin } });
+    await tx.adminAuditLog.updateMany({ where: { targetLogin: login }, data: { targetLogin: anonLogin } });
+    await tx.tournamentMatch.updateMany({ where: { recordedByLogin: login }, data: { recordedByLogin: anonLogin } });
+  });
+
+  return c.json({ ok: true });
+});
+
 app.get('/events', async (c) => {
   // EventSource ne peut pas envoyer de header Authorization → on accepte aussi
   // le token en query param (?token=...) en plus de la session/cookie habituels.
@@ -263,11 +335,15 @@ app.get('/events', async (c) => {
   });
 });
 
-app.get('/users', async (c) =>
-  c.json(await prisma.user.findMany({ orderBy: { elo: 'desc' } })),
-);
+// ── RGPD Art. 25 — Privacy by design : toutes les données utilisateurs exigent une auth ──
+
+app.get('/users', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(await prisma.user.findMany({ orderBy: { elo: 'desc' } }));
+});
 
 app.get('/users/:login', async (c) => {
+  await getCurrentLogin(c);
   const login = c.req.param('login');
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user) {
@@ -296,17 +372,20 @@ app.get('/users/:login', async (c) => {
 });
 
 app.get('/leaderboard', async (c) => {
+  await getCurrentLogin(c);
   const users = await prisma.user.findMany({ orderBy: { elo: 'desc' } });
   return c.json(users.map((u, i) => ({ rank: i + 1, ...u })));
 });
 
-app.get('/matches', async (c) =>
-  c.json(await prisma.playedMatch.findMany({ orderBy: { playedAt: 'desc' } })),
-);
+app.get('/matches', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(await prisma.playedMatch.findMany({ orderBy: { playedAt: 'desc' } }));
+});
 
-app.get('/matches/pending', async (c) =>
-  c.json(await prisma.pendingMatch.findMany({ orderBy: { declaredAt: 'desc' } })),
-);
+app.get('/matches/pending', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(await prisma.pendingMatch.findMany({ orderBy: { declaredAt: 'desc' } }));
+});
 
 app.post('/matches', async (c) => {
   const me = await getCurrentLogin(c);
@@ -1569,11 +1648,33 @@ app.get('/admin/audit-log', async (c) => {
   return c.json(entries);
 });
 
+// ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──
+async function purgeOldAuditLogs(): Promise<void> {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 24);
+  const { count } = await prisma.adminAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  if (count > 0) console.log(`[purge] ${count} audit log entries older than 24 months deleted`);
+}
+
 const port = Number(process.env.PORT ?? 3000);
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`42 League backend listening on http://localhost:${info.port}`);
-  // Re-arme les timers d'expiration des ops actifs (perdus au redémarrage).
   rescheduleOpsTimers().catch((err) => {
     console.error('failed to reschedule ops timers', err);
   });
+  purgeOldAuditLogs().catch((err) => {
+    console.error('failed to purge old audit logs', err);
+  });
+  // Purge quotidienne à 03h00
+  const msUntil3am = (() => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(3, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next.getTime() - now.getTime();
+  })();
+  setTimeout(() => {
+    void purgeOldAuditLogs();
+    setInterval(() => void purgeOldAuditLogs(), 24 * 60 * 60 * 1000);
+  }, msUntil3am);
 });

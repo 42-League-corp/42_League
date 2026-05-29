@@ -21,16 +21,22 @@ export interface AuthReturnResult {
 }
 
 export function consumeAuthReturn(): AuthReturnResult {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('token');
-  const login = params.get('login');
-  const error = params.get('error');
+  const search = new URLSearchParams(window.location.search);
+  // Token dans le fragment (#) — non transmis aux serveurs ni logué (RGPD Art. 32)
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const token = hash.get('token');
+  const login = search.get('login');
+  const error = search.get('error');
 
   if (error) {
     return { ok: false, login: login ?? null, error };
   }
   if (token && login) {
     setToken(token, login);
+    // Efface le fragment pour éviter qu'il reste dans l'historique du navigateur
+    if (window.history.replaceState) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
     return { ok: true, login, error: null };
   }
   return { ok: false, login: null, error: 'missing token or login' };
