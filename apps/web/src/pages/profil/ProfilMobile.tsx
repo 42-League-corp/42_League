@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Award, History, LogOut, Settings } from 'lucide-react';
+import { Award, History, Info, LogOut, Settings } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
@@ -31,7 +31,7 @@ export function ProfilMobile() {
 
         {/* Quick actions row */}
         <div className="grid grid-cols-3 gap-2.5">
-          <QuickAction to="/trophies" Icon={Award} label="Trophées" tone="gold" />
+          <QuickAction to="/about" Icon={Info} label="Règles" tone="gold" />
           <QuickAction to="/history" Icon={History} label="Historique" tone="teal" />
           <QuickAction to="/settings" Icon={Settings} label="Réglages" tone="muted" />
         </div>
