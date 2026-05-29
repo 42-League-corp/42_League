@@ -1291,12 +1291,12 @@ app.get('/admin/suspicious', async (c) => {
       });
     }
 
-    // Recent farming: 8+ matches in 7 days between same pair (1+ per day per player)
+    // Recent farming: 15+ matches in 7 days between same pair (2+ per day per player)
     const recentCount = matches.filter(m => m.playedAt >= day7Ago).length;
-    if (recentCount >= 8) {
+    if (recentCount >= 15) {
       flags.push({
         type: 'recent_farming',
-        severity: recentCount >= 12 ? 'high' : 'medium',
+        severity: recentCount >= 20 ? 'high' : 'medium',
         players: [playerA, playerB],
         detail: `${playerA} et ${playerB} ont joué ${recentCount} fois ensemble ces 7 derniers jours — rythme anormalement élevé.`,
         matchCount: recentCount,

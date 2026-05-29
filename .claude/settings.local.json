@@ -49,7 +49,9 @@
       "Bash(wsl -d Ubuntu grep -r \"prisma migrate\" /home/adrien/projects/42_League --include=\"Dockerfile*\" --include=\"*.sh\")",
       "Bash(wsl -d Ubuntu find /home/adrien/projects/42_League -name \".env*\" -o -name \"*.env.example\")",
       "Bash(npx --no-install tsc -b)",
-      "Bash(grep -E \"\\\\.\\(yml|yaml\\)$\")"
+      "Bash(grep -E \"\\\\.\\(yml|yaml\\)$\")",
+      "Bash(xargs grep -l \"recent_farming\")",
+      "Bash(git commit -m 'fix: increase recent_farming threshold to 15+ matches/week *)"
     ]
   }
 }
