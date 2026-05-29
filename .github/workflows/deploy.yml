@@ -146,14 +146,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Debug SSH key
-        run: |
-          echo "Key length: ${#KEY}"
-          echo "First line: $(echo "$KEY" | head -1)"
-          echo "Last line: $(echo "$KEY" | tail -1)"
-        env:
-          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-
       - name: Copy config files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -175,20 +167,26 @@ jobs:
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
             cd /opt/42_league
             mv Makefile.server Makefile
-            # Nettoyage préventif si peu d'espace (< 5GB libre sur /)
-            FREE_GB=$(df --output=avail / | tail -1 | awk '{print int($1/1024/1024)}')
-            if [ "$FREE_GB" -lt 5 ]; then
-              echo "⚠️  $FREE_GB GB libres, nettoyage agressif avant pull"
-              docker image prune -af
-              docker builder prune -af
-            fi
+
+            # ── Nettoyage AVANT le pull ────────────────────────────────────────
+            # Les deploys empilent des images :sha ; on nettoie systématiquement
+            # avant de tirer les nouvelles. TOUT est non-bloquant (|| true) : un
+            # prune déjà en cours ("a prune operation is already running") ou une
+            # erreur ne doit JAMAIS faire échouer le deploy (set -e sinon abort).
+            echo "Espace avant nettoyage :"; df -h / | tail -1
+            docker container prune -f || true
+            docker image prune -af || true
+            docker builder prune -af || true
+            echo "Espace après nettoyage :"; df -h / | tail -1
+
             docker compose -f docker-compose.registry.yml pull
             docker compose -f docker-compose.registry.yml up -d --remove-orphans
             # Recrée Caddy pour qu'il remonte le Caddyfile fraîchement copié.
             # (un 'caddy reload' lit le fichier interne au conteneur et n'applique
             #  pas toujours la nouvelle config — la recréation est fiable à 100%)
             docker compose -f docker-compose.registry.yml up -d --force-recreate caddy
-            # Nettoyage post-deploy : supprime les anciennes versions :sha
-            docker image prune -af
+
+            # Nettoyage post-deploy : vire les images :sha désormais inutilisées.
+            docker image prune -af || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
