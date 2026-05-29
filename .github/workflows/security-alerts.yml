@@ -68,6 +68,6 @@ $by_sev
 https://github.com/$REPO/security/code-scanning"
               send "$msg"
             else
-              echo "No open alerts, skipping daily ping"
+              send "✅ **Tout va bien aujourd'hui — aucune faille de sécu détectée !**"
             fi
           fi

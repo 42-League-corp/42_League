@@ -261,8 +261,11 @@ schedule:
 ```
 
 Tous les matins, le workflow appelle l'API GitHub pour compter les alertes ouvertes.
-- **Si 0 alerte** → silencieux (pas de spam)
+- **Si 0 alerte** → ping heartbeat : `✅ Tout va bien aujourd'hui — aucune faille de sécu détectée !`
 - **Si N > 0** → poste un récap groupé par sévérité
+
+Le heartbeat est important : si Discord se tait pendant 2+ jours, tu sais qu'un truc
+est cassé (webhook révoqué, Actions désactivé, repo non accessible…).
 
 Exemple de message :
 ```
