@@ -1,0 +1,1061 @@
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  api,
+  type AdminUser,
+  type RejectedMatch,
+  type ModerationStats,
+  type FeatureRequestWithAuthor,
+  type PlayedMatch,
+  type SuspiciousFlag,
+} from '../lib/api';
+
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'ideas' | 'alertes';
+type Role = 'ADMIN' | 'SUPERADMIN';
+
+// ── Shared primitives ──────────────────────────────────────────────────────
+
+function RoleBadge({ role }: { role: string }) {
+  if (role === 'SUPERADMIN')
+    return <span className="px-1.5 py-0.5 text-xs bg-amber-400/15 text-amber-400 rounded font-mono tracking-wide">SUPERADMIN</span>;
+  if (role === 'ADMIN')
+    return <span className="px-1.5 py-0.5 text-xs bg-blue-400/15 text-blue-400 rounded font-mono tracking-wide">ADMIN</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-zinc-700/50 text-zinc-400 rounded font-mono tracking-wide">USER</span>;
+}
+
+function StatusBadge({ banned }: { banned: boolean }) {
+  if (banned)
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">BANNI</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">ACTIF</span>;
+}
+
+function FRStatusBadge({ status }: { status: string }) {
+  if (status === 'accepted')
+    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">ACCEPTÉE</span>;
+  if (status === 'rejected')
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">REJETÉE</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">EN ATTENTE</span>;
+}
+
+function Btn({
+  onClick,
+  variant = 'default',
+  disabled,
+  children,
+  className = '',
+}: {
+  onClick: () => void;
+  variant?: 'default' | 'danger' | 'success' | 'warn' | 'ghost';
+  disabled?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  const base = 'px-2 py-1 text-xs rounded font-mono transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+  const variants = {
+    default: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-100',
+    danger: 'bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30',
+    success: 'bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30',
+    warn: 'bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 border border-yellow-500/30',
+    ghost: 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200',
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function Input({
+  value,
+  onChange,
+  placeholder,
+  className = '',
+  type = 'text',
+}: {
+  value: string | number;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+  type?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 ${className}`}
+    />
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mb-6">
+      <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2 px-1">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+// ── Stats edit modal ───────────────────────────────────────────────────────
+
+function StatsEditModal({
+  user,
+  onClose,
+  onSave,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [elo, setElo] = useState(String(user.elo));
+  const [matches, setMatches] = useState(String(user.matchesPlayed));
+  const [dodges, setDodges] = useState(String(user.dodgeCount));
+  const [trophies, setTrophies] = useState(String(user.tournamentsWon));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await api.adminSetStats(user.login, {
+        elo: Number(elo),
+        matchesPlayed: Number(matches),
+        dodgeCount: Number(dodges),
+        tournamentsWon: Number(trophies),
+      });
+      onSave();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-80 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-sm font-mono text-zinc-300 mb-4">
+          Modifier stats — <span className="text-zinc-100 font-bold">{user.login}</span>
+        </div>
+        <div className="space-y-3">
+          {[
+            { label: 'ELO', value: elo, set: setElo },
+            { label: 'Matches joués', value: matches, set: setMatches },
+            { label: 'Dodges', value: dodges, set: setDodges },
+            { label: 'Tournois gagnés', value: trophies, set: setTrophies },
+          ].map(({ label, value, set }) => (
+            <div key={label} className="flex items-center gap-3">
+              <span className="text-xs font-mono text-zinc-400 w-32">{label}</span>
+              <Input type="number" value={value} onChange={set} className="flex-1" />
+            </div>
+          ))}
+        </div>
+        {error && <div className="mt-3 text-xs text-red-400 font-mono">{error}</div>}
+        <div className="mt-5 flex gap-2 justify-end">
+          <Btn onClick={onClose} variant="ghost">Annuler</Btn>
+          <Btn onClick={handleSave} disabled={saving} variant="default">
+            {saving ? 'Sauvegarde…' : 'Sauvegarder'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: UTILISATEURS ──────────────────────────────────────────────────────
+
+function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [pending, setPending] = useState<string | null>(null);
+  const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.adminUsers()
+      .then(setUsers)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = users.filter((u) => u.login.toLowerCase().includes(filter.toLowerCase()));
+
+  async function withPending(login: string, fn: () => Promise<void>) {
+    setPending(login);
+    setError('');
+    try { await fn(); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(null); }
+  }
+
+  return (
+    <div className="p-4">
+      {editingStats && (
+        <StatsEditModal user={editingStats} onClose={() => setEditingStats(null)} onSave={load} />
+      )}
+      <div className="mb-4 flex items-center gap-3">
+        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} utilisateurs</span>
+      </div>
+      {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm font-mono border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
+                <th className="text-left py-2 px-3">Login</th>
+                <th className="text-left py-2 px-3">Rôle</th>
+                <th className="text-right py-2 px-3">ELO</th>
+                <th className="text-right py-2 px-3">Matches</th>
+                <th className="text-right py-2 px-3">Dodges</th>
+                <th className="text-right py-2 px-3">🏆</th>
+                <th className="text-left py-2 px-3">Statut</th>
+                <th className="text-left py-2 px-3">Campus</th>
+                <th className="text-right py-2 px-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u) => {
+                const isSelf = u.login === myLogin;
+                const isSuperAdmin = u.role === 'SUPERADMIN';
+                const isLocked = isSelf || isSuperAdmin;
+                return (
+                  <tr key={u.login} className="border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors">
+                    <td className="py-2 px-3 text-zinc-100">{u.login}</td>
+                    <td className="py-2 px-3"><RoleBadge role={u.role} /></td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{u.elo}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.matchesPlayed}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.dodgeCount}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.tournamentsWon}</td>
+                    <td className="py-2 px-3"><StatusBadge banned={!!u.bannedAt} /></td>
+                    <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
+                    <td className="py-2 px-3">
+                      {isLocked ? (
+                        <span className="text-zinc-700 text-xs">—</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5 justify-end">
+                          {myRole === 'SUPERADMIN' && (
+                            u.role === 'USER'
+                              ? <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'ADMIN'))} disabled={pending === u.login} variant="default">→ ADMIN</Btn>
+                              : <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
+                          )}
+                          {u.bannedAt
+                            ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">Unban</Btn>
+                            : <Btn onClick={() => withPending(u.login, () => api.adminBanUser(u.login))} disabled={pending === u.login} variant="danger">Ban</Btn>
+                          }
+                          <Btn onClick={() => setEditingStats(u)} variant="ghost">Stats</Btn>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: MODÉRATION ────────────────────────────────────────────────────────
+
+function ModerationTab() {
+  const [query, setQuery] = useState('');
+  const [stats, setStats] = useState<ModerationStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState('');
+
+  async function lookup() {
+    if (!query.trim()) return;
+    setLoading(true);
+    setError('');
+    setStats(null);
+    try {
+      const data = await api.adminModerationStats(query.trim());
+      setStats(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Joueur introuvable');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleBan() {
+    if (!stats) return;
+    setPending('ban');
+    try {
+      await api.adminBanUser(stats.user.login);
+      const data = await api.adminModerationStats(stats.user.login);
+      setStats(data);
+    } finally { setPending(''); }
+  }
+
+  async function handleUnban() {
+    if (!stats) return;
+    setPending('unban');
+    try {
+      await api.adminUnbanUser(stats.user.login);
+      const data = await api.adminModerationStats(stats.user.login);
+      setStats(data);
+    } finally { setPending(''); }
+  }
+
+  const u = stats?.user;
+
+  return (
+    <div className="p-4">
+      <div className="mb-5 flex items-center gap-3">
+        <Input
+          value={query}
+          onChange={setQuery}
+          placeholder="Login du joueur…"
+          className="w-64"
+        />
+        <Btn
+          onClick={lookup}
+          disabled={loading || !query.trim()}
+          variant="default"
+        >
+          {loading ? 'Analyse…' : 'Analyser'}
+        </Btn>
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono mb-4">{error}</div>}
+
+      {u && stats && (
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg font-mono text-zinc-100 font-bold">{u.login}</span>
+                <RoleBadge role={u.role} />
+                <StatusBadge banned={!!u.bannedAt} />
+              </div>
+              <div className="grid grid-cols-4 gap-4 text-center">
+                {[
+                  { label: 'ELO', value: u.elo },
+                  { label: 'Matches', value: u.matchesPlayed },
+                  { label: 'Dodges', value: u.dodgeCount },
+                  { label: 'Trophées', value: u.tournamentsWon },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-zinc-800/60 rounded p-2">
+                    <div className="text-xl font-mono font-bold text-zinc-100 tabular-nums">{value}</div>
+                    <div className="text-xs text-zinc-500 uppercase">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-4 text-center">
+                {[
+                  { label: 'Rejets émis', value: stats.rejectionsEmitted.length, color: 'text-orange-400' },
+                  { label: 'Rejets reçus', value: stats.rejectionsReceived.length, color: 'text-red-400' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-zinc-800/60 rounded p-2">
+                    <div className={`text-xl font-mono font-bold tabular-nums ${color}`}>{value}</div>
+                    <div className="text-xs text-zinc-500 uppercase">{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 shrink-0">
+              {u.bannedAt
+                ? <Btn onClick={handleUnban} disabled={!!pending} variant="success">Unban</Btn>
+                : <Btn onClick={handleBan} disabled={!!pending} variant="danger">Bannir</Btn>
+              }
+            </div>
+          </div>
+
+          {/* Top opponents */}
+          <Section title="Top adversaires (50 derniers matchs)">
+            <div className="flex flex-wrap gap-2">
+              {stats.topOpponents.length === 0 ? (
+                <span className="text-zinc-600 text-xs font-mono">Aucun match</span>
+              ) : (
+                stats.topOpponents.map(({ login, count }) => (
+                  <div key={login} className="bg-zinc-800 rounded px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-zinc-200 font-mono text-sm">{login}</span>
+                    <span className="text-zinc-500 font-mono text-xs">{count} match{count > 1 ? 's' : ''}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </Section>
+
+          {/* Match history */}
+          <Section title={`Historique (${stats.recentMatches.length} matchs)`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                    <th className="text-left py-1.5 px-2">Date</th>
+                    <th className="text-left py-1.5 px-2">Joueur A</th>
+                    <th className="text-center py-1.5 px-2">Score</th>
+                    <th className="text-left py-1.5 px-2">Joueur B</th>
+                    <th className="text-right py-1.5 px-2">ΔA</th>
+                    <th className="text-right py-1.5 px-2">ΔB</th>
+                    <th className="text-center py-1.5 px-2">ELO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recentMatches.map((m) => {
+                    const isWinner = (m.playerALogin === u.login && m.winner === 'A') || (m.playerBLogin === u.login && m.winner === 'B');
+                    return (
+                      <tr key={m.id} className={`border-b border-zinc-800/40 ${isWinner ? 'bg-emerald-400/5' : 'bg-red-400/5'}`}>
+                        <td className="py-1.5 px-2 text-zinc-500">{fmtDate(m.playedAt)}</td>
+                        <td className={`py-1.5 px-2 ${m.winner === 'A' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerALogin}</td>
+                        <td className="py-1.5 px-2 text-center tabular-nums text-zinc-100">{m.scoreA}–{m.scoreB}</td>
+                        <td className={`py-1.5 px-2 ${m.winner === 'B' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerBLogin}</td>
+                        <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaA >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaA > 0 ? '+' : ''}{m.deltaA}</td>
+                        <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaB >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaB > 0 ? '+' : ''}{m.deltaB}</td>
+                        <td className="py-1.5 px-2 text-center">{m.countedForElo ? <span className="text-emerald-400">✓</span> : <span className="text-zinc-600">—</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+
+          {/* Rejections */}
+          {stats.rejectionsEmitted.length > 0 && (
+            <Section title={`Rejets émis par ${u.login} (${stats.rejectionsEmitted.length})`}>
+              <RejectionTable rows={stats.rejectionsEmitted} perspective="emitted" />
+            </Section>
+          )}
+          {stats.rejectionsReceived.length > 0 && (
+            <Section title={`Rejets reçus par ${u.login} (${stats.rejectionsReceived.length})`}>
+              <RejectionTable rows={stats.rejectionsReceived} perspective="received" />
+            </Section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: REJETS ────────────────────────────────────────────────────────────
+
+function RejectionTable({ rows, perspective }: { rows: RejectedMatch[]; perspective?: 'emitted' | 'received' | 'all' }) {
+  return (
+    <table className="w-full text-xs font-mono border-collapse">
+      <thead>
+        <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+          <th className="text-left py-1.5 px-2">Date</th>
+          <th className="text-left py-1.5 px-2">Déclarant</th>
+          <th className="text-left py-1.5 px-2">Opposant</th>
+          <th className="text-center py-1.5 px-2">Score</th>
+          <th className="text-left py-1.5 px-2">Raison</th>
+          <th className="text-left py-1.5 px-2">Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/40 transition-colors">
+            <td className="py-1.5 px-2 text-zinc-500">{fmtDate(r.rejectedAt)}</td>
+            <td className="py-1.5 px-2 text-zinc-300">{r.declarerLogin}</td>
+            <td className="py-1.5 px-2 text-zinc-300">{r.opponentLogin}</td>
+            <td className="py-1.5 px-2 text-center tabular-nums text-zinc-400">{r.scoreDeclarer}–{r.scoreOpponent}</td>
+            <td className="py-1.5 px-2">
+              <span className={`px-1 py-0.5 rounded text-xs ${r.contestReason === 'never_played' ? 'bg-red-400/15 text-red-400' : 'bg-orange-400/15 text-orange-400'}`}>
+                {r.contestReason === 'never_played' ? 'Jamais joué' : 'Score incorrect'}
+              </span>
+            </td>
+            <td className="py-1.5 px-2 text-zinc-400 max-w-xs truncate" title={r.contestMessage}>{r.contestMessage || '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function RejetsTab() {
+  const [rows, setRows] = useState<RejectedMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.adminRejectedMatches()
+      .then(setRows)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = rows.filter(
+    (r) =>
+      r.declarerLogin.includes(filter) ||
+      r.opponentLogin.includes(filter) ||
+      r.contestMessage.toLowerCase().includes(filter.toLowerCase()),
+  );
+
+  return (
+    <div className="p-4">
+      <div className="mb-4 flex items-center gap-3">
+        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login ou message…" className="w-72" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} rejet{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucun rejet enregistré.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <RejectionTable rows={filtered} perspective="all" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: MATCHES ───────────────────────────────────────────────────────────
+
+function MatchesTab() {
+  const [matches, setMatches] = useState<PlayedMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editA, setEditA] = useState('');
+  const [editB, setEditB] = useState('');
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.playedMatches()
+      .then(setMatches)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = matches.filter(
+    (m) => m.playerALogin.includes(filter) || m.playerBLogin.includes(filter),
+  ).slice(0, 200);
+
+  function startEdit(m: PlayedMatch) {
+    setEditId(m.id);
+    setEditA(String(m.scoreA));
+    setEditB(String(m.scoreB));
+  }
+
+  async function saveEdit(id: string) {
+    setPending(id);
+    setError('');
+    try {
+      await api.adminEditMatch(id, Number(editA), Number(editB));
+      setEditId(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally { setPending(null); }
+  }
+
+  async function deleteMatch(id: string) {
+    if (!confirm('Supprimer ce match ? L\'ELO sera reversé.')) return;
+    setPending(id);
+    setError('');
+    try {
+      await api.adminDeleteMatch(id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally { setPending(null); }
+  }
+
+  return (
+    <div className="p-4">
+      <div className="mb-4 flex items-center gap-3">
+        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} affiché{filtered.length > 1 ? 's' : ''} / {matches.length} total</span>
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                <th className="text-left py-2 px-2">Date</th>
+                <th className="text-left py-2 px-2">Joueur A</th>
+                <th className="text-center py-2 px-2">Score</th>
+                <th className="text-left py-2 px-2">Joueur B</th>
+                <th className="text-right py-2 px-2">ΔA</th>
+                <th className="text-right py-2 px-2">ΔB</th>
+                <th className="text-center py-2 px-2">ELO</th>
+                <th className="text-right py-2 px-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((m) => (
+                <tr key={m.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/50 transition-colors">
+                  <td className="py-1.5 px-2 text-zinc-500">{fmtDate(m.playedAt)}</td>
+                  <td className={`py-1.5 px-2 ${m.winner === 'A' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerALogin}</td>
+                  <td className="py-1.5 px-2 text-center">
+                    {editId === m.id ? (
+                      <span className="flex items-center gap-1 justify-center">
+                        <input
+                          type="number"
+                          value={editA}
+                          onChange={(e) => setEditA(e.target.value)}
+                          className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+                        />
+                        <span className="text-zinc-500">–</span>
+                        <input
+                          type="number"
+                          value={editB}
+                          onChange={(e) => setEditB(e.target.value)}
+                          className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+                        />
+                      </span>
+                    ) : (
+                      <span className="tabular-nums text-zinc-100">{m.scoreA}–{m.scoreB}</span>
+                    )}
+                  </td>
+                  <td className={`py-1.5 px-2 ${m.winner === 'B' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerBLogin}</td>
+                  <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaA >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaA > 0 ? '+' : ''}{m.deltaA}</td>
+                  <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaB >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaB > 0 ? '+' : ''}{m.deltaB}</td>
+                  <td className="py-1.5 px-2 text-center">{m.countedForElo ? <span className="text-emerald-400">✓</span> : <span className="text-zinc-600">—</span>}</td>
+                  <td className="py-1.5 px-2">
+                    <div className="flex items-center gap-1.5 justify-end">
+                      {editId === m.id ? (
+                        <>
+                          <Btn onClick={() => saveEdit(m.id)} disabled={pending === m.id} variant="success">Sauver</Btn>
+                          <Btn onClick={() => setEditId(null)} variant="ghost">✕</Btn>
+                        </>
+                      ) : (
+                        <>
+                          <Btn onClick={() => startEdit(m)} variant="ghost">✏️</Btn>
+                          <Btn onClick={() => deleteMatch(m.id)} disabled={pending === m.id} variant="danger">🗑️</Btn>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: IDÉES ─────────────────────────────────────────────────────────────
+
+function IdeasTab() {
+  const [ideas, setIdeas] = useState<FeatureRequestWithAuthor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all');
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.featureRequests()
+      .then(setIdeas)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = filter === 'all' ? ideas : ideas.filter((i) => i.status === filter);
+
+  async function setStatus(id: string, status: 'pending' | 'accepted' | 'rejected') {
+    setPending(id);
+    setError('');
+    try {
+      await api.setFeatureRequestStatus(id, status);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally { setPending(null); }
+  }
+
+  const counts = {
+    pending: ideas.filter((i) => i.status === 'pending').length,
+    accepted: ideas.filter((i) => i.status === 'accepted').length,
+    rejected: ideas.filter((i) => i.status === 'rejected').length,
+  };
+
+  return (
+    <div className="p-4">
+      {/* Summary bar */}
+      <div className="mb-4 flex items-center gap-4">
+        {(['all', 'pending', 'accepted', 'rejected'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filter === f ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            {f === 'all' ? `TOUT (${ideas.length})` : f === 'pending' ? `EN ATTENTE (${counts.pending})` : f === 'accepted' ? `ACCEPTÉES (${counts.accepted})` : `REJETÉES (${counts.rejected})`}
+          </button>
+        ))}
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucune idée dans cette catégorie.</div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((idea) => (
+            <div key={idea.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-mono text-zinc-400">{idea.author.login}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-xs font-mono text-zinc-500">{fmtDate(idea.createdAt)}</span>
+                    <FRStatusBadge status={idea.status} />
+                  </div>
+                  <p className="text-sm text-zinc-200 leading-relaxed">{idea.text}</p>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  {idea.status !== 'accepted' && (
+                    <Btn onClick={() => setStatus(idea.id, 'accepted')} disabled={pending === idea.id} variant="success">Accepter</Btn>
+                  )}
+                  {idea.status !== 'rejected' && (
+                    <Btn onClick={() => setStatus(idea.id, 'rejected')} disabled={pending === idea.id} variant="danger">Rejeter</Btn>
+                  )}
+                  {idea.status !== 'pending' && (
+                    <Btn onClick={() => setStatus(idea.id, 'pending')} disabled={pending === idea.id} variant="ghost">En attente</Btn>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: ALERTES ───────────────────────────────────────────────────────────
+
+function SeverityBadge({ severity }: { severity: SuspiciousFlag['severity'] }) {
+  if (severity === 'high')
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">ÉLEVÉ</span>;
+  if (severity === 'medium')
+    return <span className="px-1.5 py-0.5 text-xs bg-orange-400/15 text-orange-400 rounded font-mono">MOYEN</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">FAIBLE</span>;
+}
+
+const FLAG_TYPE_LABEL: Record<SuspiciousFlag['type'], string> = {
+  pair_domination: 'Domination paire',
+  recent_farming: 'Farm récent',
+  elo_spike: 'Spike ELO',
+  victim_pattern: 'Victime ciblée',
+};
+
+const FLAG_TYPE_ICON: Record<SuspiciousFlag['type'], string> = {
+  pair_domination: '⚖️',
+  recent_farming: '🔄',
+  elo_spike: '📈',
+  victim_pattern: '🎯',
+};
+
+function AlertesTab() {
+  const [flags, setFlags] = useState<SuspiciousFlag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filterType, setFilterType] = useState<SuspiciousFlag['type'] | 'all'>('all');
+  const [inspectLogin, setInspectLogin] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.adminSuspicious()
+      .then(setFlags)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = filterType === 'all' ? flags : flags.filter((f) => f.type === filterType);
+
+  const counts = {
+    high: flags.filter((f) => f.severity === 'high').length,
+    medium: flags.filter((f) => f.severity === 'medium').length,
+    low: flags.filter((f) => f.severity === 'low').length,
+  };
+
+  return (
+    <div className="p-4">
+      {/* Summary */}
+      <div className="mb-5 grid grid-cols-3 gap-3 max-w-md">
+        {[
+          { label: 'Élevé', count: counts.high, color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/20' },
+          { label: 'Moyen', count: counts.medium, color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/20' },
+          { label: 'Faible', count: counts.low, color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/20' },
+        ].map(({ label, count, color, bg }) => (
+          <div key={label} className={`border rounded-lg p-3 text-center ${bg}`}>
+            <div className={`text-2xl font-bold font-mono tabular-nums ${color}`}>{count}</div>
+            <div className="text-xs text-zinc-500 uppercase mt-0.5">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Type filter */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {(['all', 'pair_domination', 'recent_farming', 'elo_spike', 'victim_pattern'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setFilterType(t)}
+            className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filterType === t ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            {t === 'all' ? `TOUT (${flags.length})` : `${FLAG_TYPE_ICON[t]} ${FLAG_TYPE_LABEL[t]}`}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Analyse en cours…</div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-center">
+          <div className="text-zinc-500 font-mono text-sm">Aucun comportement suspect détecté.</div>
+          <div className="text-zinc-600 font-mono text-xs mt-1">La communauté joue clean 👍</div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((flag, i) => (
+            <div
+              key={i}
+              className={`bg-zinc-900 border rounded-lg p-4 transition-colors ${
+                flag.severity === 'high'
+                  ? 'border-red-400/30 hover:border-red-400/50'
+                  : flag.severity === 'medium'
+                  ? 'border-orange-400/20 hover:border-orange-400/40'
+                  : 'border-zinc-800 hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-base">{FLAG_TYPE_ICON[flag.type]}</span>
+                    <span className="text-xs font-mono text-zinc-300 font-medium">{FLAG_TYPE_LABEL[flag.type]}</span>
+                    <SeverityBadge severity={flag.severity} />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {flag.players.map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setInspectLogin(p === inspectLogin ? null : p)}
+                          className={`px-2 py-0.5 rounded text-xs font-mono transition-colors cursor-pointer ${
+                            inspectLogin === p
+                              ? 'bg-blue-500/30 text-blue-300 border border-blue-400/40'
+                              : 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-sm text-zinc-400 leading-relaxed">{flag.detail}</p>
+                  {(flag.matchCount !== undefined || flag.winRate !== undefined || flag.eloGain !== undefined) && (
+                    <div className="mt-2 flex items-center gap-4 text-xs font-mono text-zinc-500">
+                      {flag.matchCount !== undefined && <span>Matchs : <span className="text-zinc-300">{flag.matchCount}</span></span>}
+                      {flag.winRate !== undefined && <span>Win rate : <span className="text-zinc-300">{Math.round(flag.winRate * 100)}%</span></span>}
+                      {flag.eloGain !== undefined && <span>Gain ELO : <span className="text-emerald-400">+{flag.eloGain}</span></span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline moderation panel */}
+              {inspectLogin && flag.players.includes(inspectLogin) && (
+                <InlineModeration login={inspectLogin} onClose={() => setInspectLogin(null)} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InlineModeration({ login, onClose }: { login: string; onClose: () => void }) {
+  const [stats, setStats] = useState<import('../lib/api').ModerationStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    api.adminModerationStats(login)
+      .then(setStats)
+      .finally(() => setLoading(false));
+  }, [login]);
+
+  return (
+    <div className="mt-4 border-t border-zinc-800 pt-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-mono text-zinc-400">Vue rapide — <span className="text-zinc-200">{login}</span></span>
+        <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-xs font-mono cursor-pointer">✕ fermer</button>
+      </div>
+      {loading ? (
+        <div className="text-zinc-600 text-xs font-mono">Chargement…</div>
+      ) : stats ? (
+        <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+          <div>
+            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">Stats</div>
+            <div className="space-y-1 text-zinc-300">
+              <div>ELO : <span className="text-zinc-100 font-bold">{stats.user.elo}</span></div>
+              <div>Matches : {stats.user.matchesPlayed}</div>
+              <div>Win rate : <span className="text-zinc-100">{stats.recentMatches.length > 0 ? Math.round(stats.recentMatches.filter(m => (m.playerALogin === login && m.winner === 'A') || (m.playerBLogin === login && m.winner === 'B')).length / stats.recentMatches.length * 100) : 0}%</span></div>
+              <div>Rejets émis : <span className="text-orange-400">{stats.rejectionsEmitted.length}</span></div>
+              <div>Rejets reçus : <span className="text-red-400">{stats.rejectionsReceived.length}</span></div>
+            </div>
+          </div>
+          <div>
+            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">Top adversaires</div>
+            <div className="space-y-1">
+              {stats.topOpponents.slice(0, 5).map(({ login: opp, count }) => (
+                <div key={opp} className="flex items-center justify-between">
+                  <span className="text-zinc-300">{opp}</span>
+                  <span className="text-zinc-500">{count}x</span>
+                </div>
+              ))}
+              {stats.topOpponents.length === 0 && <div className="text-zinc-600">Aucun</div>}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-zinc-600 text-xs font-mono">Erreur de chargement.</div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'users', label: 'UTILISATEURS' },
+  { id: 'moderation', label: 'MODÉRATION' },
+  { id: 'rejets', label: 'REJETS' },
+  { id: 'matches', label: 'MATCHES' },
+  { id: 'ideas', label: 'IDÉES' },
+  { id: 'alertes', label: 'ALERTES' },
+];
+
+export function GODPage() {
+  const navigate = useNavigate();
+  const [myLogin, setMyLogin] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<Role | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('users');
+
+  useEffect(() => {
+    api.me()
+      .then((data) => {
+        const role = data.role;
+        if (role === 'ADMIN' || role === 'SUPERADMIN') {
+          setMyLogin(data.login);
+          setMyRole(role);
+        } else {
+          setMyRole(null);
+        }
+      })
+      .catch(() => setMyRole(null))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  if (authLoading) {
+    return (
+      <div className="h-screen bg-zinc-950 flex items-center justify-center overflow-hidden">
+        <span className="text-zinc-500 font-mono text-sm">Vérification des droits…</span>
+      </div>
+    );
+  }
+
+  if (!myRole || !myLogin) {
+    return (
+      <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 overflow-hidden">
+        <span className="text-red-400 font-mono text-2xl font-bold">403</span>
+        <span className="text-zinc-400 font-mono text-sm">Accès refusé. Admins uniquement.</span>
+        <button onClick={() => navigate('/defis')} className="text-zinc-500 font-mono text-xs hover:text-zinc-300 transition-colors cursor-pointer">
+          ← Retour
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen bg-zinc-950 text-zinc-100 font-mono flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/50">
+        <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-zinc-300 font-bold tracking-widest text-sm">GOD PANEL</span>
+            <span className="text-zinc-700">|</span>
+            <span className="text-zinc-400 text-xs">{myLogin}</span>
+            <RoleBadge role={myRole} />
+          </div>
+          <button
+            onClick={() => navigate('/defis')}
+            className="text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
+          >
+            ← Retour app
+          </button>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/30">
+        <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 ${
+                activeTab === tab.id
+                  ? 'text-zinc-100 border-zinc-400'
+                  : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-screen-2xl mx-auto">
+          {activeTab === 'users' && <UsersTab myRole={myRole} myLogin={myLogin} />}
+          {activeTab === 'moderation' && <ModerationTab />}
+          {activeTab === 'rejets' && <RejetsTab />}
+          {activeTab === 'matches' && <MatchesTab />}
+          {activeTab === 'ideas' && <IdeasTab />}
+          {activeTab === 'alertes' && <AlertesTab />}
+        </div>
+      </div>
+    </div>
+  );
+}

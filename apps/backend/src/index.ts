@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import {
   DeclareMatchSchema,
   ConfirmMatchSchema,
@@ -44,6 +45,20 @@ async function getUserRole(login: string): Promise<'USER' | 'ADMIN' | 'SUPERADMI
 async function requireSuperAdmin(login: string): Promise<void> {
   if (!SUPERADMINS.has(login.toLowerCase())) {
     throw new HTTPException(403, { message: 'superadmins only' });
+  }
+}
+
+async function requireAdmin(login: string): Promise<void> {
+  const role = await getUserRole(login);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+}
+
+async function assertNotBanned(login: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { login }, select: { bannedAt: true } });
+  if (user?.bannedAt) {
+    throw new HTTPException(403, { message: 'account suspended' });
   }
 }
 
@@ -249,6 +264,7 @@ app.post('/matches', async (c) => {
       message: 'cannot declare a match against yourself',
     });
   }
+  await assertNotBanned(me);
   await getOrCreateUser(me);
   await getOrCreateUser(opponentLogin);
   const pending = await prisma.pendingMatch.create({
@@ -382,11 +398,18 @@ app.post('/matches/:id/reject', async (c) => {
       });
     }
     declarerLogin = p.declarerLogin;
+    await tx.rejectedMatch.create({
+      data: {
+        id: randomUUID(),
+        declarerLogin: p.declarerLogin,
+        opponentLogin: me,
+        scoreDeclarer: p.scoreDeclarer,
+        scoreOpponent: p.scoreOpponent,
+        contestReason,
+        contestMessage,
+      },
+    });
     await tx.pendingMatch.delete({ where: { id } });
-    console.log(
-      `[contest] ${me} a contesté la déclaration de ${p.declarerLogin}` +
-      ` (${p.scoreDeclarer}-${p.scoreOpponent}) — raison: ${contestReason} — "${contestMessage}"`,
-    );
   });
 
   if (declarerLogin) {
@@ -1047,6 +1070,306 @@ app.get('/ops/user/:login', async (c) => {
     }),
   ]);
   return c.json({ owns: asOwner, targetedBy: asTarget });
+});
+
+/* ============ ADMIN — USERS ============ */
+
+app.get('/admin/users', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const users = await prisma.user.findMany({
+    orderBy: [{ role: 'desc' }, { elo: 'desc' }],
+  });
+  return c.json(users);
+});
+
+app.patch('/admin/users/:login/stats', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const body = await c.req.json().catch(() => null);
+  const schema = z.object({
+    elo: z.number().int().min(0).optional(),
+    matchesPlayed: z.number().int().min(0).optional(),
+    dodgeCount: z.number().int().min(0).optional(),
+    tournamentsWon: z.number().int().min(0).optional(),
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const user = await prisma.user.update({ where: { login }, data: parsed.data })
+    .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  return c.json(user);
+});
+
+app.post('/admin/users/:login/ban', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  if (SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(400, { message: 'cannot ban a superadmin' });
+  }
+  const user = await prisma.user.update({ where: { login }, data: { bannedAt: new Date() } })
+    .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  return c.json({ login: user.login, bannedAt: user.bannedAt });
+});
+
+app.post('/admin/users/:login/unban', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const user = await prisma.user.update({ where: { login }, data: { bannedAt: null } })
+    .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  return c.json({ login: user.login, bannedAt: null });
+});
+
+app.get('/admin/users/:login/moderation', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const [user, recentMatches, rejectionsEmitted, rejectionsReceived] = await Promise.all([
+    prisma.user.findUnique({ where: { login } }),
+    prisma.playedMatch.findMany({
+      where: { OR: [{ playerALogin: login }, { playerBLogin: login }] },
+      orderBy: { playedAt: 'desc' },
+      take: 50,
+    }),
+    // Emitted: this player was opponent and chose to reject
+    prisma.rejectedMatch.findMany({
+      where: { opponentLogin: login },
+      orderBy: { rejectedAt: 'desc' },
+    }),
+    // Received: someone rejected this player's declarations
+    prisma.rejectedMatch.findMany({
+      where: { declarerLogin: login },
+      orderBy: { rejectedAt: 'desc' },
+    }),
+  ]);
+  if (!user) throw new HTTPException(404, { message: 'user not found' });
+  const opponentCounts: Record<string, number> = {};
+  for (const m of recentMatches) {
+    const opp = m.playerALogin === login ? m.playerBLogin : m.playerALogin;
+    opponentCounts[opp] = (opponentCounts[opp] ?? 0) + 1;
+  }
+  const topOpponents = Object.entries(opponentCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([opp, count]) => ({ login: opp, count }));
+  return c.json({ user, recentMatches, topOpponents, rejectionsEmitted, rejectionsReceived });
+});
+
+/* ============ ADMIN — MATCHES ============ */
+
+app.delete('/admin/matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const match = await prisma.playedMatch.findUnique({ where: { id } });
+  if (!match) throw new HTTPException(404, { message: 'match not found' });
+  await prisma.$transaction(async (tx) => {
+    if (match.countedForElo) {
+      await tx.user.update({
+        where: { login: match.playerALogin },
+        data: { elo: { decrement: match.deltaA }, matchesPlayed: { decrement: 1 } },
+      });
+      await tx.user.update({
+        where: { login: match.playerBLogin },
+        data: { elo: { decrement: match.deltaB }, matchesPlayed: { decrement: 1 } },
+      });
+    }
+    await tx.playedMatch.delete({ where: { id } });
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.patch('/admin/matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const schema = z.object({
+    scoreA: z.number().int().min(0),
+    scoreB: z.number().int().min(0),
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const match = await prisma.playedMatch.findUnique({ where: { id } });
+  if (!match) throw new HTTPException(404, { message: 'match not found' });
+  const winner: 'A' | 'B' = parsed.data.scoreA > parsed.data.scoreB ? 'A' : 'B';
+  const updated = await prisma.playedMatch.update({
+    where: { id },
+    data: { scoreA: parsed.data.scoreA, scoreB: parsed.data.scoreB, winner },
+  });
+  return c.json(updated);
+});
+
+app.get('/admin/rejected-matches', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const list = await prisma.rejectedMatch.findMany({
+    orderBy: { rejectedAt: 'desc' },
+    take: 200,
+  });
+  return c.json(list);
+});
+
+app.get('/admin/suspicious', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+
+  const [allMatches, allUsers] = await Promise.all([
+    prisma.playedMatch.findMany({ orderBy: { playedAt: 'asc' } }),
+    prisma.user.findMany({ select: { login: true, elo: true, matchesPlayed: true } }),
+  ]);
+
+  type Flag = {
+    type: 'pair_domination' | 'recent_farming' | 'elo_spike' | 'victim_pattern';
+    severity: 'low' | 'medium' | 'high';
+    players: string[];
+    detail: string;
+    matchCount?: number;
+    winRate?: number;
+    eloGain?: number;
+  };
+
+  const flags: Flag[] = [];
+  const now = new Date();
+  const day30Ago = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const day7Ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  // ── Build pair stats ───────────────────────────────────────────────────
+  type PairEntry = { playerA: string; playerB: string; matches: { winner: string; playedAt: Date }[] };
+  const pairs = new Map<string, PairEntry>();
+
+  for (const m of allMatches) {
+    const [a, b] = m.playerALogin < m.playerBLogin
+      ? [m.playerALogin, m.playerBLogin]
+      : [m.playerBLogin, m.playerALogin];
+    const key = `${a}|||${b}`;
+    let entry = pairs.get(key);
+    if (!entry) {
+      entry = { playerA: a, playerB: b, matches: [] };
+      pairs.set(key, entry);
+    }
+    const winner = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
+    entry.matches.push({ winner, playedAt: m.playedAt });
+  }
+
+  // ── Per-player overall win rates (for victim_pattern) ─────────────────
+  const playerWins = new Map<string, { wins: number; total: number }>();
+  for (const m of allMatches) {
+    const winnerLogin = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
+    const loserLogin  = m.winner === 'A' ? m.playerBLogin : m.playerALogin;
+    const w = playerWins.get(winnerLogin) ?? { wins: 0, total: 0 };
+    w.wins++; w.total++;
+    playerWins.set(winnerLogin, w);
+    const l = playerWins.get(loserLogin) ?? { wins: 0, total: 0 };
+    l.total++;
+    playerWins.set(loserLogin, l);
+  }
+
+  // ── Pair-based flags ───────────────────────────────────────────────────
+  for (const { playerA, playerB, matches } of pairs.values()) {
+    const total = matches.length;
+    if (total < 3) continue;
+
+    const winsA = matches.filter(m => m.winner === playerA).length;
+    const winRateA = winsA / total;
+    const dominant   = winRateA >= 0.5 ? playerA : playerB;
+    const dominated  = winRateA >= 0.5 ? playerB : playerA;
+    const dominantWR = Math.max(winRateA, 1 - winRateA);
+
+    // Pair domination: one side wins 75%+ over 5+ matches
+    if (total >= 5 && dominantWR >= 0.75) {
+      const severity: Flag['severity'] = dominantWR >= 0.9 ? 'high' : dominantWR >= 0.83 ? 'medium' : 'low';
+      flags.push({
+        type: 'pair_domination',
+        severity,
+        players: [dominant, dominated],
+        detail: `${dominant} gagne ${Math.round(dominantWR * 100)}% des matchs face à ${dominated} sur ${total} confrontations.`,
+        matchCount: total,
+        winRate: dominantWR,
+      });
+    }
+
+    // Recent farming: 8+ matches in 7 days between same pair (1+ per day per player)
+    const recentCount = matches.filter(m => m.playedAt >= day7Ago).length;
+    if (recentCount >= 8) {
+      flags.push({
+        type: 'recent_farming',
+        severity: recentCount >= 12 ? 'high' : 'medium',
+        players: [playerA, playerB],
+        detail: `${playerA} et ${playerB} ont joué ${recentCount} fois ensemble ces 7 derniers jours — rythme anormalement élevé.`,
+        matchCount: recentCount,
+      });
+    }
+
+    // Victim pattern: victim has decent global win rate but consistently loses vs one specific player
+    if (total >= 5 && dominantWR >= 0.8) {
+      const victimOverall = playerWins.get(dominated);
+      if (victimOverall && victimOverall.total >= 8) {
+        const victimGlobalWR = victimOverall.wins / victimOverall.total;
+        // Globally decent (>35%) but crushed in this matchup → targeted
+        if (victimGlobalWR >= 0.35) {
+          flags.push({
+            type: 'victim_pattern',
+            severity: 'high',
+            players: [dominant, dominated],
+            detail: `${dominated} gagne ${Math.round(victimGlobalWR * 100)}% de ses matchs globalement, mais perd ${Math.round(dominantWR * 100)}% face à ${dominant} spécifiquement. Possible don d'ELO volontaire.`,
+            matchCount: total,
+            winRate: dominantWR,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Per-player ELO spike (last 30 days, z-score) ──────────────────────
+  const playerGains = new Map<string, { login: string; gain: number; count: number }>();
+
+  for (const m of allMatches) {
+    if (m.playedAt < day30Ago || !m.countedForElo) continue;
+    const a = playerGains.get(m.playerALogin) ?? { login: m.playerALogin, gain: 0, count: 0 };
+    a.gain += m.deltaA; a.count++;
+    playerGains.set(m.playerALogin, a);
+    const b = playerGains.get(m.playerBLogin) ?? { login: m.playerBLogin, gain: 0, count: 0 };
+    b.gain += m.deltaB; b.count++;
+    playerGains.set(m.playerBLogin, b);
+  }
+
+  const activePlayers = [...playerGains.values()].filter(p => p.count >= 5);
+  if (activePlayers.length >= 3) {
+    const gainValues = activePlayers.map(p => p.gain);
+    const avg = gainValues.reduce((s, v) => s + v, 0) / gainValues.length;
+    const variance = gainValues.reduce((s, v) => s + (v - avg) ** 2, 0) / gainValues.length;
+    const std = Math.sqrt(variance);
+    const threshold = avg + 2 * std;
+
+    for (const p of activePlayers) {
+      if (p.gain > threshold && p.gain > 80) {
+        const severity: Flag['severity'] = p.gain > avg + 3 * std ? 'high' : 'medium';
+        flags.push({
+          type: 'elo_spike',
+          severity,
+          players: [p.login],
+          detail: `${p.login} a gagné +${p.gain} ELO en 30 jours (${p.count} matchs). Moyenne communauté : ${Math.round(avg > 0 ? avg : 0)} ELO (+${Math.round(p.gain - avg)} au-dessus).`,
+          matchCount: p.count,
+          eloGain: p.gain,
+        });
+      }
+    }
+  }
+
+  // Sort: high → medium → low, deduplicate pair flags (keep highest severity)
+  const seen = new Set<string>();
+  const deduped: Flag[] = [];
+  const order = { high: 0, medium: 1, low: 2 } as const;
+  flags.sort((a, b) => order[a.severity] - order[b.severity]);
+  for (const f of flags) {
+    const key = `${f.type}:${[...f.players].sort().join(':')}`;
+    if (!seen.has(key)) { seen.add(key); deduped.push(f); }
+  }
+
+  return c.json(deduped);
 });
 
 const port = Number(process.env.PORT ?? 3000);

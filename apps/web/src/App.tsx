@@ -8,6 +8,7 @@ import { useAuth } from './hooks/useAuth';
 import { LeagueDataProvider, useLeagueData } from './hooks/useLeagueData';
 import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
+import { GODPage } from './pages/GODPage';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -64,6 +65,7 @@ export function App() {
     <Routes>
       <Route path="/auth/return" element={<AuthReturnPage />} />
       <Route path="/login" element={authenticated ? <Navigate to="/defis" replace /> : <LoginPage />} />
+      <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
       <Route
         path="*"
         element={

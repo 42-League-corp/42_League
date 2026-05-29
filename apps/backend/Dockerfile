@@ -30,5 +30,5 @@ COPY --from=builder /app/apps/backend ./apps/backend
 WORKDIR /app/apps/backend
 EXPOSE 3000
 
-# Démarrage direct via tsx
-CMD ["npx", "tsx", "src/index.ts"]
+# Auto-migrate puis démarrer
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx src/index.ts"]
