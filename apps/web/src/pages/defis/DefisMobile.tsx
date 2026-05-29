@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Users, Zap } from 'lucide-react';
+import { Plus, Swords, Users, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFAB } from '../../mobile/primitives/FAB';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
+import { ChallengeSheet } from './mobile/ChallengeSheet';
+import { DefisFabMenu } from './mobile/DefisFabMenu';
+import { BigActionButton } from './mobile/BigActionButton';
 import { OpponentBubble } from './mobile/OpponentBubble';
 import { PendingMatchCard } from './mobile/PendingMatchCard';
 import { ChallengeMobileCard } from './mobile/ChallengeMobileCard';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
-import { haptic } from '../../mobile/feedback/useHaptic';
 
 type Filter = 'all' | 'received' | 'scheduled' | 'sent';
 
@@ -34,6 +36,8 @@ export function DefisMobile() {
   const navigate = useNavigate();
 
   const [declareOpen, setDeclareOpen] = useState(false);
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
 
   // Map login → imageUrl pour les cartes de défis
@@ -56,7 +60,7 @@ export function DefisMobile() {
   useFAB({
     Icon: Plus,
     label: 'Game',
-    onClick: () => setDeclareOpen(true),
+    onClick: () => setFabMenuOpen(true),
     pulse: pendingToConfirm.length === 0 && totalChallenges === 0,
   });
 
@@ -66,55 +70,30 @@ export function DefisMobile() {
         {/* Hero player card */}
         <HeroPlayerCard />
 
-        {/* CTA principal sticky — "Déclarer une game" (style screenshot 42L) */}
-        <motion.button
-          type="button"
-          onClick={() => {
-            haptic('medium');
-            setDeclareOpen(true);
-          }}
-          whileTap={{ scale: 0.98 }}
-          whileHover={{ y: -2 }}
-          className="shine group relative w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl overflow-hidden tap-transparent transition-all border border-gold/30 active:border-gold"
-          style={{
-            background:
-              'linear-gradient(135deg, #2a241c 0%, #1d1914 60%, #15120e 100%)',
-            boxShadow:
-              'inset 0 1px 0 rgba(255,215,120,0.10), 0 8px 24px -12px rgba(255,201,74,0.4), 0 1px 0 rgba(255,201,74,0.06)',
-          }}
-        >
-          {/* Filigrane diagonale */}
-          <div className="absolute inset-0 hud-diag opacity-50 pointer-events-none" />
-
-          <div className="relative flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center border border-gold/50 group-hover:scale-110 transition-transform"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(255,201,74,0.25), rgba(255,201,74,0.08))',
-                boxShadow:
-                  'inset 0 1px 0 rgba(255,247,228,0.2), 0 0 12px rgba(255,201,74,0.25)',
-              }}
-            >
-              <Plus className="w-4 h-4 text-gold" strokeWidth={3} />
-            </div>
-            <div className="text-left">
-              <div className="font-gaming text-sm font-extrabold text-text-strong tracking-wide uppercase">
-                Déclarer une game
-              </div>
-              <div className="text-[10px] text-muted uppercase tracking-[0.16em] font-extrabold">
-                Game passée · 2 clics
-              </div>
-            </div>
-          </div>
-
-          {/* Icônes décoratives à droite (banane + carapace, comme le screenshot) */}
-          <div className="relative flex items-center gap-1.5 text-base opacity-90">
-            <span aria-hidden className="text-gold/80">🍌</span>
-            <span aria-hidden className="text-muted-2">🐢</span>
-            <span className="text-gold text-lg group-hover:translate-x-1 transition-transform">→</span>
-          </div>
-        </motion.button>
+        {/* Double CTA — Déclarer une game (passée) puis Défier un joueur (à venir) */}
+        <div className="space-y-2.5">
+          <BigActionButton
+            Icon={Plus}
+            tone="amber"
+            title="Déclarer une game"
+            subtitle="Game passée · 2 clics"
+            accessory={
+              <>
+                <span aria-hidden className="text-gold/80">🍌</span>
+                <span aria-hidden className="text-muted-2">🐢</span>
+              </>
+            }
+            onClick={() => setDeclareOpen(true)}
+          />
+          <BigActionButton
+            Icon={Swords}
+            tone="gold"
+            title="Défier un joueur"
+            subtitle="Programme un duel à venir"
+            accessory={<span aria-hidden className="text-gold/80">⚔</span>}
+            onClick={() => setChallengeOpen(true)}
+          />
+        </div>
 
         {/* Pending — à confirmer (CTA urgent) */}
         {pendingToConfirm.length > 0 && (
@@ -275,10 +254,29 @@ export function DefisMobile() {
 
       </div>
 
-      {/* Sheet de déclaration */}
+      {/* Mini-menu du FAB : Déclarer / Défier */}
+      <DefisFabMenu
+        open={fabMenuOpen}
+        onClose={() => setFabMenuOpen(false)}
+        onDeclare={() => setDeclareOpen(true)}
+        onChallenge={() => setChallengeOpen(true)}
+      />
+
+      {/* Sheet de déclaration (game passée) */}
       <DeclareGameSheet
         open={declareOpen}
         onClose={() => setDeclareOpen(false)}
+        others={others}
+        recentOpponents={recentOpponents}
+        opponentCounts={opponentCounts}
+        myLogin={myLogin}
+        onDone={refresh}
+      />
+
+      {/* Sheet de défi (duel à venir) */}
+      <ChallengeSheet
+        open={challengeOpen}
+        onClose={() => setChallengeOpen(false)}
         others={others}
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}

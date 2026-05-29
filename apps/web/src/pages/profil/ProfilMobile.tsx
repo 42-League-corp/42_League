@@ -44,8 +44,7 @@ export function ProfilMobile() {
               matches={matches}
               myLogin={myLogin}
               currentElo={stats.elo}
-              height={72}
-              maxPoints={20}
+              height={96}
             />
           </div>
         )}

@@ -13,6 +13,7 @@ export function AboutPage() {
   const [tab, setTab] = useState<Tab>('rules');
 
   return (
+    <div className="h-full overflow-y-auto overscroll-contain scrollbar-none">
     <div className="max-w-2xl mx-auto px-4 py-6">
       {/* Back button */}
       <div className="mb-5">
@@ -36,6 +37,7 @@ export function AboutPage() {
       </div>
 
       {tab === 'rules' ? <RulesSection /> : <PrivacySection />}
+    </div>
     </div>
   );
 }
