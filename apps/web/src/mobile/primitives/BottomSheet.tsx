@@ -46,15 +46,12 @@ export function BottomSheet({
   const y = useMotionValue(0);
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  // Lock du scroll body pendant que la sheet est ouverte
+  // Haptique à l'ouverture. (Le scroll derrière est bloqué naturellement par
+  // le scrim `fixed inset-0` ci-dessous, et html/body sont déjà overflow:hidden
+  // au niveau global — pas besoin de toucher au style du body ici.)
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     haptic('selection');
-    return () => {
-      document.body.style.overflow = prev;
-    };
   }, [open]);
 
   // Escape to close
