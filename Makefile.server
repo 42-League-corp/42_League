@@ -1,0 +1,33 @@
+.PHONY: deploy deploy-frontend deploy-backend logs logs-front logs-back ps restart down
+
+COMPOSE = docker compose -f docker-compose.registry.yml
+
+deploy: ## Pull + redémarre front et back
+	$(COMPOSE) pull frontend backend
+	$(COMPOSE) up -d --no-deps frontend backend
+
+deploy-frontend: ## Pull + redémarre seulement le frontend
+	$(COMPOSE) pull frontend
+	$(COMPOSE) up -d --no-deps frontend
+
+deploy-backend: ## Pull + redémarre seulement le backend
+	$(COMPOSE) pull backend
+	$(COMPOSE) up -d --no-deps backend
+
+logs: ## Logs live de tous les services
+	$(COMPOSE) logs -f --tail=100
+
+logs-front: ## Logs du frontend
+	$(COMPOSE) logs -f --tail=100 frontend
+
+logs-back: ## Logs du backend
+	$(COMPOSE) logs -f --tail=100 backend
+
+ps: ## État des containers
+	$(COMPOSE) ps
+
+restart: ## Redémarre les containers sans pull
+	$(COMPOSE) restart
+
+down: ## Arrête tout
+	$(COMPOSE) down
