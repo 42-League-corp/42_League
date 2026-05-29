@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
 import { serve } from '@hono/node-server';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
@@ -31,7 +31,8 @@ import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
 import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
-import { registerSse, emit } from './sse.js';
+import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
+import { verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
@@ -103,6 +104,22 @@ async function getCurrentLogin(c: Context): Promise<string> {
   });
 }
 
+// Variante pour le flux SSE : EventSource ne peut pas envoyer de header
+// Authorization, on autorise donc en plus l'auth via ?token=... en query param.
+async function getStreamLogin(c: Context): Promise<string> {
+  const sessionLogin = await getSessionLogin(c);
+  if (sessionLogin) return sessionLogin;
+  const secret = process.env.SESSION_SECRET;
+  const queryToken = c.req.query('token');
+  if (secret && queryToken) {
+    const login = verifyToken(queryToken, secret);
+    if (login) return login;
+  }
+  const devLogin = c.req.header('x-dev-login');
+  if (devLogin) return devLogin;
+  throw new HTTPException(401, { message: 'not authenticated' });
+}
+
 const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
 const app = new Hono();
@@ -123,11 +140,40 @@ app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Private-Network', 'true');
 
   if (c.req.method === 'OPTIONS') {
-    return c.text('', 204);
+    c.status(204);
+    return c.body(null);
   }
 
   await next();
 });
+
+// =========================================================================
+// TEMPS RÉEL — events SSE ciblés
+// =========================================================================
+// Stratégie :
+//  - Les changements qui ne concernent que certains joueurs (défis, matchs, ops)
+//    sont émis EN CIBLÉ directement dans les handlers via emit([logins], …).
+//  - Les changements GLOBAUX visibles par tous (classement, tournois) sont diffusés
+//    à tous les clients connectés via les middlewares par domaine ci-dessous.
+// Dans tous les cas le front ne ré-interroge QUE la tranche de données concernée
+// (et non les 8 endpoints).
+const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+
+/** Diffuse `event` à tous les clients après une mutation réussie sur ce préfixe. */
+function broadcastOnMutation(event: SseEvent) {
+  return async (c: Context, next: Next) => {
+    await next();
+    if (!MUTATING_METHODS.has(c.req.method)) return;
+    if (c.res.status < 200 || c.res.status >= 300) return;
+    broadcast(event);
+  };
+}
+
+// Tournois : liste + bracket sont publics → tout le monde rafraîchit les tournois.
+app.use('/tournaments', broadcastOnMutation({ type: 'tournament:update', payload: {} }));
+app.use('/tournaments/*', broadcastOnMutation({ type: 'tournament:update', payload: {} }));
+// Admin : peut toucher stats / matchs / bans (rare) → refresh complet par sécurité.
+app.use('/admin/*', broadcastOnMutation({ type: 'data:update', payload: {} }));
 
 // Gestionnaire d'erreurs global (pour que le CORS soit là même sur une erreur 401 !)
 app.onError((err, c) => {
@@ -193,7 +239,9 @@ app.get('/me', async (c) => {
 });
 
 app.get('/events', async (c) => {
-  const me = await getCurrentLogin(c);
+  // EventSource ne peut pas envoyer de header Authorization → on accepte aussi
+  // le token en query param (?token=...) en plus de la session/cookie habituels.
+  const me = await getStreamLogin(c);
   return streamSSE(c, async (stream) => {
     const cleanup = registerSse(me, stream);
     let alive = true;
@@ -381,6 +429,8 @@ app.post('/matches/:id/confirm', async (c) => {
   });
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
+  broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json(match);
 });
 
@@ -526,6 +576,10 @@ app.post('/challenges/:id/decline', async (c) => {
     type: 'challenge:declined',
     payload: { id, status: result.status, eloPenalty: result.penalty, declinedBy: me },
   });
+  // Se désister d'un défi accepté applique une pénalité d'ELO → classement global.
+  if (result.penalty > 0) {
+    broadcast({ type: 'leaderboard:update', payload: {} });
+  }
   return c.json({ id, status: result.status, eloPenalty: result.penalty });
 });
 
@@ -565,6 +619,12 @@ app.post('/challenges/:id/record', async (c) => {
         scoreOpponent,
       },
     });
+  });
+  // Le défi passe en "recorded" et un match en attente apparaît : les deux joueurs
+  // doivent rafraîchir leurs défis ET leurs matchs.
+  emit([pending.declarerLogin, pending.opponentLogin], {
+    type: 'challenge:recorded',
+    payload: { pendingId: pending.id },
   });
   return c.json({ pendingId: pending.id, status: 'pending_confirmation' }, 201);
 });
@@ -967,6 +1027,40 @@ app.patch('/feature-requests/:id/status', async (c) => {
 const OPS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const OPS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
+// ─── Expiration des ops en temps réel ──────────────────────────────────────
+// Un ops expire — puis son cooldown se termine — uniquement par le temps, sans
+// aucune mutation HTTP → aucun event SSE n'est émis naturellement. On programme
+// donc des timers serveur qui poussent `ops:update` aux joueurs concernés au
+// moment exact de ces transitions. (OPS_DURATION = 7j < limite setTimeout ~24,8j.)
+// La marge de +1s garantit que la requête de relecture voie bien l'ops comme
+// expiré (filtre expiresAt > now côté lecture).
+function scheduleOpsTimers(ownerLogin: string, targetLogin: string, expiresAt: Date): void {
+  const expiryDelay = expiresAt.getTime() - Date.now() + 1000;
+  if (expiryDelay > 0) {
+    // À l'expiration : `current` (auteur) et `targetedBy` (cible) repassent à null.
+    setTimeout(() => {
+      emit([ownerLogin, targetLogin], { type: 'ops:update', payload: { reason: 'expired' } });
+    }, expiryDelay);
+  }
+  const cooldownDelay = expiresAt.getTime() + OPS_COOLDOWN_MS - Date.now() + 1000;
+  if (cooldownDelay > 0) {
+    // À la fin du cooldown : l'auteur peut redéclarer (canDeclareAt franchi).
+    setTimeout(() => {
+      emit([ownerLogin], { type: 'ops:update', payload: { reason: 'cooldown_ended' } });
+    }, cooldownDelay);
+  }
+}
+
+// Au démarrage, on re-programme les timers des ops encore actifs ou en cooldown :
+// les setTimeout sont perdus à chaque redémarrage du process.
+async function rescheduleOpsTimers(): Promise<void> {
+  const cooldownThreshold = new Date(Date.now() - OPS_COOLDOWN_MS);
+  const pending = await prisma.ops.findMany({
+    where: { expiresAt: { gt: cooldownThreshold } },
+  });
+  for (const o of pending) scheduleOpsTimers(o.ownerLogin, o.targetLogin, o.expiresAt);
+}
+
 app.get('/ops', async (c) => {
   const now = new Date();
   const list = await prisma.ops.findMany({
@@ -1069,6 +1163,9 @@ app.post('/ops', async (c) => {
       include: { target: { select: { login: true, imageUrl: true } } },
     });
   });
+  emit([me, target], { type: 'ops:update', payload: ops });
+  // Programme l'émission de `ops:update` à l'expiration + fin de cooldown.
+  scheduleOpsTimers(me, target, ops.expiresAt);
   return c.json(ops, 201);
 });
 
@@ -1475,4 +1572,8 @@ app.get('/admin/audit-log', async (c) => {
 const port = Number(process.env.PORT ?? 3000);
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`42 League backend listening on http://localhost:${info.port}`);
+  // Re-arme les timers d'expiration des ops actifs (perdus au redémarrage).
+  rescheduleOpsTimers().catch((err) => {
+    console.error('failed to reschedule ops timers', err);
+  });
 });
