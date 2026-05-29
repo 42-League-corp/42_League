@@ -111,3 +111,22 @@ export const TournamentRecordSchema = z
   );
 
 export type TournamentRecordInput = z.infer<typeof TournamentRecordSchema>;
+
+export const FeatureRequestSchema = z.object({
+  text: z.string().min(10, 'description must be at least 10 characters').max(500),
+});
+
+export type FeatureRequestInput = z.infer<typeof FeatureRequestSchema>;
+
+// SUPERADMIN only — 'SUPERADMIN' role cannot be granted via API
+export const SetRoleSchema = z.object({
+  role: z.enum(['USER', 'ADMIN']),
+});
+
+export type SetRoleInput = z.infer<typeof SetRoleSchema>;
+
+export const SetFeatureRequestStatusSchema = z.object({
+  status: z.enum(['pending', 'accepted', 'rejected']),
+});
+
+export type SetFeatureRequestStatusInput = z.infer<typeof SetFeatureRequestStatusSchema>;
