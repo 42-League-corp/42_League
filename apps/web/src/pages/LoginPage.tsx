@@ -26,17 +26,14 @@ export function LoginPage() {
         <div className="absolute bottom-0 left-6 right-6 h-[2px] brass-pipe rounded-full" />
 
         <div className="relative">
-          <div className="font-display text-3xl font-black tracking-[0.22em] uppercase gradient-text-brand mb-2">
-            42 League
-          </div>
+          <img
+            src="/logo-wordmark.png"
+            alt="42 League"
+            className="w-64 max-w-full h-auto mx-auto mb-2 select-none drop-shadow-[0_3px_12px_rgba(255,201,74,0.3)]"
+            draggable={false}
+          />
           <div className="text-[10px] text-brass/80 uppercase tracking-[0.22em] mb-8 font-extrabold">
             Babyfoot · Ranked
-          </div>
-
-          <div
-            className="relative w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center font-display text-3xl font-black animate-glow-pulse metal-plate-gold"
-          >
-            <span className="text-[#1a1100]">42</span>
           </div>
 
           <h1 className="font-gaming text-xl font-extrabold text-text-strong mb-3 uppercase tracking-wide">

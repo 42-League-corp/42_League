@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Plus, Swords, X } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -6,15 +8,17 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
 import { AbacusSlider } from '../../components/AbacusSlider';
 import { ContestModal } from '../../components/ContestModal';
-import { api, type Challenge, type PendingMatch } from '../../lib/api';
+import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT } from '../../lib/i18n';
-import { fmtRelative, isoLocalNowPlusMinutes } from '../../lib/format';
+import { fmtRelative } from '../../lib/format';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { DeclareGameFlow, WINNING_SCORE, LOSER_SCORE_MIN, LOSER_SCORE_MAX } from './shared/DeclareGameFlow';
+import { ChallengeFlow } from './shared/ChallengeFlow';
 
 type Kind = 'incoming' | 'outgoing' | 'accepted';
+type OpenCard = 'declare' | 'challenge' | null;
 
 /**
  * Vue desktop de la page Défis — reprend l'UX existante en se branchant
@@ -37,13 +41,34 @@ export function DefisDesktop() {
     handleAction,
   } = useDefisLogic();
 
+  const [openCard, setOpenCard] = useState<OpenCard>(null);
+  const [presetOpp, setPresetOpp] = useState<LeaderboardEntry | null>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  const openChallengeWith = (player: LeaderboardEntry | null) => {
+    setPresetOpp(player);
+    setOpenCard('challenge');
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')}>
-      <DeclareGameSection
+      <div ref={topRef} />
+      <ActionBento
+        openCard={openCard}
+        presetOpp={presetOpp}
         others={others}
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        onOpen={(c) => {
+          if (c === 'challenge') setPresetOpp(null);
+          setOpenCard(c);
+        }}
+        onClose={() => {
+          setOpenCard(null);
+          setPresetOpp(null);
+        }}
         onDone={refresh}
       />
 
@@ -122,14 +147,7 @@ export function DefisDesktop() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {others.map((u) => (
-              <ChallengeCard
-                key={u.login}
-                login={u.login}
-                imageUrl={u.imageUrl}
-                elo={u.elo}
-                rank={u.rank}
-                onSent={refresh}
-              />
+              <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
             ))}
           </div>
         )}
@@ -140,79 +158,177 @@ export function DefisDesktop() {
 
 const NOOP = () => {};
 
-// ─── Section "Déclarer une game" — carte animée open/close ───────────────────
+// ─── Bento d'actions « Déclarer / Défier » — réagencement selon l'espace ─────
 
-interface DeclareGameSectionProps {
-  others: ReturnType<typeof useDefisLogic>['others'];
-  recentOpponents: ReturnType<typeof useDefisLogic>['recentOpponents'];
-  opponentCounts: ReturnType<typeof useDefisLogic>['opponentCounts'];
+interface ActionBentoProps {
+  openCard: OpenCard;
+  presetOpp: LeaderboardEntry | null;
+  others: LeaderboardEntry[];
+  recentOpponents: LeaderboardEntry[];
+  opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  onOpen: (card: Exclude<OpenCard, null>) => void;
+  onClose: () => void;
   onDone: () => Promise<void>;
 }
 
-function DeclareGameSection({
+/**
+ * Deux cartes d'action côte à côte. Quand l'une s'ouvre, elle prend toute la
+ * largeur et l'autre s'efface — layout « Uber Eats » qui se réagence selon
+ * l'espace disponible (transitions framer layout).
+ */
+function ActionBento({
+  openCard,
+  presetOpp,
   others,
   recentOpponents,
   opponentCounts,
   myLogin,
+  onOpen,
+  onClose,
   onDone,
-}: DeclareGameSectionProps) {
-  const [open, setOpen] = useState(false);
+}: ActionBentoProps) {
+  const submitAndClose = async () => {
+    await onDone();
+    onClose();
+  };
 
-  if (!open) {
+  return (
+    <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <AnimatePresence mode="popLayout">
+        {(openCard === null || openCard === 'declare') && (
+          <ActionCard
+            key="declare"
+            kind="declare"
+            expanded={openCard === 'declare'}
+            onOpen={() => onOpen('declare')}
+            onClose={onClose}
+          >
+            <DeclareGameFlow
+              variant="desktop"
+              others={others}
+              recentOpponents={recentOpponents}
+              opponentCounts={opponentCounts}
+              myLogin={myLogin}
+              onSubmitted={submitAndClose}
+            />
+          </ActionCard>
+        )}
+
+        {(openCard === null || openCard === 'challenge') && (
+          <ActionCard
+            key="challenge"
+            kind="challenge"
+            expanded={openCard === 'challenge'}
+            onOpen={() => onOpen('challenge')}
+            onClose={onClose}
+          >
+            <ChallengeFlow
+              key={presetOpp?.login ?? 'free'}
+              variant="desktop"
+              others={others}
+              recentOpponents={recentOpponents}
+              opponentCounts={opponentCounts}
+              myLogin={myLogin}
+              presetOpponent={presetOpp}
+              onSubmitted={submitAndClose}
+            />
+          </ActionCard>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+interface ActionCardMeta {
+  Icon: typeof Plus;
+  label: string;
+  sub: string;
+}
+
+const ACTION_META: Record<Exclude<OpenCard, null>, ActionCardMeta> = {
+  declare: { Icon: Plus, label: 'Déclarer une game', sub: 'Game déjà jouée' },
+  challenge: { Icon: Swords, label: 'Défier un joueur', sub: 'Programmer un duel' },
+};
+
+interface ActionCardProps {
+  kind: Exclude<OpenCard, null>;
+  expanded: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}
+
+function ActionCard({ kind, expanded, onOpen, onClose, children }: ActionCardProps) {
+  const meta = ACTION_META[kind];
+  const Icon = meta.Icon;
+
+  if (!expanded) {
     return (
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="shine w-full group flex items-center justify-center gap-2 py-5 rounded-2xl border border-dashed border-gold/30 hover:border-gold hover:bg-gold/8 transition-all duration-300 text-muted-2 hover:text-gold text-xs font-extrabold uppercase tracking-[0.16em] shadow-sm hover:shadow-gold-glow font-gaming"
+      <motion.button
+        layout
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        type="button"
+        onClick={onOpen}
+        className="shine group flex items-center gap-3 py-5 px-5 rounded-2xl border border-dashed border-gold/30 hover:border-gold hover:bg-gold/[0.06] transition-all duration-300 text-left shadow-sm hover:shadow-gold-glow"
+      >
+        <span
+          className="flex items-center justify-center w-10 h-10 rounded-full border border-gold/50 group-hover:scale-110 transition-transform flex-shrink-0"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,201,74,0.25), rgba(255,201,74,0.08))',
+            boxShadow: 'inset 0 1px 0 rgba(255,247,228,0.2), 0 0 12px rgba(255,201,74,0.25)',
+          }}
         >
-          <span className="text-lg transition-transform duration-300 group-hover:rotate-90">+</span>
-          Déclarer une game passée
-        </button>
-      </div>
+          <Icon className="w-5 h-5 text-gold" strokeWidth={2.5} />
+        </span>
+        <span className="min-w-0">
+          <span className="block font-gaming text-sm font-extrabold uppercase tracking-[0.14em] text-text-strong group-hover:text-gold transition-colors">
+            {meta.label}
+          </span>
+          <span className="block text-[10px] text-muted uppercase tracking-[0.16em] font-extrabold mt-0.5">
+            {meta.sub}
+          </span>
+        </span>
+      </motion.button>
     );
   }
 
   return (
-    <div className="mb-6">
-      <div
-        className="relative card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col animate-pop overflow-hidden"
-        style={{
-          backgroundImage:
-            'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,201,74,0.18), transparent 70%)',
-          boxShadow:
-            '0 18px 48px rgba(0,0,0,0.5), 0 0 36px rgba(255,201,74,0.15), inset 0 1px 0 rgba(255,215,120,0.1)',
-        }}
-      >
-        <div className="relative flex items-center justify-between mb-6">
-          <span className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold flex items-center gap-2">
-            <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-            Déclarer une game passée
-          </span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Fermer"
-            className="text-muted hover:text-text-strong transition-colors text-xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
-          >
-            ×
-          </button>
-        </div>
-
-        <DeclareGameFlow
-          variant="desktop"
-          others={others}
-          recentOpponents={recentOpponents}
-          opponentCounts={opponentCounts}
-          myLogin={myLogin}
-          onSubmitted={async () => {
-            await onDone();
-            setOpen(false);
-          }}
-        />
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col overflow-hidden"
+      style={{
+        backgroundImage:
+          'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,201,74,0.18), transparent 70%)',
+        boxShadow:
+          '0 18px 48px rgba(0,0,0,0.5), 0 0 36px rgba(255,201,74,0.15), inset 0 1px 0 rgba(255,215,120,0.1)',
+      }}
+    >
+      <div className="relative flex items-center justify-between mb-6">
+        <span className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold flex items-center gap-2">
+          <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+          {meta.label}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          className="text-muted hover:text-text-strong transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
+        >
+          <X className="w-4 h-4" strokeWidth={2.5} />
+        </button>
       </div>
-    </div>
+
+      {/* Largeur de lecture confortable pour le flow */}
+      <div className="relative w-full max-w-md mx-auto">{children}</div>
+    </motion.div>
   );
 }
 
@@ -495,62 +611,25 @@ function RecordResultForm({
 }
 
 interface ChallengeCardProps {
-  login: string;
-  imageUrl: string | null;
-  elo: number;
-  rank: number;
-  onSent: () => Promise<void>;
+  player: LeaderboardEntry;
+  onChallenge: (player: LeaderboardEntry) => void;
 }
 
-function ChallengeCard({ login, imageUrl, elo, rank, onSent }: ChallengeCardProps) {
-  const [open, setOpen] = useState(false);
-  const flash = useFlash();
-  const [when, setWhen] = useState(() => isoLocalNowPlusMinutes(30));
-  const [busy, setBusy] = useState(false);
-
-  const sendChallenge = async () => {
-    if (!when) return;
-    setBusy(true);
-    try {
-      const scheduledAt = new Date(when).toISOString();
-      await api.createChallenge({ opponentLogin: login, scheduledAt });
-      flash.show(`Défi envoyé à @${login}`);
-      await onSent();
-      setOpen(false);
-    } catch (err) {
-      flash.show(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
+function ChallengeCard({ player, onChallenge }: ChallengeCardProps) {
   return (
     <div className="card-hud rounded-xl p-3 hover-glow">
       <div className="flex items-center gap-2.5">
-        <PlayerLink login={login} className="flex-1 min-w-0">
-          <Avatar login={login} imageUrl={imageUrl} size="md" />
+        <PlayerLink login={player.login} className="flex-1 min-w-0">
+          <Avatar login={player.login} imageUrl={player.imageUrl} size="md" />
           <div className="min-w-0">
-            <div className="font-display font-bold truncate text-text-strong">{login}</div>
+            <div className="font-display font-bold truncate text-text-strong">{player.login}</div>
             <div className="text-[11px] text-muted-2">
-              <span className="text-gold font-extrabold font-mono tabular-nums">{elo}</span> ELO · #{rank}
+              <span className="text-gold font-extrabold font-mono tabular-nums">{player.elo}</span> ELO · #{player.rank}
             </div>
           </div>
         </PlayerLink>
-        <Button size="sm" onClick={() => setOpen((v) => !v)}>Défier</Button>
+        <Button size="sm" onClick={() => onChallenge(player)}>Défier</Button>
       </div>
-      {open && (
-        <div className="mt-3 flex flex-wrap gap-2 items-center">
-          <input
-            type="datetime-local"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            aria-label="Date et heure du défi"
-            className="flex-1 min-w-[180px] px-3 py-2 bg-bg-0 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
-          />
-          <Button size="sm" loading={busy} onClick={sendChallenge}>Envoyer</Button>
-          <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
-        </div>
-      )}
     </div>
   );
 }

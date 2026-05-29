@@ -74,15 +74,15 @@ export function DesktopShell({ children }: DesktopShellProps) {
 
         {/* Brand */}
         <div className="relative px-5 py-5 border-b border-gold/20">
-          <NavLink to="/" className="flex items-center gap-2 group" aria-label="42 League">
-            <BrandMark />
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display leading-none">
-                42 League
-              </div>
-              <div className="text-[9px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
-                Babyfoot · Ranked
-              </div>
+          <NavLink to="/" className="flex flex-col gap-1.5 group" aria-label="42 League">
+            <img
+              src="/logo-wordmark.png"
+              alt="42 League"
+              className="w-full h-auto select-none drop-shadow-[0_2px_8px_rgba(255,201,74,0.25)]"
+              draggable={false}
+            />
+            <div className="text-[9px] text-brass/80 uppercase tracking-[0.2em] font-bold text-center">
+              Babyfoot · Ranked
             </div>
           </NavLink>
         </div>
@@ -253,12 +253,3 @@ function NavItem({ to, label, Icon, badge = 0 }: NavItemProps) {
 
 // ─── Brand mark (petit rouage doré) ─────────────────────────────────────
 
-function BrandMark() {
-  return (
-    <div className="relative w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 metal-plate-gold">
-      <span className="font-display font-black text-[13px] tracking-tight text-[#3a1e00] relative z-10">
-        42L
-      </span>
-    </div>
-  );
-}
