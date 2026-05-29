@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Users, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { FAB } from '../../mobile/primitives/FAB';
+import { useFAB } from '../../mobile/primitives/FAB';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
@@ -52,6 +52,13 @@ export function DefisMobile() {
   const showOutgoing = filter === 'all' || filter === 'sent';
 
   const totalChallenges = incoming.length + accepted.length + outgoing.length;
+
+  useFAB({
+    Icon: Plus,
+    label: 'Game',
+    onClick: () => setDeclareOpen(true),
+    pulse: pendingToConfirm.length === 0 && totalChallenges === 0,
+  });
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -267,14 +274,6 @@ export function DefisMobile() {
           )}
 
       </div>
-
-      {/* FAB → ouvre la BottomSheet de déclaration */}
-      <FAB
-        Icon={Plus}
-        label="Game"
-        onClick={() => setDeclareOpen(true)}
-        pulse={pendingToConfirm.length === 0 && totalChallenges === 0}
-      />
 
       {/* Sheet de déclaration */}
       <DeclareGameSheet

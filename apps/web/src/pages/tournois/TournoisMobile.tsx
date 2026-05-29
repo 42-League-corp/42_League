@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trophy } from 'lucide-react';
-import { FAB } from '../../mobile/primitives/FAB';
+import { useFAB } from '../../mobile/primitives/FAB';
 import { MetalFrame } from '../../mobile/primitives/MetalFrame';
 import { TrophySilhouette } from '../../mobile/primitives/Silhouettes';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
@@ -52,6 +52,13 @@ export function TournoisMobile() {
     { value: 'done', label: 'Finis', badge: counts.done },
   ];
 
+  useFAB({
+    Icon: Plus,
+    label: 'Nouveau',
+    onClick: () => setCreateOpen(true),
+    pulse: tournaments.length === 0,
+  });
+
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
@@ -81,13 +88,6 @@ export function TournoisMobile() {
         )}
 
       </div>
-
-      <FAB
-        Icon={Plus}
-        label="Nouveau"
-        onClick={() => setCreateOpen(true)}
-        pulse={tournaments.length === 0}
-      />
 
       <CreateTournamentSheet
         open={createOpen}

@@ -1,8 +1,9 @@
-import { type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { MobileHeader } from '../mobile/primitives/MobileHeader';
 import { MobileTabBar } from '../mobile/primitives/MobileTabBar';
 import { PageTransition } from '../mobile/motion/PageTransition';
 import { FABProvider } from '../mobile/primitives/FAB';
+import { ScrollRootContext } from './scrollRoot';
 
 interface MobileShellProps {
   children: ReactNode;
@@ -12,6 +13,8 @@ interface MobileShellProps {
  * Shell mobile premium :
  * - Hauteur figée à 100dvh, scroll interne uniquement dans <main> →
  *   évite le « double scroll » où on peut descendre sous le contenu.
+ * - Le ref sur <main> est exposé via ScrollRootContext : c'est la source de
+ *   vérité unique du conteneur scrollable, consommée par PullToRefresh.
  * - Header sticky (en flux, en haut) avec safe-area-top
  * - Contenu scrollable avec padding bottom = tabbar height
  * - TabBar premium fixe en bas avec safe-area-bottom
@@ -19,28 +22,33 @@ interface MobileShellProps {
  * - PageTransition wrap les routes pour une nav fluide (fade + slide directionnel)
  */
 export function MobileShell({ children }: MobileShellProps) {
+  const mainRef = useRef<HTMLElement>(null);
+
   return (
-    <FABProvider>
-      <div className="relative flex flex-col h-dvh overflow-hidden">
-        {/* Vignette dorée subtile en arrière-plan (par-dessus le bg global du body). */}
-        <div className="fixed inset-0 bg-gold-vignette pointer-events-none z-0" />
+    <ScrollRootContext.Provider value={mainRef}>
+      <FABProvider>
+        <div className="relative flex flex-col h-dvh overflow-hidden">
+          {/* Vignette dorée subtile en arrière-plan (par-dessus le bg global du body). */}
+          <div className="fixed inset-0 bg-gold-vignette pointer-events-none z-0" />
 
-        <MobileHeader />
+          <MobileHeader />
 
-        {/* Scroll container — padding bottom = hauteur tabbar + safe-area + 8px
-            de respiration. overflow-y-auto + overscroll-contain → seul <main>
-            scrolle, le rebond est bloqué (pas de zone vide sous le site). */}
-        <main
-          className="flex-1 min-w-0 w-full px-4 pt-3 overflow-x-hidden overflow-y-auto overscroll-contain relative z-[1] scrollbar-none"
-          style={{
-            paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 8px)',
-          }}
-        >
-          <PageTransition>{children}</PageTransition>
-        </main>
+          {/* Scroll container — padding bottom = hauteur tabbar + safe-area + 8px
+              de respiration. overflow-y-auto + overscroll-contain → seul <main>
+              scrolle, le rebond est bloqué (pas de zone vide sous le site). */}
+          <main
+            ref={mainRef}
+            className="flex-1 min-w-0 w-full px-4 pt-3 overflow-x-hidden overflow-y-auto overscroll-contain relative z-[1] scrollbar-none"
+            style={{
+              paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 8px)',
+            }}
+          >
+            <PageTransition>{children}</PageTransition>
+          </main>
 
-        <MobileTabBar />
-      </div>
-    </FABProvider>
+          <MobileTabBar />
+        </div>
+      </FABProvider>
+    </ScrollRootContext.Provider>
   );
 }
