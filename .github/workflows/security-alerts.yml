@@ -4,9 +4,11 @@ on:
   # Temps réel : déclenché quand CodeQL/Trivy créent une nouvelle alerte
   code_scanning_alert:
     types: [created, reopened]
-  # Résumé quotidien à 8h Paris (6h UTC en été)
+  # Résumé quotidien ~8h Paris. Minute décalée (≠ :00) car GitHub retarde/abandonne
+  # souvent les crons pile à l'heure pendant les pics de charge.
+  # Note : 6h UTC = 8h Paris en été (CEST) ; 7h Paris en hiver (CET).
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '23 6 * * *'
   workflow_dispatch:
 
 jobs:
