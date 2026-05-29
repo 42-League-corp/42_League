@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { Pills } from '../components/Pills';
 import { Button } from '../components/Button';
+import { FeatureRequestBox } from '../components/FeatureRequestBox';
 import { useAuth } from '../hooks/useAuth';
 import { useFlash } from '../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../lib/i18n';
-import { getApiBase } from '../lib/config';
+import { getApiBase, APP_VERSION, APP_BUILD_DATE } from '../lib/config';
 import { getToken } from '../lib/storage';
 
 export function ReglagesPage() {
@@ -61,7 +62,9 @@ export function ReglagesPage() {
   }
 
   return (
-    <Panel title={t('panel.settings.title')}>
+    <div className="flex flex-col gap-5">
+      <FeatureRequestBox />
+      <Panel title={t('panel.settings.title')}>
       <div className="flex flex-col gap-6">
 
         {/* Langue */}
@@ -162,7 +165,21 @@ export function ReglagesPage() {
           </Link>
         </div>
 
+        {/* Version */}
+        <div className="border-t border-gold/10 pt-4 flex items-center justify-between">
+          <span className="font-gaming text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold/50">
+            42 League
+          </span>
+          <div className="text-right leading-snug">
+            <span className="font-mono text-[11px] font-bold text-muted-2 tabular-nums">
+              v{APP_VERSION}
+            </span>
+            <span className="block text-[10px] text-muted-2/50 tabular-nums">{APP_BUILD_DATE}</span>
+          </div>
+        </div>
+
       </div>
-    </Panel>
+      </Panel>
+    </div>
   );
 }

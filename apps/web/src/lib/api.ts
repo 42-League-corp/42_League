@@ -381,6 +381,7 @@ export const api = {
       `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/reject`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  locations: () => request<Record<string, string>>('/locations'),
   health: () => request<{ ok: boolean }>('/health', {}, { auth: false }),
 
   // ── Admin ──────────────────────────────────────────────────────────────────
@@ -430,6 +431,11 @@ export const api = {
     const qs = params.toString();
     return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
   },
+  createFeatureRequest: (text: string) =>
+    request<{ id: string; text: string; status: string; createdAt: string }>(
+      '/feature-requests',
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
   featureRequests: () => request<FeatureRequestWithAuthor[]>('/feature-requests'),
   setFeatureRequestStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
     request<FeatureRequestWithAuthor>(`/feature-requests/${encodeURIComponent(id)}/status`, {

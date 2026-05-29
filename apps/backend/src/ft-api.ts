@@ -11,7 +11,7 @@ interface CachedToken {
 let cached: CachedToken | null = null;
 const inFlight = new Set<string>();
 
-async function getAppToken(): Promise<string | null> {
+export async function getAppToken(): Promise<string | null> {
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
   const uid = process.env.FT_OAUTH_UID;
   const secret = process.env.FT_OAUTH_SECRET;

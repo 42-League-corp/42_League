@@ -11,7 +11,7 @@ import { useLeagueData } from '../../hooks/useLeagueData';
 type Filter = 'all' | 'top10' | 'around';
 
 export function LeaderboardMobile() {
-  const { leaderboard, matches, me, allOps, refresh } = useLeagueData();
+  const { leaderboard, matches, me, allOps, locations, refresh } = useLeagueData();
   const myLogin = me?.login;
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -32,21 +32,31 @@ export function LeaderboardMobile() {
     return map;
   }, [leaderboard, matches]);
 
-  const top3 = leaderboard.slice(0, 3);
+  // Online first, puis matchesPlayed desc (ranks ELO restent affichés)
+  const sortedLeaderboard = useMemo(() => {
+    return [...leaderboard].sort((a, b) => {
+      const aOnline = locations.has(a.login) ? 1 : 0;
+      const bOnline = locations.has(b.login) ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+      return b.matchesPlayed - a.matchesPlayed;
+    });
+  }, [leaderboard, locations]);
+
+  const top3 = sortedLeaderboard.slice(0, 3);
 
   // Le reste après le podium (filtré selon les critères)
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    let list = leaderboard.slice(3);
+    let list = sortedLeaderboard.slice(3);
 
     if (filter === 'top10') {
-      list = leaderboard.slice(0, 10);
+      list = sortedLeaderboard.slice(0, 10);
     } else if (filter === 'around' && myLogin) {
-      const myIdx = leaderboard.findIndex((u) => u.login === myLogin);
+      const myIdx = sortedLeaderboard.findIndex((u) => u.login === myLogin);
       if (myIdx >= 0) {
         const start = Math.max(0, myIdx - 5);
-        const end = Math.min(leaderboard.length, myIdx + 6);
-        list = leaderboard.slice(start, end);
+        const end = Math.min(sortedLeaderboard.length, myIdx + 6);
+        list = sortedLeaderboard.slice(start, end);
       }
     }
 
@@ -55,9 +65,9 @@ export function LeaderboardMobile() {
     }
 
     return list;
-  }, [leaderboard, filter, query, myLogin]);
+  }, [sortedLeaderboard, filter, query, myLogin]);
 
-  const myRank = leaderboard.find((u) => u.login === myLogin)?.rank;
+  const myRank = sortedLeaderboard.find((u) => u.login === myLogin)?.rank;
 
   const filterChoices: SegmentChoice<Filter>[] = [
     { value: 'all', label: 'Tous' },
@@ -139,6 +149,7 @@ export function LeaderboardMobile() {
                     losses={wl.losses}
                     isMe={isMe}
                     targetedBy={targetedBy}
+                    host={locations.get(entry.login)}
                   />
                 </StaggerItem>
               );
