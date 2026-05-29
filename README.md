@@ -39,6 +39,9 @@ Une ligue compétitive de babyfoot **1v1** entre étudiants 42 :
 | Extension | Manifest V3, TypeScript, Vite |
 | Infra | Docker Compose + Caddy |
 
+> 📖 Détail complet de la stack (front, back, DB, Docker, déploiement) : [`DOC/STACK.md`](DOC/STACK.md)
+> 🔒 Dispositif de sécurité (auth, autorisation, scanners CI, audit) : [`DOC/SECURITY.md`](DOC/SECURITY.md)
+
 ## ELO
 
 - Rating initial : **1000**
