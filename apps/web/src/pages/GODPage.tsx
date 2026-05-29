@@ -203,7 +203,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
 
   const filtered = users.filter((u) => u.login.toLowerCase().includes(filter.toLowerCase()));
 
-  async function withPending(login: string, fn: () => Promise<void>) {
+  async function withPending(login: string, fn: () => Promise<unknown>) {
     setPending(login);
     setError('');
     try { await fn(); load(); }
@@ -461,7 +461,7 @@ function ModerationTab() {
 
 // ── Tab: REJETS ────────────────────────────────────────────────────────────
 
-function RejectionTable({ rows, perspective }: { rows: RejectedMatch[]; perspective?: 'emitted' | 'received' | 'all' }) {
+function RejectionTable({ rows }: { rows: RejectedMatch[]; perspective?: 'emitted' | 'received' | 'all' }) {
   return (
     <table className="w-full text-xs font-mono border-collapse">
       <thead>
