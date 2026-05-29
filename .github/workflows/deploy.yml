@@ -139,14 +139,8 @@ jobs:
     needs: [build-backend, build-frontend]
     if: |
       always() &&
-      (
-        github.event.inputs.deploy_only == 'true' ||
-        (
-          (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped') &&
-          (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
-          (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
-        )
-      )
+      needs.build-backend.result != 'failure' &&
+      needs.build-frontend.result != 'failure'
     runs-on: ubuntu-latest
 
     steps:
@@ -190,8 +184,10 @@ jobs:
             fi
             docker compose -f docker-compose.registry.yml pull
             docker compose -f docker-compose.registry.yml up -d --remove-orphans
-            # Reload Caddy config sans downtime (nouveau Caddyfile)
-            docker exec league-caddy caddy reload --config /etc/caddy/Caddyfile || docker compose -f docker-compose.registry.yml restart caddy
+            # Recrée Caddy pour qu'il remonte le Caddyfile fraîchement copié.
+            # (un 'caddy reload' lit le fichier interne au conteneur et n'applique
+            #  pas toujours la nouvelle config — la recréation est fiable à 100%)
+            docker compose -f docker-compose.registry.yml up -d --force-recreate caddy
             # Nettoyage post-deploy : supprime les anciennes versions :sha
             docker image prune -af
         env:
