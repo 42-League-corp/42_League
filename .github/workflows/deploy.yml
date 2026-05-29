@@ -6,14 +6,10 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      force_build:
-        description: 'Force build both images'
-        required: false
-        default: 'true'
       deploy_only:
         description: 'Skip builds and deploy existing :latest images'
         required: false
-        default: 'false'
+        default: 'true'
 
 env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
@@ -145,8 +141,16 @@ jobs:
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
             cd /opt/42_league
             mv Makefile.server Makefile
+            # Nettoyage préventif si peu d'espace (< 5GB libre sur /)
+            FREE_GB=$(df --output=avail / | tail -1 | awk '{print int($1/1024/1024)}')
+            if [ "$FREE_GB" -lt 5 ]; then
+              echo "⚠️  $FREE_GB GB libres, nettoyage agressif avant pull"
+              docker image prune -af
+              docker builder prune -af
+            fi
             docker compose -f docker-compose.registry.yml pull
             docker compose -f docker-compose.registry.yml up -d --remove-orphans
-            docker image prune -f
+            # Nettoyage post-deploy : supprime les anciennes versions :sha
+            docker image prune -af
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
