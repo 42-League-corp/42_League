@@ -1,66 +1,62 @@
 import { describe, it, expect } from 'vitest';
-import {
-  applyElo,
-  expectedScore,
-  kFactor,
-  K_PLACEMENT,
-  K_RANKED,
-  PLACEMENT_MATCHES,
-} from './elo.js';
+import { calculateBabyfootElo, K, DEFAULT_ELO } from './elo.js';
 
-describe('expectedScore', () => {
-  it('returns 0.5 when ratings are equal', () => {
-    expect(expectedScore(1000, 1000)).toBeCloseTo(0.5);
-  });
-
-  it('strongly favors the much-higher-rated player', () => {
-    expect(expectedScore(1400, 1000)).toBeGreaterThan(0.9);
-  });
-
-  it('is symmetric', () => {
-    expect(expectedScore(1200, 1000) + expectedScore(1000, 1200)).toBeCloseTo(1);
-  });
-});
-
-describe('kFactor', () => {
-  it('uses placement K during placements', () => {
-    expect(kFactor(0)).toBe(K_PLACEMENT);
-    expect(kFactor(PLACEMENT_MATCHES - 1)).toBe(K_PLACEMENT);
-  });
-
-  it('uses ranked K after placements', () => {
-    expect(kFactor(PLACEMENT_MATCHES)).toBe(K_RANKED);
-    expect(kFactor(100)).toBe(K_RANKED);
-  });
-});
-
-describe('applyElo', () => {
-  it('is zero-sum when both players are out of placements', () => {
-    const r = applyElo(1000, 1000, 'A', 50, 50);
+describe('calculateBabyfootElo', () => {
+  it('est à somme nulle : deltaA + deltaB === 0', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
     expect(r.deltaA + r.deltaB).toBe(0);
   });
 
-  it('gives a big boost to an underdog winner', () => {
-    const r = applyElo(1000, 1400, 'A', 50, 50);
-    expect(r.deltaA).toBeGreaterThan(15);
-    expect(r.deltaB).toBeLessThan(-15);
-  });
-
-  it('gives only a small gain when the favorite wins', () => {
-    const r = applyElo(1400, 1000, 'A', 50, 50);
-    expect(r.deltaA).toBeLessThan(5);
+  it('le gagnant gagne des points, le perdant en perd', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
     expect(r.deltaA).toBeGreaterThan(0);
+    expect(r.deltaB).toBeLessThan(0);
   });
 
-  it('moves a fresh player faster than a settled one', () => {
-    const settled = applyElo(1000, 1000, 'A', 50, 50);
-    const placement = applyElo(1000, 1000, 'A', 0, 50);
-    expect(Math.abs(placement.deltaA)).toBeGreaterThan(Math.abs(settled.deltaA));
+  it("boost plus élevé pour l'outsider qui gagne", () => {
+    const upset = calculateBabyfootElo(1000, 1400, 'A', 10, 5);
+    const expected = calculateBabyfootElo(1400, 1000, 'A', 10, 5);
+    expect(upset.deltaA).toBeGreaterThan(expected.deltaA);
   });
 
-  it('returns updated absolute ratings consistent with deltas', () => {
-    const r = applyElo(1000, 1000, 'B', 50, 50);
+  it('un écart de buts plus grand transfère plus de points', () => {
+    const close = calculateBabyfootElo(1000, 1000, 'A', 10, 9); // Δ=1
+    const crush = calculateBabyfootElo(1000, 1000, 'A', 10, 0); // Δ=10
+    expect(crush.deltaA).toBeGreaterThan(close.deltaA);
+  });
+
+  it('victoire 10-0 : multiplicateur maximum M=2 (Δ=10)', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
+    // E=0.5, M=2, P = round(32 * 2 * 0.5) = 32
+    expect(r.deltaA).toBe(32);
+    expect(r.deltaB).toBe(-32);
+  });
+
+  it('victoire 10-9 : multiplicateur minimum M=1.1 (Δ=1)', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
+    // E=0.5, M=1.1, P = round(32 * 1.1 * 0.5) = round(17.6) = 18
+    expect(r.deltaA).toBe(18);
+    expect(r.deltaB).toBe(-18);
+  });
+
+  it('fonctionne si B est le gagnant', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'B', 5, 10);
+    expect(r.deltaB).toBeGreaterThan(0);
+    expect(r.deltaA).toBeLessThan(0);
+    expect(r.deltaA + r.deltaB).toBe(0);
+  });
+
+  it('les nouveaux ratings sont cohérents avec les deltas', () => {
+    const r = calculateBabyfootElo(1000, 1200, 'A', 10, 3);
     expect(r.newA).toBe(1000 + r.deltaA);
-    expect(r.newB).toBe(1000 + r.deltaB);
+    expect(r.newB).toBe(1200 + r.deltaB);
+  });
+
+  it('K=32 est le facteur de base', () => {
+    expect(K).toBe(32);
+  });
+
+  it('DEFAULT_ELO est 1000', () => {
+    expect(DEFAULT_ELO).toBe(1000);
   });
 });
