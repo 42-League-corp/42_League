@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { useAuth } from '../hooks/useAuth';
 import { useFlash } from '../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../lib/i18n';
-import { getApiBase } from '../lib/config';
+import { getApiBase, APP_VERSION, APP_BUILD_DATE } from '../lib/config';
 import { getToken } from '../lib/storage';
 
 export function ReglagesPage() {
@@ -160,6 +160,19 @@ export function ReglagesPage() {
             <span className="inline-block w-1 h-1 rounded-full bg-gold/60" />
             {t('settings.gdpr.about')}
           </Link>
+        </div>
+
+        {/* Version */}
+        <div className="border-t border-gold/10 pt-4 flex items-center justify-between">
+          <span className="font-gaming text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold/50">
+            42 League
+          </span>
+          <div className="text-right">
+            <span className="font-mono text-[11px] font-bold text-muted-2">
+              v{APP_VERSION}
+            </span>
+            <span className="text-[10px] text-muted-2/60 ml-2">{APP_BUILD_DATE}</span>
+          </div>
         </div>
 
       </div>
