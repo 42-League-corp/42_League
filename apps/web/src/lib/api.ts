@@ -4,6 +4,8 @@ import { clearToken, getToken } from './storage';
 export interface LeaderboardEntry {
   rank: number;
   login: string;
+  firstName?: string | null;
+  lastName?: string | null;
   elo: number;
   matchesPlayed: number;
   campus: string | null;
@@ -51,6 +53,8 @@ export interface MeResponse {
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   user: {
     login: string;
+    firstName?: string | null;
+    lastName?: string | null;
     elo: number;
     matchesPlayed: number;
     campus: string | null;
@@ -137,6 +141,8 @@ export interface OpsUserResponse {
 export interface UserProfile {
   user: {
     login: string;
+    firstName?: string | null;
+    lastName?: string | null;
     elo: number;
     matchesPlayed: number;
     campus: string | null;
