@@ -167,11 +167,11 @@ export function ReglagesPage() {
           <span className="font-gaming text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold/50">
             42 League
           </span>
-          <div className="text-right">
-            <span className="font-mono text-[11px] font-bold text-muted-2">
+          <div className="text-right leading-snug">
+            <span className="font-mono text-[11px] font-bold text-muted-2 tabular-nums">
               v{APP_VERSION}
             </span>
-            <span className="text-[10px] text-muted-2/60 ml-2">{APP_BUILD_DATE}</span>
+            <span className="block text-[10px] text-muted-2/50 tabular-nums">{APP_BUILD_DATE}</span>
           </div>
         </div>
 
