@@ -12,6 +12,7 @@ import {
   Zap,
   Cog,
   Shield,
+  Info,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../hooks/useAuth';
@@ -35,6 +36,7 @@ const NAV: NavDef[] = [
 const NAV_SECONDARY: NavDef[] = [
   { to: '/history', labelKey: 'nav.historique', Icon: History },
   { to: '/settings', labelKey: 'nav.reglages', Icon: Settings },
+  { to: '/about', labelKey: 'nav.about', Icon: Info },
 ];
 
 const NAV_ADMIN: NavDef = { to: '/GOD', labelKey: 'nav.god', Icon: Shield };

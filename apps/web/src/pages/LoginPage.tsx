@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { useAuth } from '../hooks/useAuth';
 import { useT } from '../lib/i18n';
@@ -46,6 +47,14 @@ export function LoginPage() {
           <Button onClick={startLogin} full size="lg">
             {t('anon.cta')}
           </Button>
+
+          <p className="text-[10px] text-muted-2/60 mt-4 leading-relaxed">
+            {t('login.privacy')}{' '}
+            <Link to="/about" className="underline underline-offset-2 hover:text-muted-2 transition-colors">
+              {t('login.privacyLink')}
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </main>
