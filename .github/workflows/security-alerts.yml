@@ -1,0 +1,73 @@
+name: Security alerts → Discord
+
+on:
+  # Temps réel : déclenché quand CodeQL/Trivy créent une nouvelle alerte
+  code_scanning_alert:
+    types: [created, reopened]
+  # Résumé quotidien à 8h Paris (6h UTC en été)
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: read
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK_URL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          ALERT_NUMBER: ${{ github.event.alert.number }}
+          ALERT_URL: ${{ github.event.alert.html_url }}
+          ALERT_RULE: ${{ github.event.alert.rule.id }}
+          ALERT_SEVERITY: ${{ github.event.alert.rule.severity }}
+          ALERT_DESC: ${{ github.event.alert.rule.description }}
+        run: |
+          set -eu
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::warning::DISCORD_SECURITY_WEBHOOK_URL not set, skipping"
+            exit 0
+          fi
+
+          send() {
+            local content="$1"
+            curl -sS -X POST -H "Content-Type: application/json" \
+              -d "$(jq -nc --arg c "$content" '{content: $c, allowed_mentions: {parse: []}}')" \
+              "$WEBHOOK"
+          }
+
+          if [ "$EVENT_NAME" = "code_scanning_alert" ]; then
+            emoji="🚨"
+            case "${ALERT_SEVERITY:-}" in
+              critical) emoji="💥" ;;
+              high)     emoji="🚨" ;;
+              medium)   emoji="⚠️" ;;
+              low|note) emoji="🔎" ;;
+            esac
+            msg="$emoji **New code-scanning alert** [\`${ALERT_SEVERITY:-?}\`]
+\`${ALERT_RULE:-?}\` — ${ALERT_DESC:-no description}
+${ALERT_URL:-}"
+            send "$msg"
+          else
+            # Cron ou manuel : résumé des alertes ouvertes
+            open=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/code-scanning/alerts?state=open&per_page=100" \
+              | jq 'length')
+            if [ "$open" -gt 0 ]; then
+              by_sev=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO/code-scanning/alerts?state=open&per_page=100" \
+                | jq -r '[.[] | .rule.severity] | group_by(.) | map("\(.[0]): \(length)") | join(" · ")')
+              msg="🛡️ **Daily security summary** — $open open alert(s)
+$by_sev
+https://github.com/$REPO/security/code-scanning"
+              send "$msg"
+            else
+              echo "No open alerts, skipping daily ping"
+            fi
+          fi
