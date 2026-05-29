@@ -295,7 +295,96 @@ Aucun endpoint admin mutant n'accepte de payload non validé.
 
 ---
 
-## 7. Permissions GitHub Actions
+## 7. Authentification (42 OAuth + sessions)
+
+### Le principe
+
+L'identité d'un utilisateur vient de l'**intra 42**. On ne stocke aucun mot de passe.
+On délègue l'authentification à l'OAuth de 42.
+
+### Le flux OAuth
+
+Fichier : `apps/backend/src/auth.ts`
+
+| Route | Rôle |
+|---|---|
+| `GET /auth/login` | Démarre le flux OAuth (redirige vers l'intra 42). |
+| `GET /auth/callback` | Retour de l'intra. Vérifie le code, récupère le profil 42, crée/maj l'utilisateur. |
+| `GET /auth/web/login` | Variante du démarrage pour le site web. |
+| `GET /auth/extension/login` | Variante pour l'extension navigateur. |
+| `POST /auth/logout` | Détruit la session. |
+
+Étapes du callback :
+1. L'intra 42 renvoie un `code` + un `state`.
+2. Le `state` est vérifié via un cookie signé (anti-CSRF du flux OAuth).
+3. Le backend échange le `code` contre un access token 42, puis lit le profil (`login`, `campus`, image).
+4. L'utilisateur est créé ou mis à jour en DB (`getOrCreateUser`).
+
+### Les deux preuves de session acceptées
+
+Le backend accepte **deux** moyens de prouver son identité (`getSessionLogin`) :
+
+1. **Token Bearer** — en-tête `Authorization: Bearer <token>`.
+   - Format : `<payloadBase64url>.<signature>`.
+   - Signature : **HMAC-SHA256** avec `SESSION_SECRET` (`apps/backend/src/tokens.ts`).
+   - Payload : `{ login, iat, exp }`. Durée de vie : **30 jours**.
+   - Vérification : comparaison **timing-safe** (`timingSafeEqual`) + contrôle de l'expiration.
+   - C'est ce que le **site web** utilise : le token est stocké dans `localStorage` et envoyé à chaque requête.
+
+2. **Cookie de session signé** — cookie `httpOnly`, `SameSite=Lax`, signé avec `SESSION_SECRET`.
+
+`getCurrentLogin` applique l'ordre : token/cookie d'abord, puis en dernier recours l'en-tête `x-dev-login` (réservé au développement local), sinon renvoie **401**.
+
+### Cas du temps réel (SSE)
+
+`EventSource` ne peut pas envoyer d'en-tête `Authorization`. Pour `GET /events`, le token
+est donc passé en query (`/events?token=<token>`) et vérifié par `getStreamLogin` (même
+logique : token signé, sinon cookie, sinon `x-dev-login`).
+
+### Secret
+
+- `SESSION_SECRET` signe **à la fois** les tokens Bearer et les cookies.
+- S'il est absent, `getSessionLogin` renvoie `null` (personne n'est authentifié).
+- Le générer : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+
+---
+
+## 8. Autorisation (requireAdmin / requireSuperAdmin)
+
+Une fois l'utilisateur **authentifié** (section 7), on vérifie ce qu'il a le **droit** de faire.
+
+### Les rôles
+
+- Enum `Role` en DB : `USER`, `ADMIN`, `SUPERADMIN` (`apps/backend/prisma/schema.prisma`).
+- `getUserRole(login)` (`apps/backend/src/index.ts`) calcule le rôle :
+  - Si le login est dans la liste **SUPERADMINS hardcodée** (`abidaux`, `throbert`) → toujours `SUPERADMIN`.
+  - Sinon → le rôle stocké en DB.
+  - Sinon → `USER` par défaut.
+
+### Les gardes
+
+| Garde | Règle | Si échec |
+|---|---|---|
+| `requireAdmin(login)` | Le rôle doit être `ADMIN` ou `SUPERADMIN`. | `403` |
+| `requireSuperAdmin(login)` | Le login doit être dans la liste SUPERADMINS hardcodée. | `403` |
+| `assertNotBanned(login)` | L'utilisateur ne doit pas avoir `bannedAt`. | `403` |
+
+Chaque endpoint admin appelle la garde correspondante **avant** d'exécuter quoi que ce soit.
+
+### Le rôle SUPERADMIN est immuable
+
+À chaque connexion, `getOrCreateUser` **réimpose** le rôle `SUPERADMIN` aux logins de la
+liste hardcodée. Aucune route API ne peut accorder ou retirer ce rôle. La liste vit
+uniquement dans le code (`SUPERADMINS` dans `apps/backend/src/index.ts`).
+
+### Deux notions d'« admin » distinctes (à ne pas confondre)
+
+1. **Rôle `ADMIN`/`SUPERADMIN`** (ci-dessus) → contrôle l'accès au **GOD panel** et aux actions admin (ban, ELO, rôles…). Gardé par `requireAdmin` / `requireSuperAdmin`.
+2. **Liste `isAdmin()`** (`apps/backend/src/admins.ts`, logins `throbert`/`abidaux`) → autorise uniquement la **création/validation des tournois OFFICIELS**. C'est une liste séparée, indépendante du rôle DB.
+
+---
+
+## 9. Permissions GitHub Actions
 
 Chaque workflow utilise le **principe du moindre privilège** :
 
