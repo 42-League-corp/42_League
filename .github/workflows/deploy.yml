@@ -190,6 +190,8 @@ jobs:
             fi
             docker compose -f docker-compose.registry.yml pull
             docker compose -f docker-compose.registry.yml up -d --remove-orphans
+            # Reload Caddy config sans downtime (nouveau Caddyfile)
+            docker exec league-caddy caddy reload --config /etc/caddy/Caddyfile || docker compose -f docker-compose.registry.yml restart caddy
             # Nettoyage post-deploy : supprime les anciennes versions :sha
             docker image prune -af
         env:
