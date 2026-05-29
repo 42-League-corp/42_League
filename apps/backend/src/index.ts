@@ -28,6 +28,7 @@ import {
   type FtProfile,
 } from './auth.js';
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
+import { getCampusLocations } from './locations.js';
 import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
@@ -197,6 +198,12 @@ app.onError((err, c) => {
 
 
 app.get('/health', (c) => c.json({ ok: true }));
+
+app.get('/locations', async (c) => {
+  await getCurrentLogin(c);
+  const map = await getCampusLocations();
+  return c.json(Object.fromEntries(map));
+});
 
 app.post('/admin/refresh-images', async (c) => {
   const n = await backfillMissingImages();

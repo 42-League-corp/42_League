@@ -19,6 +19,7 @@ interface DeclareGameFlowProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  locations?: Map<string, string>;
   /** Appelé après un POST réussi. Doit refresh les data + (optionnel) fermer le container. */
   onSubmitted: () => Promise<void> | void;
   /** Mode visuel — change l'autofocus + la taille des inputs. */
@@ -37,6 +38,7 @@ export function DeclareGameFlow({
   recentOpponents,
   opponentCounts,
   myLogin,
+  locations,
   onSubmitted,
   variant = 'desktop',
 }: DeclareGameFlowProps) {
@@ -121,6 +123,7 @@ export function DeclareGameFlow({
           selected={opponent}
           onSelect={setOpponent}
           onClear={() => { setOpponent(null); setIWon(null); }}
+          locations={locations}
         />
       </div>
 

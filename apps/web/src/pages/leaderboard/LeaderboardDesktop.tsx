@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
+import { OnlineBadge } from '../../components/OnlineBadge';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 
@@ -11,7 +12,7 @@ import { useT } from '../../lib/i18n';
  */
 export function LeaderboardDesktop() {
   const t = useT();
-  const { leaderboard, matches, me, allOps } = useLeagueData();
+  const { leaderboard, matches, me, allOps, locations } = useLeagueData();
 
   const winsLossesByLogin = useMemo(() => {
     const map = new Map<string, { wins: number; losses: number }>();
@@ -30,6 +31,16 @@ export function LeaderboardDesktop() {
   }, [leaderboard, matches]);
 
   const myLogin = me?.login;
+
+  // Online first, then matchesPlayed desc (ranks ELO restent affichés tels quels)
+  const sortedLeaderboard = useMemo(() => {
+    return [...leaderboard].sort((a, b) => {
+      const aOnline = locations.has(a.login) ? 1 : 0;
+      const bOnline = locations.has(b.login) ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+      return b.matchesPlayed - a.matchesPlayed;
+    });
+  }, [leaderboard, locations]);
 
   return (
     <Panel
@@ -51,10 +62,11 @@ export function LeaderboardDesktop() {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.map((u) => {
+              {sortedLeaderboard.map((u) => {
                 const wl = winsLossesByLogin.get(u.login) ?? { wins: 0, losses: 0 };
                 const isMe = u.login === myLogin;
                 const targetedBy = allOps.find((o) => o.targetLogin === u.login);
+                const host = locations.get(u.login);
                 const rankCls =
                   u.rank === 1
                     ? 'text-gold'
@@ -76,7 +88,12 @@ export function LeaderboardDesktop() {
                     </td>
                     <td className="px-2 sm:px-3 py-2.5">
                       <PlayerLink login={u.login}>
-                        <Avatar login={u.login} imageUrl={u.imageUrl} size="sm" />
+                        <div className="relative flex-shrink-0">
+                          <Avatar login={u.login} imageUrl={u.imageUrl} size="sm" />
+                          {host && (
+                            <OnlineBadge host={host} compact className="absolute -bottom-0.5 -right-0.5" />
+                          )}
+                        </div>
                         <span className="truncate max-w-[120px] sm:max-w-none">
                           {u.login}
                         </span>
@@ -89,6 +106,11 @@ export function LeaderboardDesktop() {
                           </span>
                         )}
                       </PlayerLink>
+                      {host && (
+                        <div className="ml-10 mt-0.5">
+                          <OnlineBadge host={host} />
+                        </div>
+                      )}
                       {u.title && (
                         <div className="text-[10px] text-gold italic mt-0.5 ml-10 truncate">
                           « {u.title} »

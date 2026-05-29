@@ -381,6 +381,7 @@ export const api = {
       `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/reject`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  locations: () => request<Record<string, string>>('/locations'),
   health: () => request<{ ok: boolean }>('/health', {}, { auth: false }),
 
   // ── Admin ──────────────────────────────────────────────────────────────────

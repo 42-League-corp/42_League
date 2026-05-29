@@ -9,6 +9,7 @@ interface DeclareGameSheetProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  locations?: Map<string, string>;
   onDone: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ export function DeclareGameSheet({
   recentOpponents,
   opponentCounts,
   myLogin,
+  locations,
   onDone,
 }: DeclareGameSheetProps) {
   const handleSubmitted = async () => {
@@ -48,6 +50,7 @@ export function DeclareGameSheet({
           recentOpponents={recentOpponents}
           opponentCounts={opponentCounts}
           myLogin={myLogin}
+          locations={locations}
           onSubmitted={handleSubmitted}
         />
       </div>
