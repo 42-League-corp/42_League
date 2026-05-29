@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { LeaderboardEntry } from '../../../lib/api';
+import { OnlineBadge } from '../../../components/OnlineBadge';
 
 interface PlayerSearchProps {
   players: LeaderboardEntry[];
@@ -9,6 +10,8 @@ interface PlayerSearchProps {
   selected: LeaderboardEntry | null;
   onSelect: (p: LeaderboardEntry) => void;
   onClear: () => void;
+  /** login → hôte 42 pour afficher les users connectés à l'école */
+  locations?: Map<string, string>;
   /** En mode mobile, on autofocus et on remonte les résultats au-dessus du clavier. */
   variant?: 'desktop' | 'mobile';
 }
@@ -28,6 +31,7 @@ export function PlayerSearch({
   selected,
   onSelect,
   onClear,
+  locations,
   variant = 'desktop',
 }: PlayerSearchProps) {
   const [query, setQuery] = useState('');
@@ -38,14 +42,26 @@ export function PlayerSearch({
 
   const normalizedQuery = query.trim().toLowerCase();
 
+  // Tri : online first, puis matchesPlayed desc
+  const sortByOnline = (list: LeaderboardEntry[]) =>
+    [...list].sort((a, b) => {
+      const aOn = locations?.has(a.login) ? 1 : 0;
+      const bOn = locations?.has(b.login) ? 1 : 0;
+      if (aOn !== bOn) return bOn - aOn;
+      return b.matchesPlayed - a.matchesPlayed;
+    });
+
   const visibleList = useMemo(() => {
     if (normalizedQuery) {
-      return players.filter((p) => p.login.toLowerCase().includes(normalizedQuery));
+      const filtered = players.filter((p) => p.login.toLowerCase().includes(normalizedQuery));
+      return sortByOnline(filtered);
     }
     const recentLogins = new Set(recentPlayers.map((p) => p.login));
-    const rest = players.filter((p) => !recentLogins.has(p.login));
-    return [...recentPlayers, ...rest];
-  }, [normalizedQuery, players, recentPlayers]);
+    const sortedRecents = sortByOnline(recentPlayers);
+    const sortedRest = sortByOnline(players.filter((p) => !recentLogins.has(p.login)));
+    return [...sortedRecents, ...sortedRest];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalizedQuery, players, recentPlayers, locations]);
 
   const commit = useCallback(
     (p: LeaderboardEntry) => {
@@ -157,6 +173,7 @@ export function PlayerSearch({
             {visibleList.map((p, i) => {
               const count = opponentCounts[p.login] ?? 0;
               const played = count > 0;
+              const host = locations?.get(p.login);
               return (
                 <button
                   key={p.login}
@@ -169,7 +186,7 @@ export function PlayerSearch({
                       : 'hover:bg-bg-2 text-muted-2 border-l-2 border-transparent'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gold/30 shadow-sm">
+                  <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gold/30 shadow-sm">
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt={p.login} className="w-full h-full object-cover" />
                     ) : (
@@ -180,10 +197,16 @@ export function PlayerSearch({
                         {p.login[0]?.toUpperCase()}
                       </div>
                     )}
+                    {host && (
+                      <OnlineBadge host={host} compact className="absolute bottom-0 right-0" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold truncate">
-                      <HighlightMatch text={p.login} query={query} />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold truncate">
+                        <HighlightMatch text={p.login} query={query} />
+                      </span>
+                      {host && <OnlineBadge host={host} />}
                     </div>
                     <div className="text-[11px] text-muted font-medium">
                       {played ? (

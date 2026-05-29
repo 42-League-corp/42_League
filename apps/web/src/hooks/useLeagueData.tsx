@@ -33,6 +33,8 @@ export interface LeagueData {
   tournaments: Tournament[];
   opsMe: OpsMeResponse | null;
   allOps: Ops[];
+  /** login → host (ex. "c1r7s8") pour les users connectés à l'école. Poolé toutes les 5 min. */
+  locations: Map<string, string>;
 }
 
 interface LeagueDataContextValue extends LeagueData {
@@ -50,6 +52,7 @@ const EMPTY: LeagueData = {
   tournaments: [],
   opsMe: null,
   allOps: [],
+  locations: new Map(),
 };
 
 // ─── Temps réel : domaines de données ──────────────────────────────────────
@@ -172,6 +175,22 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     },
     [authenticated, signOut],
   );
+
+  // ─── Locations 42 (polling 5 min) ─────────────────────────────────────
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchLocations = async () => {
+      try {
+        const raw = await api.locations();
+        setData((prev) => ({ ...prev, locations: new Map(Object.entries(raw)) }));
+      } catch {
+        // silently ignore — pas critique
+      }
+    };
+    void fetchLocations();
+    const interval = setInterval(fetchLocations, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [authenticated]);
 
   // ─── Temps réel (SSE) ──────────────────────────────────────────────────
   // On s'abonne au flux /events. Chaque event indique quel(s) domaine(s) ont
