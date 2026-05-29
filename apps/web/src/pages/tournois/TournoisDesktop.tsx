@@ -78,7 +78,7 @@ export function TournoisDesktop() {
                 const tNew = await api.createTournament({ name: n, capacity, kind });
                 flash.show(`Tournoi "${tNew.name}" créé`);
                 await refresh();
-                navigate(`/tournois/${encodeURIComponent(tNew.id)}`);
+                navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
               } catch (err) {
                 flash.show(err instanceof Error ? err.message : String(err), 'error');
               } finally {
@@ -122,7 +122,7 @@ function TournoiCard({ t }: { t: Tournament }) {
   const count = t.entries?.length ?? 0;
   return (
     <Link
-      to={`/tournois/${encodeURIComponent(t.id)}`}
+      to={`/tournaments/${encodeURIComponent(t.id)}`}
       className="block card-hud p-4 rounded-xl hover-glow transition-all"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
