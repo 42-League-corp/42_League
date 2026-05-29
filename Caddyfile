@@ -3,6 +3,11 @@ www.42league.fr {
 }
 
 42league.fr {
-    reverse_proxy /api/* backend:3000
-    reverse_proxy frontend:80
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy backend:3000
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
 }
