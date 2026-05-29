@@ -5,7 +5,11 @@ www.42league.fr {
 42league.fr {
     handle /api/* {
         uri strip_prefix /api
-        reverse_proxy backend:3000
+        reverse_proxy backend:3000 {
+            # Flush immédiat : indispensable pour le flux SSE (/api/events),
+            # sinon Caddy bufferise et les events n'arrivent qu'à la fermeture.
+            flush_interval -1
+        }
     }
     handle {
         reverse_proxy frontend:80
