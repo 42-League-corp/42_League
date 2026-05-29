@@ -163,7 +163,7 @@ export function createAuthRouter(
       }),
     });
     if (!tokenRes.ok) {
-      const body = await tokenRes.text();
+      const body = (await tokenRes.text()).slice(0, 120);
       throw new HTTPException(502, {
         message: `token exchange failed: ${tokenRes.status} ${body}`,
       });
@@ -227,7 +227,8 @@ p{line-height:1.5;color:#95a3b8;font-size:13px}
     if (externalReturn) {
       const leagueToken = issueToken(profile.login, secret);
       const redirect = new URL(externalReturn);
-      redirect.searchParams.set('token', leagueToken);
+      // Token dans le fragment (#) — non transmis aux serveurs, absent des logs (RGPD Art. 32)
+      redirect.hash = new URLSearchParams({ token: leagueToken }).toString();
       redirect.searchParams.set('login', profile.login);
       if (profile.campus) redirect.searchParams.set('campus', profile.campus);
       return c.redirect(redirect.toString());

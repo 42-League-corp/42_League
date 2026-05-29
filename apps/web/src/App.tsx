@@ -9,6 +9,7 @@ import { LeagueDataProvider, useLeagueData } from './hooks/useLeagueData';
 import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
 import { GODPage } from './pages/GODPage';
+import { AboutPage } from './pages/AboutPage';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -64,6 +65,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/auth/return" element={<AuthReturnPage />} />
+      {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13) */}
+      <Route path="/about" element={<AboutPage />} />
       <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
       <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
       <Route
