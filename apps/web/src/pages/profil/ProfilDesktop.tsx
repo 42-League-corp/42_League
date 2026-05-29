@@ -107,8 +107,7 @@ export function ProfilDesktop() {
           matches={matches}
           myLogin={u.login}
           currentElo={stats.elo}
-          height={80}
-          maxPoints={25}
+          height={104}
         />
       </div>
 
