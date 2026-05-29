@@ -12,6 +12,9 @@ RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
 # Etape 2 : Runtime
 FROM node:20-alpine AS runner
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="backend"
 
 # FIX PRISMA : OpenSSL est aussi requis à l'exécution
 RUN apk add --no-cache openssl libc6-compat
