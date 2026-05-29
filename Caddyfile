@@ -1,7 +1,7 @@
-http://163.172.141.178:80 {
-    reverse_proxy frontend:80
-}
+42league.fr {
+    # 1. On redirige toutes les requêtes qui commencent par /api vers le backend
+    reverse_proxy /api/* backend:3000
 
-http://163.172.141.178:3000 {
-    reverse_proxy backend:3000
+    # 2. On redirige tout le reste (le site web) vers le frontend
+    reverse_proxy frontend:80
 }
