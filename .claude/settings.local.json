@@ -46,7 +46,8 @@
       "Bash(ls -la \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\")",
       "Bash(ls -la \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\apps\" \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\packages\")",
       "Bash(find \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\apps\" \"\\\\\\\\wsl.localhost\\\\ubuntu\\\\home\\\\adrien\\\\projects\\\\42_League\\\\packages\" -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.json\" -o -name \"*.prisma\" -o -name \"*.html\" -o -name \"*.css\" \\\\\\) -not -path \"*/node_modules/*\" -not -path \"*/dist/*\" -not -path \"*/.next/*\" -not -path \"*/build/*\")",
-      "Bash(wsl -d Ubuntu grep -r \"prisma migrate\" /home/adrien/projects/42_League --include=\"Dockerfile*\" --include=\"*.sh\")"
+      "Bash(wsl -d Ubuntu grep -r \"prisma migrate\" /home/adrien/projects/42_League --include=\"Dockerfile*\" --include=\"*.sh\")",
+      "Bash(wsl -d Ubuntu find /home/adrien/projects/42_League -name \".env*\" -o -name \"*.env.example\")"
     ]
   }
 }

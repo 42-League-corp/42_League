@@ -48,6 +48,7 @@ export interface PlayedMatch {
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
+  role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   user: {
     login: string;
     elo: number;
@@ -58,6 +59,58 @@ export interface MeResponse {
     dodgeCount: number;
     tournamentsWon: number;
   } | null;
+}
+
+export interface AdminUser {
+  login: string;
+  role: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  elo: number;
+  matchesPlayed: number;
+  dodgeCount: number;
+  tournamentsWon: number;
+  title: string | null;
+  imageUrl: string | null;
+  campus: string | null;
+  bannedAt: string | null;
+  createdAt: string;
+}
+
+export interface RejectedMatch {
+  id: string;
+  declarerLogin: string;
+  opponentLogin: string;
+  scoreDeclarer: number;
+  scoreOpponent: number;
+  contestReason: string;
+  contestMessage: string;
+  rejectedAt: string;
+}
+
+export interface ModerationStats {
+  user: AdminUser;
+  recentMatches: PlayedMatch[];
+  topOpponents: { login: string; count: number }[];
+  rejectionsEmitted: RejectedMatch[];
+  rejectionsReceived: RejectedMatch[];
+}
+
+export interface FeatureRequestWithAuthor {
+  id: string;
+  text: string;
+  status: string;
+  authorId: string;
+  createdAt: string;
+  author: { login: string; imageUrl: string | null };
+}
+
+export interface SuspiciousFlag {
+  type: 'pair_domination' | 'recent_farming' | 'elo_spike' | 'victim_pattern';
+  severity: 'low' | 'medium' | 'high';
+  players: string[];
+  detail: string;
+  matchCount?: number;
+  winRate?: number;
+  eloGain?: number;
 }
 
 export interface Ops {
@@ -301,4 +354,49 @@ export const api = {
       { method: 'POST', body: JSON.stringify({}) },
     ),
   health: () => request<{ ok: boolean }>('/health', {}, { auth: false }),
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+  adminUsers: () => request<AdminUser[]>('/admin/users'),
+  setUserRole: (login: string, role: 'USER' | 'ADMIN') =>
+    request<{ login: string; role: string }>(
+      `/admin/users/${encodeURIComponent(login)}/role`,
+      { method: 'POST', body: JSON.stringify({ role }) },
+    ),
+  adminSetStats: (
+    login: string,
+    stats: { elo?: number; matchesPlayed?: number; dodgeCount?: number; tournamentsWon?: number },
+  ) =>
+    request<AdminUser>(`/admin/users/${encodeURIComponent(login)}/stats`, {
+      method: 'PATCH',
+      body: JSON.stringify(stats),
+    }),
+  adminBanUser: (login: string) =>
+    request<{ login: string; bannedAt: string }>(`/admin/users/${encodeURIComponent(login)}/ban`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  adminUnbanUser: (login: string) =>
+    request<{ login: string; bannedAt: null }>(`/admin/users/${encodeURIComponent(login)}/unban`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  adminModerationStats: (login: string) =>
+    request<ModerationStats>(`/admin/users/${encodeURIComponent(login)}/moderation`),
+  adminDeleteMatch: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/matches/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  adminEditMatch: (id: string, scoreA: number, scoreB: number) =>
+    request<PlayedMatch>(`/admin/matches/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scoreA, scoreB }),
+    }),
+  adminRejectedMatches: () => request<RejectedMatch[]>('/admin/rejected-matches'),
+  adminSuspicious: () => request<SuspiciousFlag[]>('/admin/suspicious'),
+  featureRequests: () => request<FeatureRequestWithAuthor[]>('/feature-requests'),
+  setFeatureRequestStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
+    request<FeatureRequestWithAuthor>(`/feature-requests/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 };

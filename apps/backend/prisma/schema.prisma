@@ -14,17 +14,18 @@ enum Role {
 }
 
 model User {
-  login           String   @id
-  ftId            Int?     @unique @map("ft_id")
+  login           String    @id
+  ftId            Int?      @unique @map("ft_id")
   campus          String?
-  imageUrl        String?  @map("image_url")
+  imageUrl        String?   @map("image_url")
   title           String?
-  role            Role     @default(USER)
-  elo             Int      @default(1000)
-  matchesPlayed   Int      @default(0) @map("matches_played")
-  dodgeCount      Int      @default(0) @map("dodge_count")
-  tournamentsWon  Int      @default(0) @map("tournaments_won")
-  createdAt       DateTime @default(now()) @map("created_at")
+  role            Role      @default(USER)
+  elo             Int       @default(1000)
+  matchesPlayed   Int       @default(0) @map("matches_played")
+  dodgeCount      Int       @default(0) @map("dodge_count")
+  tournamentsWon  Int       @default(0) @map("tournaments_won")
+  bannedAt        DateTime? @map("banned_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   declaredPending     PendingMatch[]     @relation("declarer")
   awaitingPending     PendingMatch[]     @relation("opponent")
@@ -40,6 +41,8 @@ model User {
   opsAsOwner          Ops[]              @relation("opsOwner")
   opsAsTarget         Ops[]              @relation("opsTarget")
   featureRequests     FeatureRequest[]
+  rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
+  rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
 
   @@map("users")
 }
@@ -54,6 +57,24 @@ model FeatureRequest {
   author User @relation(fields: [authorId], references: [login])
 
   @@map("feature_requests")
+}
+
+model RejectedMatch {
+  id             String   @id @default(uuid())
+  declarerLogin  String   @map("declarer_login")
+  opponentLogin  String   @map("opponent_login")
+  scoreDeclarer  Int      @map("score_declarer")
+  scoreOpponent  Int      @map("score_opponent")
+  contestReason  String   @map("contest_reason")
+  contestMessage String   @map("contest_message")
+  rejectedAt     DateTime @default(now()) @map("rejected_at")
+
+  declarer User @relation("rejectedDeclarer", fields: [declarerLogin], references: [login])
+  opponent User @relation("rejectedOpponent", fields: [opponentLogin], references: [login])
+
+  @@index([declarerLogin])
+  @@index([opponentLogin])
+  @@map("rejected_matches")
 }
 
 model Ops {
