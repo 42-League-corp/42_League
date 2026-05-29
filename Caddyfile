@@ -1,7 +1,8 @@
-42league.fr {
-    # 1. On redirige toutes les requêtes qui commencent par /api vers le backend
-    reverse_proxy /api/* backend:3000
+www.42league.fr {
+    redir https://42league.fr{uri} permanent
+}
 
-    # 2. On redirige tout le reste (le site web) vers le frontend
+42league.fr {
+    reverse_proxy /api/* backend:3000
     reverse_proxy frontend:80
 }
