@@ -85,6 +85,31 @@ export function NotifBanner() {
     });
   }, [duels, scores]);
 
+  // Accepte tout d'un coup : tous les duels en attente + tous les scores à
+  // valider. Permet d'enchaîner très vite quand plusieurs games s'accumulent.
+  const [acceptingAll, setAcceptingAll] = useState(false);
+  const acceptAll = useCallback(async () => {
+    setAcceptingAll(true);
+    const ids = [...duels.map((d) => d.id), ...scores.map((s) => s.id)];
+    setBusy((prev) => new Set([...prev, ...ids]));
+    try {
+      await Promise.allSettled([
+        ...duels.map((d) => api.acceptChallenge(d.id)),
+        ...scores.map((p) => api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer)),
+      ]);
+      flash.show(`${ids.length} demande${ids.length > 1 ? 's' : ''} acceptée${ids.length > 1 ? 's' : ''} ✓`, 'info');
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+      setAcceptingAll(false);
+    }
+  }, [duels, scores, flash]);
+
   // ─── Actions duel ──────────────────────────────────────────────────────────
   const acceptDuel = useCallback(
     async (id: string) => {
@@ -210,6 +235,28 @@ export function NotifBanner() {
           >
             {total} notification{total > 1 ? 's' : ''}
           </span>
+          {total > 1 && (
+            <button
+              onClick={acceptAll}
+              disabled={acceptingAll}
+              title="Tout accepter"
+              style={{
+                background: `linear-gradient(180deg, ${C.cyan}, ${C.cyanDark})`,
+                color: '#001416',
+                border: 'none',
+                borderRadius: 5,
+                padding: '4px 9px',
+                fontSize: 9,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                cursor: acceptingAll ? 'default' : 'pointer',
+                opacity: acceptingAll ? 0.5 : 1,
+              }}
+            >
+              ✓ Tout
+            </button>
+          )}
           <button
             onClick={dismissAll}
             title="Fermer (réapparaît au prochain événement)"
@@ -232,6 +279,7 @@ export function NotifBanner() {
           </button>
         </div>
 
+        <div style={{ maxHeight: 'min(70vh, 460px)', overflowY: 'auto' }}>
         {/* Duels reçus */}
         {duels.map((c) => (
           <Row key={c.id}>
@@ -283,6 +331,7 @@ export function NotifBanner() {
             </Actions>
           </Row>
         ))}
+        </div>
       </div>
 
       {renderContest()}

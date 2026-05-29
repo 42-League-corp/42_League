@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { DesktopShell } from './DesktopShell';
 import { MobileShell } from './MobileShell';
 import { ViewportSwitch } from './ViewportSwitch';
+import { NotifBanner } from '../components/NotifBanner';
 
 interface AppShellProps {
   children: ReactNode;
@@ -12,12 +13,19 @@ interface AppShellProps {
  * Choisit Mobile ou Desktop selon le viewport.
  * Le contenu (les <Routes>) est passé en children — il est rendu une seule fois
  * et reçoit le bon wrapper.
+ *
+ * <NotifBanner> est monté ici (hors du switch viewport) pour flotter au-dessus
+ * de n'importe quelle page : duels reçus et scores à valider poppent en temps
+ * réel (SSE via useLeagueData) sur toute l'app.
  */
 export function AppShell({ children }: AppShellProps) {
   return (
-    <ViewportSwitch
-      mobile={<MobileShell>{children}</MobileShell>}
-      desktop={<DesktopShell>{children}</DesktopShell>}
-    />
+    <>
+      <ViewportSwitch
+        mobile={<MobileShell>{children}</MobileShell>}
+        desktop={<DesktopShell>{children}</DesktopShell>}
+      />
+      <NotifBanner />
+    </>
   );
 }
