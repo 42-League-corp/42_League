@@ -1,0 +1,74 @@
+name: Force build images
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which image(s) to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - backend
+          - frontend
+
+env:
+  BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
+  FRONTEND_IMAGE: ghcr.io/42-league-corp/42_league-frontend
+
+jobs:
+  build-backend:
+    if: github.event.inputs.target == 'both' || github.event.inputs.target == 'backend'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_IMAGE }}:latest,${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ github.run_id }}
+
+  build-frontend:
+    if: github.event.inputs.target == 'both' || github.event.inputs.target == 'frontend'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}:latest,${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ github.run_id }}
