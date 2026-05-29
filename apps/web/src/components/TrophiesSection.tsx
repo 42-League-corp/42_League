@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { PlayerLink } from './PlayerLink';
-import { Avatar } from './Avatar';
+import { Avatar, UserBadge } from './Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { computeTrophies, type TrophyColor } from '../lib/trophies';
+import type { LeaderboardEntry } from '../lib/api';
 
 const COLOR_BORDER: Record<TrophyColor, string> = {
   gold: 'border-gold/40',
@@ -93,6 +94,42 @@ function TiltCard({
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Tente de parser une valeur de type "JoueurA vs JoueurB (X matchs)"
+ * pour afficher les deux PPs face à face dans l'encart Rivalité.
+ */
+function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
+  const match = value.match(/^([\w-]+)\s+vs\s+([\w-]+)(.*)$/);
+  if (match) {
+    const [, login1, login2, rest] = match;
+    const u1 = leaderboard.find((u) => u.login === login1);
+    const u2 = leaderboard.find((u) => u.login === login2);
+    
+    if (u1 && u2) {
+      const name1 = u1.firstName && u1.lastName ? `${u1.firstName} ${u1.lastName}` : u1.login;
+      const name2 = u2.firstName && u2.lastName ? `${u2.firstName} ${u2.lastName}` : u2.login;
+      
+      return (
+        <div className="flex items-center gap-2 flex-wrap mt-1">
+          <PlayerLink login={u1.login} className="!gap-1.5">
+            <Avatar login={u1.login} imageUrl={u1.imageUrl} size="sm" />
+            <span className="font-semibold text-sm text-text-strong">{name1}</span>
+          </PlayerLink>
+          <span className="text-muted-2 text-[10px] font-black uppercase tracking-wider">VS</span>
+          <PlayerLink login={u2.login} className="!gap-1.5">
+            <Avatar login={u2.login} imageUrl={u2.imageUrl} size="sm" />
+            <span className="font-semibold text-sm text-text-strong">{name2}</span>
+          </PlayerLink>
+          <span className="text-muted-2 text-xs ml-1">{rest}</span>
+        </div>
+      );
+    }
+  }
+  return <div className="text-text-strong font-semibold text-sm">{value}</div>;
+}
+
 // ─── Main section ─────────────────────────────────────────────────────────────
 
 interface TrophiesSectionProps {
@@ -131,39 +168,50 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
         <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/10 to-transparent ml-2" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {trophies.map((t) => (
-          <TiltCard
-            key={t.title}
-            color={t.color}
-            className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="text-3xl leading-none">{t.emoji}</div>
-              <div className="min-w-0">
-                <div className={`text-xs font-extrabold uppercase tracking-wider ${COLOR_TEXT[t.color]}`}>
-                  {t.title}
+        {trophies.map((t) => {
+          const winnerEntry = t.winner ? leaderboard.find((u) => u.login === t.winner?.login) : null;
+          
+          return (
+            <TiltCard
+              key={t.title}
+              color={t.color}
+              className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-3xl leading-none">{t.emoji}</div>
+                <div className="min-w-0">
+                  <div className={`text-xs font-extrabold uppercase tracking-wider ${COLOR_TEXT[t.color]}`}>
+                    {t.title}
+                  </div>
+                  <div className="text-[10px] text-muted-2">{t.subtitle}</div>
                 </div>
-                <div className="text-[10px] text-muted-2">{t.subtitle}</div>
               </div>
-            </div>
-            {t.winner ? (
-              <PlayerLink login={t.winner.login}>
-                <Avatar login={t.winner.login} imageUrl={t.winner.imageUrl} size="sm" />
-                <span className="font-semibold">{t.winner.login}</span>
-              </PlayerLink>
-            ) : (
-              <div className="text-text-strong font-semibold text-sm">{t.value}</div>
-            )}
-            <div className="flex items-center gap-2 mt-auto pt-1">
-              {t.winner && (
-                <span className={`text-sm font-extrabold ${COLOR_TEXT[t.color]}`}>
-                  {t.value}
-                </span>
+              
+              {t.winner ? (
+                <PlayerLink login={t.winner.login} className="mt-1">
+                  <UserBadge 
+                    login={t.winner.login} 
+                    imageUrl={t.winner.imageUrl} 
+                    firstName={winnerEntry?.firstName}
+                    lastName={winnerEntry?.lastName}
+                    size="sm" 
+                  />
+                </PlayerLink>
+              ) : (
+                renderRivalryOrValue(t.value, leaderboard)
               )}
-              {t.hint && <span className="text-[10px] text-muted">{t.hint}</span>}
-            </div>
-          </TiltCard>
-        ))}
+              
+              <div className="flex items-center gap-2 mt-auto pt-1">
+                {t.winner && (
+                  <span className={`text-sm font-extrabold ${COLOR_TEXT[t.color]}`}>
+                    {t.value}
+                  </span>
+                )}
+                {t.hint && <span className="text-[10px] text-muted">{t.hint}</span>}
+              </div>
+            </TiltCard>
+          );
+        })}
       </div>
     </section>
   );
