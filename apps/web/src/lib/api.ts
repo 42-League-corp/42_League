@@ -117,6 +117,28 @@ export interface SuspiciousFlag {
   eloGain?: number;
 }
 
+export type AdminAuditAction =
+  | 'SET_ROLE'
+  | 'BAN_USER'
+  | 'UNBAN_USER'
+  | 'EDIT_STATS'
+  | 'EDIT_TITLE'
+  | 'DELETE_MATCH'
+  | 'EDIT_MATCH'
+  | 'REFRESH_IMAGES';
+
+export interface AdminAuditEntry {
+  id: string;
+  actorLogin: string;
+  actorRole: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  action: AdminAuditAction;
+  targetLogin: string | null;
+  payload: Record<string, unknown> | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
 export interface Ops {
   id: string;
   ownerLogin: string;
@@ -399,6 +421,15 @@ export const api = {
     }),
   adminRejectedMatches: () => request<RejectedMatch[]>('/admin/rejected-matches'),
   adminSuspicious: () => request<SuspiciousFlag[]>('/admin/suspicious'),
+  adminAuditLog: (filters?: { actor?: string; target?: string; action?: AdminAuditAction; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.actor) params.set('actor', filters.actor);
+    if (filters?.target) params.set('target', filters.target);
+    if (filters?.action) params.set('action', filters.action);
+    if (filters?.limit) params.set('limit', String(filters.limit));
+    const qs = params.toString();
+    return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
+  },
   featureRequests: () => request<FeatureRequestWithAuthor[]>('/feature-requests'),
   setFeatureRequestStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
     request<FeatureRequestWithAuthor>(`/feature-requests/${encodeURIComponent(id)}/status`, {

@@ -22,6 +22,7 @@ const fr: Dict = {
   'nav.profil': 'Profil',
   'nav.historique': 'Historique',
   'nav.reglages': 'Réglages',
+  'nav.god': 'GOD',
   'auth.notConnected': 'non connecté',
 
   'panel.defis.title': 'Défis',
@@ -103,6 +104,7 @@ const en: Dict = {
   'nav.profil': 'Profile',
   'nav.historique': 'History',
   'nav.reglages': 'Settings',
+  'nav.god': 'GOD',
   'auth.notConnected': 'not signed in',
 
   'panel.defis.title': 'Challenges',
