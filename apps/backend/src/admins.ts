@@ -7,6 +7,7 @@
 
 export const ADMINS: string[] = [
   'throbert',
+  'abidaux',
 ];
 
 const normalized = new Set(ADMINS.map((l) => l.toLowerCase()));
