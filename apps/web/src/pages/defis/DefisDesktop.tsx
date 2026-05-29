@@ -52,6 +52,13 @@ export function DefisDesktop() {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const hasActivity =
+    pendingToConfirm.length > 0 ||
+    pendingWaiting.length > 0 ||
+    incoming.length > 0 ||
+    accepted.length > 0 ||
+    outgoing.length > 0;
+
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')}>
       <div ref={topRef} />
@@ -74,86 +81,92 @@ export function DefisDesktop() {
         onDone={refresh}
       />
 
-      {(pendingToConfirm.length > 0 || pendingWaiting.length > 0) && (
-        <div className="space-y-4 mb-6">
-          {pendingToConfirm.length > 0 && (
-            <Section title="À confirmer">
-              {pendingToConfirm.map((p) => (
-                <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
-              ))}
-            </Section>
-          )}
-          {pendingWaiting.length > 0 && (
-            <Section title="En attente de confirmation">
-              {pendingWaiting.map((p) => (
-                <PendingWaitRow key={p.id} match={p} />
-              ))}
-            </Section>
-          )}
-        </div>
-      )}
-
-      {(incoming.length || outgoing.length || accepted.length) > 0 && (
-        <div className="space-y-4 mb-6">
-          {incoming.length > 0 && (
-            <Section title={t('defis.received')}>
-              {incoming.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="incoming"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={() => handleAction(c.id, 'accept')}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-          {accepted.length > 0 && (
-            <Section title={t('defis.scheduled')}>
-              {accepted.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="accepted"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-          {outgoing.length > 0 && (
-            <Section title={t('defis.sent')}>
-              {outgoing.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="outgoing"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-        </div>
-      )}
-
-      <Section title={t('defis.challenge')}>
-        {others.length === 0 ? (
-          <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {others.map((u) => (
-              <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
-            ))}
+      {/* Command center : à gauche le flux d'activité (à confirmer + défis),
+          à droite le roster d'adversaires. Quand il n'y a aucune activité, le
+          roster s'étale sur toute la largeur (réagencement « Uber Eats »). */}
+      <div className={`grid gap-5 ${hasActivity ? 'lg:grid-cols-12' : ''}`}>
+        {hasActivity && (
+          <div className="lg:col-span-5 space-y-4">
+            {pendingToConfirm.length > 0 && (
+              <Section title="À confirmer">
+                {pendingToConfirm.map((p) => (
+                  <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
+                ))}
+              </Section>
+            )}
+            {incoming.length > 0 && (
+              <Section title={t('defis.received')}>
+                {incoming.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="incoming"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={() => handleAction(c.id, 'accept')}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {accepted.length > 0 && (
+              <Section title={t('defis.scheduled')}>
+                {accepted.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="accepted"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={NOOP}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {outgoing.length > 0 && (
+              <Section title={t('defis.sent')}>
+                {outgoing.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="outgoing"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={NOOP}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {pendingWaiting.length > 0 && (
+              <Section title="En attente de confirmation">
+                {pendingWaiting.map((p) => (
+                  <PendingWaitRow key={p.id} match={p} />
+                ))}
+              </Section>
+            )}
           </div>
         )}
-      </Section>
+
+        <div className={hasActivity ? 'lg:col-span-7' : ''}>
+          <Section title={t('defis.challenge')}>
+            {others.length === 0 ? (
+              <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
+            ) : (
+              <div
+                className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
+                  hasActivity ? '' : 'xl:grid-cols-3'
+                }`}
+              >
+                {others.map((u) => (
+                  <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
+      </div>
     </Panel>
   );
 }
@@ -253,7 +266,7 @@ interface ActionCardMeta {
 }
 
 const ACTION_META: Record<Exclude<OpenCard, null>, ActionCardMeta> = {
-  declare: { Icon: Plus, label: 'Déclarer une game', sub: 'Game déjà jouée' },
+  declare: { Icon: Plus, label: 'Déclarer une game passée', sub: 'Game déjà jouée' },
   challenge: { Icon: Swords, label: 'Défier un joueur', sub: 'Programmer un duel' },
 };
 
