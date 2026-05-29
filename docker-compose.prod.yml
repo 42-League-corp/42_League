@@ -35,7 +35,8 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_BASE_URL: "http://163.172.141.178:3000"
+        # On remplace l'IP par le nom de domaine !
+        VITE_API_BASE_URL: "https://42league.fr/api" 
     container_name: league-frontend
     restart: always
 
@@ -46,7 +47,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "3000:3000"
+      # On retire le port 3000 ici, Caddy gère tout via 80/443
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
