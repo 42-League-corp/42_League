@@ -33,6 +33,7 @@ function extractIp(c: Context): string | null {
 /**
  * Insère une entrée dans admin_audit_log et notifie Discord en fire-and-forget.
  * Toute erreur est avalée — l'audit ne doit jamais empêcher l'action métier.
+ * La notification Discord ne contient aucune donnée personnelle (RGPD Art. 44-46 + CGU 42 Art. 4.1(g)).
  */
 export async function logAdminAction(c: Context, params: LogParams): Promise<void> {
   const ip = extractIp(c);
@@ -54,31 +55,21 @@ export async function logAdminAction(c: Context, params: LogParams): Promise<voi
     console.error('[audit] failed to persist log entry', err);
   }
 
-  void notifyDiscord({ ...params, ip }).catch((err) => {
+  void notifyDiscord(params.action).catch((err) => {
     console.error('[audit] discord webhook failed', err);
   });
 }
 
-async function notifyDiscord(params: LogParams & { ip: string | null }): Promise<void> {
+async function notifyDiscord(action: AdminAction): Promise<void> {
   const url = process.env.DISCORD_AUDIT_WEBHOOK_URL;
   if (!url) return;
 
-  const emoji = ACTION_EMOJI[params.action] ?? '🔔';
-  const target = params.target ? ` → \`${params.target}\`` : '';
-  const payloadStr =
-    params.payload && Object.keys(params.payload).length > 0
-      ? '\n```json\n' + JSON.stringify(params.payload, null, 2).slice(0, 1500) + '\n```'
-      : '';
-
-  const content =
-    `${emoji} **${params.action}** by \`${params.actor}\` (${params.actorRole})${target}` +
-    payloadStr;
-
+  const emoji = ACTION_EMOJI[action] ?? '🔔';
   await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      content,
+      content: `${emoji} **${action}**`,
       allowed_mentions: { parse: [] },
     }),
   });

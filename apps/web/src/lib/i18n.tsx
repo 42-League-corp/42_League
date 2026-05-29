@@ -93,6 +93,27 @@ const fr: Dict = {
   'common.in': 'dans',
   'common.ago': 'il y a',
   'common.toi': 'toi',
+
+  'nav.about': 'À propos',
+  'nav.about.short': 'Règles',
+
+  'panel.about.title': 'À propos',
+  'about.rules.title': 'Règles du jeu',
+  'about.privacy.title': 'Confidentialité',
+
+  'settings.gdpr.title': 'Données personnelles',
+  'settings.gdpr.export': 'Exporter mes données',
+  'settings.gdpr.delete': 'Supprimer mon compte',
+  'settings.gdpr.delete.confirm': 'Confirmer la suppression',
+  'settings.gdpr.delete.warning': 'Action irréversible. Ton profil, login et données identifiables seront anonymisés.',
+  'settings.gdpr.cancel': 'Annuler',
+  'settings.gdpr.about': 'Politique de confidentialité',
+  'settings.gdpr.exporting': 'Export en cours…',
+  'settings.gdpr.deleting': 'Suppression en cours…',
+  'settings.gdpr.deleted': 'Compte anonymisé. À bientôt.',
+
+  'login.privacy': 'En te connectant, tu acceptes notre',
+  'login.privacyLink': 'politique de confidentialité',
 };
 
 const en: Dict = {
@@ -175,6 +196,27 @@ const en: Dict = {
   'common.in': 'in',
   'common.ago': '',
   'common.toi': 'you',
+
+  'nav.about': 'About',
+  'nav.about.short': 'Rules',
+
+  'panel.about.title': 'About',
+  'about.rules.title': 'Game rules',
+  'about.privacy.title': 'Privacy',
+
+  'settings.gdpr.title': 'Personal data',
+  'settings.gdpr.export': 'Export my data',
+  'settings.gdpr.delete': 'Delete my account',
+  'settings.gdpr.delete.confirm': 'Confirm deletion',
+  'settings.gdpr.delete.warning': 'Irreversible. Your profile, login and personal data will be anonymized.',
+  'settings.gdpr.cancel': 'Cancel',
+  'settings.gdpr.about': 'Privacy policy',
+  'settings.gdpr.exporting': 'Exporting…',
+  'settings.gdpr.deleting': 'Deleting…',
+  'settings.gdpr.deleted': 'Account anonymized. See you.',
+
+  'login.privacy': 'By signing in, you accept our',
+  'login.privacyLink': 'privacy policy',
 };
 
 const DICTS: Record<Lang, Dict> = { fr, en };

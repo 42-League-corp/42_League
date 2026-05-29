@@ -47,3 +47,44 @@ export function fmtDate(iso: string, locale: string): string {
     year: '2-digit',
   });
 }
+
+/**
+ * Date « en lettres » élégante : « 12 janvier », « 4 février ».
+ * L'année n'est ajoutée que si la date n'est pas dans l'année courante.
+ */
+export function fmtDateLong(iso: string, locale: string): string {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(
+    locale,
+    sameYear
+      ? { day: 'numeric', month: 'long' }
+      : { day: 'numeric', month: 'long', year: 'numeric' },
+  );
+}
+
+/** Début de journée locale (00:00) en ms — utilitaire pour comparer des jours. */
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Libellé de jour humain : « Aujourd'hui », « Hier », sinon date en lettres.
+ * Idéal pour grouper / dater des cartes d'historique sans bruit numérique.
+ */
+export function fmtDayLabel(iso: string, lang: 'fr' | 'en'): string {
+  const d = new Date(iso);
+  const locale = lang === 'fr' ? 'fr-FR' : 'en-GB';
+  const dayDiff = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
+  if (dayDiff === 0) return lang === 'fr' ? "Aujourd'hui" : 'Today';
+  if (dayDiff === 1) return lang === 'fr' ? 'Hier' : 'Yesterday';
+  if (dayDiff === -1) return lang === 'fr' ? 'Demain' : 'Tomorrow';
+  return fmtDateLong(iso, locale);
+}
+
+/** Heure locale « HH:MM » (zéro-paddé). */
+export function fmtTime(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
