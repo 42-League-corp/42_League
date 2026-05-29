@@ -431,6 +431,11 @@ export const api = {
     const qs = params.toString();
     return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
   },
+  createFeatureRequest: (text: string) =>
+    request<{ id: string; text: string; status: string; createdAt: string }>(
+      '/feature-requests',
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
   featureRequests: () => request<FeatureRequestWithAuthor[]>('/feature-requests'),
   setFeatureRequestStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
     request<FeatureRequestWithAuthor>(`/feature-requests/${encodeURIComponent(id)}/status`, {
