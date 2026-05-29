@@ -128,7 +128,7 @@ async function getStreamLogin(c: Context): Promise<string> {
 
 const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
-const app = new Hono();
+export const app = new Hono();
 // =========================================================================
 // MIDDLEWARE CORS + PNA BLINDÉ
 // =========================================================================
@@ -1663,24 +1663,30 @@ async function purgeOldAuditLogs(): Promise<void> {
 }
 
 const port = Number(process.env.PORT ?? 3000);
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`42 League backend listening on http://localhost:${info.port}`);
-  rescheduleOpsTimers().catch((err) => {
-    console.error('failed to reschedule ops timers', err);
+
+// En environnement de test (NODE_ENV=test), on importe `app` pour le tester via
+// app.request(...) SANS démarrer le serveur HTTP ni les timers de fond (purge,
+// ops). Sinon vitest ne se terminerait jamais (handles ouverts).
+if (process.env.NODE_ENV !== 'test') {
+  serve({ fetch: app.fetch, port }, (info) => {
+    console.log(`42 League backend listening on http://localhost:${info.port}`);
+    rescheduleOpsTimers().catch((err) => {
+      console.error('failed to reschedule ops timers', err);
+    });
+    purgeOldAuditLogs().catch((err) => {
+      console.error('failed to purge old audit logs', err);
+    });
+    // Purge quotidienne à 03h00
+    const msUntil3am = (() => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(3, 0, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      return next.getTime() - now.getTime();
+    })();
+    setTimeout(() => {
+      void purgeOldAuditLogs();
+      setInterval(() => void purgeOldAuditLogs(), 24 * 60 * 60 * 1000);
+    }, msUntil3am);
   });
-  purgeOldAuditLogs().catch((err) => {
-    console.error('failed to purge old audit logs', err);
-  });
-  // Purge quotidienne à 03h00
-  const msUntil3am = (() => {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(3, 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next.getTime() - now.getTime();
-  })();
-  setTimeout(() => {
-    void purgeOldAuditLogs();
-    setInterval(() => void purgeOldAuditLogs(), 24 * 60 * 60 * 1000);
-  }, msUntil3am);
-});
+}
