@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['icon.svg', 'apple-touch-icon.png', 'manifest.webmanifest'],
+        includeAssets: ['favicon.ico', 'favicon-32.png', 'favicon-16.png', 'apple-touch-icon.png', 'manifest.webmanifest'],
         // On utilise le manifest.webmanifest custom dans /public — pas celui généré.
         manifest: false,
         devOptions: {
