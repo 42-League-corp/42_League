@@ -2,12 +2,32 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+// MAJOR.MINOR à bumper manuellement lors d'une refonte majeure.
+// BUILD = nombre de commits git → s'incrémente automatiquement à chaque commit.
+const RELEASE = '0.4';
+
+function getGitVersion(): { version: string; date: string } {
+  try {
+    const build = execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim();
+    const isoDate = execSync('git log -1 --format=%ci', { encoding: 'utf8' }).trim().slice(0, 10);
+    return { version: `${RELEASE}.${build}`, date: isoDate };
+  } catch {
+    return { version: `${RELEASE}.0`, date: new Date().toISOString().slice(0, 10) };
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBase = env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+  const { version, date } = getGitVersion();
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(version),
+      __APP_DATE__: JSON.stringify(date),
+    },
     plugins: [
       react(),
       VitePWA({
