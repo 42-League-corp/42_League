@@ -39,8 +39,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: {
-      __APP_VERSION__: JSON.stringify(version),
-      __APP_DATE__: JSON.stringify(date),
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+      'import.meta.env.VITE_APP_DATE': JSON.stringify(date),
     },
     plugins: [
       react(),
