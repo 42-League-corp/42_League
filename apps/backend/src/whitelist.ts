@@ -23,6 +23,7 @@ export const WHITELIST: string[] = [
   'hkeromne',
   'sbonneau',
   'mosmond',
+  'jagharra',
 ];
 
 const normalized = new Set(WHITELIST.map((l) => l.toLowerCase()));
