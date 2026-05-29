@@ -14,6 +14,12 @@ const STATE_COOKIE = 'league_oauth_state';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 const STATE_MAX_AGE = 60 * 10; // 10 minutes
 
+// `Secure` en prod uniquement : le cookie n'est alors transmis que sur HTTPS.
+// En dev/test (HTTP localhost), Secure empêcherait le navigateur de stocker le
+// cookie, donc on le laisse à false. La terminaison TLS est faite par Caddy ;
+// l'attribut Set-Cookie reste correct même si le backend reçoit du HTTP en interne.
+const COOKIE_SECURE = process.env.NODE_ENV === 'production';
+
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new HTTPException(500, { message: `missing env var ${name}` });
@@ -88,6 +94,7 @@ export function createAuthRouter(
       maxAge: STATE_MAX_AGE,
       httpOnly: true,
       sameSite: 'Lax',
+      secure: COOKIE_SECURE,
       path: '/',
     });
 
@@ -238,6 +245,7 @@ p{line-height:1.5;color:#95a3b8;font-size:13px}
       maxAge: SESSION_MAX_AGE,
       httpOnly: true,
       sameSite: 'Lax',
+      secure: COOKIE_SECURE,
       path: '/',
     });
 
