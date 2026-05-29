@@ -9,6 +9,7 @@ interface ChallengeSheetProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  locations?: Map<string, string>;
   onDone: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ export function ChallengeSheet({
   recentOpponents,
   opponentCounts,
   myLogin,
+  locations,
   onDone,
 }: ChallengeSheetProps) {
   const handleSubmitted = async () => {
@@ -44,6 +46,7 @@ export function ChallengeSheet({
           recentOpponents={recentOpponents}
           opponentCounts={opponentCounts}
           myLogin={myLogin}
+          locations={locations}
           onSubmitted={handleSubmitted}
         />
       </div>

@@ -12,20 +12,8 @@ export function AboutPage() {
   const { authenticated } = useAuth();
   const [tab, setTab] = useState<Tab>('rules');
 
-  return (
-    <div className="h-full overflow-y-auto overscroll-contain scrollbar-none">
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      {/* Back button */}
-      <div className="mb-5">
-        <Link
-          to={authenticated ? '/settings' : '/login'}
-          className="inline-flex items-center gap-1.5 text-muted-2 hover:text-gold transition-colors text-xs font-semibold uppercase tracking-[0.14em]"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-          {authenticated ? t('nav.reglages') : 'Connexion'}
-        </Link>
-      </div>
-
+  const inner = (
+    <>
       {/* Tab switcher */}
       <div className="flex gap-1 p-1 rounded-xl bg-bg-2/60 border border-border/40 mb-5">
         <TabBtn active={tab === 'rules'} onClick={() => setTab('rules')} Icon={BookOpen}>
@@ -37,9 +25,33 @@ export function AboutPage() {
       </div>
 
       {tab === 'rules' ? <RulesSection /> : <PrivacySection />}
-    </div>
-    </div>
+    </>
   );
+
+  // Non authentifié : page autonome (hors shell). Conteneur scrollable plein écran
+  // + bouton retour vers la connexion (parcours RGPD avant login).
+  if (!authenticated) {
+    return (
+      <div className="h-full overflow-y-auto overscroll-contain scrollbar-none">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="mb-5">
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-1.5 text-muted-2 hover:text-gold transition-colors text-xs font-semibold uppercase tracking-[0.14em]"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+              Connexion
+            </Link>
+          </div>
+          {inner}
+        </div>
+      </div>
+    );
+  }
+
+  // Authentifié : rendu à l'intérieur du shell (header + scroll <main> + tab bar).
+  // On s'appuie sur le scroll du shell — pas de conteneur scrollable imbriqué.
+  return <div className="max-w-2xl mx-auto">{inner}</div>;
 }
 
 function TabBtn({

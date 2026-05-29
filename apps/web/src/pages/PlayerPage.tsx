@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { UserBadge } from '../components/Avatar';
+import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
@@ -21,7 +22,7 @@ export function PlayerPage() {
   const login = rawLogin ?? '';
   const t = useT();
   const { locale } = useI18n();
-  const { me, opsMe, refresh } = useLeagueData();
+  const { me, opsMe, locations, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
 
@@ -76,6 +77,7 @@ export function PlayerPage() {
 
   const myLogin = me?.login;
   const isMe = myLogin === p.user.login;
+  const onlineHost = locations.get(p.user.login);
 
   return (
     <Panel title={p.user.firstName && p.user.lastName ? `${p.user.firstName} ${p.user.lastName}` : p.user.login} sub="Profil 42 League">
@@ -95,6 +97,7 @@ export function PlayerPage() {
             <span className="metal-plate-gold px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
               {p.user.elo} ELO
             </span>
+            {onlineHost && <OnlineBadge host={onlineHost} />}
           </div>
           {p.user.title && (
             <div className="text-gold italic text-sm mt-1.5">« {p.user.title} »</div>

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Skull, Swords, Trophy } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
+import { OnlineBadge } from '../../../components/OnlineBadge';
 import { SwipeableCard } from '../../../mobile/primitives/SwipeableCard';
 import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
@@ -13,6 +14,8 @@ interface PlayerRankCardProps {
   losses: number;
   isMe: boolean;
   targetedBy?: Ops;
+  /** Hôte 42 si l'utilisateur est connecté à l'école (ex. "c1r7s8"). */
+  host?: string;
   /** Si fourni, le swipe gauche → droite déclenche cette action (défier). */
   onDefi?: (entry: LeaderboardEntry) => void;
 }
@@ -29,6 +32,7 @@ export function PlayerRankCard({
   losses,
   isMe,
   targetedBy,
+  host,
   onDefi,
 }: PlayerRankCardProps) {
   const navigate = useNavigate();
@@ -82,11 +86,14 @@ export function PlayerRankCard({
             <Skull className="w-3 h-3" strokeWidth={2.5} />
           </span>
         )}
+        {host && !targetedBy && (
+          <OnlineBadge host={host} compact className="absolute -bottom-0.5 -right-0.5" />
+        )}
       </div>
 
       {/* Login + title + tournois */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-extrabold text-text-strong truncate text-sm">
             {entry.login}
           </span>
@@ -95,6 +102,7 @@ export function PlayerRankCard({
               Toi
             </span>
           )}
+          {host && <OnlineBadge host={host} />}
         </div>
         {entry.title ? (
           <div className="text-[10px] text-gold italic truncate">« {entry.title} »</div>

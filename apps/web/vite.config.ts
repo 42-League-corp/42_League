@@ -2,12 +2,46 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+// MAJOR.MINOR à bumper manuellement lors d'une refonte majeure.
+// BUILD = nombre de commits git → s'incrémente automatiquement à chaque commit.
+const RELEASE = '0.4';
+
+function formatDate(raw: string): string {
+  // raw = "2026-05-29 14:30:22 +0200"
+  const [datePart, timePart] = raw.trim().split(' ');
+  const [year, month, day] = datePart.split('-');
+  const hhmm = timePart.slice(0, 5); // "14:30"
+  const MONTHS = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'aoû', 'sep', 'oct', 'nov', 'déc'];
+  const monthName = MONTHS[parseInt(month, 10) - 1];
+  return `${parseInt(day, 10)} ${monthName} ${year} · ${hhmm}`;
+}
+
+function getGitVersion(): { version: string; date: string } {
+  try {
+    const opts = { encoding: 'utf8' as const, stdio: 'pipe' as const };
+    const build = execSync('git rev-list --count HEAD', opts).trim();
+    const rawDate = execSync('git log -1 --format=%ci', opts).trim();
+    return { version: `${RELEASE}.${build}`, date: formatDate(rawDate) };
+  } catch (e) {
+    console.warn('[vite] git version detection failed:', e);
+    const now = new Date();
+    const fallbackDate = formatDate(now.toISOString().replace('T', ' ').replace('Z', ' +0000'));
+    return { version: `${RELEASE}.?`, date: fallbackDate };
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBase = env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+  const { version, date } = getGitVersion();
 
   return {
+    define: {
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+      'import.meta.env.VITE_APP_DATE': JSON.stringify(date),
+    },
     plugins: [
       react(),
       VitePWA({

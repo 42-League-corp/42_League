@@ -17,6 +17,7 @@ interface ChallengeFlowProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  locations?: Map<string, string>;
   /** Pré-sélectionne un adversaire (depuis une carte joueur) → saute l'étape recherche. */
   presetOpponent?: LeaderboardEntry | null;
   /** Appelé après un POST réussi. Doit refresh les data + (optionnel) fermer le container. */
@@ -41,6 +42,7 @@ export function ChallengeFlow({
   recentOpponents,
   opponentCounts,
   presetOpponent = null,
+  locations,
   onSubmitted,
   variant = 'desktop',
 }: ChallengeFlowProps) {
@@ -125,6 +127,7 @@ export function ChallengeFlow({
               selected={opponent}
               onSelect={setOpponent}
               onClear={() => setOpponent(null)}
+              locations={locations}
             />
           </div>
         )}

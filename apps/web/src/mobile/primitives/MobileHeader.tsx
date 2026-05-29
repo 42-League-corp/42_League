@@ -19,6 +19,7 @@ const ROUTE_TITLE: Record<string, string> = {
   '/profile': 'Profil',
   '/history': 'Historique',
   '/settings': 'Réglages',
+  '/about': 'Règles',
 };
 
 function titleFor(pathname: string): string {
