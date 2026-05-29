@@ -38,6 +38,12 @@ import { logAdminAction } from './audit.js';
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
 
+// Backdoor de dev : le header `x-dev-login` permet de se faire passer pour
+// n'importe quel utilisateur SANS OAuth. Il est donc STRICTEMENT réservé au dev
+// local et n'est honoré que si ALLOW_DEV_LOGIN=true est explicitement positionné.
+// Fail-secure : par défaut (prod) le flag est absent → le header est ignoré.
+const ALLOW_DEV_LOGIN = process.env.ALLOW_DEV_LOGIN === 'true';
+
 async function getUserRole(login: string): Promise<'USER' | 'ADMIN' | 'SUPERADMIN'> {
   if (SUPERADMINS.has(login.toLowerCase())) return 'SUPERADMIN';
   const u = await prisma.user.findUnique({ where: { login }, select: { role: true } });
@@ -98,9 +104,9 @@ async function getCurrentLogin(c: Context): Promise<string> {
   const sessionLogin = await getSessionLogin(c);
   if (sessionLogin) return sessionLogin;
   const devLogin = c.req.header('x-dev-login');
-  if (devLogin) return devLogin;
+  if (ALLOW_DEV_LOGIN && devLogin) return devLogin;
   throw new HTTPException(401, {
-    message: 'not authenticated — call /auth/login or set x-dev-login header',
+    message: 'not authenticated — call /auth/login',
   });
 }
 
@@ -116,7 +122,7 @@ async function getStreamLogin(c: Context): Promise<string> {
     if (login) return login;
   }
   const devLogin = c.req.header('x-dev-login');
-  if (devLogin) return devLogin;
+  if (ALLOW_DEV_LOGIN && devLogin) return devLogin;
   throw new HTTPException(401, { message: 'not authenticated' });
 }
 
