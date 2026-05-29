@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { Pills } from '../components/Pills';
 import { Button } from '../components/Button';
+import { FeatureRequestBox } from '../components/FeatureRequestBox';
 import { useAuth } from '../hooks/useAuth';
 import { useFlash } from '../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../lib/i18n';
@@ -61,7 +62,9 @@ export function ReglagesPage() {
   }
 
   return (
-    <Panel title={t('panel.settings.title')}>
+    <div className="flex flex-col gap-5">
+      <FeatureRequestBox />
+      <Panel title={t('panel.settings.title')}>
       <div className="flex flex-col gap-6">
 
         {/* Langue */}
@@ -176,6 +179,7 @@ export function ReglagesPage() {
         </div>
 
       </div>
-    </Panel>
+      </Panel>
+    </div>
   );
 }
