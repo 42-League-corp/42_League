@@ -43,6 +43,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -64,6 +65,25 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.run_id }}
 
+      - name: Trivy scan (backend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy-backend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+        continue-on-error: true
+
+      - name: Upload Trivy results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend.sarif
+          category: trivy-backend
+        continue-on-error: true
+
   build-frontend:
     needs: changes
     if: |
@@ -73,6 +93,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +115,25 @@ jobs:
             VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.run_id }}
+
+      - name: Trivy scan (frontend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy-frontend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+        continue-on-error: true
+
+      - name: Upload Trivy results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: trivy-frontend
+        continue-on-error: true
 
   deploy:
     needs: [build-backend, build-frontend]

@@ -198,3 +198,31 @@ model PlayedMatch {
   @@index([playerALogin, playerBLogin, playedAt])
   @@map("played_matches")
 }
+
+enum AdminAction {
+  SET_ROLE
+  BAN_USER
+  UNBAN_USER
+  EDIT_STATS
+  EDIT_TITLE
+  DELETE_MATCH
+  EDIT_MATCH
+  REFRESH_IMAGES
+}
+
+model AdminAuditLog {
+  id          String      @id @default(uuid())
+  actorLogin  String      @map("actor_login")
+  actorRole   Role        @map("actor_role")
+  action      AdminAction
+  targetLogin String?     @map("target_login")
+  payload     Json?
+  ipAddress   String?     @map("ip_address")
+  userAgent   String?     @map("user_agent")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([actorLogin])
+  @@index([targetLogin])
+  @@map("admin_audit_log")
+}
