@@ -6,14 +6,10 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      force_build:
-        description: 'Force build both images'
-        required: false
-        default: 'true'
       deploy_only:
         description: 'Skip builds and deploy existing :latest images'
         required: false
-        default: 'false'
+        default: 'true'
 
 env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
