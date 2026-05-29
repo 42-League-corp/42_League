@@ -31,9 +31,9 @@ export function ProfilMobile() {
 
         {/* Quick actions row */}
         <div className="grid grid-cols-3 gap-2.5">
-          <QuickAction to="/trophees" Icon={Award} label="Trophées" tone="gold" />
-          <QuickAction to="/historique" Icon={History} label="Historique" tone="teal" />
-          <QuickAction to="/reglages" Icon={Settings} label="Réglages" tone="muted" />
+          <QuickAction to="/trophies" Icon={Award} label="Trophées" tone="gold" />
+          <QuickAction to="/history" Icon={History} label="Historique" tone="teal" />
+          <QuickAction to="/settings" Icon={Settings} label="Réglages" tone="muted" />
         </div>
 
         {/* ELO evolution chart */}

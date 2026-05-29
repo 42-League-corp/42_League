@@ -61,7 +61,7 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
   return (
     <motion.div layout>
       <Link
-        to={`/tournois/${encodeURIComponent(t.id)}`}
+        to={`/tournaments/${encodeURIComponent(t.id)}`}
         onClick={() => haptic('selection')}
         className={`block relative overflow-hidden rounded-2xl border ${style.ring} ${style.bg} ${isLive ? style.glow : ''} active:scale-[0.98] transition-transform tap-transparent shadow-[inset_0_1px_0_rgba(255,215,120,0.10),0_4px_14px_rgba(0,0,0,0.35)]`}
       >

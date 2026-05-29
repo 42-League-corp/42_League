@@ -14,7 +14,7 @@ export function AuthReturnPage() {
     const result = consumeAuthReturn();
     if (result.ok) {
       refreshSession();
-      navigate('/defis', { replace: true });
+      navigate('/challenges', { replace: true });
       return;
     }
     setError(result.error);

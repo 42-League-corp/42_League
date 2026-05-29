@@ -27,7 +27,7 @@ export function RecentMatchesList({ matches, myLogin }: RecentMatchesListProps) 
         <RecentMatchRow key={m.id} match={m} myLogin={myLogin} delay={i * 0.03} />
       ))}
       <Link
-        to="/historique"
+        to="/history"
         className="flex items-center justify-center gap-1 py-2.5 mt-2 text-xs font-bold text-muted-2 hover:text-teal uppercase tracking-wider tap-transparent transition-colors"
       >
         Voir tout l'historique
@@ -86,7 +86,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted">vs</span>
           <Link
-            to={`/joueur/${opp}`}
+            to={`/player/${opp}`}
             className="text-sm font-bold text-text-strong truncate hover:text-teal transition-colors"
           >
             {opp}

@@ -39,7 +39,7 @@ export function OpsCard() {
       </div>
 
       {opsMe.current && (
-        <Link to={`/joueur/${opsMe.current.targetLogin}`} className="block tap-transparent">
+        <Link to={`/player/${opsMe.current.targetLogin}`} className="block tap-transparent">
           <div className="flex items-center gap-3 mb-3">
             <Avatar
               login={opsMe.current.target?.login ?? opsMe.current.targetLogin}
@@ -77,7 +77,7 @@ export function OpsCard() {
           <div className="text-[10px] text-red uppercase tracking-wider mt-3 mb-2 font-extrabold">
             ⚠ Tu es la cible de :
           </div>
-          <Link to={`/joueur/${opsMe.targetedBy.ownerLogin}`} className="block tap-transparent">
+          <Link to={`/player/${opsMe.targetedBy.ownerLogin}`} className="block tap-transparent">
             <div className="flex items-center gap-3 p-3 rounded-xl bg-red/10 border border-red/20">
               <Avatar
                 login={opsMe.targetedBy.owner?.login ?? opsMe.targetedBy.ownerLogin}

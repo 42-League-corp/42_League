@@ -22,7 +22,7 @@ export function Podium({ top3 }: PodiumProps) {
 
   const goTo = (login: string) => {
     haptic('selection');
-    navigate(`/joueur/${login}`);
+    navigate(`/player/${login}`);
   };
 
   return (

@@ -56,7 +56,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
       await onDone();
       reset();
       onClose();
-      navigate(`/tournois/${encodeURIComponent(tNew.id)}`);
+      navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
       haptic('error');
