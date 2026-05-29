@@ -1,6 +1,7 @@
-.PHONY: deploy deploy-frontend deploy-backend logs logs-front logs-back ps restart down version
+.PHONY: deploy deploy-frontend deploy-backend build-frontend build-backend logs logs-front logs-back ps restart down version
 
-COMPOSE = docker compose -f docker-compose.prod.yml
+COMPOSE        = docker compose -f docker-compose.registry.yml
+COMPOSE_BUILD  = docker compose -f docker-compose.prod.yml
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 COMMIT     := $(shell git rev-parse --short HEAD)
@@ -23,31 +24,40 @@ endef
 
 # ── Targets ────────────────────────────────────────────────────────────────────
 
-deploy: ## Pull + rebuild front + back + affiche les versions
+deploy: ## Pull les images depuis le registry + redémarre tout
 	git pull
-	$(COMPOSE) build \
-		--build-arg GIT_COMMIT=$(COMMIT) \
-		--build-arg BUILD_DATE="$(DATE)" \
-		frontend backend
+	$(COMPOSE) pull frontend backend
 	$(COMPOSE) up -d --no-deps frontend backend
 	$(call show_version)
 
-deploy-frontend: ## Pull + rebuild seulement le frontend
+deploy-frontend: ## Pull l'image frontend depuis le registry
 	git pull
-	$(COMPOSE) build \
-		--build-arg GIT_COMMIT=$(COMMIT) \
-		--build-arg BUILD_DATE="$(DATE)" \
-		frontend
+	$(COMPOSE) pull frontend
 	$(COMPOSE) up -d --no-deps frontend
 	$(call show_version)
 
-deploy-backend: ## Pull + rebuild seulement le backend
+deploy-backend: ## Pull l'image backend depuis le registry
 	git pull
-	$(COMPOSE) build \
+	$(COMPOSE) pull backend
+	$(COMPOSE) up -d --no-deps backend
+	$(call show_version)
+
+build-frontend: ## Build le frontend depuis le source sur ce serveur
+	git pull
+	$(COMPOSE_BUILD) build \
+		--build-arg GIT_COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE="$(DATE)" \
+		frontend
+	$(COMPOSE_BUILD) up -d --no-deps frontend
+	$(call show_version)
+
+build-backend: ## Build le backend depuis le source sur ce serveur
+	git pull
+	$(COMPOSE_BUILD) build \
 		--build-arg GIT_COMMIT=$(COMMIT) \
 		--build-arg BUILD_DATE="$(DATE)" \
 		backend
-	$(COMPOSE) up -d --no-deps backend
+	$(COMPOSE_BUILD) up -d --no-deps backend
 	$(call show_version)
 
 version: ## Affiche la version actuellement déployée
