@@ -135,9 +135,11 @@ export function BottomSheet({
               </div>
             )}
 
-            {/* Contenu scrollable. Padding-bottom inclut safe-area. */}
+            {/* Contenu scrollable. `flex-1 min-h-0` borne sa hauteur dans la sheet
+                (sinon le contenu déborde et le bas est clippé/inaccessible sur mobile).
+                Padding-bottom inclut la safe-area. */}
             <div
-              className="overflow-y-auto overscroll-contain scroll-smooth-touch custom-scrollbar"
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth-touch custom-scrollbar"
               style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
             >
               {children}

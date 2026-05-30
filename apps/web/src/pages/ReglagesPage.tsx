@@ -78,6 +78,7 @@ export function ReglagesPage() {
             choices={[
               { value: 'fr', label: t('settings.lang.fr') },
               { value: 'en', label: t('settings.lang.en') },
+              { value: 'es', label: t('settings.lang.es') },
             ]}
           />
         </div>

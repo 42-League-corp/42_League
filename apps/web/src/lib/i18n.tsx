@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { getStoredLang, setStoredLang } from './storage';
 
-export type Lang = 'fr' | 'en';
+export type Lang = 'fr' | 'en' | 'es';
 
 type Dict = Record<string, string>;
 
@@ -57,6 +57,10 @@ const fr: Dict = {
   'lb.col.streak': 'Série',
   'lb.col.titles': 'Titres',
   'lb.podium.champion': 'Champion',
+  'lb.abbr.win': 'V',
+  'lb.abbr.loss': 'D',
+  'lb.streak.wins': "victoires d'affilée",
+  'lb.streak.losses': "défaites d'affilée",
   'idea.title': 'Boîte à idées',
   'idea.subtitle': 'Une feature en tête ? Propose-la, on lit tout.',
   'idea.placeholder': 'Ex : un mode tournoi en double, des badges de saison…',
@@ -96,6 +100,7 @@ const fr: Dict = {
   'settings.lang': 'Langue',
   'settings.lang.fr': 'Français',
   'settings.lang.en': 'English',
+  'settings.lang.es': 'Español',
   'settings.account': 'Compte',
   'settings.changeAccount': 'Changer de compte',
   'settings.logout': 'Se déconnecter',
@@ -187,6 +192,10 @@ const en: Dict = {
   'lb.col.streak': 'Streak',
   'lb.col.titles': 'Titles',
   'lb.podium.champion': 'Champion',
+  'lb.abbr.win': 'W',
+  'lb.abbr.loss': 'L',
+  'lb.streak.wins': 'wins in a row',
+  'lb.streak.losses': 'losses in a row',
   'idea.title': 'Idea box',
   'idea.subtitle': 'Got a feature in mind? Drop it — we read everything.',
   'idea.placeholder': 'E.g. a doubles tournament mode, seasonal badges…',
@@ -226,6 +235,7 @@ const en: Dict = {
   'settings.lang': 'Language',
   'settings.lang.fr': 'Français',
   'settings.lang.en': 'English',
+  'settings.lang.es': 'Español',
   'settings.account': 'Account',
   'settings.changeAccount': 'Change account',
   'settings.logout': 'Sign out',
@@ -273,16 +283,154 @@ const en: Dict = {
   'login.how.linkPrivacy': 'Our privacy policy',
 };
 
-const DICTS: Record<Lang, Dict> = { fr, en };
-const LOCALES: Record<Lang, string> = { fr: 'fr-FR', en: 'en-GB' };
+const es: Dict = {
+  'app.console': '42 League',
+  'nav.defis': 'Desafíos',
+  'nav.tournois': 'Torneos',
+  'nav.leaderboard': 'Clasificación',
+  'nav.trophees': 'Salón de la fama',
+  'nav.profil': 'Perfil',
+  'nav.historique': 'Historial',
+  'nav.reglages': 'Ajustes',
+  'nav.god': 'GOD',
+  'auth.notConnected': 'no conectado',
+
+  'panel.defis.title': 'Desafíos',
+  'panel.defis.sub': 'Lanza un duelo — gánate la gloria.',
+  'defis.received': 'Desafíos recibidos',
+  'defis.scheduled': 'Partidos programados',
+  'defis.sent': 'Desafíos enviados',
+  'defis.challenge': 'Desafía a un jugador de la liga',
+  'defis.empty': 'Aún no hay otros jugadores inscritos.',
+  'defis.from': 'Desafío de',
+  'defis.to': 'Desafío a',
+  'defis.vs': 'Partido vs',
+  'defis.accept': 'Aceptar',
+  'defis.decline': 'Rechazar',
+  'defis.cancel': 'Cancelar',
+  'defis.enterScore': 'Introducir marcador',
+  'defis.send': 'Enviar',
+  'defis.youScore': 'Tu marcador',
+  'defis.oppScorePrefix': 'Marcador de',
+  'defis.btn': 'Desafiar',
+
+  'panel.lb.title': 'Clasificación',
+  'panel.lb.sub': 'jugadores · temporada actual',
+  'lb.empty': 'Nadie ha jugado todavía.',
+  'lb.col.player': 'Jugador',
+  'lb.col.elo': 'ELO',
+  'lb.col.w': 'V',
+  'lb.col.l': 'D',
+  'lb.col.rank': 'Rango',
+  'lb.col.games': 'Partidas',
+  'lb.col.winrate': 'Vict.',
+  'lb.col.streak': 'Racha',
+  'lb.col.titles': 'Títulos',
+  'lb.podium.champion': 'Campeón',
+  'lb.abbr.win': 'V',
+  'lb.abbr.loss': 'D',
+  'lb.streak.wins': 'victorias seguidas',
+  'lb.streak.losses': 'derrotas seguidas',
+  'idea.title': 'Buzón de ideas',
+  'idea.subtitle': '¿Tienes una idea? Cuéntanosla — lo leemos todo.',
+  'idea.placeholder': 'Ej.: un modo torneo por parejas, insignias de temporada…',
+  'idea.send': 'Enviar',
+  'idea.sending': 'Enviando…',
+  'idea.sent': '¡Idea enviada — gracias! 🙌',
+  'idea.thanks': '¡Gracias!',
+  'idea.tooShort': 'Al menos 10 caracteres',
+
+  'panel.profil.title': 'Perfil',
+  'panel.profil.sub': 'Tus estadísticas actuales',
+  'profil.campus': 'Campus',
+  'profil.elo': 'ELO',
+  'profil.matchesElo': 'Partidas ELO',
+  'profil.winRate': '% Victorias',
+  'profil.delta': 'Δ ELO',
+  'profil.wins': 'Victorias',
+  'profil.losses': 'Derrotas',
+
+  'panel.history.title': 'Historial',
+  'panel.history.sub': 'Últimos 50 partidos',
+  'history.tab.global': 'La mesa',
+  'history.tab.mine': 'Tú',
+  'history.global.sub': 'Todas las partidas recientes',
+  'history.mine.sub': 'Tus partidas',
+  'history.empty': 'Aún no se ha jugado ningún partido.',
+  'history.empty.mine': 'Todavía no has jugado ninguna partida.',
+  'history.col.date': 'Fecha',
+  'history.col.opp': 'Rival',
+  'history.col.score': 'Marcador',
+  'history.col.result': 'Resultado',
+  'history.col.delta': 'Δ ELO',
+  'history.win': 'VICTORIA',
+  'history.loss': 'DERROTA',
+
+  'panel.settings.title': 'Ajustes',
+  'settings.lang': 'Idioma',
+  'settings.lang.fr': 'Français',
+  'settings.lang.en': 'English',
+  'settings.lang.es': 'Español',
+  'settings.account': 'Cuenta',
+  'settings.changeAccount': 'Cambiar de cuenta',
+  'settings.logout': 'Cerrar sesión',
+  'settings.loggedOut': 'Sesión cerrada.',
+  'settings.connecting': 'Conectando…',
+
+  'anon.title': 'Inicio de sesión requerido',
+  'anon.text':
+    'Inicia sesión con tu cuenta 42 para desafiar a tus compañeros, seguir tu ELO y escalar en la clasificación.',
+  'anon.cta': 'Iniciar sesión con 42',
+  'anon.welcome': 'Bienvenido',
+
+  'common.loading': 'Cargando…',
+  'common.in': 'en',
+  'common.ago': 'hace',
+  'common.toi': 'tú',
+
+  'nav.about': 'Acerca de',
+  'nav.about.short': 'Reglas',
+
+  'panel.about.title': 'Acerca de',
+  'about.rules.title': 'Reglas del juego',
+  'about.privacy.title': 'Privacidad',
+
+  'settings.gdpr.title': 'Datos personales',
+  'settings.gdpr.export': 'Exportar mis datos',
+  'settings.gdpr.delete': 'Eliminar mi cuenta',
+  'settings.gdpr.delete.confirm': 'Confirmar eliminación',
+  'settings.gdpr.delete.warning': 'Acción irreversible. Tu perfil, login y datos identificables serán anonimizados.',
+  'settings.gdpr.cancel': 'Cancelar',
+  'settings.gdpr.about': 'Política de privacidad',
+  'settings.gdpr.exporting': 'Exportando…',
+  'settings.gdpr.deleting': 'Eliminando…',
+  'settings.gdpr.deleted': 'Cuenta anonimizada. Hasta pronto.',
+
+  'login.privacy': 'Al iniciar sesión, aceptas nuestra',
+  'login.privacyLink': 'política de privacidad',
+
+  'login.how.title': '¿Cómo funciona?',
+  'login.how.reassure': 'No guardamos ninguna información personal sobre ti.',
+  'login.how.steps':
+    'El inicio de sesión usa OAuth, el estándar seguro de 42. Te identificas directamente en la intranet de 42, que simplemente nos confirma tu identidad. Tu contraseña nunca pasa por nosotros y no almacenamos ningún dato privado — solo tu apodo y tu avatar públicos, durante tu sesión.',
+  'login.how.link42': 'La documentación oficial de OAuth de 42',
+  'login.how.linkOauth': 'Entender cómo funciona OAuth',
+  'login.how.linkPrivacy': 'Nuestra política de privacidad',
+};
+
+const DICTS: Record<Lang, Dict> = { fr, en, es };
+const LOCALES: Record<Lang, string> = { fr: 'fr-FR', en: 'en-GB', es: 'es-ES' };
 
 function readInitialLang(): Lang {
   const stored = getStoredLang();
-  if (stored === 'fr' || stored === 'en') return stored;
-  if (typeof navigator !== 'undefined' && navigator.language.startsWith('en')) {
-    return 'en';
+  if (stored === 'fr' || stored === 'en' || stored === 'es') return stored;
+  // Détection navigateur : espagnol → es, français → fr, sinon anglais par défaut.
+  if (typeof navigator !== 'undefined') {
+    const nav = navigator.language.toLowerCase();
+    if (nav.startsWith('es')) return 'es';
+    if (nav.startsWith('fr')) return 'fr';
   }
-  return 'fr';
+  return 'en';
 }
 
 interface I18nContextValue {

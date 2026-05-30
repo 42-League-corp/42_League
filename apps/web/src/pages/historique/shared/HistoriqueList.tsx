@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { GlobalMatchCard, MyMatchCard } from './MatchCards';
 import type { HistoriqueData } from './useHistoriqueLogic';
+import type { Lang } from '../../../lib/i18n';
 
 export type HistoTab = 'global' | 'mine';
 
@@ -8,7 +9,7 @@ interface HistoriqueListProps {
   tab: HistoTab;
   data: HistoriqueData;
   imgByLogin: Map<string, string | null>;
-  lang: 'fr' | 'en';
+  lang: Lang;
   /** Texte d'état vide (déjà traduit par la page). */
   emptyText: string;
   /** Nombre max de cartes affichées. */

@@ -4,6 +4,7 @@ import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import type { PlayedMatch } from '../../../lib/api';
 import { fmtDayLabel } from '../../../lib/format';
+import type { Lang } from '../../../lib/i18n';
 import type { MyMatchStat } from './useHistoriqueLogic';
 
 // ─── Badges réutilisables ────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export function WinRateImpact({ wrAfter, wrImpact }: { wrAfter: number; wrImpact
 
 interface MyMatchCardProps {
   stat: MyMatchStat;
-  lang: 'fr' | 'en';
+  lang: Lang;
   imageUrl?: string | null;
   delay?: number;
 }
@@ -116,11 +117,16 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
 
 interface GlobalMatchCardProps {
   match: PlayedMatch;
-  lang: 'fr' | 'en';
+  lang: Lang;
   imgByLogin: Map<string, string | null>;
   delay?: number;
 }
 
+/**
+ * Carte « game de la league » (historique global) — même type de bloc que la
+ * carte perso (MyMatchCard) : badge à gauche, avatar du vainqueur, opposants
+ * « winner vs loser », et à droite le score + le Δ ELO du vainqueur.
+ */
 export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMatchCardProps) {
   const aWon = match.winner === 'A';
   const winnerLogin = aWon ? match.playerALogin : match.playerBLogin;
@@ -128,77 +134,44 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
   const winnerScore = aWon ? match.scoreA : match.scoreB;
   const loserScore = aWon ? match.scoreB : match.scoreA;
   const winnerDelta = aWon ? match.deltaA : match.deltaB;
-  const loserDelta = aWon ? match.deltaB : match.deltaA;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-      className="relative card-hud rounded-2xl p-3.5 hover-glow"
+      className="relative card-hud rounded-2xl p-3.5 flex items-center gap-3 hover-glow border border-gold/25"
     >
-      {/* Ligne gagnant */}
-      <PlayerRow
-        login={winnerLogin}
-        imageUrl={imgByLogin.get(winnerLogin) ?? null}
-        score={winnerScore}
-        delta={winnerDelta}
-        counted={match.countedForElo}
-        winner
-      />
-      <div className="my-2 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      {/* Ligne perdant */}
-      <PlayerRow
-        login={loserLogin}
-        imageUrl={imgByLogin.get(loserLogin) ?? null}
-        score={loserScore}
-        delta={loserDelta}
-        counted={match.countedForElo}
-      />
+      {/* Badge résultat (trophée) — pendant du badge W/L de la carte perso */}
+      <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-gold/15 text-base">
+        🏆
+      </div>
 
-      <div className="mt-2.5 text-[10px] text-muted font-medium text-right">
-        {fmtDayLabel(match.playedAt, lang)}
+      <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" />
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <PlayerLink login={winnerLogin} className="text-sm font-bold text-gold truncate">
+            {winnerLogin}
+          </PlayerLink>
+          <span className="text-[11px] text-muted">vs</span>
+          <PlayerLink login={loserLogin} className="text-xs font-semibold text-muted-2 truncate">
+            {loserLogin}
+          </PlayerLink>
+        </div>
+        <div className="text-[10px] text-muted font-medium mt-0.5">
+          {fmtDayLabel(match.playedAt, lang)}
+        </div>
+      </div>
+
+      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <div className="font-display tabular-nums text-base font-black">
+          <span className="text-gold text-gold-emboss">{winnerScore}</span>
+          <span className="text-muted mx-1 opacity-60">–</span>
+          <span className="text-text-strong">{loserScore}</span>
+        </div>
+        <EloDeltaPill delta={winnerDelta} counted={match.countedForElo} />
       </div>
     </motion.div>
-  );
-}
-
-interface PlayerRowProps {
-  login: string;
-  imageUrl: string | null;
-  score: number;
-  delta: number;
-  counted: boolean;
-  winner?: boolean;
-}
-
-function PlayerRow({ login, imageUrl, score, delta, counted, winner = false }: PlayerRowProps) {
-  return (
-    <div className="flex items-center gap-2.5">
-      {winner ? (
-        <span aria-hidden className="text-sm w-5 text-center">🏆</span>
-      ) : (
-        <span aria-hidden className="w-5 text-center text-muted-2 text-xs">·</span>
-      )}
-      <Avatar login={login} imageUrl={imageUrl} size="sm" />
-      <PlayerLink
-        login={login}
-        className={`flex-1 min-w-0 text-sm font-bold truncate ${
-          winner ? 'text-gold' : 'text-muted-2'
-        }`}
-      >
-        {login}
-      </PlayerLink>
-      <span
-        className={`font-display tabular-nums text-base font-black ${
-          winner ? 'text-gold text-gold-emboss' : 'text-text-strong'
-        }`}
-      >
-        {score}
-      </span>
-      <div className="w-[68px] flex justify-end">
-        <EloDeltaPill delta={delta} counted={counted} />
-      </div>
-    </div>
   );
 }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
 import { haptic } from '../mobile/feedback/useHaptic';
 import { fmtDayLabel } from '../lib/format';
+import type { Lang } from '../lib/i18n';
 
 interface TimePickerProps {
   /** Date/heure sélectionnée. */
@@ -12,7 +13,7 @@ interface TimePickerProps {
   days?: number;
   /** Pas des minutes (5 = 00,05,10…). */
   minuteStep?: number;
-  lang?: 'fr' | 'en';
+  lang?: Lang;
 }
 
 const ITEM_H = 40; // hauteur d'une ligne de molette (px)
@@ -325,10 +326,10 @@ function pad(n: number): string {
 }
 const pad2 = pad;
 
-function dayChipLabel(d: Date, idx: number, lang: 'fr' | 'en'): string {
-  if (idx === 0) return lang === 'fr' ? "Auj." : 'Today';
-  if (idx === 1) return lang === 'fr' ? 'Demain' : 'Tmrw';
-  const locale = lang === 'fr' ? 'fr-FR' : 'en-GB';
+function dayChipLabel(d: Date, idx: number, lang: Lang): string {
+  if (idx === 0) return lang === 'fr' ? 'Auj.' : lang === 'es' ? 'Hoy' : 'Today';
+  if (idx === 1) return lang === 'fr' ? 'Demain' : lang === 'es' ? 'Mañana' : 'Tmrw';
+  const locale = lang === 'fr' ? 'fr-FR' : lang === 'es' ? 'es-ES' : 'en-GB';
   // Ex. « lun. 2 » — court mais lisible.
   return d
     .toLocaleDateString(locale, { weekday: 'short', day: 'numeric' })
@@ -340,8 +341,7 @@ interface Preset {
   date: () => Date;
 }
 
-function buildPresets(lang: 'fr' | 'en'): Preset[] {
-  const fr = lang === 'fr';
+function buildPresets(lang: Lang): Preset[] {
   const atToday = (h: number, m = 0) => {
     const d = new Date();
     d.setHours(h, m, 0, 0);
@@ -352,24 +352,26 @@ function buildPresets(lang: 'fr' | 'en'): Preset[] {
     d.setDate(d.getDate() + 1);
     return d;
   };
+  const tonight = lang === 'fr' ? 'Ce soir 19h' : lang === 'es' ? 'Esta noche 19h' : 'Tonight 7pm';
+  const tmrwNoon = lang === 'fr' ? 'Demain 12h' : lang === 'es' ? 'Mañana 12h' : 'Tmrw noon';
   return [
     {
-      label: fr ? '+30 min' : '+30 min',
+      label: '+30 min',
       date: () => new Date(Date.now() + 30 * 60_000),
     },
     {
-      label: fr ? '+1 h' : '+1 h',
+      label: '+1 h',
       date: () => new Date(Date.now() + 60 * 60_000),
     },
     {
-      label: fr ? 'Ce soir 19h' : 'Tonight 7pm',
+      label: tonight,
       date: () => {
         const t = atToday(19);
         return t.getTime() > Date.now() ? t : tomorrowAt(19);
       },
     },
     {
-      label: fr ? 'Demain 12h' : 'Tmrw noon',
+      label: tmrwNoon,
       date: () => tomorrowAt(12),
     },
   ];
