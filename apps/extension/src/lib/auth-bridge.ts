@@ -1,4 +1,4 @@
-interface AuthStatus {
+export interface AuthStatus {
   authenticated: boolean;
   login: string | null;
 }

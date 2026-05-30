@@ -24,17 +24,23 @@ export default defineManifest({
       128: ICON,
     },
   },
+  // `service_worker` (Chrome MV3) + `scripts` (Firefox MV3) cohabitent
+  // volontairement pour rester cross-browser. La combinaison n'est pas exprimable
+  // dans le type strict de defineManifest → on élargit le cast (manifeste émis
+  // inchangé).
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',
     scripts: ['src/background/index.ts'],
-  } as chrome.runtime.ManifestBackground,
+  } as unknown as { service_worker: string; type: 'module' },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   browser_specific_settings: {
     gecko: {
       id: '42league@42league.fr',
       strict_min_version: '140.0',
     },
-  } as Record<string, unknown>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any,
   permissions: ['storage', 'identity', 'tabs'],
   host_permissions: [
     'https://intra.42.fr/*',
