@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, Flame, Snowflake, Trophy, Skull } from 'lucide-react';
+import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
@@ -173,11 +173,8 @@ export function LeaderboardDesktop() {
                   <SortTh label={t('lb.col.player')} k="player" sort={sort} onSort={toggleSort} align="left" />
                   <SortTh label={t('lb.col.elo')} k="elo" sort={sort} onSort={toggleSort} align="right" />
                   <SortTh label={t('lb.col.games')} k="games" sort={sort} onSort={toggleSort} align="right" />
-                  <SortTh label={t('lb.col.winrate')} k="winRate" sort={sort} onSort={toggleSort} align="right" />
-                  <SortTh label={t('lb.col.w')} k="wins" sort={sort} onSort={toggleSort} align="right" tone="gold" />
-                  <SortTh label={t('lb.col.l')} k="losses" sort={sort} onSort={toggleSort} align="right" tone="red" />
+                  <SortTh label={t('lb.col.winrate')} k="winRate" sort={sort} onSort={toggleSort} align="left" />
                   <SortTh label={t('lb.col.streak')} k="streak" sort={sort} onSort={toggleSort} align="right" />
-                  <SortTh label={t('lb.col.titles')} k="titles" sort={sort} onSort={toggleSort} align="right" />
                 </tr>
               </thead>
               <tbody>
@@ -246,23 +243,16 @@ export function LeaderboardDesktop() {
                       <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-muted-2">
                         {stats.games}
                       </td>
-                      <td className="px-1 sm:px-3 py-2.5 text-right">
-                        <WinRateCell winRate={stats.winRate} games={stats.games} />
+                      <td className="px-2 sm:px-3 py-2.5 min-w-[160px]">
+                        <WinRateCell
+                          winRate={stats.winRate}
+                          games={stats.games}
+                          wins={stats.wins}
+                          losses={stats.losses}
+                        />
                       </td>
-                      <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-gold">{stats.wins}</td>
-                      <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-red">{stats.losses}</td>
                       <td className="px-1 sm:px-3 py-2.5 text-right">
                         <StreakCell streak={stats.streak} />
-                      </td>
-                      <td className="px-1 sm:px-3 py-2.5 text-right">
-                        {(u.tournamentsWon ?? 0) > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-gold font-mono tabular-nums">
-                            <Trophy className="w-3 h-3" strokeWidth={2.5} />
-                            {u.tournamentsWon}
-                          </span>
-                        ) : (
-                          <span className="text-muted/40">—</span>
-                        )}
                       </td>
                     </tr>
                   );
@@ -322,24 +312,43 @@ function SortTh({
   );
 }
 
-// ─── Cellule win rate avec mini-jauge ────────────────────────────────────────
-function WinRateCell({ winRate, games }: { winRate: number; games: number }) {
+// ─── Cellule win rate — barre type OP.GG (V / D dans la jauge) ────────────────
+function WinRateCell({
+  winRate,
+  games,
+  wins,
+  losses,
+}: {
+  winRate: number;
+  games: number;
+  wins: number;
+  losses: number;
+}) {
   if (games === 0) return <span className="text-muted/40 text-xs">—</span>;
-  const color =
-    winRate >= 60 ? '#4ade80' : winRate >= 45 ? '#ffc94a' : '#ff5366';
+  const color = winRate >= 60 ? '#4ade80' : winRate >= 45 ? '#ffc94a' : '#ff5366';
   return (
-    <Tooltip
-      label={`${winRate}% de victoires sur ${games} game${games > 1 ? 's' : ''}`}
-      className="justify-end gap-2 cursor-help"
-    >
-      <span className="tabular-nums font-bold text-xs" style={{ color }}>
-        {winRate}%
-      </span>
-      <span className="hidden sm:block w-12 h-1.5 rounded-full bg-bg-2 overflow-hidden">
+    <Tooltip label={`${wins} V · ${losses} D · ${winRate}%`} className="w-full">
+      <span className="flex w-full items-center gap-2">
+        <span className="flex h-4 flex-1 min-w-[80px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none tabular-nums ring-1 ring-black/30">
+          <span
+            className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
+            style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
+          >
+            {wins > 0 && wins}
+          </span>
+          <span
+            className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
+            style={{ background: 'rgba(255,83,102,0.85)' }}
+          >
+            {losses > 0 && losses}
+          </span>
+        </span>
         <span
-          className="block h-full rounded-full transition-all"
-          style={{ width: `${winRate}%`, background: color }}
-        />
+          className="w-9 shrink-0 text-right text-xs font-extrabold tabular-nums"
+          style={{ color }}
+        >
+          {winRate}%
+        </span>
       </span>
     </Tooltip>
   );
@@ -351,7 +360,7 @@ function StreakCell({ streak }: { streak: number }) {
   if (streak > 0) {
     return (
       <Tooltip label={`${streak} victoire${streak > 1 ? 's' : ''} d'affilée 🔥`}>
-        <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a] cursor-help">
+        <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a]">
           <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
           {streak}
         </span>
@@ -360,7 +369,7 @@ function StreakCell({ streak }: { streak: number }) {
   }
   return (
     <Tooltip label={`${Math.abs(streak)} défaite${Math.abs(streak) > 1 ? 's' : ''} d'affilée ❄️`}>
-      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff] cursor-help">
+      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
         <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
         {Math.abs(streak)}
       </span>

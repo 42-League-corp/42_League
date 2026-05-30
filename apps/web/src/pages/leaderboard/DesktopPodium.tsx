@@ -32,12 +32,14 @@ export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
         }}
       />
       {/* Rayons de lumière en éventail */}
-      <div className="absolute inset-x-0 top-0 h-72 pointer-events-none opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]">
+      <div className="absolute inset-x-0 top-0 h-72 pointer-events-none overflow-hidden opacity-40 [mask-image:radial-gradient(ellipse_70%_100%_at_50%_0%,black,transparent_72%)]">
+        {/* Soleil : grand carré centré en haut, rayons en éventail tout autour,
+            qui tourne sur lui-même → rotation infinie sans bord qui disparaît. */}
         <div
-          className="absolute left-[-20%] top-0 h-full w-[140%] origin-top animate-[spin_28s_linear_infinite]"
+          className="absolute left-1/2 top-0 aspect-square w-[1400px] max-w-none animate-spin-sun"
           style={{
             background:
-              'repeating-conic-gradient(from 0deg at 50% 0%, rgba(255,201,74,0.12) 0deg 6deg, transparent 6deg 18deg)',
+              'repeating-conic-gradient(rgba(255,201,74,0.14) 0deg 5deg, transparent 5deg 16deg)',
           }}
         />
       </div>
