@@ -132,7 +132,6 @@ function PodiumColumn({
     <motion.button
       type="button"
       onClick={() => navigate(`/player/${entry.login}`)}
-      title={`#${rank} · ${entry.login} · ${entry.elo} ELO${stats && stats.games > 0 ? ` · ${stats.winRate}% sur ${stats.games} games` : ''}`}
       initial={{ opacity: 0, y: 28 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
