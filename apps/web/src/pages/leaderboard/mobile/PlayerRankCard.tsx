@@ -7,6 +7,7 @@ import { SwipeableCard } from '../../../mobile/primitives/SwipeableCard';
 import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { useT } from '../../../lib/i18n';
 
 interface PlayerRankCardProps {
   entry: LeaderboardEntry;
@@ -36,6 +37,7 @@ export function PlayerRankCard({
   onDefi,
 }: PlayerRankCardProps) {
   const navigate = useNavigate();
+  const t = useT();
 
   const rankColor =
     entry.rank === 1
@@ -108,9 +110,9 @@ export function PlayerRankCard({
           <div className="text-[10px] text-gold italic truncate">« {entry.title} »</div>
         ) : (
           <div className="text-[10px] text-muted font-mono">
-            <span className="text-gold">{wins}W</span>
+            <span className="text-gold">{wins}{t('lb.abbr.win')}</span>
             <span className="mx-1 opacity-30">·</span>
-            <span className="text-red">{losses}L</span>
+            <span className="text-red">{losses}{t('lb.abbr.loss')}</span>
             <span className="mx-1 opacity-30">·</span>
             <span>{winRate}%</span>
           </div>

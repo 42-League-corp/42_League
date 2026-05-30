@@ -3,6 +3,7 @@ import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
 interface ProfileHeroCardProps {
@@ -15,6 +16,7 @@ interface ProfileHeroCardProps {
  */
 export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const { me, leaderboard } = useLeagueData();
+  const t = useT();
   const reducedMotion = useReducedMotion();
   const user = me?.user;
   if (!user) return null;
@@ -164,8 +166,8 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
 
         {/* Stats row */}
         <div className="mt-4 grid grid-cols-4 gap-2">
-          <StatPill label="W" value={stats.wins} tone="teal" />
-          <StatPill label="L" value={stats.losses} tone="red" />
+          <StatPill label={t('lb.abbr.win')} value={stats.wins} tone="teal" />
+          <StatPill label={t('lb.abbr.loss')} value={stats.losses} tone="red" />
           <StatPill label="WR" value={`${stats.winRate}%`} tone="gold" />
           <StatPill
             label="STREAK"

@@ -10,7 +10,10 @@
 //   - mettre `export const WHITELIST_DISABLED = true;` ci-dessous
 // ─────────────────────────────────────────────────────────────
 
-export const WHITELIST_DISABLED = false;
+// Open beta : whitelist désactivée → tout login 42 valide peut se connecter.
+// (typé `boolean` explicitement pour garder la logique d'appartenance compilable
+// quand le flag vaut true — pas de narrowing en littéral.)
+export const WHITELIST_DISABLED: boolean = true;
 
 export const WHITELIST: string[] = [
   'throbert',

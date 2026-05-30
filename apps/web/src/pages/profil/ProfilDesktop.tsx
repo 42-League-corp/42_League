@@ -67,7 +67,7 @@ export function ProfilDesktop() {
             <span className="font-bold uppercase tracking-wider text-[10px]">
               {t('profil.campus')} · {u.campus ?? '—'}
             </span>
-            <span className="metal-plate-gold px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
+            <span className="bg-gold/10 border border-gold/30 text-gold px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
               {stats.elo} ELO
             </span>
           </div>

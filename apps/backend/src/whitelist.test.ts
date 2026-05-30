@@ -29,35 +29,38 @@ describe('isWhitelisted', () => {
     }
   });
 
-  it('un login non whitelisté renvoie false', () => {
-    expect(isWhitelisted('randomuser')).toBe(false);
+  // En open beta (WHITELIST_DISABLED = true), isWhitelisted renvoie true pour
+  // TOUS les logins. Hors open beta, seuls les membres de la WHITELIST passent.
+  // Ces assertions valent donc `WHITELIST_DISABLED` dans les deux modes.
+  it('un login non whitelisté : bloqué seulement hors open beta', () => {
+    expect(isWhitelisted('randomuser')).toBe(WHITELIST_DISABLED);
   });
 
-  it('une chaîne vide renvoie false', () => {
-    expect(isWhitelisted('')).toBe(false);
+  it('une chaîne vide : bloquée seulement hors open beta', () => {
+    expect(isWhitelisted('')).toBe(WHITELIST_DISABLED);
   });
 
-  // ── SÉCURITÉ : garde-fous contre l'usurpation (spoofing) ──
-  it('SÉCURITÉ: un login avec espace en suffixe ne passe pas la whitelist', () => {
-    expect(isWhitelisted('throbert ')).toBe(false);
+  // ── SÉCURITÉ : garde-fous contre l'usurpation (spoofing) hors open beta ──
+  it('SÉCURITÉ: un login avec espace en suffixe ne passe pas (hors open beta)', () => {
+    expect(isWhitelisted('throbert ')).toBe(WHITELIST_DISABLED);
   });
 
-  it('SÉCURITÉ: un login avec saut de ligne ne passe pas la whitelist', () => {
-    expect(isWhitelisted('throbert\n')).toBe(false);
+  it('SÉCURITÉ: un login avec saut de ligne ne passe pas (hors open beta)', () => {
+    expect(isWhitelisted('throbert\n')).toBe(WHITELIST_DISABLED);
   });
 
-  it('SÉCURITÉ: un caractère ajouté ne passe pas la whitelist (throbertt)', () => {
-    expect(isWhitelisted('throbertt')).toBe(false);
+  it('SÉCURITÉ: un caractère ajouté ne passe pas (throbertt, hors open beta)', () => {
+    expect(isWhitelisted('throbertt')).toBe(WHITELIST_DISABLED);
   });
 
-  it('SÉCURITÉ: un caractère retiré ne passe pas la whitelist (throber)', () => {
-    expect(isWhitelisted('throber')).toBe(false);
+  it('SÉCURITÉ: un caractère retiré ne passe pas (throber, hors open beta)', () => {
+    expect(isWhitelisted('throber')).toBe(WHITELIST_DISABLED);
   });
 
-  it('SÉCURITÉ: des caractères sosies (lookalike) ne passent pas la whitelist', () => {
+  it('SÉCURITÉ: des caractères sosies (lookalike) ne passent pas (hors open beta)', () => {
     // '0' à la place du 'o' dans 'throbert'
-    expect(isWhitelisted('thr0bert')).toBe(false);
+    expect(isWhitelisted('thr0bert')).toBe(WHITELIST_DISABLED);
     // Cyrillique 'а' (U+0430) au lieu du 'a' latin dans 'abidaux'
-    expect(isWhitelisted('аbidaux')).toBe(false);
+    expect(isWhitelisted('аbidaux')).toBe(WHITELIST_DISABLED);
   });
 });

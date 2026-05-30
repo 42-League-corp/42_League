@@ -4,7 +4,7 @@ import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import type { PlayedMatch } from '../../../lib/api';
 import { fmtDayLabel } from '../../../lib/format';
-import type { Lang } from '../../../lib/i18n';
+import { useT, type Lang } from '../../../lib/i18n';
 import type { MyMatchStat } from './useHistoriqueLogic';
 
 // ─── Badges réutilisables ────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ interface MyMatchCardProps {
 }
 
 export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProps) {
+  const t = useT();
   const { won, opponent, myScore, oppScore, delta, counted, wrAfter, wrImpact } = stat;
   return (
     <motion.div
@@ -81,7 +82,7 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
           won ? 'bg-accent/15 text-accent' : 'bg-red/15 text-red'
         }`}
       >
-        {won ? 'W' : 'L'}
+        {won ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
       <Avatar login={opponent} imageUrl={imageUrl ?? null} size="sm" />
