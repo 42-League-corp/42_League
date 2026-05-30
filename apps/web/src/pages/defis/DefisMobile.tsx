@@ -79,8 +79,8 @@ export function DefisMobile() {
             subtitle="Game passée · 2 clics"
             accessory={
               <>
-                <span aria-hidden className="text-gold/80">🍌</span>
-                <span aria-hidden className="text-muted-2">🐢</span>
+                <span aria-hidden className="text-gold/80"></span>
+                <span aria-hidden className="text-muted-2"></span>
               </>
             }
             onClick={() => setDeclareOpen(true)}
@@ -90,7 +90,7 @@ export function DefisMobile() {
             tone="gold"
             title="Défier un joueur"
             subtitle="Programme un duel à venir"
-            accessory={<span aria-hidden className="text-gold/80">⚔</span>}
+            accessory={<span aria-hidden className="text-gold/80"></span>}
             onClick={() => setChallengeOpen(true)}
           />
         </div>
@@ -242,7 +242,7 @@ export function DefisMobile() {
           pendingToConfirm.length === 0 &&
           pendingWaiting.length === 0 && (
             <div className="text-center py-10 px-4">
-              <div className="text-4xl mb-3 opacity-60">⚔</div>
+              <div className="text-4xl mb-3 opacity-60"></div>
               <div className="text-sm text-muted-2 font-medium">
                 Aucun défi en cours.<br />
                 <span className="text-xs text-muted">
