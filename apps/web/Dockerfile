@@ -8,6 +8,13 @@ RUN npm install
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
+# Numéro de build (= nombre de commits git) calculé sur l'hôte et injecté,
+# car `git` est absent de l'image et `.git` est exclu du contexte de build.
+ARG APP_BUILD
+ARG APP_DATE
+ENV VITE_APP_BUILD=$APP_BUILD
+ENV VITE_APP_DATE=$APP_DATE
+
 # Injection de l'URL de l'API
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL

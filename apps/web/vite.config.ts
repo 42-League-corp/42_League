@@ -18,7 +18,20 @@ function formatDate(raw: string): string {
   return `${parseInt(day, 10)} ${monthName} ${year} · ${hhmm}`;
 }
 
-function getGitVersion(): { version: string; date: string } {
+function getGitVersion(env: Record<string, string>): { version: string; date: string } {
+  // 1. Build-args injectés (Docker / CI) : prioritaires car `git` est absent
+  //    de l'image alpine et `.git` est exclu du contexte (.dockerignore).
+  const injectedBuild = env.VITE_APP_BUILD;
+  if (injectedBuild) {
+    const rawDate = env.VITE_APP_DATE;
+    const now = new Date();
+    return {
+      version: `${RELEASE}.${injectedBuild}`,
+      date: formatDate(rawDate || now.toISOString().replace('T', ' ').replace('Z', ' +0000')),
+    };
+  }
+
+  // 2. git local (dev) : nombre de commits → build number.
   try {
     const opts = { encoding: 'utf8' as const, stdio: 'pipe' as const };
     const build = execSync('git rev-list --count HEAD', opts).trim();
@@ -35,7 +48,7 @@ function getGitVersion(): { version: string; date: string } {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBase = env.VITE_API_BASE_URL ?? 'http://localhost:3000';
-  const { version, date } = getGitVersion();
+  const { version, date } = getGitVersion(env);
 
   return {
     define: {
