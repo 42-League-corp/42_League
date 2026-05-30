@@ -77,12 +77,6 @@ export function DefisMobile() {
             tone="amber"
             title="Déclarer une game"
             subtitle="Game passée · 2 clics"
-            accessory={
-              <>
-                <span aria-hidden className="text-gold/80">🍌</span>
-                <span aria-hidden className="text-muted-2">🐢</span>
-              </>
-            }
             onClick={() => setDeclareOpen(true)}
           />
           <BigActionButton
@@ -90,7 +84,6 @@ export function DefisMobile() {
             tone="gold"
             title="Défier un joueur"
             subtitle="Programme un duel à venir"
-            accessory={<span aria-hidden className="text-gold/80">⚔</span>}
             onClick={() => setChallengeOpen(true)}
           />
         </div>

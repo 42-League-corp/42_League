@@ -155,7 +155,13 @@ export function DeclareGameFlow({
             }`}
           >
             <span className="text-sm font-extrabold tracking-wide">
-              {iWon ? "🏆 J'ai gagné" : "💀 J'ai perdu"}
+              {variant === 'mobile'
+                ? iWon
+                  ? "J'ai gagné"
+                  : "J'ai perdu"
+                : iWon
+                  ? "🏆 J'ai gagné"
+                  : "💀 J'ai perdu"}
             </span>
             <span className="text-muted-2 text-lg leading-none">×</span>
           </button>

@@ -452,20 +452,16 @@ function PendingConfirmRow({
   onDone: () => Promise<void>;
 }) {
   const flash = useFlash();
-  const [confirming, setConfirming] = useState(false);
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const iWon = match.scoreOpponent === WINNING_SCORE;
-  const loserDeclaredScore = iWon ? match.scoreDeclarer : match.scoreOpponent;
-  const [loserScore, setLoserScore] = useState(loserDeclaredScore);
 
   const handleConfirm = async () => {
     setBusy(true);
     try {
-      const scoreSelf = iWon ? WINNING_SCORE : loserScore;
-      const scoreOpp = iWon ? loserScore : WINNING_SCORE;
-      await api.confirmMatch(match.id, scoreSelf, scoreOpp);
+      // Confirmation directe du score déclaré (point de vue « toi ») — pas de re-saisie.
+      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer);
       flash.show('✓ Match confirmé — ELO mis à jour !');
       await onDone();
     } catch (err) {
@@ -509,47 +505,21 @@ function PendingConfirmRow({
           <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">(eux – toi)</span>
         </div>
 
-        {!confirming ? (
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={() => setConfirming(true)} className="flex-1">✓ Confirmer</Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setContesting(true)}
-              className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
-            >
-              Contester
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-3 space-y-3">
-            <div
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                iWon
-                  ? 'bg-gold/10 text-gold border border-gold/30'
-                  : 'bg-red/10 text-red border border-red/30'
-              }`}
-            >
-              <span aria-hidden>{iWon ? '🏆' : '💀'}</span>
-              <span>
-                Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'} {WINNING_SCORE}–{loserDeclaredScore}
-              </span>
-            </div>
-            <p className="text-[10px] text-muted leading-relaxed">
-              Ajuste le score si ta version est différente.
-            </p>
-            <AbacusSlider
-              value={loserScore}
-              onChange={setLoserScore}
-              min={LOSER_SCORE_MIN}
-              max={LOSER_SCORE_MAX}
-            />
-            <div className="flex gap-2 mt-2">
-              <Button size="sm" loading={busy} onClick={handleConfirm} className="flex-1">Valider</Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Retour</Button>
-            </div>
-          </div>
-        )}
+        <div className="mt-1.5 text-[11px] text-muted-2">
+          Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'}. Confirme si c'est exact.
+        </div>
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" loading={busy} onClick={handleConfirm} className="flex-1">✓ Confirmer</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => setContesting(true)}
+            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+          >
+            Contester
+          </Button>
+        </div>
       </div>
 
       {contesting && (

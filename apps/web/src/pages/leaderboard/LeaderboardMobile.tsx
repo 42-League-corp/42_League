@@ -1,19 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
-import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { useLeagueData } from '../../hooks/useLeagueData';
 
-type Filter = 'all' | 'top10' | 'around';
-
 export function LeaderboardMobile() {
   const { leaderboard, matches, me, allOps, locations, refresh } = useLeagueData();
   const myLogin = me?.login;
-  const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
 
   const winsLossesByLogin = useMemo(() => {
@@ -32,8 +28,7 @@ export function LeaderboardMobile() {
     return map;
   }, [leaderboard, matches]);
 
-  // Tri par rang officiel (ELO) — comme la vue desktop. Le statut en ligne reste
-  // visible via le badge sur chaque carte, sans bousculer l'ordre du classement.
+  // Tri par rang officiel (ELO) — comme la vue desktop.
   const sortedLeaderboard = useMemo(
     () => [...leaderboard].sort((a, b) => a.rank - b.rank),
     [leaderboard],
@@ -56,43 +51,33 @@ export function LeaderboardMobile() {
     return m;
   }, [top3, winsLossesByLogin]);
 
-  // Le reste après le podium (filtré selon les critères)
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    let list = sortedLeaderboard.slice(3);
-
-    if (filter === 'top10') {
-      list = sortedLeaderboard.slice(0, 10);
-    } else if (filter === 'around' && myLogin) {
-      const myIdx = sortedLeaderboard.findIndex((u) => u.login === myLogin);
-      if (myIdx >= 0) {
-        const start = Math.max(0, myIdx - 5);
-        const end = Math.min(sortedLeaderboard.length, myIdx + 6);
-        list = sortedLeaderboard.slice(start, end);
-      }
-    }
-
-    if (normalizedQuery) {
-      list = list.filter((u) => u.login.toLowerCase().includes(normalizedQuery));
-    }
-
-    return list;
-  }, [sortedLeaderboard, filter, query, myLogin]);
+  // Une seule liste : tout le classement après le podium, filtré par la recherche.
+  const normalizedQuery = query.trim().toLowerCase();
+  const rest = useMemo(() => {
+    const list = sortedLeaderboard.slice(3);
+    if (!normalizedQuery) return list;
+    return list.filter((u) => u.login.toLowerCase().includes(normalizedQuery));
+  }, [sortedLeaderboard, normalizedQuery]);
 
   const myRank = sortedLeaderboard.find((u) => u.login === myLogin)?.rank;
 
-  const filterChoices: SegmentChoice<Filter>[] = [
-    { value: 'all', label: 'Tous' },
-    { value: 'top10', label: 'Top 10' },
-    ...(myRank ? ([{ value: 'around' as const, label: 'Moi' }] satisfies SegmentChoice<Filter>[]) : []),
-  ];
+  // À l'arrivée sur la page (et hors recherche), on centre la liste sur la carte
+  // de l'utilisateur. Différé pour passer APRÈS le reset de scroll du shell.
+  useEffect(() => {
+    if (!myLogin || normalizedQuery) return;
+    const el = document.getElementById('lb-me-row');
+    if (!el) return;
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 160);
+    return () => window.clearTimeout(id);
+  }, [myLogin, normalizedQuery, sortedLeaderboard.length]);
 
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
-        {/* Podium top 3 — uniquement sur le filtre "Tous" sans recherche.
-            Sur Top 10/Moi, le podium dupliquerait les 3 premiers de la liste. */}
-        {top3.length > 0 && filter === 'all' && !query && (
+        {/* Podium top 3 — toujours en haut (masqué seulement pendant une recherche). */}
+        {top3.length > 0 && !normalizedQuery && (
           <Podium top3={top3} statsByLogin={podiumStats} />
         )}
 
@@ -114,55 +99,50 @@ export function LeaderboardMobile() {
           )}
         </motion.div>
 
-        {/* Filter + search */}
-        <div className="space-y-2.5">
-          <SegmentedControl<Filter>
-            value={filter}
-            onChange={setFilter}
-            choices={filterChoices}
+        {/* Recherche */}
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" strokeWidth={2.5} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Chercher un joueur…"
+            className="w-full pl-11 pr-10 py-3 bg-bg-1 border border-border rounded-xl text-sm font-medium focus:border-gold focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
           />
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" strokeWidth={2.5} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Chercher un joueur…"
-              className="w-full pl-11 pr-10 py-3 bg-bg-1 border border-border rounded-xl text-sm font-medium focus:border-gold focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
-            />
-            {query && (
-              <button
-                type="button"
-                aria-label="Effacer"
-                onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-red hover:bg-red/10 tap-transparent"
-              >
-                <X className="w-4 h-4" strokeWidth={2.5} />
-              </button>
-            )}
-          </div>
+          {query && (
+            <button
+              type="button"
+              aria-label="Effacer"
+              onClick={() => setQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-red hover:bg-red/10 tap-transparent"
+            >
+              <X className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
 
         {/* Liste des joueurs */}
-        {filtered.length === 0 ? (
+        {rest.length === 0 ? (
           <div className="text-center py-10 text-sm text-muted-2">
             {query ? `Aucun joueur trouvé pour "${query}"` : 'Aucun joueur'}
           </div>
         ) : (
           <StaggerList className="space-y-2" stagger={0.03}>
-            {filtered.map((entry) => {
+            {rest.map((entry) => {
               const wl = winsLossesByLogin.get(entry.login) ?? { wins: 0, losses: 0 };
               const isMe = entry.login === myLogin;
               const targetedBy = allOps.find((o) => o.targetLogin === entry.login);
               return (
                 <StaggerItem key={entry.login}>
-                  <PlayerRankCard
-                    entry={entry}
-                    wins={wl.wins}
-                    losses={wl.losses}
-                    isMe={isMe}
-                    targetedBy={targetedBy}
-                    host={locations.get(entry.login)}
-                  />
+                  <div id={isMe ? 'lb-me-row' : undefined} className="scroll-mt-24">
+                    <PlayerRankCard
+                      entry={entry}
+                      wins={wl.wins}
+                      losses={wl.losses}
+                      isMe={isMe}
+                      targetedBy={targetedBy}
+                      host={locations.get(entry.login)}
+                    />
+                  </div>
                 </StaggerItem>
               );
             })}

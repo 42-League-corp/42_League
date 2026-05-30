@@ -34,8 +34,11 @@ export function PlayerSearch({
   locations,
   variant = 'desktop',
 }: PlayerSearchProps) {
+  const isMobileVariant = variant === 'mobile';
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
+  // Sur mobile, on ouvre la liste des adversaires d'emblée (sans focus ni clavier)
+  // pour que les suggestions soient visibles sans avoir à scroller.
+  const [open, setOpen] = useState(isMobileVariant);
   const [activeIdx, setActiveIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -144,10 +147,19 @@ export function PlayerSearch({
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" strokeWidth={2.5} />
         <input
           ref={inputRef}
-          autoFocus={isMobile}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setActiveIdx(0); setOpen(true); }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            // Mobile : remonte l'input en haut de la sheet pour laisser un maximum
+            // de place aux suggestions au-dessus du clavier.
+            if (isMobile) {
+              setTimeout(
+                () => inputRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+                80,
+              );
+            }
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Tape un pseudo…"
           aria-label="Rechercher un adversaire"
