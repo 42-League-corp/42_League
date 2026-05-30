@@ -160,34 +160,39 @@ app.use('*', async (c, next) => {
 // =========================================================================
 // NB : le middleware CORS ci-dessus court-circuite déjà les requêtes OPTIONS
 // (preflight) sans appeler next(), donc les limiteurs ne les comptent pas.
-const isMutation = (c: Context) =>
-  ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
+// Désactivé sous NODE_ENV=test : les tests d'intégration partagent tous l'IP
+// `unknown` (pas de X-Forwarded-For via app.request) et trébucheraient sur le
+// plafond. Le middleware lui-même est couvert par rate-limit.test.ts.
+if (process.env.NODE_ENV !== 'test') {
+  const isMutation = (c: Context) =>
+    ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-// Backstop global : plafond large par IP, juste pour absorber un flood / scan.
-app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600 }));
+  // Backstop global : plafond large par IP, juste pour absorber un flood / scan.
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600 }));
 
-// Auth : protège l'échange OAuth contre le brute-force / spam de state.
-app.use('/auth/*', rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 50 }));
+  // Auth : protège l'échange OAuth contre le brute-force / spam de state.
+  app.use('/auth/*', rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 50 }));
 
-// Écriture : ne compte que les mutations (déclarations de matchs, défis, ops,
-// tournois, feature-requests). Généreux pour un humain, bloque les floods.
-const writeLimiter = rateLimit({
-  name: 'write',
-  windowMs: 60_000,
-  max: 120,
-  skip: (c) => !isMutation(c),
-});
-for (const path of [
-  '/matches',
-  '/matches/*',
-  '/challenges',
-  '/challenges/*',
-  '/tournaments',
-  '/tournaments/*',
-  '/ops',
-  '/feature-requests',
-]) {
-  app.use(path, writeLimiter);
+  // Écriture : ne compte que les mutations (déclarations de matchs, défis, ops,
+  // tournois, feature-requests). Généreux pour un humain, bloque les floods.
+  const writeLimiter = rateLimit({
+    name: 'write',
+    windowMs: 60_000,
+    max: 120,
+    skip: (c) => !isMutation(c),
+  });
+  for (const path of [
+    '/matches',
+    '/matches/*',
+    '/challenges',
+    '/challenges/*',
+    '/tournaments',
+    '/tournaments/*',
+    '/ops',
+    '/feature-requests',
+  ]) {
+    app.use(path, writeLimiter);
+  }
 }
 
 // =========================================================================
