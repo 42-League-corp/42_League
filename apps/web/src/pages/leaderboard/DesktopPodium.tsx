@@ -140,8 +140,17 @@ function PodiumColumn({
       whileHover={{ y: -6 }}
       className="group relative flex flex-col items-center gap-3 focus:outline-none"
     >
-      {/* Avatar + couronne */}
-      <div className="relative">
+      {/* Avatar + couronne — flotte doucement (lévitation de la photo intra) */}
+      <motion.div
+        className="relative"
+        animate={{ y: [0, -7, 0] }}
+        transition={{
+          duration: 3.4,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          delay: delay + 0.5,
+        }}
+      >
         {isFirst && (
           <motion.div
             initial={{ y: -16, opacity: 0, rotate: -18 }}
@@ -170,7 +179,7 @@ function PodiumColumn({
         >
           {rank}
         </div>
-      </div>
+      </motion.div>
 
       {/* Login + ELO + stats */}
       <div className="text-center mt-1 max-w-full px-1">

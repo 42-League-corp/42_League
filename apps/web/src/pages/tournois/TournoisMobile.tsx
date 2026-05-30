@@ -87,6 +87,9 @@ export function TournoisMobile() {
           </StaggerList>
         )}
 
+        {/* Comment ça marche ? (parité avec la version desktop) */}
+        <HowItWorks />
+
       </div>
 
       <CreateTournamentSheet
@@ -149,6 +152,44 @@ function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
         </div>
       </MetalFrame>
     </motion.div>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section className="pt-2">
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90">
+          Comment ça marche ?
+        </span>
+        <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
+      </div>
+      <div className="space-y-3">
+        <div className="card-hud rounded-2xl p-4">
+          <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2">
+            🎲 Tournoi amical
+          </h3>
+          <p className="text-xs text-muted-2 leading-relaxed">
+            Tout le monde peut en lancer un : choisis un nom, 4 ou 8 joueurs, puis démarre le
+            bracket avec le bouton <span className="text-text-strong font-semibold">Nouveau</span>.
+            Idéal pour s'amuser entre collègues — sans impact sur le classement.
+          </p>
+        </div>
+        <div className="card-hud rounded-2xl p-4 border border-gold/40">
+          <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2">
+            👑 Tournoi officiel
+          </h3>
+          <p className="text-xs text-muted-2 leading-relaxed">
+            Réservé aux admins : seuls les administrateurs peuvent les lancer. En échange, ils
+            donnent lieu à des récompenses très spéciales —{' '}
+            <span className="text-gold font-semibold">titres exclusifs</span>,{' '}
+            <span className="text-gold font-semibold">League Coins</span> et{' '}
+            <span className="text-gold font-semibold">cosmétiques</span>.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 

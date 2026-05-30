@@ -312,7 +312,9 @@ function SortTh({
   );
 }
 
-// ─── Cellule win rate — barre type OP.GG (V / D dans la jauge) ────────────────
+// ─── Cellule win rate — barre type OP.GG (W / L dans la jauge) ────────────────
+// Le pourcentage se place À GAUCHE en jaune si win rate > 50, sinon À DROITE en
+// rouge — repère visuel immédiat des joueurs au-dessus / en-dessous de 50 %.
 function WinRateCell({
   winRate,
   games,
@@ -324,31 +326,50 @@ function WinRateCell({
   wins: number;
   losses: number;
 }) {
+  const t = useT();
   if (games === 0) return <span className="text-muted/40 text-xs">—</span>;
-  const color = winRate >= 50 ? '#4ade80' : '#ff5366';
+  const high = winRate > 50;
+  const pct = (
+    <span
+      className={`w-9 shrink-0 text-xs font-extrabold tabular-nums ${high ? 'text-left' : 'text-right'}`}
+      style={{ color: high ? '#ffc94a' : '#ff5366' }}
+    >
+      {winRate}%
+    </span>
+  );
+  const bar = (
+    <span className="flex h-4 flex-1 min-w-[72px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none ring-1 ring-black/30">
+      <span
+        className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
+        style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
+      >
+        {winRate >= 12 ? 'W' : ''}
+      </span>
+      <span
+        className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
+        style={{ background: 'rgba(255,83,102,0.85)' }}
+      >
+        {100 - winRate >= 12 ? 'L' : ''}
+      </span>
+    </span>
+  );
   return (
-    <Tooltip label={`${wins} V · ${losses} D · ${winRate}%`} className="w-full">
+    <Tooltip
+      label={`${wins} ${t('lb.abbr.win')} · ${losses} ${t('lb.abbr.loss')} · ${winRate}%`}
+      className="w-full"
+    >
       <span className="flex w-full items-center gap-2">
-        <span className="flex h-4 flex-1 min-w-[80px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none tabular-nums ring-1 ring-black/30">
-          <span
-            className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
-            style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
-          >
-            {winRate >= 20 ? wins : winRate >= 8 ? 'W' : ''}
-          </span>
-          <span
-            className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
-            style={{ background: 'rgba(255,83,102,0.85)' }}
-          >
-            {100 - winRate >= 20 ? losses : 100 - winRate >= 8 ? 'L' : ''}
-          </span>
-        </span>
-        <span
-          className="w-9 shrink-0 text-right text-xs font-extrabold tabular-nums"
-          style={{ color }}
-        >
-          {winRate}%
-        </span>
+        {high ? (
+          <>
+            {pct}
+            {bar}
+          </>
+        ) : (
+          <>
+            {bar}
+            {pct}
+          </>
+        )}
       </span>
     </Tooltip>
   );
@@ -356,10 +377,11 @@ function WinRateCell({
 
 // ─── Cellule série (streak) ──────────────────────────────────────────────────
 function StreakCell({ streak }: { streak: number }) {
+  const t = useT();
   if (streak === 0) return <span className="text-muted/40">—</span>;
   if (streak > 0) {
     return (
-      <Tooltip label={`${streak} victoire${streak > 1 ? 's' : ''} d'affilée 🔥`}>
+      <Tooltip label={`${streak} ${t('lb.streak.wins')} 🔥`}>
         <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a]">
           <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
           {streak}
@@ -368,7 +390,7 @@ function StreakCell({ streak }: { streak: number }) {
     );
   }
   return (
-    <Tooltip label={`${Math.abs(streak)} défaite${Math.abs(streak) > 1 ? 's' : ''} d'affilée ❄️`}>
+    <Tooltip label={`${Math.abs(streak)} ${t('lb.streak.losses')} ❄️`}>
       <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
         <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
         {Math.abs(streak)}

@@ -12,7 +12,7 @@ import { ContestModal } from '../../components/ContestModal';
 import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
-import { useI18n, useT } from '../../lib/i18n';
+import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { DeclareGameFlow, WINNING_SCORE, LOSER_SCORE_MIN, LOSER_SCORE_MAX } from './shared/DeclareGameFlow';
@@ -603,7 +603,7 @@ interface ChallengeRowProps {
   challenge: Challenge;
   kind: Kind;
   myLogin: string | undefined;
-  lang: 'fr' | 'en';
+  lang: Lang;
   onAccept: () => void;
   onDecline: () => void;
 }

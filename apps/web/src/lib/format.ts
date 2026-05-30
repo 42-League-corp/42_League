@@ -1,27 +1,43 @@
-export function fmtRelative(iso: string, lang: 'fr' | 'en'): { text: string; late: boolean } {
+import type { Lang } from './i18n';
+
+export function fmtRelative(iso: string, lang: Lang): { text: string; late: boolean } {
   const diff = new Date(iso).getTime() - Date.now();
   const absMin = Math.round(Math.abs(diff) / 60_000);
-  const fr = lang === 'fr';
-  if (diff >= 0) {
-    if (absMin < 1) return { text: fr ? 'maintenant' : 'now', late: false };
-    if (absMin === 1) return { text: fr ? 'dans 1 minute' : 'in 1 minute', late: false };
-    if (absMin < 60) return { text: fr ? `dans ${absMin} min` : `in ${absMin} min`, late: false };
-    const h = Math.floor(absMin / 60);
-    return {
-      text: fr ? (h === 1 ? 'dans 1 heure' : `dans ${h} h`) : `in ${h}h`,
-      late: false,
-    };
-  }
-  if (absMin < 1) return { text: fr ? "à l'instant" : 'just now', late: false };
-  if (absMin === 1) return { text: fr ? 'il y a 1 minute' : '1 minute ago', late: true };
-  if (absMin < 60) {
-    return { text: fr ? `il y a ${absMin} min` : `${absMin} min ago`, late: true };
-  }
   const h = Math.floor(absMin / 60);
-  return {
-    text: fr ? (h === 1 ? 'il y a 1 heure' : `il y a ${h} h`) : `${h}h ago`,
-    late: true,
-  };
+  if (diff >= 0) {
+    if (lang === 'fr') {
+      if (absMin < 1) return { text: 'maintenant', late: false };
+      if (absMin === 1) return { text: 'dans 1 minute', late: false };
+      if (absMin < 60) return { text: `dans ${absMin} min`, late: false };
+      return { text: h === 1 ? 'dans 1 heure' : `dans ${h} h`, late: false };
+    }
+    if (lang === 'es') {
+      if (absMin < 1) return { text: 'ahora', late: false };
+      if (absMin === 1) return { text: 'en 1 minuto', late: false };
+      if (absMin < 60) return { text: `en ${absMin} min`, late: false };
+      return { text: h === 1 ? 'en 1 hora' : `en ${h} h`, late: false };
+    }
+    if (absMin < 1) return { text: 'now', late: false };
+    if (absMin === 1) return { text: 'in 1 minute', late: false };
+    if (absMin < 60) return { text: `in ${absMin} min`, late: false };
+    return { text: `in ${h}h`, late: false };
+  }
+  if (lang === 'fr') {
+    if (absMin < 1) return { text: "à l'instant", late: false };
+    if (absMin === 1) return { text: 'il y a 1 minute', late: true };
+    if (absMin < 60) return { text: `il y a ${absMin} min`, late: true };
+    return { text: h === 1 ? 'il y a 1 heure' : `il y a ${h} h`, late: true };
+  }
+  if (lang === 'es') {
+    if (absMin < 1) return { text: 'ahora mismo', late: false };
+    if (absMin === 1) return { text: 'hace 1 minuto', late: true };
+    if (absMin < 60) return { text: `hace ${absMin} min`, late: true };
+    return { text: h === 1 ? 'hace 1 hora' : `hace ${h} h`, late: true };
+  }
+  if (absMin < 1) return { text: 'just now', late: false };
+  if (absMin === 1) return { text: '1 minute ago', late: true };
+  if (absMin < 60) return { text: `${absMin} min ago`, late: true };
+  return { text: `${h}h ago`, late: true };
 }
 
 export function fmtCountdown(iso: string): string {
@@ -72,13 +88,18 @@ function startOfDay(d: Date): number {
  * Libellé de jour humain : « Aujourd'hui », « Hier », sinon date en lettres.
  * Idéal pour grouper / dater des cartes d'historique sans bruit numérique.
  */
-export function fmtDayLabel(iso: string, lang: 'fr' | 'en'): string {
+export function fmtDayLabel(iso: string, lang: Lang): string {
   const d = new Date(iso);
-  const locale = lang === 'fr' ? 'fr-FR' : 'en-GB';
+  const locale = lang === 'fr' ? 'fr-FR' : lang === 'es' ? 'es-ES' : 'en-GB';
   const dayDiff = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
-  if (dayDiff === 0) return lang === 'fr' ? "Aujourd'hui" : 'Today';
-  if (dayDiff === 1) return lang === 'fr' ? 'Hier' : 'Yesterday';
-  if (dayDiff === -1) return lang === 'fr' ? 'Demain' : 'Tomorrow';
+  const labels: Record<Lang, [string, string, string]> = {
+    fr: ["Aujourd'hui", 'Hier', 'Demain'],
+    en: ['Today', 'Yesterday', 'Tomorrow'],
+    es: ['Hoy', 'Ayer', 'Mañana'],
+  };
+  if (dayDiff === 0) return labels[lang][0];
+  if (dayDiff === 1) return labels[lang][1];
+  if (dayDiff === -1) return labels[lang][2];
   return fmtDateLong(iso, locale);
 }
 

@@ -123,8 +123,17 @@ function PodiumSlot({ rank, entry, onClick, height, color, delay }: PodiumSlotPr
       onClick={() => onClick(entry.login)}
       className="flex flex-col items-center gap-2 tap-transparent active:scale-95 transition-transform"
     >
-      {/* Avatar + couronne pour le #1 */}
-      <div className="relative">
+      {/* Avatar + couronne pour le #1 — flotte doucement (photo en lévitation) */}
+      <motion.div
+        className="relative"
+        animate={{ y: [0, -6, 0] }}
+        transition={{
+          duration: 3.2,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          delay: delay + 0.4,
+        }}
+      >
         {rank === 1 && (
           <motion.div
             initial={{ y: -20, opacity: 0, rotate: -20 }}
@@ -152,7 +161,7 @@ function PodiumSlot({ rank, entry, onClick, height, color, delay }: PodiumSlotPr
         >
           {rank}
         </div>
-      </div>
+      </motion.div>
 
       {/* Login */}
       <div className="text-center mt-1 max-w-full px-1">
