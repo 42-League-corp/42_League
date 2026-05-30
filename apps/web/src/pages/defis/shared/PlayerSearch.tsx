@@ -181,7 +181,7 @@ export function PlayerSearch({
               </span>
             </div>
           )}
-          <div className={`${isMobile ? 'max-h-[40vh]' : 'max-h-72'} overflow-y-auto custom-scrollbar`}>
+          <div className={`${isMobile ? 'max-h-[34vh]' : 'max-h-72'} overflow-y-auto custom-scrollbar`}>
             {visibleList.map((p, i) => {
               const count = opponentCounts[p.login] ?? 0;
               const played = count > 0;

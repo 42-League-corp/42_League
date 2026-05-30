@@ -19,7 +19,7 @@ async function main() {
     await prisma.user.upsert({
       where: { login },
       update: {},
-      create: { login, campus: 'Paris', elo: 1000 },
+      create: { login, campus: 'Le Havre', elo: 1000 },
     });
     console.log(`   ✓ ${login}`);
   }

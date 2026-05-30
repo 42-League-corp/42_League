@@ -87,6 +87,21 @@ export function ChallengeMobileCard({
         </div>
       </div>
 
+      {kind === 'incoming' && (
+        <div className="flex flex-col gap-1.5 flex-shrink-0">
+          <Button size="sm" onClick={onAccept} className="text-[10px] px-3">
+            Accepter
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDecline}
+            className="text-[10px] px-3 text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+          >
+            Refuser
+          </Button>
+        </div>
+      )}
       {kind === 'outgoing' && (
         <Button size="sm" variant="ghost" onClick={onDecline} className="text-[10px]">
           Annuler
@@ -100,7 +115,7 @@ export function ChallengeMobileCard({
     </motion.div>
   );
 
-  // Seulement les défis reçus sont swipeables (accepter/refuser).
+  // Défis reçus : boutons explicites (ci-dessus) + swipe en bonus (accepter/refuser).
   if (kind === 'incoming') {
     return (
       <SwipeableCard

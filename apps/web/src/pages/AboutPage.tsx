@@ -84,7 +84,48 @@ function TabBtn({
 
 function RulesSection() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+    <div className="flex flex-col gap-4">
+      {/* En tête, pleine largeur : les règles de jeu sur le terrain. */}
+      <Panel title="Règles sur le terrain">
+        <div className="space-y-3 text-sm text-muted leading-relaxed">
+          <p>
+            Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés
+            proprement :
+          </p>
+          <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+            <li>
+              Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
+              être <span className="text-gold font-semibold">touchée au moins une fois</span> avant qu'un but
+              ne compte.
+            </li>
+            <li>
+              Le joueur qui <span className="text-text font-semibold">vient d'encaisser un but</span> a le droit
+              de remettre la balle <span className="text-gold font-semibold">au pied de sa barre du milieu</span> (demis)
+              pour relancer.
+            </li>
+            <li>
+              Les <span className="text-gold font-semibold">buts marqués depuis la barre du milieu</span> (demis)
+              sont valables.
+            </li>
+            <li>
+              La <span className="text-gold font-semibold">gamelle</span> (balle qui ressort du but) : tu peux
+              soit <span className="text-text font-semibold">prendre le point</span>, soit
+              <span className="text-text font-semibold"> retirer un point à l'adversaire</span> — mais on ne peut
+              <span className="text-text font-semibold"> pas conclure le match sur une gamelle</span>.
+            </li>
+            <li>
+              Les <span className="text-gold font-semibold">roulettes</span> doivent être
+              <span className="text-text font-semibold"> contrôlées</span> (pas de moulinets incontrôlés).
+            </li>
+          </ul>
+        </div>
+      </Panel>
+
+      {/* Le système ELO en pleine largeur : la formule détaillée mérite l'espace. */}
+      <EloSection />
+
+      {/* Rangée régulière de 3 panneaux « méta », hauteurs égales. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
       <Panel title="Format du match">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
@@ -95,57 +136,6 @@ function RulesSection() {
             <li>Match en <span className="text-gold font-semibold">10 buts</span> — premier arrivé à 10 gagne.</li>
             <li>Un match ne peut être déclaré qu'<span className="text-text font-semibold">après avoir été joué</span>.</li>
             <li>Les deux joueurs déclarent leur score indépendamment. En cas de désaccord, le match est annulé.</li>
-          </ul>
-        </div>
-      </Panel>
-
-      <div className="md:col-span-2">
-        <Panel title="Règles sur le terrain">
-          <div className="space-y-3 text-sm text-muted leading-relaxed">
-            <p>
-              Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés
-              proprement :
-            </p>
-            <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-              <li>
-                Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
-                être <span className="text-gold font-semibold">touchée au moins une fois</span> avant qu'un but
-                ne compte.
-              </li>
-              <li>
-                Le joueur qui <span className="text-text font-semibold">vient d'encaisser un but</span> a le droit
-                de remettre la balle <span className="text-gold font-semibold">au pied de sa barre du milieu</span> (demis)
-                pour relancer.
-              </li>
-              <li>
-                Les <span className="text-gold font-semibold">buts marqués depuis la barre du milieu</span> (demis)
-                sont valables.
-              </li>
-              <li>
-                La <span className="text-gold font-semibold">gamelle</span> (balle qui ressort du but) : tu peux
-                soit <span className="text-text font-semibold">prendre le point</span>, soit
-                <span className="text-text font-semibold"> retirer un point à l'adversaire</span> — mais on ne peut
-                <span className="text-text font-semibold"> pas conclure le match sur une gamelle</span>.
-              </li>
-              <li>
-                Les <span className="text-gold font-semibold">roulettes</span> doivent être
-                <span className="text-text font-semibold"> contrôlées</span> (pas de moulinets incontrôlés).
-              </li>
-            </ul>
-          </div>
-        </Panel>
-      </div>
-
-      <Panel title="ELO">
-        <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Le classement utilise un système <span className="text-gold font-semibold">ELO dérivé des échecs</span>,
-            adapté au babyfoot.
-          </p>
-          <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-            <li>Score de départ : <span className="text-text font-semibold">1000 ELO</span>.</li>
-            <li>Battre un adversaire mieux classé rapporte plus de points.</li>
-            <li>Seul le <span className="text-text font-semibold">premier match entre deux mêmes joueurs dans un délai de 3 jours</span> est comptabilisé pour l'ELO — évite le farming.</li>
           </ul>
         </div>
       </Panel>
@@ -174,6 +164,107 @@ function RulesSection() {
           </p>
         </div>
       </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ─── Système ELO ──────────────────────────────────────────────────────────────
+
+/**
+ * Détail de la formule ELO réellement appliquée côté serveur
+ * (cf. packages/shared/src/elo.ts). Présentation pédagogique, en pleine largeur.
+ */
+function EloSection() {
+  return (
+    <Panel title="Système ELO" sub="comment les points sont calculés">
+      <div className="space-y-5 text-sm text-muted leading-relaxed">
+        <p>
+          Le classement repose sur un système <span className="text-gold font-semibold">ELO dérivé des échecs</span>,
+          adapté au babyfoot 1 contre 1. Chaque joueur démarre à{' '}
+          <span className="text-text font-semibold">1000 points</span>. À chaque match, des points sont
+          transférés du perdant vers le gagnant — d'autant plus que le résultat était{' '}
+          <span className="text-text font-semibold">inattendu</span> et la victoire{' '}
+          <span className="text-text font-semibold">large</span>.
+        </p>
+
+        {/* La formule mise en avant */}
+        <div className="rounded-xl border border-gold/25 bg-bg-2/50 p-4 sm:p-5">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2 mb-3">
+            Points transférés
+          </div>
+          <div className="font-gaming text-center text-base sm:text-lg text-text-strong tracking-wide">
+            <span className="text-gold">K</span> × <span className="text-gold">M</span> ×{' '}
+            <span className="text-text">(1 − E)</span>
+            <span className="text-muted"> + </span>
+            <span className="text-gold">bonus d'upset</span>
+          </div>
+        </div>
+
+        {/* Décomposition terme par terme */}
+        <div className="space-y-3">
+          <EloTerm symbol="E" label="Probabilité attendue">
+            La chance théorique de victoire du gagnant, calculée à partir de l'écart de classement
+            (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 / (1 + 10^((Elo_perdant − Elo_gagnant) / 400))</code>).
+            Battre un adversaire mieux classé rapporte plus, car la victoire était peu probable.
+          </EloTerm>
+          <EloTerm symbol="K = 32" label="Facteur de base">
+            La quantité maximale de points en jeu sur un match « neutre ». Plus il est élevé, plus le
+            classement réagit vite.
+          </EloTerm>
+          <EloTerm symbol="M" label="Multiplicateur d'écart de buts">
+            <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − score_perdant) × 0,1</code> :
+            gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
+            <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
+          </EloTerm>
+          <EloTerm symbol="Bonus d'upset" label="Anti-inflation">
+            Un bonus <span className="text-text font-semibold">proportionnel à l'écart réel de classement</span>{' '}
+            (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">écart × 0,04</code>), appliqué{' '}
+            <span className="text-text font-semibold">uniquement quand l'outsider l'emporte</span>. Contrairement au
+            facteur ELO classique, il ne sature pas : un classement gonflé fond réellement vers la moyenne quand
+            son détenteur perd contre plus faible.
+          </EloTerm>
+        </div>
+
+        {/* Garde-fous & règles annexes */}
+        <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+          <li>
+            <span className="text-text font-semibold">Asymétrie sur les gros upsets</span> — le perdant surcoté encaisse
+            tout le bonus (jusqu'à <span className="text-gold font-semibold">−400</span> sur un match), mais le gagnant
+            ne grimpe que d'une part <span className="text-text font-semibold">plafonnée à +50</span> : battre un seul
+            « boss » gonflé ne fait pas exploser ton propre rating.
+          </li>
+          <li>
+            <span className="text-text font-semibold">Garde-fou</span> — la variation est bornée à{' '}
+            <span className="text-gold font-semibold">±400 points</span> par match.
+          </li>
+          <li>
+            <span className="text-text font-semibold">Anti-farming</span> — seul le{' '}
+            <span className="text-text font-semibold">premier match entre deux mêmes joueurs sur une fenêtre de 3 jours</span>{' '}
+            compte pour l'ELO.
+          </li>
+        </ul>
+      </div>
+    </Panel>
+  );
+}
+
+function EloTerm({
+  symbol,
+  label,
+  children,
+}: {
+  symbol: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="shrink-0 w-24 sm:w-28 pt-0.5">
+        <div className="font-gaming text-sm font-extrabold text-gold leading-tight">{symbol}</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-2 mt-0.5">{label}</div>
+      </div>
+      <p className="flex-1 text-sm text-muted leading-relaxed">{children}</p>
     </div>
   );
 }

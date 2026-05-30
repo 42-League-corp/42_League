@@ -1,49 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { calculateBabyfootElo, K, DEFAULT_ELO } from './elo.js';
+import {
+  calculateBabyfootElo,
+  K,
+  DEFAULT_ELO,
+  UPSET_GAP_COEFF,
+  WINNER_BONUS_CAP,
+  MAX_DELTA_PER_MATCH,
+} from './elo.js';
 
 describe('calculateBabyfootElo', () => {
-  it('est à somme nulle : deltaA + deltaB === 0', () => {
-    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
-    expect(r.deltaA + r.deltaB).toBe(0);
-  });
-
   it('le gagnant gagne des points, le perdant en perd', () => {
     const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
     expect(r.deltaA).toBeGreaterThan(0);
     expect(r.deltaB).toBeLessThan(0);
-  });
-
-  it("boost plus élevé pour l'outsider qui gagne", () => {
-    const upset = calculateBabyfootElo(1000, 1400, 'A', 10, 5);
-    const expected = calculateBabyfootElo(1400, 1000, 'A', 10, 5);
-    expect(upset.deltaA).toBeGreaterThan(expected.deltaA);
-  });
-
-  it('un écart de buts plus grand transfère plus de points', () => {
-    const close = calculateBabyfootElo(1000, 1000, 'A', 10, 9); // Δ=1
-    const crush = calculateBabyfootElo(1000, 1000, 'A', 10, 0); // Δ=10
-    expect(crush.deltaA).toBeGreaterThan(close.deltaA);
-  });
-
-  it('victoire 10-0 : multiplicateur maximum M=2 (Δ=10)', () => {
-    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
-    // E=0.5, M=2, P = round(32 * 2 * 0.5) = 32
-    expect(r.deltaA).toBe(32);
-    expect(r.deltaB).toBe(-32);
-  });
-
-  it('victoire 10-9 : multiplicateur minimum M=1.1 (Δ=1)', () => {
-    const r = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
-    // E=0.5, M=1.1, P = round(32 * 1.1 * 0.5) = round(17.6) = 18
-    expect(r.deltaA).toBe(18);
-    expect(r.deltaB).toBe(-18);
-  });
-
-  it('fonctionne si B est le gagnant', () => {
-    const r = calculateBabyfootElo(1000, 1000, 'B', 5, 10);
-    expect(r.deltaB).toBeGreaterThan(0);
-    expect(r.deltaA).toBeLessThan(0);
-    expect(r.deltaA + r.deltaB).toBe(0);
   });
 
   it('les nouveaux ratings sont cohérents avec les deltas', () => {
@@ -52,62 +21,181 @@ describe('calculateBabyfootElo', () => {
     expect(r.newB).toBe(1200 + r.deltaB);
   });
 
-  it('K=32 est le facteur de base', () => {
-    expect(K).toBe(32);
-  });
-
-  it('DEFAULT_ELO est 1000', () => {
-    expect(DEFAULT_ELO).toBe(1000);
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Constantes
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('constantes du module', () => {
-    it('K vaut exactement 32', () => {
-      expect(K).toBe(32);
-    });
-
-    it('DEFAULT_ELO vaut exactement 1000', () => {
-      expect(DEFAULT_ELO).toBe(1000);
-    });
-
-    it('K et DEFAULT_ELO sont des nombres', () => {
-      expect(typeof K).toBe('number');
-      expect(typeof DEFAULT_ELO).toBe('number');
-    });
+  it('fonctionne si B est le gagnant', () => {
+    const r = calculateBabyfootElo(1000, 1000, 'B', 5, 10);
+    expect(r.deltaB).toBeGreaterThan(0);
+    expect(r.deltaA).toBeLessThan(0);
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Invariant somme-nulle sur une large matrice de ratings et scores
+  // Résultats SYMÉTRIQUES (pas d'upset) : ratings égaux ou favori qui gagne.
+  // Le bonus d'écart de rating est nul → transfert classique somme-nulle.
   // ─────────────────────────────────────────────────────────────────────────
-  describe('invariant somme-nulle (matrice exhaustive)', () => {
-    const ratings = [100, 500, 800, 1000, 1200, 1500, 2000, 2400, 2800];
-    const loserScores = [-10, -5, -1, 0, 1, 3, 5, 7, 9];
+  describe('résultats attendus : transfert symétrique (somme nulle)', () => {
+    it('ratings égaux 10-0 → ±32 (E=0.5, M=2)', () => {
+      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
+      expect(r.deltaA).toBe(32);
+      expect(r.deltaB).toBe(-32);
+      expect(r.deltaA + r.deltaB).toBe(0);
+    });
 
-    it('deltaA + deltaB === 0 pour A gagnant sur toute la matrice', () => {
+    it('ratings égaux 10-9 → ±18 (E=0.5, M=1.1)', () => {
+      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
+      expect(r.deltaA).toBe(18);
+      expect(r.deltaB).toBe(-18);
+    });
+
+    it('ratings égaux 10-5 → ±24 (E=0.5, M=1.5)', () => {
+      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
+      expect(r.deltaA).toBe(24);
+      expect(r.deltaB).toBe(-24);
+    });
+
+    it('favori 1200 bat 1000, 10-5 → ±12 (pas de bonus, gap côté perdant)', () => {
+      const r = calculateBabyfootElo(1200, 1000, 'A', 10, 5);
+      expect(r.deltaA).toBe(12);
+      expect(r.deltaB).toBe(-12);
+      expect(r.deltaA + r.deltaB).toBe(0);
+    });
+
+    it('favori 1400 bat 1000, 10-0 → ±6', () => {
+      const r = calculateBabyfootElo(1400, 1000, 'A', 10, 0);
+      expect(r.deltaA).toBe(6);
+      expect(r.deltaB).toBe(-6);
+    });
+
+    it('le favori extrême (2800 bat 100, 10-0) gagne ~0', () => {
+      const r = calculateBabyfootElo(2800, 100, 'A', 10, 0);
+      expect(r.deltaA + 0).toBe(0);
+      expect(r.deltaB + 0).toBe(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Écart de BUTS : un écrasement transfère plus qu'un match serré.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('écart de buts (multiplicateur M)', () => {
+    it('un écart de buts plus grand transfère plus de points', () => {
+      const close = calculateBabyfootElo(1000, 1000, 'A', 10, 9); // Δ=1
+      const crush = calculateBabyfootElo(1000, 1000, 'A', 10, 0); // Δ=10
+      expect(crush.deltaA).toBeGreaterThan(close.deltaA);
+    });
+
+    it('le gain croît (au sens large) quand le score du perdant baisse', () => {
+      const scores = [9, 7, 5, 3, 1, 0, -5, -10];
+      let previous = -Infinity;
+      for (const ls of scores) {
+        const r = calculateBabyfootElo(1000, 1000, 'A', 10, ls);
+        expect(r.deltaA).toBeGreaterThanOrEqual(previous);
+        previous = r.deltaA;
+      }
+    });
+
+    it('gamelle 10--10 à rating égal → ±48 (M=3)', () => {
+      const r = calculateBabyfootElo(1000, 1000, 'A', 10, -10);
+      expect(r.deltaA).toBe(48);
+      expect(r.deltaB).toBe(-48);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // UPSETS : l'écart RÉEL de rating amplifie la perte du surcoté (non saturant).
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('amplification des upsets (bonus proportionnel à l\'écart de rating)', () => {
+    it("l'outsider qui gagne touche plus qu'un favori qui gagne (mêmes scores)", () => {
+      const upset = calculateBabyfootElo(1000, 1400, 'A', 10, 5);
+      const favorite = calculateBabyfootElo(1400, 1000, 'A', 10, 5);
+      expect(upset.deltaA).toBeGreaterThan(favorite.deltaA);
+    });
+
+    it('plus l\'écart de rating est grand, plus le perdant perd (non saturant)', () => {
+      // Au-delà de ~800 pts, l'Elo classique sature ; ici la perte continue de croître.
+      const small = calculateBabyfootElo(1000, 1800, 'A', 10, 5);
+      const huge = calculateBabyfootElo(1000, 6000, 'A', 10, 5);
+      expect(Math.abs(huge.deltaB)).toBeGreaterThan(Math.abs(small.deltaB));
+    });
+
+    it('petit upset 900 bat 1200, 10-5 → ±53 (bonus modéré, reste symétrique)', () => {
+      // baseP = round? E=0.15098, baseP=32*1.5*0.84902=40.75 ; gapBonus=300*0.04=12
+      // gain = loss = round(40.75 + 12) = 53  (bonus 12 < WINNER_BONUS_CAP)
+      const r = calculateBabyfootElo(900, 1200, 'A', 10, 5);
+      expect(r.deltaA).toBe(53);
+      expect(r.deltaB).toBe(-53);
+    });
+
+    it('gros upset 100 bat 2800, 10-0 → gagnant +114, perdant -172 (asymétrique)', () => {
+      // baseP≈64 ; gapBonus=2700*0.04=108
+      // gain = round(64 + min(108,50)) = 114 ; loss = round(64 + 108) = 172
+      const r = calculateBabyfootElo(100, 2800, 'A', 10, 0);
+      expect(r.deltaA).toBe(114);
+      expect(r.deltaB).toBe(-172);
+    });
+
+    it('upset énorme 1100 bat 15000, 10-5 : le perdant prend le plafond -400', () => {
+      // gapBonus=13900*0.04=556 → loss plafonnée à MAX_DELTA_PER_MATCH
+      // gain = round(48 + min(556,50)) = 98
+      const r = calculateBabyfootElo(1100, 15000, 'A', 10, 5);
+      expect(r.deltaB).toBe(-MAX_DELTA_PER_MATCH);
+      expect(r.deltaA).toBe(98);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Bornes & garde-fous
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('bornes et garde-fous', () => {
+    it('aucune variation ne dépasse MAX_DELTA_PER_MATCH en magnitude', () => {
+      const ratings = [100, 1000, 5000, 15000, 50000];
+      const loserScores = [-10, 0, 5, 9];
       for (const ra of ratings) {
         for (const rb of ratings) {
           for (const ls of loserScores) {
             const r = calculateBabyfootElo(ra, rb, 'A', 10, ls);
-            expect(r.deltaA + r.deltaB).toBe(0);
+            expect(Math.abs(r.deltaA)).toBeLessThanOrEqual(MAX_DELTA_PER_MATCH);
+            expect(Math.abs(r.deltaB)).toBeLessThanOrEqual(MAX_DELTA_PER_MATCH);
           }
         }
       }
     });
 
-    it('deltaA + deltaB === 0 pour B gagnant sur toute la matrice', () => {
+    it('le gain du gagnant ne dépasse jamais baseP + WINNER_BONUS_CAP (hors plafond global)', () => {
+      // 100 bat 2800 10-0 : baseP≈64, cap bonus 50 → gain ≤ 114
+      const r = calculateBabyfootElo(100, 2800, 'A', 10, 0);
+      expect(r.deltaA).toBeLessThanOrEqual(64 + WINNER_BONUS_CAP);
+    });
+
+    it('le perdant perd toujours au moins autant que le gagnant ne gagne (upset)', () => {
+      const r = calculateBabyfootElo(100, 2800, 'A', 10, 0);
+      expect(Math.abs(r.deltaB)).toBeGreaterThanOrEqual(r.deltaA);
+    });
+
+    it('aucun NaN ni Infinity pour des ratings extrêmes', () => {
+      const extremes = [0, 1, 100, 2800, 5000, 10000, 50000];
+      for (const ra of extremes) {
+        for (const rb of extremes) {
+          const r = calculateBabyfootElo(ra, rb, 'A', 10, 0);
+          expect(Number.isFinite(r.deltaA)).toBe(true);
+          expect(Number.isFinite(r.deltaB)).toBe(true);
+          expect(Number.isFinite(r.newA)).toBe(true);
+          expect(Number.isFinite(r.newB)).toBe(true);
+        }
+      }
+    });
+
+    it('les deltas sont des entiers', () => {
+      const ratings = [100, 1000, 1300, 2500, 15000];
       for (const ra of ratings) {
         for (const rb of ratings) {
-          for (const ls of loserScores) {
-            const r = calculateBabyfootElo(ra, rb, 'B', ls, 10);
-            expect(r.deltaA + r.deltaB).toBe(0);
-          }
+          const r = calculateBabyfootElo(ra, rb, 'A', 10, 3);
+          expect(Number.isInteger(r.deltaA)).toBe(true);
+          expect(Number.isInteger(r.deltaB)).toBe(true);
         }
       }
     });
 
-    it('newA et newB cohérents avec les deltas sur toute la matrice', () => {
+    it('newA et newB cohérents avec les deltas sur une large matrice', () => {
+      const ratings = [100, 800, 1000, 1500, 2800, 15000];
+      const loserScores = [-10, -1, 0, 5, 9];
       for (const ra of ratings) {
         for (const rb of ratings) {
           for (const ls of loserScores) {
@@ -121,8 +209,7 @@ describe('calculateBabyfootElo', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Symétrie : peu importe quel joueur est "A" ou "B", le même vrai
-  // gagnant obtient le même gain de points.
+  // Symétrie A/B : le vrai gagnant obtient le même résultat quel que soit son label.
   // ─────────────────────────────────────────────────────────────────────────
   describe('symétrie A/B', () => {
     const cases: Array<[number, number, number]> = [
@@ -136,8 +223,7 @@ describe('calculateBabyfootElo', () => {
     ];
 
     for (const [a, b, s] of cases) {
-      it(`gagnant identique : (${a},${b},'A',10,${s}) ↔ (${b},${a},'B',${s},10)`, () => {
-        // Dans les deux cas le joueur de rating "a" gagne contre le rating "b".
+      it(`(${a},${b},'A',10,${s}) ↔ (${b},${a},'B',${s},10)`, () => {
         const left = calculateBabyfootElo(a, b, 'A', 10, s);
         const right = calculateBabyfootElo(b, a, 'B', s, 10);
         expect(left.deltaA).toBe(right.deltaB);
@@ -147,314 +233,13 @@ describe('calculateBabyfootElo', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Monotonicité par rapport à l'écart de rating (favori qui gagne)
+  // Constantes
   // ─────────────────────────────────────────────────────────────────────────
-  describe('monotonicité : écart de rating du favori', () => {
-    it('plus le favori est largement favori, moins il gagne de points', () => {
-      // Le gagnant a un rating supérieur ; on augmente progressivement l'écart.
-      const gaps = [0, 100, 200, 400, 800];
-      let previous = Infinity;
-      for (const gap of gaps) {
-        const r = calculateBabyfootElo(1000 + gap, 1000, 'A', 10, 5);
-        expect(r.deltaA).toBeLessThanOrEqual(previous);
-        previous = r.deltaA;
-      }
-    });
-
-    it('un favori extrême gagne moins quà rating égal', () => {
-      const equal = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
-      const heavy = calculateBabyfootElo(2000, 1000, 'A', 10, 5);
-      expect(heavy.deltaA).toBeLessThan(equal.deltaA);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Monotonicité par rapport à l'écart de buts (multiplicateur M)
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('monotonicité : écart de buts', () => {
-    it('le gain croît (au sens large) quand le score du perdant baisse', () => {
-      const scores = [9, 7, 5, 3, 1, 0, -5, -10];
-      let previous = -Infinity;
-      for (const ls of scores) {
-        const r = calculateBabyfootElo(1000, 1000, 'A', 10, ls);
-        expect(r.deltaA).toBeGreaterThanOrEqual(previous);
-        previous = r.deltaA;
-      }
-    });
-
-    it('un écrasement transfère strictement plus quun match serré', () => {
-      const close = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
-      const crush = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
-      expect(crush.deltaA).toBeGreaterThan(close.deltaA);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Amplification des upsets : l'outsider qui gagne gagne plus que le favori
-  // qui gagne, dans des conditions de score identiques.
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('amplification des upsets', () => {
-    it("l'outsider 1000 battant 1400 gagne plus que le favori 1400 battant 1000", () => {
-      const upset = calculateBabyfootElo(1000, 1400, 'A', 10, 5);
-      const favorite = calculateBabyfootElo(1400, 1000, 'A', 10, 5);
-      expect(upset.deltaA).toBeGreaterThan(favorite.deltaA);
-    });
-
-    it('un upset rapporte toujours plus de 16 points (au-dessus du gain à rating égal)', () => {
-      const upset = calculateBabyfootElo(1000, 1400, 'A', 10, 5);
-      const equal = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
-      expect(upset.deltaA).toBeGreaterThan(equal.deltaA);
-    });
-
-    it("l'upset extrême (100 bat 2800) approche le maximum théorique", () => {
-      const r = calculateBabyfootElo(100, 2800, 'A', 10, 0);
-      // E ≈ 0, M=2 → P ≈ round(32 * 2 * 1) = 64
-      expect(r.deltaA).toBe(64);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Valeurs exactes calculées à la main
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('valeurs exactes (calcul manuel)', () => {
-    it('1000 vs 1000, 10-0 → P=32 (E=0.5, M=2)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
-      // P = round(32 * 2.0 * 0.5) = round(32) = 32
-      expect(r.deltaA).toBe(32);
-      expect(r.deltaB).toBe(-32);
-    });
-
-    it('1000 vs 1000, 10-9 → P=18 (E=0.5, M=1.1)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
-      // P = round(32 * 1.1 * 0.5) = round(17.6) = 18
-      expect(r.deltaA).toBe(18);
-      expect(r.deltaB).toBe(-18);
-    });
-
-    it('1000 vs 1000, 10-5 → P=24 (E=0.5, M=1.5)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 5);
-      // P = round(32 * 1.5 * 0.5) = round(24) = 24
-      expect(r.deltaA).toBe(24);
-      expect(r.deltaB).toBe(-24);
-    });
-
-    it('1000 vs 1000, 10-3 → P=27 (E=0.5, M=1.7)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 3);
-      // P = round(32 * 1.7 * 0.5) = round(27.2) = 27
-      expect(r.deltaA).toBe(27);
-      expect(r.deltaB).toBe(-27);
-    });
-
-    it('favori 1200 bat 1000, 10-5 → P=12', () => {
-      const r = calculateBabyfootElo(1200, 1000, 'A', 10, 5);
-      // E = 1/(1+10^((1000-1200)/400)) = 1/(1+10^-0.5) ≈ 0.75975
-      // P = round(32 * 1.5 * (1-0.75975)) = round(32*1.5*0.24025) = round(11.53) = 12
-      expect(r.deltaA).toBe(12);
-      expect(r.deltaB).toBe(-12);
-    });
-
-    it('outsider 1000 bat 1200, 10-5 → P=36', () => {
-      const r = calculateBabyfootElo(1000, 1200, 'A', 10, 5);
-      // E ≈ 0.24025
-      // P = round(32 * 1.5 * 0.75975) = round(36.47) = 36
-      expect(r.deltaA).toBe(36);
-      expect(r.deltaB).toBe(-36);
-    });
-
-    it('favori 1200 bat 1000, 10-0 → P=15', () => {
-      const r = calculateBabyfootElo(1200, 1000, 'A', 10, 0);
-      // E ≈ 0.75975, M=2 → round(32 * 2 * 0.24025) = round(15.38) = 15
-      expect(r.deltaA).toBe(15);
-      expect(r.deltaB).toBe(-15);
-    });
-
-    it('outsider 1000 bat 1200, 10-0 → P=49', () => {
-      const r = calculateBabyfootElo(1000, 1200, 'A', 10, 0);
-      // E ≈ 0.24025, M=2 → round(32 * 2 * 0.75975) = round(48.62) = 49
-      expect(r.deltaA).toBe(49);
-      expect(r.deltaB).toBe(-49);
-    });
-
-    it('outsider 1000 bat 1400, 10-0 → P=58', () => {
-      const r = calculateBabyfootElo(1000, 1400, 'A', 10, 0);
-      // E = 1/(1+10^(400/400)) = 1/(1+10) = 0.090909, M=2
-      // P = round(32 * 2 * 0.909090) = round(58.18) = 58
-      expect(r.deltaA).toBe(58);
-      expect(r.deltaB).toBe(-58);
-    });
-
-    it('favori 1400 bat 1000, 10-0 → P=6', () => {
-      const r = calculateBabyfootElo(1400, 1000, 'A', 10, 0);
-      // E = 0.909090, M=2 → round(32 * 2 * 0.090909) = round(5.818) = 6
-      expect(r.deltaA).toBe(6);
-      expect(r.deltaB).toBe(-6);
-    });
-
-    it('favori 1100 bat 1000, 10-5 → P=17', () => {
-      const r = calculateBabyfootElo(1100, 1000, 'A', 10, 5);
-      // E = 1/(1+10^(-100/400)) = 1/(1+10^-0.25) ≈ 0.640065
-      // P = round(32 * 1.5 * 0.359935) = round(17.28) = 17
-      expect(r.deltaA).toBe(17);
-      expect(r.deltaB).toBe(-17);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Bornes du multiplicateur M
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('bornes du multiplicateur M', () => {
-    it('M = 1.1 minimum quand loserScore = 9 (à rating égal P=18)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 9);
-      // M = 1 + 1*0.1 = 1.1 ; P = round(32*1.1*0.5) = 18
-      expect(r.deltaA).toBe(18);
-    });
-
-    it('M = 2.0 maximum normal quand loserScore = 0 (à rating égal P=32)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
-      // M = 1 + 10*0.1 = 2.0 ; P = round(32*2*0.5) = 32
-      expect(r.deltaA).toBe(32);
-    });
-
-    it('le gain à 10-0 est exactement K à rating égal (M=2, E=0.5)', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, 0);
-      expect(r.deltaA).toBe(K);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Scores négatifs (gamelles) : loserScore peut descendre jusqu'à -10
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('scores négatifs (gamelles)', () => {
-    it('1000 vs 1000, 10--10 → M=3.0, P=48', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, -10);
-      // goalDiff = 10 - (-10) = 20 ; M = 1 + 20*0.1 = 3.0
-      // P = round(32 * 3 * 0.5) = round(48) = 48
-      expect(r.deltaA).toBe(48);
-      expect(r.deltaB).toBe(-48);
-    });
-
-    it('1000 vs 1000, 10--5 → M=2.5, P=40', () => {
-      const r = calculateBabyfootElo(1000, 1000, 'A', 10, -5);
-      // goalDiff = 15 ; M = 2.5 ; P = round(32 * 2.5 * 0.5) = 40
-      expect(r.deltaA).toBe(40);
-      expect(r.deltaB).toBe(-40);
-    });
-
-    it('une gamelle transfère plus quune victoire 10-0 (à conditions égales)', () => {
-      const crush = calculateBabyfootElo(1000, 1000, 'A', 10, 0); // M=2
-      const gamelle = calculateBabyfootElo(1000, 1000, 'A', 10, -10); // M=3
-      expect(gamelle.deltaA).toBeGreaterThan(crush.deltaA);
-    });
-
-    it('P reste entier et somme-nulle avec scores négatifs', () => {
-      for (let ls = -10; ls <= -1; ls++) {
-        const r = calculateBabyfootElo(1200, 900, 'A', 10, ls);
-        expect(Number.isInteger(r.deltaA)).toBe(true);
-        expect(r.deltaA + r.deltaB).toBe(0);
-      }
-    });
-
-    it('upset extrême avec gamelle (100 bat 2800, 10--10) approche le max', () => {
-      const r = calculateBabyfootElo(100, 2800, 'A', 10, -10);
-      // E ≈ 0, M=3 → round(32 * 3 * 1) = 96
-      expect(r.deltaA).toBe(96);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Grands écarts de rating : E tend vers 0 ou 1, pas de NaN/Infinity
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('grands écarts de rating', () => {
-    it("le favori écrasant (2800 bat 100, 10-0) gagne très peu (P≈0)", () => {
-      const r = calculateBabyfootElo(2800, 100, 'A', 10, 0);
-      // E ≈ 1 → P = round(32 * 2 * ~0) = 0
-      // (deltaB peut être -0 puisqu'il vaut -P ; +0 ajouté pour normaliser le signe)
-      expect(r.deltaA + 0).toBe(0);
-      expect(r.deltaB + 0).toBe(0);
-      expect(r.deltaA + r.deltaB).toBe(0);
-    });
-
-    it("l'outsider écrasant (100 bat 2800, 10-0) gagne près du max (P=64)", () => {
-      const r = calculateBabyfootElo(100, 2800, 'A', 10, 0);
-      expect(r.deltaA).toBe(64);
-    });
-
-    it('aucun NaN ni Infinity pour des ratings extrêmes', () => {
-      const extremes = [0, 1, 100, 2800, 5000, 10000];
-      for (const ra of extremes) {
-        for (const rb of extremes) {
-          const r = calculateBabyfootElo(ra, rb, 'A', 10, 0);
-          expect(Number.isFinite(r.deltaA)).toBe(true);
-          expect(Number.isFinite(r.deltaB)).toBe(true);
-          expect(Number.isFinite(r.newA)).toBe(true);
-          expect(Number.isFinite(r.newB)).toBe(true);
-          expect(Number.isNaN(r.deltaA)).toBe(false);
-          expect(Number.isNaN(r.deltaB)).toBe(false);
-        }
-      }
-    });
-
-    it('le favori extrême ne gagne jamais plus que loutsider symétrique', () => {
-      const favorite = calculateBabyfootElo(2800, 100, 'A', 10, 0);
-      const outsider = calculateBabyfootElo(100, 2800, 'A', 10, 0);
-      expect(favorite.deltaA).toBeLessThanOrEqual(outsider.deltaA);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Propriétés générales : P entier non négatif, zéro-sum, égalité des
-  // magnitudes gagnant/perdant.
-  // ─────────────────────────────────────────────────────────────────────────
-  describe('propriétés générales', () => {
-    const ratings = [100, 700, 1000, 1300, 1800, 2500];
-    const loserScores = [-10, -3, 0, 4, 9];
-
-    it('le gain du gagnant est un entier non négatif', () => {
-      for (const ra of ratings) {
-        for (const rb of ratings) {
-          for (const ls of loserScores) {
-            const r = calculateBabyfootElo(ra, rb, 'A', 10, ls);
-            expect(Number.isInteger(r.deltaA)).toBe(true);
-            expect(r.deltaA).toBeGreaterThanOrEqual(0);
-          }
-        }
-      }
-    });
-
-    it('la magnitude du gagnant égale celle du perdant (transfert pur)', () => {
-      for (const ra of ratings) {
-        for (const rb of ratings) {
-          for (const ls of loserScores) {
-            const r = calculateBabyfootElo(ra, rb, 'A', 10, ls);
-            expect(r.deltaA).toBe(-r.deltaB);
-            expect(Math.abs(r.deltaA)).toBe(Math.abs(r.deltaB));
-          }
-        }
-      }
-    });
-
-    it('quand B gagne, deltaB est un entier non négatif et deltaA son opposé', () => {
-      for (const ra of ratings) {
-        for (const rb of ratings) {
-          for (const ls of loserScores) {
-            const r = calculateBabyfootElo(ra, rb, 'B', ls, 10);
-            expect(Number.isInteger(r.deltaB)).toBe(true);
-            expect(r.deltaB).toBeGreaterThanOrEqual(0);
-            expect(r.deltaA).toBe(-r.deltaB);
-          }
-        }
-      }
-    });
-
-    it('le total des ratings est conservé (newA + newB === ratingA + ratingB)', () => {
-      for (const ra of ratings) {
-        for (const rb of ratings) {
-          for (const ls of loserScores) {
-            const r = calculateBabyfootElo(ra, rb, 'A', 10, ls);
-            expect(r.newA + r.newB).toBe(ra + rb);
-          }
-        }
-      }
-    });
+  describe('constantes du module', () => {
+    it('K vaut 32', () => expect(K).toBe(32));
+    it('DEFAULT_ELO vaut 1000', () => expect(DEFAULT_ELO).toBe(1000));
+    it('UPSET_GAP_COEFF vaut 0.04', () => expect(UPSET_GAP_COEFF).toBe(0.04));
+    it('WINNER_BONUS_CAP vaut 50', () => expect(WINNER_BONUS_CAP).toBe(50));
+    it('MAX_DELTA_PER_MATCH vaut 400', () => expect(MAX_DELTA_PER_MATCH).toBe(400));
   });
 });

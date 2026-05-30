@@ -67,6 +67,8 @@ export interface MeResponse {
 
 export interface AdminUser {
   login: string;
+  /** Null = faux compte créé manuellement (jamais passé par OAuth 42) → supprimable. */
+  ftId: number | null;
   role: 'USER' | 'ADMIN' | 'SUPERADMIN';
   elo: number;
   matchesPlayed: number;
@@ -346,6 +348,12 @@ export const api = {
       `/tournaments/${encodeURIComponent(id)}/leave`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  // Organisateur/admin : ajoute directement un joueur existant au tournoi.
+  addTournamentPlayer: (id: string, login: string) =>
+    request<{ id: string; added: string; status: string }>(
+      `/tournaments/${encodeURIComponent(id)}/add-player`,
+      { method: 'POST', body: JSON.stringify({ login }) },
+    ),
   startTournament: (id: string) =>
     request<{ id: string; started: true }>(
       `/tournaments/${encodeURIComponent(id)}/start`,
@@ -419,6 +427,32 @@ export const api = {
     request<PlayedMatch>(`/admin/matches/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify({ scoreA, scoreB }),
+    }),
+  // SUPERADMIN : créer un faux joueur, supprimer un faux joueur, forcer un résultat.
+  adminCreateUser: (login: string, opts?: { campus?: string; elo?: number }) =>
+    request<AdminUser>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ login, ...opts }),
+    }),
+  adminDeleteUser: (login: string) =>
+    request<{ login: string; deleted: true }>(`/admin/users/${encodeURIComponent(login)}`, {
+      method: 'DELETE',
+    }),
+  adminForceResult: (playerA: string, playerB: string, scoreA: number, scoreB: number) =>
+    request<PlayedMatch>('/admin/matches/force-result', {
+      method: 'POST',
+      body: JSON.stringify({ playerA, playerB, scoreA, scoreB }),
+    }),
+  // SUPERADMIN : forcer la résolution d'un match en attente (validation ou annulation).
+  adminForceConfirmMatch: (id: string) =>
+    request<PlayedMatch>(`/admin/matches/${encodeURIComponent(id)}/force-confirm`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  adminForceCancelMatch: (id: string) =>
+    request<{ id: string; status: 'cancelled' }>(`/admin/matches/${encodeURIComponent(id)}/force-cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
   adminRejectedMatches: () => request<RejectedMatch[]>('/admin/rejected-matches'),
   adminSuspicious: () => request<SuspiciousFlag[]>('/admin/suspicious'),
