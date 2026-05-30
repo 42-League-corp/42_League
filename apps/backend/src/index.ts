@@ -35,6 +35,7 @@ import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
 import { verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
+import { rateLimit } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
@@ -153,6 +154,46 @@ app.use('*', async (c, next) => {
 
   await next();
 });
+
+// =========================================================================
+// RATE-LIMITING — garde-fou anti-abus pour la bêta
+// =========================================================================
+// NB : le middleware CORS ci-dessus court-circuite déjà les requêtes OPTIONS
+// (preflight) sans appeler next(), donc les limiteurs ne les comptent pas.
+// Désactivé sous NODE_ENV=test : les tests d'intégration partagent tous l'IP
+// `unknown` (pas de X-Forwarded-For via app.request) et trébucheraient sur le
+// plafond. Le middleware lui-même est couvert par rate-limit.test.ts.
+if (process.env.NODE_ENV !== 'test') {
+  const isMutation = (c: Context) =>
+    ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
+
+  // Backstop global : plafond large par IP, juste pour absorber un flood / scan.
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600 }));
+
+  // Auth : protège l'échange OAuth contre le brute-force / spam de state.
+  app.use('/auth/*', rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 50 }));
+
+  // Écriture : ne compte que les mutations (déclarations de matchs, défis, ops,
+  // tournois, feature-requests). Généreux pour un humain, bloque les floods.
+  const writeLimiter = rateLimit({
+    name: 'write',
+    windowMs: 60_000,
+    max: 120,
+    skip: (c) => !isMutation(c),
+  });
+  for (const path of [
+    '/matches',
+    '/matches/*',
+    '/challenges',
+    '/challenges/*',
+    '/tournaments',
+    '/tournaments/*',
+    '/ops',
+    '/feature-requests',
+  ]) {
+    app.use(path, writeLimiter);
+  }
+}
 
 // =========================================================================
 // TEMPS RÉEL — events SSE ciblés
@@ -442,7 +483,7 @@ app.post('/matches/:id/confirm', async (c) => {
   }
   const { scoreSelf: confirmedSelf, scoreOpponent: confirmedOpponent } = parsed.data;
 
-  const match = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
       throw new HTTPException(404, { message: 'pending match not found' });
@@ -457,11 +498,15 @@ app.post('/matches/:id/confirm', async (c) => {
       confirmedSelf !== p.scoreOpponent ||
       confirmedOpponent !== p.scoreDeclarer
     ) {
-      // Bilateral validation failed → both must redo. Delete the pending entirely.
+      // Validation bilatérale échouée → les deux doivent recommencer : on
+      // supprime le pending. ⚠️ Ne PAS `throw` ici : une exception ferait
+      // rollback de la transaction et annulerait ce delete. On renvoie un
+      // marqueur et on lève le 409 APRÈS le commit de la transaction.
       await tx.pendingMatch.delete({ where: { id } });
-      throw new HTTPException(409, {
+      return {
+        mismatch: true as const,
         message: `Scores différents — ${p.declarerLogin} a déclaré ${p.scoreDeclarer}-${p.scoreOpponent}, tu as soumis ${confirmedOpponent}-${confirmedSelf}. Match annulé, à redéclarer.`,
-      });
+      };
     }
 
     const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
@@ -504,7 +549,7 @@ app.post('/matches/:id/confirm', async (c) => {
 
     await tx.pendingMatch.delete({ where: { id } });
 
-    return tx.playedMatch.create({
+    const created = await tx.playedMatch.create({
       data: {
         id,
         playerALogin: a,
@@ -518,7 +563,14 @@ app.post('/matches/:id/confirm', async (c) => {
         deltaB,
       },
     });
+    return { mismatch: false as const, match: created };
   });
+
+  // Le 409 est levé hors transaction : le delete du pending est ainsi committé.
+  if (result.mismatch) {
+    throw new HTTPException(409, { message: result.message });
+  }
+  const match = result.match;
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
@@ -1669,6 +1721,31 @@ async function purgeOldAuditLogs(): Promise<void> {
   if (count > 0) console.log(`[purge] ${count} audit log entries older than 24 months deleted`);
 }
 
+// ── Expiration des matchs en attente non confirmés ──
+// Un PendingMatch jamais confirmé ni refusé reste affiché indéfiniment et pollue
+// l'UI des deux joueurs. On les purge après PENDING_MATCH_TTL_HOURS et on notifie
+// les deux camps pour que leur liste se rafraîchisse.
+const PENDING_MATCH_TTL_HOURS = Number(process.env.PENDING_MATCH_TTL_HOURS ?? 72);
+
+async function purgeStalePendingMatches(): Promise<void> {
+  const cutoff = new Date(Date.now() - PENDING_MATCH_TTL_HOURS * 60 * 60 * 1000);
+  const stale = await prisma.pendingMatch.findMany({
+    where: { declaredAt: { lt: cutoff } },
+    select: { id: true, declarerLogin: true, opponentLogin: true },
+  });
+  if (stale.length === 0) return;
+  await prisma.pendingMatch.deleteMany({ where: { id: { in: stale.map((m) => m.id) } } });
+  for (const m of stale) {
+    emit([m.declarerLogin, m.opponentLogin], {
+      type: 'match:expired',
+      payload: { id: m.id },
+    });
+  }
+  console.log(
+    `[purge] ${stale.length} pending match(es) older than ${PENDING_MATCH_TTL_HOURS}h deleted`,
+  );
+}
+
 const port = Number(process.env.PORT ?? 3000);
 
 // En environnement de test (NODE_ENV=test), on importe `app` pour le tester via
@@ -1680,9 +1757,15 @@ if (process.env.NODE_ENV !== 'test') {
     rescheduleOpsTimers().catch((err) => {
       console.error('failed to reschedule ops timers', err);
     });
-    purgeOldAuditLogs().catch((err) => {
-      console.error('failed to purge old audit logs', err);
-    });
+    const runDailyPurges = () => {
+      purgeOldAuditLogs().catch((err) => {
+        console.error('failed to purge old audit logs', err);
+      });
+      purgeStalePendingMatches().catch((err) => {
+        console.error('failed to purge stale pending matches', err);
+      });
+    };
+    runDailyPurges();
     // Purge quotidienne à 03h00
     const msUntil3am = (() => {
       const now = new Date();
@@ -1692,8 +1775,8 @@ if (process.env.NODE_ENV !== 'test') {
       return next.getTime() - now.getTime();
     })();
     setTimeout(() => {
-      void purgeOldAuditLogs();
-      setInterval(() => void purgeOldAuditLogs(), 24 * 60 * 60 * 1000);
+      runDailyPurges();
+      setInterval(runDailyPurges, 24 * 60 * 60 * 1000);
     }, msUntil3am);
   });
 }

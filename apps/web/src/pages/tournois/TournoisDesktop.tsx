@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
+import { Trophy } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
@@ -92,14 +93,63 @@ export function TournoisDesktop() {
       </div>
 
       {tournaments.length === 0 ? (
-        <div className="text-center text-muted-2 py-10">Aucun tournoi pour le moment.</div>
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 bg-gold/20 blur-2xl rounded-full" />
+            <Trophy className="relative w-16 h-16 text-gold/70" strokeWidth={1.5} />
+          </div>
+          <h3 className="font-gaming text-lg font-extrabold uppercase tracking-[0.14em] text-text-strong mb-1.5">
+            Aucun tournoi pour le moment
+          </h3>
+          <p className="text-sm text-muted-2 max-w-sm mb-5">
+            Lance le premier bracket de la ligue — crée un tournoi amical à 4 ou 8
+            joueurs avec le formulaire ci-dessus et désigne le champion sur le terrain.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-2">
+            <span className="card-hud rounded-full px-3 py-1.5">Single-élimination</span>
+            <span className="card-hud rounded-full px-3 py-1.5">4 ou 8 joueurs</span>
+            <span className="card-hud rounded-full px-3 py-1.5">Bracket automatique</span>
+          </div>
+        </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
           {tournaments.map((t) => (
             <TournoiCard key={t.id} t={t} />
           ))}
         </div>
       )}
+
+      {/* ─── Comment lancer un tournoi ? ─────────────────────────────────── */}
+      <div className="mt-6 pt-6 border-t border-gold/15">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-3 flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+          Comment ça marche ?
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="card-hud rounded-xl p-4">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2">
+              🎲 Tournoi amical
+            </h3>
+            <p className="text-xs text-muted-2 leading-relaxed">
+              Tout le monde peut en lancer un : choisis un nom, 4 ou 8 joueurs, puis
+              démarre le bracket avec le formulaire ci-dessus. Idéal pour s'amuser entre
+              collègues — sans impact sur le classement.
+            </p>
+          </div>
+          <div className="card-hud rounded-xl p-4 border-gold/40">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2">
+              👑 Tournoi officiel
+            </h3>
+            <p className="text-xs text-muted-2 leading-relaxed">
+              Réservé aux admins : seuls les administrateurs peuvent les lancer. En
+              échange, ils donnent lieu à des récompenses très spéciales —{' '}
+              <span className="text-gold font-semibold">titres exclusifs</span>,{' '}
+              <span className="text-gold font-semibold">League Coins</span> et{' '}
+              <span className="text-gold font-semibold">cosmétiques</span>.
+            </p>
+          </div>
+        </div>
+      </div>
     </Panel>
   );
 }
@@ -123,7 +173,7 @@ function TournoiCard({ t }: { t: Tournament }) {
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="block card-hud p-4 rounded-xl hover-glow transition-all"
+      className="block card-hud p-4 rounded-xl hover-glow transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

@@ -1,8 +1,9 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, X } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
+import { StatCard } from '../../components/StatCard';
 import { Button } from '../../components/Button';
 import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
@@ -44,7 +45,10 @@ export function DefisDesktop() {
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
   const [presetOpp, setPresetOpp] = useState<LeaderboardEntry | null>(null);
+  const [showAllTargets, setShowAllTargets] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
+
+  const TARGETS_PREVIEW = 9;
 
   const openChallengeWith = (player: LeaderboardEntry | null) => {
     setPresetOpp(player);
@@ -52,9 +56,17 @@ export function DefisDesktop() {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const hasActivity =
+    pendingToConfirm.length > 0 ||
+    pendingWaiting.length > 0 ||
+    incoming.length > 0 ||
+    accepted.length > 0 ||
+    outgoing.length > 0;
+
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')}>
       <div ref={topRef} />
+      <DefisStatsBar />
       <ActionBento
         openCard={openCard}
         presetOpp={presetOpp}
@@ -74,91 +86,183 @@ export function DefisDesktop() {
         onDone={refresh}
       />
 
-      {(pendingToConfirm.length > 0 || pendingWaiting.length > 0) && (
-        <div className="space-y-4 mb-6">
-          {pendingToConfirm.length > 0 && (
-            <Section title="À confirmer">
-              {pendingToConfirm.map((p) => (
-                <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
-              ))}
-            </Section>
-          )}
-          {pendingWaiting.length > 0 && (
-            <Section title="En attente de confirmation">
-              {pendingWaiting.map((p) => (
-                <PendingWaitRow key={p.id} match={p} />
-              ))}
-            </Section>
-          )}
-        </div>
-      )}
-
-      {(incoming.length || outgoing.length || accepted.length) > 0 && (
-        <div className="space-y-4 mb-6">
-          {incoming.length > 0 && (
-            <Section title={t('defis.received')}>
-              {incoming.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="incoming"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={() => handleAction(c.id, 'accept')}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-          {accepted.length > 0 && (
-            <Section title={t('defis.scheduled')}>
-              {accepted.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="accepted"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-          {outgoing.length > 0 && (
-            <Section title={t('defis.sent')}>
-              {outgoing.map((c) => (
-                <ChallengeRow
-                  key={c.id}
-                  challenge={c}
-                  kind="outgoing"
-                  myLogin={myLogin}
-                  lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')}
-                />
-              ))}
-            </Section>
-          )}
-        </div>
-      )}
-
-      <Section title={t('defis.challenge')}>
-        {others.length === 0 ? (
-          <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {others.map((u) => (
-              <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
-            ))}
+      {/* Command center : à gauche le flux d'activité (à confirmer + défis),
+          à droite le roster d'adversaires. Quand il n'y a aucune activité, le
+          roster s'étale sur toute la largeur (réagencement « Uber Eats »). */}
+      <div className={`grid gap-5 ${hasActivity ? 'lg:grid-cols-12' : ''}`}>
+        {hasActivity && (
+          <div className="lg:col-span-5 space-y-4">
+            {pendingToConfirm.length > 0 && (
+              <Section title="À confirmer">
+                {pendingToConfirm.map((p) => (
+                  <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
+                ))}
+              </Section>
+            )}
+            {incoming.length > 0 && (
+              <Section title={t('defis.received')}>
+                {incoming.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="incoming"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={() => handleAction(c.id, 'accept')}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {accepted.length > 0 && (
+              <Section title={t('defis.scheduled')}>
+                {accepted.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="accepted"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={NOOP}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {outgoing.length > 0 && (
+              <Section title={t('defis.sent')}>
+                {outgoing.map((c) => (
+                  <ChallengeRow
+                    key={c.id}
+                    challenge={c}
+                    kind="outgoing"
+                    myLogin={myLogin}
+                    lang={lang}
+                    onAccept={NOOP}
+                    onDecline={() => handleAction(c.id, 'decline')}
+                  />
+                ))}
+              </Section>
+            )}
+            {pendingWaiting.length > 0 && (
+              <Section title="En attente de confirmation">
+                {pendingWaiting.map((p) => (
+                  <PendingWaitRow key={p.id} match={p} />
+                ))}
+              </Section>
+            )}
           </div>
         )}
-      </Section>
+
+        <div className={hasActivity ? 'lg:col-span-7' : ''}>
+          <Section title={t('defis.challenge')}>
+            {others.length === 0 ? (
+              <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
+            ) : (
+              <>
+                <div
+                  className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
+                    hasActivity ? '' : 'xl:grid-cols-3'
+                  }`}
+                >
+                  {(showAllTargets ? others : others.slice(0, TARGETS_PREVIEW)).map((u) => (
+                    <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
+                  ))}
+                </div>
+                {others.length > TARGETS_PREVIEW && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTargets((v) => !v)}
+                    className="mt-3 w-full py-2 rounded-lg border border-gold/30 text-gold/90 text-xs font-gaming font-extrabold uppercase tracking-[0.14em] hover:bg-gold/[0.06] hover:border-gold transition-colors"
+                  >
+                    {showAllTargets
+                      ? '▲ Afficher moins'
+                      : `▼ Afficher plus (${others.length - TARGETS_PREVIEW} joueurs)`}
+                  </button>
+                )}
+              </>
+            )}
+          </Section>
+
+          <ChallengeStats
+            incoming={incoming.length}
+            outgoing={outgoing.length}
+            accepted={accepted.length}
+            pending={pendingToConfirm.length + pendingWaiting.length}
+            available={others.length}
+          />
+        </div>
+      </div>
     </Panel>
   );
 }
 
 const NOOP = () => {};
+
+// ─── Barre de stats perso (remplit le haut du panneau Défis) ─────────────────
+
+function DefisStatsBar() {
+  const { me, matches, leaderboard } = useLeagueData();
+  const stats = useMemo(() => {
+    const login = me?.login;
+    if (!login) return null;
+    const mine = matches.filter(
+      (m) => m.playerALogin === login || m.playerBLogin === login,
+    );
+    let wins = 0;
+    let losses = 0;
+    for (const m of mine) {
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (won) wins += 1;
+      else losses += 1;
+    }
+    const recent = [...mine].sort(
+      (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+    );
+    let streak = 0;
+    for (const m of recent) {
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (streak === 0) streak = won ? 1 : -1;
+      else if (won && streak > 0) streak += 1;
+      else if (!won && streak < 0) streak -= 1;
+      else break;
+    }
+    const total = wins + losses;
+    return {
+      elo: me?.user?.elo ?? 1000,
+      rank: leaderboard.find((u) => u.login === login)?.rank ?? null,
+      wins,
+      losses,
+      winRate: total ? Math.round((wins / total) * 100) : 0,
+      streak,
+    };
+  }, [me, matches, leaderboard]);
+
+  if (!stats) return null;
+
+  const streakLabel =
+    stats.streak > 0
+      ? `${stats.streak} V`
+      : stats.streak < 0
+        ? `${Math.abs(stats.streak)} D`
+        : '—';
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
+      <StatCard value={stats.rank ? `#${stats.rank}` : '—'} label="Rang" tone="gold" />
+      <StatCard value={String(stats.elo)} label="ELO" tone="teal" />
+      <StatCard value={`${stats.wins}-${stats.losses}`} label="Bilan V-D" tone="neutral" />
+      <StatCard
+        value={`${stats.winRate}%`}
+        label="Win rate"
+        tone={stats.winRate >= 50 ? 'win' : 'loss'}
+      />
+      <StatCard value={streakLabel} label="Série" tone={stats.streak >= 0 ? 'win' : 'loss'} />
+    </div>
+  );
+}
 
 // ─── Bento d'actions « Déclarer / Défier » — réagencement selon l'espace ─────
 
@@ -253,7 +357,7 @@ interface ActionCardMeta {
 }
 
 const ACTION_META: Record<Exclude<OpenCard, null>, ActionCardMeta> = {
-  declare: { Icon: Plus, label: 'Déclarer une game', sub: 'Game déjà jouée' },
+  declare: { Icon: Plus, label: 'Déclarer une game passée', sub: 'Game déjà jouée' },
   challenge: { Icon: Swords, label: 'Défier un joueur', sub: 'Programmer un duel' },
 };
 
@@ -619,6 +723,43 @@ function RecordResultForm({
 interface ChallengeCardProps {
   player: LeaderboardEntry;
   onChallenge: (player: LeaderboardEntry) => void;
+}
+
+// ─── Stats des défis en cours (comble l'espace sous le roster) ───────────────
+
+function ChallengeStats({
+  incoming,
+  outgoing,
+  accepted,
+  pending,
+  available,
+}: {
+  incoming: number;
+  outgoing: number;
+  accepted: number;
+  pending: number;
+  available: number;
+}) {
+  return (
+    <div className="mt-6">
+      <Section title="Stats des défis">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <StatCard value={String(incoming)} label="Reçus" tone="gold" />
+          <StatCard value={String(outgoing)} label="Envoyés" tone="teal" />
+          <StatCard value={String(accepted)} label="Programmés" tone="win" />
+          <StatCard value={String(pending)} label="À confirmer" tone="loss" />
+          <StatCard value={String(available)} label="À défier" tone="neutral" />
+        </div>
+        <p className="text-[11px] text-muted-2 mt-2 leading-relaxed">
+          {pending > 0
+            ? `${pending} match${pending > 1 ? 's' : ''} en attente de confirmation — pense à valider tes scores.`
+            : accepted > 0
+              ? `${accepted} duel${accepted > 1 ? 's' : ''} programmé${accepted > 1 ? 's' : ''} : saisis le score une fois joué.`
+              : 'Aucun défi en cours — lance-toi en défiant un joueur ci-dessus !'}
+        </p>
+      </Section>
+    </div>
+  );
 }
 
 function ChallengeCard({ player, onChallenge }: ChallengeCardProps) {

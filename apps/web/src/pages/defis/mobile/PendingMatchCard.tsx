@@ -38,7 +38,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
       const scoreSelf = iWon ? WINNING_SCORE : loserScore;
       const scoreOpp = iWon ? loserScore : WINNING_SCORE;
       await api.confirmMatch(match.id, scoreSelf, scoreOpp);
-      flash.show('✓ Match confirmé — ELO mis à jour !');
+      flash.show('Match confirmé — ELO mis à jour !');
       haptic('success');
       await onDone();
     } catch (err) {
@@ -153,7 +153,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
                     : 'bg-red/10 text-red border border-red/30'
                 }`}
               >
-                <span aria-hidden>{iWon ? '🏆' : '💀'}</span>
+                <span aria-hidden>{iWon ? '' : ''}</span>
                 <span>
                   Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'} {WINNING_SCORE}–{loserDeclaredScore}
                 </span>

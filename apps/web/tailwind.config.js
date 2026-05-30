@@ -175,6 +175,11 @@ export default {
         spin: {
           to: { transform: 'rotate(360deg)' },
         },
+        // Rotation centrée (translate inclus pour ne pas être écrasé) — effet soleil.
+        'spin-sun': {
+          from: { transform: 'translate(-50%, -50%) rotate(0deg)' },
+          to: { transform: 'translate(-50%, -50%) rotate(360deg)' },
+        },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
@@ -232,6 +237,7 @@ export default {
         'sheet-down': 'sheet-down 220ms cubic-bezier(0.32, 0.72, 0, 1)',
         'bead-pulse': 'bead-pulse 180ms ease-out',
         spin: 'spin 0.7s linear infinite',
+        'spin-sun': 'spin-sun 44s linear infinite',
         shimmer: 'shimmer 2.5s linear infinite',
         'glow-pulse': 'glow-pulse 2.2s ease-in-out infinite',
         'tab-bounce': 'tab-bounce 320ms cubic-bezier(0.16, 1, 0.3, 1)',

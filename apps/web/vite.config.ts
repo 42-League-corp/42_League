@@ -10,8 +10,8 @@ const RELEASE = '0.4';
 
 function formatDate(raw: string): string {
   // raw = "2026-05-29 14:30:22 +0200"
-  const [datePart, timePart] = raw.trim().split(' ');
-  const [year, month, day] = datePart.split('-');
+  const [datePart = '', timePart = ''] = raw.trim().split(' ');
+  const [year = '', month = '1', day = '1'] = datePart.split('-');
   const hhmm = timePart.slice(0, 5); // "14:30"
   const MONTHS = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'aoû', 'sep', 'oct', 'nov', 'déc'];
   const monthName = MONTHS[parseInt(month, 10) - 1];

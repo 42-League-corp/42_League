@@ -65,7 +65,7 @@ export function ReglagesPage() {
     <div className="flex flex-col gap-5">
       <FeatureRequestBox />
       <Panel title={t('panel.settings.title')}>
-      <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
         {/* Langue */}
         <div>

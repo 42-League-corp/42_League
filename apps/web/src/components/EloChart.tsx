@@ -51,14 +51,13 @@ function buildSvgPath(pts: { x: number; y: number }[]): string {
   const first = pts[0];
   if (!first) return '';
   if (pts.length === 1) return `M ${first.x} ${first.y}`;
+  // Polyligne rigide : segments droits entre chaque match → on voit nettement
+  // chaque variation d'ELO (le lissage gommait les écarts entre points proches).
   let d = `M ${first.x} ${first.y}`;
   for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1];
     const curr = pts[i];
-    if (!prev || !curr) continue;
-    const cp1x = prev.x + (curr.x - prev.x) * 0.5;
-    const cp2x = curr.x - (curr.x - prev.x) * 0.5;
-    d += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`;
+    if (!curr) continue;
+    d += ` L ${curr.x} ${curr.y}`;
   }
   return d;
 }
