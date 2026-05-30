@@ -21,6 +21,7 @@ import {
   shouldCountForElo,
 } from '@42-league/shared';
 import { prisma } from './db.js';
+import type { Prisma } from '@prisma/client';
 import {
   createAuthRouter,
   getAllowedWebOrigins,
@@ -473,6 +474,69 @@ app.post('/matches', async (c) => {
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
 
+// Applique un match en attente comme match joué (calcul ELO + anti-farming +
+// création du PlayedMatch + suppression du pending). Partagé entre la confirmation
+// normale (par l'adversaire) et la force-validation SUPERADMIN.
+type PendingForSettle = {
+  id: string;
+  declarerLogin: string;
+  opponentLogin: string;
+  scoreDeclarer: number;
+  scoreOpponent: number;
+  declaredAt: Date;
+};
+
+async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingForSettle) {
+  const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
+  const scoreA = p.declarerLogin === a ? p.scoreDeclarer : p.scoreOpponent;
+  const scoreB = p.declarerLogin === a ? p.scoreOpponent : p.scoreDeclarer;
+  const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
+
+  const priors = await tx.playedMatch.findMany({
+    where: { playerALogin: a, playerBLogin: b },
+    select: { playedAt: true, countedForElo: true },
+  });
+  const countsForElo = shouldCountForElo(priors, p.declaredAt);
+
+  const [userA, userB] = await Promise.all([
+    tx.user.findUniqueOrThrow({ where: { login: a } }),
+    tx.user.findUniqueOrThrow({ where: { login: b } }),
+  ]);
+
+  let deltaA = 0;
+  let deltaB = 0;
+  if (countsForElo) {
+    const update = calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
+    deltaA = update.deltaA;
+    deltaB = update.deltaB;
+    await tx.user.update({
+      where: { login: a },
+      data: { elo: update.newA, matchesPlayed: { increment: 1 } },
+    });
+    await tx.user.update({
+      where: { login: b },
+      data: { elo: update.newB, matchesPlayed: { increment: 1 } },
+    });
+  }
+
+  await tx.pendingMatch.delete({ where: { id: p.id } });
+
+  return tx.playedMatch.create({
+    data: {
+      id: p.id,
+      playerALogin: a,
+      playerBLogin: b,
+      scoreA,
+      scoreB,
+      winner,
+      playedAt: p.declaredAt,
+      countedForElo: countsForElo,
+      deltaA,
+      deltaB,
+    },
+  });
+}
+
 app.post('/matches/:id/confirm', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
@@ -509,60 +573,7 @@ app.post('/matches/:id/confirm', async (c) => {
       };
     }
 
-    const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
-    const scoreA = p.declarerLogin === a ? p.scoreDeclarer : p.scoreOpponent;
-    const scoreB = p.declarerLogin === a ? p.scoreOpponent : p.scoreDeclarer;
-    const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
-
-    const priors = await tx.playedMatch.findMany({
-      where: { playerALogin: a, playerBLogin: b },
-      select: { playedAt: true, countedForElo: true },
-    });
-    const countsForElo = shouldCountForElo(priors, p.declaredAt);
-
-    const [userA, userB] = await Promise.all([
-      tx.user.findUniqueOrThrow({ where: { login: a } }),
-      tx.user.findUniqueOrThrow({ where: { login: b } }),
-    ]);
-
-    let deltaA = 0;
-    let deltaB = 0;
-    if (countsForElo) {
-      const update = calculateBabyfootElo(
-        userA.elo,
-        userB.elo,
-        winner,
-        scoreA,
-        scoreB,
-      );
-      deltaA = update.deltaA;
-      deltaB = update.deltaB;
-      await tx.user.update({
-        where: { login: a },
-        data: { elo: update.newA, matchesPlayed: { increment: 1 } },
-      });
-      await tx.user.update({
-        where: { login: b },
-        data: { elo: update.newB, matchesPlayed: { increment: 1 } },
-      });
-    }
-
-    await tx.pendingMatch.delete({ where: { id } });
-
-    const created = await tx.playedMatch.create({
-      data: {
-        id,
-        playerALogin: a,
-        playerBLogin: b,
-        scoreA,
-        scoreB,
-        winner,
-        playedAt: p.declaredAt,
-        countedForElo: countsForElo,
-        deltaA,
-        deltaB,
-      },
-    });
+    const created = await settlePendingAsPlayed(tx, p);
     return { mismatch: false as const, match: created };
   });
 
@@ -619,6 +630,250 @@ app.post('/matches/:id/reject', async (c) => {
     emit([declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
   }
   return c.json({ id, status: 'rejected', contestReason });
+});
+
+// ── SUPERADMIN : forcer la résolution d'un match en attente ──────────────────
+// Réservé au SUPERADMIN. Permet de trancher un match qu'un joueur refuse de
+// confirmer/contester (esquive). Soit on valide le score déclaré tel quel
+// (force-confirm → l'ELO s'applique), soit on annule le pending (force-cancel).
+
+app.post('/admin/matches/:id/force-confirm', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const id = c.req.param('id');
+
+  const match = await prisma.$transaction(async (tx) => {
+    const p = await tx.pendingMatch.findUnique({ where: { id } });
+    if (!p) throw new HTTPException(404, { message: 'pending match not found' });
+    return settlePendingAsPlayed(tx, p);
+  });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: match.playerALogin,
+    payload: {
+      forced: 'confirm',
+      matchId: id,
+      playerA: match.playerALogin,
+      playerB: match.playerBLogin,
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+    },
+  });
+
+  emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json(match);
+});
+
+app.post('/admin/matches/:id/force-cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const id = c.req.param('id');
+
+  const p = await prisma.pendingMatch.findUnique({ where: { id } });
+  if (!p) throw new HTTPException(404, { message: 'pending match not found' });
+  await prisma.pendingMatch.delete({ where: { id } });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'DELETE_MATCH',
+    target: p.declarerLogin,
+    payload: {
+      forced: 'cancel',
+      matchId: id,
+      declarer: p.declarerLogin,
+      opponent: p.opponentLogin,
+      score: `${p.scoreDeclarer}-${p.scoreOpponent}`,
+    },
+  });
+
+  emit([p.declarerLogin, p.opponentLogin], { type: 'match:expired', payload: { id } });
+  return c.json({ id, status: 'cancelled' });
+});
+
+// ── SUPERADMIN : gestion des faux joueurs + forçage de résultat ──────────────
+
+const AdminCreateUserSchema = z.object({
+  login: z.string().trim().min(2).max(20).regex(/^[a-zA-Z0-9_-]+$/),
+  campus: z.string().trim().max(40).optional(),
+  elo: z.number().int().min(0).max(5000).optional(),
+});
+
+// Crée un faux joueur (sans ftId → pas de compte 42 réel). Seuls ces comptes
+// pourront ensuite être supprimés (cf. DELETE ci-dessous).
+app.post('/admin/users', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = AdminCreateUserSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { login, campus, elo } = parsed.data;
+
+  const existing = await prisma.user.findUnique({ where: { login } });
+  if (existing) {
+    throw new HTTPException(409, { message: `Le login "${login}" existe déjà.` });
+  }
+
+  const user = await prisma.user.create({
+    data: { login, campus: campus ?? null, elo: elo ?? 1000 },
+  });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_STATS',
+    target: login,
+    payload: { created: true, fake: true, campus: campus ?? null, elo: elo ?? 1000 },
+  });
+
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json(user);
+});
+
+// Suppression DÉFINITIVE — uniquement les faux comptes (ftId null, jamais passés
+// par OAuth 42). Refuse tout compte réel ou SUPERADMIN. Nettoie les dépendances.
+app.delete('/admin/users/:login', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const login = c.req.param('login');
+
+  if (SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(403, { message: 'Un SUPERADMIN ne peut pas être supprimé.' });
+  }
+
+  const user = await prisma.user.findUnique({ where: { login } });
+  if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  if (user.ftId !== null) {
+    throw new HTTPException(403, {
+      message: 'Seuls les faux comptes (créés manuellement, sans compte 42) peuvent être supprimés.',
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.pendingMatch.deleteMany({
+      where: { OR: [{ declarerLogin: login }, { opponentLogin: login }] },
+    });
+    await tx.playedMatch.deleteMany({
+      where: { OR: [{ playerALogin: login }, { playerBLogin: login }] },
+    });
+    await tx.challenge.deleteMany({
+      where: { OR: [{ challengerLogin: login }, { opponentLogin: login }] },
+    });
+    await tx.ops.deleteMany({
+      where: { OR: [{ ownerLogin: login }, { targetLogin: login }] },
+    });
+    await tx.rejectedMatch.deleteMany({
+      where: { OR: [{ declarerLogin: login }, { opponentLogin: login }] },
+    });
+    await tx.featureRequest.deleteMany({ where: { authorId: login } });
+    await tx.tournamentEntry.deleteMany({ where: { login } });
+    await tx.tournamentMatch.updateMany({ where: { playerALogin: login }, data: { playerALogin: null } });
+    await tx.tournamentMatch.updateMany({ where: { playerBLogin: login }, data: { playerBLogin: null } });
+    await tx.tournament.updateMany({ where: { winnerLogin: login }, data: { winnerLogin: null } });
+    await tx.tournament.deleteMany({ where: { createdByLogin: login } });
+    await tx.user.delete({ where: { login } });
+  });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_STATS',
+    target: login,
+    payload: { deletedFakeUser: true },
+  });
+
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ login, deleted: true });
+});
+
+const AdminForceResultSchema = z
+  .object({
+    playerA: z.string().trim().min(1),
+    playerB: z.string().trim().min(1),
+    scoreA: z.number().int().min(0).max(50),
+    scoreB: z.number().int().min(0).max(50),
+  })
+  .refine((d) => d.playerA !== d.playerB, { message: 'Les deux joueurs doivent être différents.' })
+  .refine((d) => d.scoreA !== d.scoreB, { message: 'Match nul impossible — il faut un vainqueur.' });
+
+// Injecte directement un résultat de match (admin) → applique l'ELO. Fonctionne
+// pour faux comme vrais joueurs, sans confirmation de leur part.
+app.post('/admin/matches/force-result', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = AdminForceResultSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { playerA: pA, playerB: pB, scoreA: sIn, scoreB: sInB } = parsed.data;
+
+  const match = await prisma.$transaction(async (tx) => {
+    const [uA, uB] = await Promise.all([
+      tx.user.findUnique({ where: { login: pA } }),
+      tx.user.findUnique({ where: { login: pB } }),
+    ]);
+    if (!uA) throw new HTTPException(404, { message: `Joueur introuvable : ${pA}` });
+    if (!uB) throw new HTTPException(404, { message: `Joueur introuvable : ${pB}` });
+
+    // Ordonnancement canonique (login a < b) comme pour les matchs normaux.
+    const [a, b] = pairKey(pA, pB);
+    const scoreA = a === pA ? sIn : sInB;
+    const scoreB = a === pA ? sInB : sIn;
+    const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
+
+    const userA = a === pA ? uA : uB;
+    const userB = a === pA ? uB : uA;
+    const update = calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
+
+    await tx.user.update({
+      where: { login: a },
+      data: { elo: update.newA, matchesPlayed: { increment: 1 } },
+    });
+    await tx.user.update({
+      where: { login: b },
+      data: { elo: update.newB, matchesPlayed: { increment: 1 } },
+    });
+
+    return tx.playedMatch.create({
+      data: {
+        id: randomUUID(),
+        playerALogin: a,
+        playerBLogin: b,
+        scoreA,
+        scoreB,
+        winner,
+        playedAt: new Date(),
+        countedForElo: true,
+        deltaA: update.deltaA,
+        deltaB: update.deltaB,
+      },
+    });
+  });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: match.playerALogin,
+    payload: {
+      forcedResult: true,
+      playerA: match.playerALogin,
+      playerB: match.playerBLogin,
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+    },
+  });
+
+  emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json(match);
 });
 
 app.get('/challenges', async (c) => {
@@ -872,6 +1127,57 @@ app.post('/tournaments/:id/join', async (c) => {
     return { autoStarted: false };
   });
   return c.json({ id, status: result.autoStarted ? 'in_progress' : 'registration' });
+});
+
+// Inviter / ajouter directement un joueur existant à un tournoi (organisateur ou
+// admin), pendant la phase d'inscription. Auto-démarre si le tournoi devient plein.
+const AddTournamentPlayerSchema = z.object({ login: z.string().trim().min(1) });
+
+app.post('/tournaments/:id/add-player', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = AddTournamentPlayerSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const login = parsed.data.login;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, {
+        message: "seul l'organisateur ou un admin peut inviter des joueurs",
+      });
+    }
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    const target = await tx.user.findUnique({ where: { login } });
+    if (!target) throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
+    if (t.entries.some((e) => e.login === login)) {
+      throw new HTTPException(409, { message: 'joueur déjà inscrit' });
+    }
+    if (t.entries.length >= t.capacity) {
+      throw new HTTPException(409, { message: 'tournoi complet' });
+    }
+    await tx.tournamentEntry.create({ data: { tournamentId: id, login } });
+    const newCount = t.entries.length + 1;
+    if (newCount === t.capacity) {
+      const logins = [...t.entries.map((e) => e.login), login];
+      await generateBracket(id, t.capacity, logins);
+      await tx.tournament.update({
+        where: { id },
+        data: { status: 'in_progress', startedAt: new Date() },
+      });
+      return { autoStarted: true };
+    }
+    return { autoStarted: false };
+  });
+
+  emit([login], { type: 'leaderboard:update', payload: {} });
+  return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
 });
 
 app.post('/tournaments/:id/leave', async (c) => {

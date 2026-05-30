@@ -413,7 +413,7 @@ function ActionCard({ kind, expanded, onOpen, onClose, children }: ActionCardPro
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col overflow-hidden"
+      className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col"
       style={{
         backgroundImage:
           'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,201,74,0.18), transparent 70%)',
