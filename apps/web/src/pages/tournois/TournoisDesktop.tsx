@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
+import { Trophy } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
@@ -92,7 +93,24 @@ export function TournoisDesktop() {
       </div>
 
       {tournaments.length === 0 ? (
-        <div className="text-center text-muted-2 py-10">Aucun tournoi pour le moment.</div>
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 bg-gold/20 blur-2xl rounded-full" />
+            <Trophy className="relative w-16 h-16 text-gold/70" strokeWidth={1.5} />
+          </div>
+          <h3 className="font-gaming text-lg font-extrabold uppercase tracking-[0.14em] text-text-strong mb-1.5">
+            Aucun tournoi pour le moment
+          </h3>
+          <p className="text-sm text-muted-2 max-w-sm mb-5">
+            Lance le premier bracket de la ligue — crée un tournoi amical à 4 ou 8
+            joueurs avec le formulaire ci-dessus et désigne le champion sur le terrain.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-2">
+            <span className="card-hud rounded-full px-3 py-1.5">Single-élimination</span>
+            <span className="card-hud rounded-full px-3 py-1.5">4 ou 8 joueurs</span>
+            <span className="card-hud rounded-full px-3 py-1.5">Bracket automatique</span>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
           {tournaments.map((t) => (

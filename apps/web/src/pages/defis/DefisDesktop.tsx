@@ -1,8 +1,9 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, X } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
+import { StatCard } from '../../components/StatCard';
 import { Button } from '../../components/Button';
 import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
@@ -62,6 +63,7 @@ export function DefisDesktop() {
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')}>
       <div ref={topRef} />
+      <DefisStatsBar />
       <ActionBento
         openCard={openCard}
         presetOpp={presetOpp}
@@ -172,6 +174,71 @@ export function DefisDesktop() {
 }
 
 const NOOP = () => {};
+
+// ─── Barre de stats perso (remplit le haut du panneau Défis) ─────────────────
+
+function DefisStatsBar() {
+  const { me, matches, leaderboard } = useLeagueData();
+  const stats = useMemo(() => {
+    const login = me?.login;
+    if (!login) return null;
+    const mine = matches.filter(
+      (m) => m.playerALogin === login || m.playerBLogin === login,
+    );
+    let wins = 0;
+    let losses = 0;
+    for (const m of mine) {
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (won) wins += 1;
+      else losses += 1;
+    }
+    const recent = [...mine].sort(
+      (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+    );
+    let streak = 0;
+    for (const m of recent) {
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (streak === 0) streak = won ? 1 : -1;
+      else if (won && streak > 0) streak += 1;
+      else if (!won && streak < 0) streak -= 1;
+      else break;
+    }
+    const total = wins + losses;
+    return {
+      elo: me?.user?.elo ?? 1000,
+      rank: leaderboard.find((u) => u.login === login)?.rank ?? null,
+      wins,
+      losses,
+      winRate: total ? Math.round((wins / total) * 100) : 0,
+      streak,
+    };
+  }, [me, matches, leaderboard]);
+
+  if (!stats) return null;
+
+  const streakLabel =
+    stats.streak > 0
+      ? `${stats.streak} V`
+      : stats.streak < 0
+        ? `${Math.abs(stats.streak)} D`
+        : '—';
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
+      <StatCard value={stats.rank ? `#${stats.rank}` : '—'} label="Rang" tone="gold" />
+      <StatCard value={String(stats.elo)} label="ELO" tone="teal" />
+      <StatCard value={`${stats.wins}-${stats.losses}`} label="Bilan V-D" tone="neutral" />
+      <StatCard
+        value={`${stats.winRate}%`}
+        label="Win rate"
+        tone={stats.winRate >= 50 ? 'win' : 'loss'}
+      />
+      <StatCard value={streakLabel} label="Série" tone={stats.streak >= 0 ? 'win' : 'loss'} />
+    </div>
+  );
+}
 
 // ─── Bento d'actions « Déclarer / Défier » — réagencement selon l'espace ─────
 
