@@ -16,6 +16,7 @@ export interface DefisLogic {
   opponentCounts: Record<string, number>;
   refresh: () => Promise<void>;
   handleAction: (id: string, action: 'accept' | 'decline') => Promise<void>;
+  cancelDeclaration: (match: PendingMatch) => Promise<void>;
 }
 
 /**
@@ -129,6 +130,27 @@ export function useDefisLogic(): DefisLogic {
     [challenges, confirm, declinePrompt, flash, refresh],
   );
 
+  const cancelDeclaration = useCallback(
+    async (match: PendingMatch) => {
+      const ok = await confirm({
+        title: 'Annuler ta déclaration ?',
+        message: `Le match que tu as déclaré contre ${match.opponentLogin} (${match.scoreDeclarer}–${match.scoreOpponent}) sera retiré. Tu pourras le redéclarer plus tard.`,
+        confirmLabel: 'Annuler la déclaration',
+        cancelLabel: 'Garder',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api.cancelMatch(match.id);
+        flash.show('Déclaration annulée');
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [confirm, flash, refresh],
+  );
+
   return {
     myLogin,
     incoming,
@@ -141,5 +163,6 @@ export function useDefisLogic(): DefisLogic {
     opponentCounts,
     refresh,
     handleAction,
+    cancelDeclaration,
   };
 }

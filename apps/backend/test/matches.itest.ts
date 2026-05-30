@@ -188,6 +188,39 @@ describe('matches — rejet par l’adversaire', () => {
   });
 });
 
+describe('matches — annulation par le déclarant', () => {
+  beforeEach(async () => {
+    await resetDb();
+    await seedUser('alice');
+    await seedUser('bob');
+  });
+
+  it('seul le déclarant peut annuler (l’adversaire → 403)', async () => {
+    const id = await declare('alice', 'bob', 10, 3);
+    const r = await post(`/matches/${id}/cancel`, { login: 'bob' });
+    expect(r.status).toBe(403);
+  });
+
+  it('annulation valide → pending supprimé, aucune trace de rejet', async () => {
+    const id = await declare('alice', 'bob', 10, 3);
+    const r = await post(`/matches/${id}/cancel`, { login: 'alice' });
+    expect(r.status).toBe(200);
+    expect(r.body.status).toBe('cancelled');
+
+    const pendings = await get('/matches/pending', { login: 'alice' });
+    expect(pendings.body).toHaveLength(0);
+
+    await seedUser('admin', { role: 'ADMIN' });
+    const rejected = await get('/admin/rejected-matches', { login: 'admin' });
+    expect(rejected.body).toHaveLength(0);
+  });
+
+  it('annuler un match inexistant → 404', async () => {
+    const r = await post('/matches/does-not-exist/cancel', { login: 'alice' });
+    expect(r.status).toBe(404);
+  });
+});
+
 describe('matches — anti-farming (max 2 comptés / paire / fenêtre)', () => {
   beforeEach(async () => {
     await resetDb();

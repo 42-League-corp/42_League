@@ -8,6 +8,7 @@
 - [x] **Tests d'intégration HTTP** sur les endpoints (déclaration, confirmation, anti-farming) avec une vraie DB de test — `test/matches.itest.ts` + `test/challenges.itest.ts` (29 tests, `npm run test:integration`)
 - [ ] **Rate-limiting / abuse protection** sur les endpoints publics
 - [x] **Annulation / refus** d'un match pending par l'adversaire (`POST /matches/:id/reject`)
+- [x] **Annulation par le déclarant** de sa propre déclaration tant que non confirmée (`POST /matches/:id/cancel`)
 - [x] **Validation symétrique du score** : l'adversaire ressaisit son score à la confirmation ; mismatch → 409 (corriger ou refuser)
 - [ ] **Expiration** des matchs pending non confirmés (auto-purge après N jours ?)
 
