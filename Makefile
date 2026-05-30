@@ -5,6 +5,7 @@ COMPOSE_BUILD  = docker compose -f docker-compose.prod.yml
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 COMMIT     := $(shell git rev-parse --short HEAD)
+BUILD      := $(shell git rev-list --count HEAD)
 COMMIT_MSG := $(shell git log -1 --pretty=format:"%s")
 BRANCH     := $(shell git rev-parse --abbrev-ref HEAD)
 DATE       := $(shell date '+%Y-%m-%d %H:%M')
@@ -47,6 +48,8 @@ build-frontend: ## Build le frontend depuis le source sur ce serveur
 	$(COMPOSE_BUILD) build \
 		--build-arg GIT_COMMIT=$(COMMIT) \
 		--build-arg BUILD_DATE="$(DATE)" \
+		--build-arg APP_BUILD=$(BUILD) \
+		--build-arg APP_DATE="$(DATE)" \
 		frontend
 	$(COMPOSE_BUILD) up -d --no-deps frontend
 	$(call show_version)
