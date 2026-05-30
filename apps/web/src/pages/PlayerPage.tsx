@@ -6,6 +6,7 @@ import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
+import { EloChart } from '../components/EloChart';
 import {
   api,
   type OpsUserResponse,
@@ -54,16 +55,16 @@ export function PlayerPage() {
 
   if (loading) {
     return (
-      <Panel title={login || 'Joueur'} sub="Profil 42 League">
-        <div className="text-center text-muted-2 py-10">Chargement…</div>
+      <Panel title={login || 'Joueur'} sub={t('profil.subtitle')}>
+        <div className="text-center text-muted-2 py-10">{t('common.loading')}</div>
       </Panel>
     );
   }
   if (!profile) {
     return (
-      <Panel title={login} sub="Profil 42 League">
+      <Panel title={login} sub={t('profil.subtitle')}>
         <div className="text-center text-muted-2 py-10">
-          {login} n'est pas inscrit dans la league.
+          {login} {t('profil.notRegistered')}
         </div>
       </Panel>
     );
@@ -80,7 +81,7 @@ export function PlayerPage() {
   const onlineHost = locations.get(p.user.login);
 
   return (
-    <Panel title={p.user.firstName && p.user.lastName ? `${p.user.firstName} ${p.user.lastName}` : p.user.login} sub="Profil 42 League">
+    <Panel title={p.user.firstName && p.user.lastName ? `${p.user.firstName} ${p.user.lastName}` : p.user.login} sub={t('profil.subtitle')}>
       <div className="flex items-center gap-5 mb-6">
         <UserBadge 
           login={p.user.login} 
@@ -94,7 +95,7 @@ export function PlayerPage() {
             <span className="font-bold uppercase tracking-wider text-[10px]">
               {t('profil.campus')} · {p.user.campus ?? '—'}
             </span>
-            <span className="metal-plate-gold px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
+            <span className="bg-gold/10 border border-gold/30 text-gold px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
               {p.user.elo} ELO
             </span>
             {onlineHost && <OnlineBadge host={onlineHost} />}
@@ -168,31 +169,31 @@ export function PlayerPage() {
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-6 mb-4">
-        <StatCard value={String(p.rank ?? '—')} label="Rang" tone="teal" />
-        <StatCard value={String(p.user.matchesPlayed)} label="Matchs ELO" tone="teal" />
+        <StatCard value={String(p.rank ?? '—')} label={t('profil.rank')} tone="teal" />
+        <StatCard value={String(p.user.matchesPlayed)} label={t('profil.matchesElo')} tone="teal" />
         <StatCard
           value={`${winRate}%`}
-          label="Win rate"
+          label={t('profil.winRate')}
           tone={winRate >= 50 ? 'win' : 'loss'}
         />
         <StatCard
           value={String(p.user.dodgeCount ?? 0)}
-          label="Fuites"
+          label={t('profil.dodges')}
           tone={p.user.dodgeCount ? 'loss' : 'neutral'}
         />
       </div>
 
       <div className="space-y-1.5 mb-6 text-sm card-hud rounded-xl px-4 py-3">
         <div className="flex justify-between border-b border-gold/10 pb-1.5">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Victoires</span>
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.wins')}</span>
           <span className="text-gold font-display font-extrabold tabular-nums">{p.wins}</span>
         </div>
         <div className="flex justify-between border-b border-gold/10 pb-1.5">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Défaites</span>
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.losses')}</span>
           <span className="text-red font-display font-extrabold tabular-nums">{p.losses}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">Inscrit depuis</span>
+          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.registeredSince')}</span>
           <span className="text-text font-mono">
             {new Date(p.user.createdAt).toLocaleDateString(locale, {
               day: '2-digit',
@@ -203,19 +204,36 @@ export function PlayerPage() {
         </div>
       </div>
 
+      {/* Courbe d'évolution ELO — comme sur son propre profil */}
+      {p.recent.length >= 2 && (
+        <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
+          <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
+            <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
+            {t('profil.eloEvolution')}
+            <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
+          </div>
+          <EloChart
+            matches={p.recent}
+            myLogin={p.user.login}
+            currentElo={p.user.elo}
+            height={104}
+          />
+        </div>
+      )}
+
       {p.recent.length > 0 && (
         <>
           <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
-            Derniers matchs
+            {t('profil.recent')}
           </div>
           <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-muted">
-                  <th className="text-left px-2 sm:px-3 py-2">Date</th>
-                  <th className="text-left px-2 sm:px-3 py-2">Adversaire</th>
-                  <th className="text-right px-2 sm:px-3 py-2">Score</th>
-                  <th className="text-right px-2 sm:px-3 py-2">Résultat</th>
+                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.date')}</th>
+                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.opp')}</th>
+                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.score')}</th>
+                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.result')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,7 +257,7 @@ export function PlayerPage() {
                       <td
                         className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${won ? 'text-gold' : 'text-red'}`}
                       >
-                        {won ? 'VICTOIRE' : 'DÉFAITE'}
+                        {won ? t('history.win') : t('history.loss')}
                       </td>
                     </tr>
                   );

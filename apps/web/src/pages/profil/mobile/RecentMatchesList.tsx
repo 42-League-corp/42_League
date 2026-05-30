@@ -2,6 +2,8 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import type { PlayedMatch } from '../../../lib/api';
+import { useI18n, useT } from '../../../lib/i18n';
+import { fmtDayLabel } from '../../../lib/format';
 
 interface RecentMatchesListProps {
   matches: PlayedMatch[];
@@ -44,6 +46,8 @@ interface RecentMatchRowProps {
 }
 
 function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
+  const t = useT();
+  const { lang } = useI18n();
   const youAreA = match.playerALogin === myLogin;
   const youWon = (youAreA && match.winner === 'A') || (!youAreA && match.winner === 'B');
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
@@ -51,16 +55,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const oppScore = youAreA ? match.scoreB : match.scoreA;
   const delta = youAreA ? match.deltaA : match.deltaB;
 
-  const when = new Date(match.playedAt);
-  const dayDiff = Math.floor((Date.now() - when.getTime()) / (24 * 60 * 60 * 1000));
-  const dateLabel =
-    dayDiff === 0
-      ? "Aujourd'hui"
-      : dayDiff === 1
-        ? 'Hier'
-        : dayDiff < 7
-          ? `il y a ${dayDiff}j`
-          : when.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const dateLabel = fmtDayLabel(match.playedAt, lang);
 
   return (
     <motion.div
@@ -79,7 +74,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
           youWon ? 'bg-teal/15 text-teal' : 'bg-red/15 text-red'
         }`}
       >
-        {youWon ? 'W' : 'L'}
+        {youWon ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
       <div className="flex-1 min-w-0">

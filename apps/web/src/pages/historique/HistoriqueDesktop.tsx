@@ -43,7 +43,7 @@ export function HistoriqueDesktop() {
 
   return (
     <Panel title={t('panel.history.title')} sub={t('history.global.sub')}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:items-start">
         {/* ─── Colonne GLOBALE ─────────────────────────────────────────── */}
         <HistoColumn
           Icon={Globe2}
@@ -108,7 +108,7 @@ interface HistoColumnProps {
 
 function HistoColumn({ Icon, title, count, header, children }: HistoColumnProps) {
   return (
-    <div className="flex flex-col rounded-2xl border border-border bg-bg-1/30 overflow-hidden">
+    <div className="flex flex-col rounded-2xl border border-border bg-bg-1/30 overflow-hidden min-h-0 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-7rem)]">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-2/40">
         <Icon className="w-4 h-4 text-gold" strokeWidth={2.5} />
         <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-text-strong">
@@ -119,7 +119,9 @@ function HistoColumn({ Icon, title, count, header, children }: HistoColumnProps)
         </span>
       </div>
       {header && <div className="px-3 pt-3">{header}</div>}
-      <div className="flex-1 px-3 pt-3 pb-6 space-y-2 overflow-y-auto overscroll-contain custom-scrollbar lg:max-h-[72vh]">
+      {/* `min-h-0` borne ce conteneur dans la colonne → le scroll interne atteint
+          bien le dernier match (sinon la liste paraissait coupée avant la fin). */}
+      <div className="flex-1 min-h-0 px-3 pt-3 pb-6 space-y-2 overflow-y-auto overscroll-contain custom-scrollbar">
         {children}
       </div>
     </div>
@@ -137,6 +139,7 @@ interface MyStatsStripProps {
 }
 
 function MyStatsStrip({ total, wins, losses, wr, netElo }: MyStatsStripProps) {
+  const t = useT();
   const eloUp = netElo > 0;
   const EloIcon = eloUp ? TrendingUp : TrendingDown;
   return (
@@ -146,7 +149,7 @@ function MyStatsStrip({ total, wins, losses, wr, netElo }: MyStatsStripProps) {
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       className="grid grid-cols-3 gap-2 mb-1"
     >
-      <Stat label="Games" value={String(total)} sub={`${wins}V · ${losses}D`} />
+      <Stat label="Games" value={String(total)} sub={`${wins}${t('lb.abbr.win')} · ${losses}${t('lb.abbr.loss')}`} />
       <Stat label="Win rate" value={`${wr}%`} accent={wr >= 50 ? 'accent' : 'red'} />
       <Stat
         label="ELO net"

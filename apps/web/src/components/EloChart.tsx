@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PlayedMatch } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 interface EloChartProps {
   matches: PlayedMatch[];
@@ -73,6 +74,7 @@ export function EloChart({
   maxPoints,
   height = 100,
 }: EloChartProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(360);
 
@@ -100,7 +102,7 @@ export function EloChart({
   if (points.length < 2) {
     return (
       <div className="flex items-center justify-center h-16 text-xs text-muted-2 italic">
-        Pas encore assez de matches
+        {t('profil.notEnoughMatches')}
       </div>
     );
   }

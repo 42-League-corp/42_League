@@ -173,7 +173,7 @@ export function LeaderboardDesktop() {
                   <SortTh label={t('lb.col.player')} k="player" sort={sort} onSort={toggleSort} align="left" />
                   <SortTh label={t('lb.col.elo')} k="elo" sort={sort} onSort={toggleSort} align="right" />
                   <SortTh label={t('lb.col.games')} k="games" sort={sort} onSort={toggleSort} align="right" />
-                  <SortTh label={`${t('lb.col.winrate')} %`} k="winRate" sort={sort} onSort={toggleSort} align="center" />
+                  <SortTh label={t('lb.col.winrate')} k="winRate" sort={sort} onSort={toggleSort} align="center" />
                   <SortTh label={t('lb.col.streak')} k="streak" sort={sort} onSort={toggleSort} align="right" />
                 </tr>
               </thead>
@@ -211,7 +211,7 @@ export function LeaderboardDesktop() {
                               <OnlineBadge host={host} compact className="absolute -bottom-0.5 -right-0.5" />
                             )}
                           </div>
-                          <span className="truncate max-w-[120px] sm:max-w-none font-semibold">
+                          <span className="truncate max-w-[120px] sm:max-w-[150px] font-semibold">
                             {u.login}
                           </span>
                           {isMe && (
@@ -329,47 +329,35 @@ function WinRateCell({
   const t = useT();
   if (games === 0) return <span className="text-muted/40 text-xs">—</span>;
   const high = winRate > 50;
-  const pct = (
-    <span
-      className={`w-9 shrink-0 text-xs font-extrabold tabular-nums ${high ? 'text-left' : 'text-right'}`}
-      style={{ color: high ? '#ffc94a' : '#ff5366' }}
-    >
-      {winRate}%
-    </span>
-  );
-  const bar = (
-    <span className="flex h-4 flex-1 min-w-[72px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none ring-1 ring-black/30">
-      <span
-        className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
-        style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
-      >
-        {winRate >= 12 ? 'W' : ''}
-      </span>
-      <span
-        className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
-        style={{ background: 'rgba(255,83,102,0.85)' }}
-      >
-        {100 - winRate >= 12 ? 'L' : ''}
-      </span>
-    </span>
-  );
+  // Deux emplacements de largeur fixe de chaque côté : la barre reste donc
+  // toujours à la même position horizontale d'une ligne à l'autre (pas de
+  // décalage selon que le % soit affiché à gauche ou à droite).
   return (
     <Tooltip
       label={`${wins} ${t('lb.abbr.win')} · ${losses} ${t('lb.abbr.loss')} · ${winRate}%`}
       className="w-full"
     >
       <span className="flex w-full items-center gap-2">
-        {high ? (
-          <>
-            {pct}
-            {bar}
-          </>
-        ) : (
-          <>
-            {bar}
-            {pct}
-          </>
-        )}
+        <span className="w-9 shrink-0 text-right text-xs font-extrabold tabular-nums" style={{ color: '#ffc94a' }}>
+          {high ? `${winRate}%` : ''}
+        </span>
+        <span className="flex h-4 flex-1 min-w-[64px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none ring-1 ring-black/30">
+          <span
+            className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
+            style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
+          >
+            {winRate >= 12 ? 'W' : ''}
+          </span>
+          <span
+            className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
+            style={{ background: 'rgba(255,83,102,0.85)' }}
+          >
+            {100 - winRate >= 12 ? 'L' : ''}
+          </span>
+        </span>
+        <span className="w-9 shrink-0 text-left text-xs font-extrabold tabular-nums" style={{ color: '#ff5366' }}>
+          {high ? '' : `${winRate}%`}
+        </span>
       </span>
     </Tooltip>
   );
