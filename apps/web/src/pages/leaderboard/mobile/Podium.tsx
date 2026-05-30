@@ -7,6 +7,8 @@ import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 
 interface PodiumProps {
   top3: LeaderboardEntry[];
+  /** login → { winRate, games } affiché sous l'ELO de chaque marche. */
+  statsByLogin?: Map<string, { winRate: number; games: number }>;
 }
 
 /**
@@ -16,7 +18,7 @@ interface PodiumProps {
  * - Bronze à droite
  * - Tap sur un joueur → sa page profil
  */
-export function Podium({ top3 }: PodiumProps) {
+export function Podium({ top3, statsByLogin }: PodiumProps) {
   const navigate = useNavigate();
   const [p1, p2, p3] = top3;
 
@@ -41,8 +43,9 @@ export function Podium({ top3 }: PodiumProps) {
         {/* 2nd place — left */}
         {p2 && (
           <PodiumSlot
-            rank={2}
+            rank={p2.rank}
             entry={p2}
+            stats={statsByLogin?.get(p2.login)}
             onClick={goTo}
             height="h-24"
             color="silver"
@@ -53,8 +56,9 @@ export function Podium({ top3 }: PodiumProps) {
         {/* 1st place — center, elevated */}
         {p1 && (
           <PodiumSlot
-            rank={1}
+            rank={p1.rank}
             entry={p1}
+            stats={statsByLogin?.get(p1.login)}
             onClick={goTo}
             height="h-32"
             color="gold"
@@ -65,8 +69,9 @@ export function Podium({ top3 }: PodiumProps) {
         {/* 3rd place — right */}
         {p3 && (
           <PodiumSlot
-            rank={3}
+            rank={p3.rank}
             entry={p3}
+            stats={statsByLogin?.get(p3.login)}
             onClick={goTo}
             height="h-20"
             color="bronze"
@@ -83,6 +88,7 @@ type PodiumColor = 'gold' | 'silver' | 'bronze';
 interface PodiumSlotProps {
   rank: number;
   entry: LeaderboardEntry;
+  stats?: { winRate: number; games: number };
   onClick: (login: string) => void;
   height: string;
   color: PodiumColor;
@@ -113,7 +119,7 @@ const COLOR_RANK: Record<PodiumColor, string> = {
   bronze: 'bg-gradient-to-br from-[#cd7f32] to-[#8b5722] text-white',
 };
 
-function PodiumSlot({ rank, entry, onClick, height, color, delay }: PodiumSlotProps) {
+function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: PodiumSlotProps) {
   return (
     <motion.button
       type="button"
@@ -162,6 +168,11 @@ function PodiumSlot({ rank, entry, onClick, height, color, delay }: PodiumSlotPr
         <div className="text-[10px] font-mono tabular-nums text-text-strong leading-tight">
           <AnimatedCounter value={entry.elo} duration={1.0} />
         </div>
+        {stats && stats.games > 0 && (
+          <div className="text-[9px] font-mono tabular-nums text-muted leading-tight mt-0.5">
+            {stats.winRate}% · {stats.games}G
+          </div>
+        )}
       </div>
 
       {/* Step */}
