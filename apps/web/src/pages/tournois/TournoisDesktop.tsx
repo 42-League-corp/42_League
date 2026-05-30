@@ -94,7 +94,7 @@ export function TournoisDesktop() {
       {tournaments.length === 0 ? (
         <div className="text-center text-muted-2 py-10">Aucun tournoi pour le moment.</div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
           {tournaments.map((t) => (
             <TournoiCard key={t.id} t={t} />
           ))}
