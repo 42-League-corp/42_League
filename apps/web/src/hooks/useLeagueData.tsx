@@ -96,6 +96,7 @@ const EVENT_DOMAINS: Record<string, Domain[]> = {
   'match:pending': ['matches'],
   'match:confirmed': ['matches', 'me'],
   'match:rejected': ['matches'],
+  'match:expired': ['matches'],
   'challenge:received': ['challenges'],
   'challenge:accepted': ['challenges'],
   'challenge:declined': ['challenges'],
