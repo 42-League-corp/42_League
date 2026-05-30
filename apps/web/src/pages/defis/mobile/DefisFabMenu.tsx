@@ -29,8 +29,8 @@ export function DefisFabMenu({ open, onClose, onDeclare, onChallenge }: DefisFab
           subtitle="Game déjà jouée · 2 clics"
           accessory={
             <>
-              <span aria-hidden className="text-gold/80"></span>
-              <span aria-hidden className="text-muted-2"></span>
+              <span aria-hidden className="text-gold/80">🍌</span>
+              <span aria-hidden className="text-muted-2">🐢</span>
             </>
           }
           onClick={() => {
@@ -43,7 +43,7 @@ export function DefisFabMenu({ open, onClose, onDeclare, onChallenge }: DefisFab
           tone="gold"
           title="Défier un joueur"
           subtitle="Programme un duel à venir"
-          accessory={<span aria-hidden className="text-gold/80"></span>}
+          accessory={<span aria-hidden className="text-gold/80">⚔</span>}
           onClick={() => {
             onClose();
             onChallenge();
