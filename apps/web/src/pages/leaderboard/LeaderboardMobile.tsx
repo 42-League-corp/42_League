@@ -32,17 +32,29 @@ export function LeaderboardMobile() {
     return map;
   }, [leaderboard, matches]);
 
-  // Online first, puis matchesPlayed desc (ranks ELO restent affichés)
-  const sortedLeaderboard = useMemo(() => {
-    return [...leaderboard].sort((a, b) => {
-      const aOnline = locations.has(a.login) ? 1 : 0;
-      const bOnline = locations.has(b.login) ? 1 : 0;
-      if (aOnline !== bOnline) return bOnline - aOnline;
-      return b.matchesPlayed - a.matchesPlayed;
-    });
-  }, [leaderboard, locations]);
+  // Tri par rang officiel (ELO) — comme la vue desktop. Le statut en ligne reste
+  // visible via le badge sur chaque carte, sans bousculer l'ordre du classement.
+  const sortedLeaderboard = useMemo(
+    () => [...leaderboard].sort((a, b) => a.rank - b.rank),
+    [leaderboard],
+  );
 
+  // Top 3 par rang → podium (or / argent / bronze cohérents avec l'ELO).
   const top3 = sortedLeaderboard.slice(0, 3);
+
+  // Win rate des 3 du podium (affiché sous l'ELO, façon tracker esport).
+  const podiumStats = useMemo(() => {
+    const m = new Map<string, { winRate: number; games: number }>();
+    for (const u of top3) {
+      const wl = winsLossesByLogin.get(u.login) ?? { wins: 0, losses: 0 };
+      const games = wl.wins + wl.losses;
+      m.set(u.login, {
+        games,
+        winRate: games === 0 ? 0 : Math.round((wl.wins / games) * 100),
+      });
+    }
+    return m;
+  }, [top3, winsLossesByLogin]);
 
   // Le reste après le podium (filtré selon les critères)
   const filtered = useMemo(() => {
@@ -81,7 +93,7 @@ export function LeaderboardMobile() {
         {/* Podium top 3 — uniquement sur le filtre "Tous" sans recherche.
             Sur Top 10/Moi, le podium dupliquerait les 3 premiers de la liste. */}
         {top3.length > 0 && filter === 'all' && !query && (
-          <Podium top3={top3} />
+          <Podium top3={top3} statsByLogin={podiumStats} />
         )}
 
         {/* Stats globales */}
