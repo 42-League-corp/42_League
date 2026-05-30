@@ -5,6 +5,7 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
 import { OnlineBadge } from '../../components/OnlineBadge';
 import { Tooltip } from '../../components/Tooltip';
+import { WinRateBar } from '../../components/WinRateBar';
 import { DesktopPodium } from './DesktopPodium';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
@@ -328,37 +329,12 @@ function WinRateCell({
 }) {
   const t = useT();
   if (games === 0) return <span className="text-muted/40 text-xs">—</span>;
-  const high = winRate > 50;
-  // Deux emplacements de largeur fixe de chaque côté : la barre reste donc
-  // toujours à la même position horizontale d'une ligne à l'autre (pas de
-  // décalage selon que le % soit affiché à gauche ou à droite).
   return (
     <Tooltip
       label={`${wins} ${t('lb.abbr.win')} · ${losses} ${t('lb.abbr.loss')} · ${winRate}%`}
       className="w-full"
     >
-      <span className="flex w-full items-center gap-2">
-        <span className="w-9 shrink-0 text-right text-xs font-extrabold tabular-nums" style={{ color: '#ffc94a' }}>
-          {high ? `${winRate}%` : ''}
-        </span>
-        <span className="flex h-4 flex-1 min-w-[64px] overflow-hidden rounded-md text-[9px] font-extrabold leading-none ring-1 ring-black/30">
-          <span
-            className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
-            style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
-          >
-            {winRate >= 12 ? 'W' : ''}
-          </span>
-          <span
-            className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
-            style={{ background: 'rgba(255,83,102,0.85)' }}
-          >
-            {100 - winRate >= 12 ? 'L' : ''}
-          </span>
-        </span>
-        <span className="w-9 shrink-0 text-left text-xs font-extrabold tabular-nums" style={{ color: '#ff5366' }}>
-          {high ? '' : `${winRate}%`}
-        </span>
-      </span>
+      <WinRateBar wins={wins} losses={losses} />
     </Tooltip>
   );
 }

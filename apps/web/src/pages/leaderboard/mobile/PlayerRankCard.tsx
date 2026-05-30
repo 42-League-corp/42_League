@@ -7,7 +7,7 @@ import { SwipeableCard } from '../../../mobile/primitives/SwipeableCard';
 import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
-import { useT } from '../../../lib/i18n';
+import { WinRateBar } from '../../../components/WinRateBar';
 
 interface PlayerRankCardProps {
   entry: LeaderboardEntry;
@@ -37,7 +37,6 @@ export function PlayerRankCard({
   onDefi,
 }: PlayerRankCardProps) {
   const navigate = useNavigate();
-  const t = useT();
 
   const rankColor =
     entry.rank === 1
@@ -47,9 +46,6 @@ export function PlayerRankCard({
         : entry.rank === 3
           ? 'text-[#cd7f32]'
           : 'text-muted';
-
-  const total = wins + losses;
-  const winRate = total === 0 ? 0 : Math.round((wins / total) * 100);
 
   const inner = (
     <motion.button
@@ -106,17 +102,12 @@ export function PlayerRankCard({
           )}
           {host && <OnlineBadge host={host} />}
         </div>
-        {entry.title ? (
+        {entry.title && (
           <div className="text-[10px] text-gold italic truncate">« {entry.title} »</div>
-        ) : (
-          <div className="text-[10px] text-muted font-mono">
-            <span className="text-gold">{wins}{t('lb.abbr.win')}</span>
-            <span className="mx-1 opacity-30">·</span>
-            <span className="text-red">{losses}{t('lb.abbr.loss')}</span>
-            <span className="mx-1 opacity-30">·</span>
-            <span>{winRate}%</span>
-          </div>
         )}
+        <div className="mt-1">
+          <WinRateBar wins={wins} losses={losses} />
+        </div>
         {entry.tournamentsWon !== undefined && entry.tournamentsWon > 0 && (
           <div className="flex items-center gap-1 mt-0.5 text-[9px] text-gold">
             <Trophy className="w-2.5 h-2.5" strokeWidth={2.5} />

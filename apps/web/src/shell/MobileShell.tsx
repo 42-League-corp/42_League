@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MobileHeader } from '../mobile/primitives/MobileHeader';
 import { MobileTabBar } from '../mobile/primitives/MobileTabBar';
 import { PageTransition } from '../mobile/motion/PageTransition';
@@ -23,6 +24,14 @@ interface MobileShellProps {
  */
 export function MobileShell({ children }: MobileShellProps) {
   const mainRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // Au changement de page, on repart en haut de la nouvelle page (le <main> est
+  // le seul conteneur scrollable). Les pages qui veulent un autre point d'ancrage
+  // (ex. le classement qui se centre sur l'utilisateur) le font ensuite, en différé.
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [pathname]);
 
   return (
     <ScrollRootContext.Provider value={mainRef}>

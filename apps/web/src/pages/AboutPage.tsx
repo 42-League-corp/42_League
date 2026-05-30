@@ -99,6 +99,43 @@ function RulesSection() {
         </div>
       </Panel>
 
+      <div className="md:col-span-2">
+        <Panel title="Règles sur le terrain">
+          <div className="space-y-3 text-sm text-muted leading-relaxed">
+            <p>
+              Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés
+              proprement :
+            </p>
+            <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+              <li>
+                Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
+                être <span className="text-gold font-semibold">touchée au moins une fois</span> avant qu'un but
+                ne compte.
+              </li>
+              <li>
+                Le joueur qui <span className="text-text font-semibold">vient d'encaisser un but</span> a le droit
+                de remettre la balle <span className="text-gold font-semibold">au pied de sa barre du milieu</span> (demis)
+                pour relancer.
+              </li>
+              <li>
+                Les <span className="text-gold font-semibold">buts marqués depuis la barre du milieu</span> (demis)
+                sont valables.
+              </li>
+              <li>
+                La <span className="text-gold font-semibold">gamelle</span> (balle qui ressort du but) : tu peux
+                soit <span className="text-text font-semibold">prendre le point</span>, soit
+                <span className="text-text font-semibold"> retirer un point à l'adversaire</span> — mais on ne peut
+                <span className="text-text font-semibold"> pas conclure le match sur une gamelle</span>.
+              </li>
+              <li>
+                Les <span className="text-gold font-semibold">roulettes</span> doivent être
+                <span className="text-text font-semibold"> contrôlées</span> (pas de moulinets incontrôlés).
+              </li>
+            </ul>
+          </div>
+        </Panel>
+      </div>
+
       <Panel title="ELO">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>

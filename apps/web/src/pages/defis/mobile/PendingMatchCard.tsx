@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, X, Zap } from 'lucide-react';
-import { AbacusSlider } from '../../../components/AbacusSlider';
 import { Button } from '../../../components/Button';
 import { ContestModal } from '../../../components/ContestModal';
 import { PlayerLink } from '../../../components/PlayerLink';
@@ -10,8 +9,6 @@ import { useFlash } from '../../../hooks/useFlash';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
 const WINNING_SCORE = 10;
-const LOSER_SCORE_MIN = -10;
-const LOSER_SCORE_MAX = WINNING_SCORE - 1;
 
 interface PendingMatchCardProps {
   match: PendingMatch;
@@ -20,24 +17,23 @@ interface PendingMatchCardProps {
 
 /**
  * Carte d'un match en attente de confirmation côté mobile.
- * Style premium : border-gold animée, abaque intégré, actions tactiles XL.
+ * Deux issues nettes : soit on confirme le score déclaré tel quel (validation
+ * directe, l'ELO bouge), soit on conteste avec une justification. Pas de re-saisie
+ * du score à la confirmation.
  */
 export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
   const flash = useFlash();
-  const [confirming, setConfirming] = useState(false);
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const iWon = match.scoreOpponent === WINNING_SCORE;
-  const loserDeclaredScore = iWon ? match.scoreDeclarer : match.scoreOpponent;
-  const [loserScore, setLoserScore] = useState(loserDeclaredScore);
 
   const handleConfirm = async () => {
     setBusy(true);
     try {
-      const scoreSelf = iWon ? WINNING_SCORE : loserScore;
-      const scoreOpp = iWon ? loserScore : WINNING_SCORE;
-      await api.confirmMatch(match.id, scoreSelf, scoreOpp);
+      // On confirme exactement le score déclaré (du point de vue « toi ») —
+      // aucune re-saisie : c'est l'accord sur la version du déclarant.
+      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer);
       flash.show('Match confirmé — ELO mis à jour !');
       haptic('success');
       await onDone();
@@ -92,7 +88,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             <span className="text-muted-2">a déclaré :</span>
           </div>
 
-          <div className="relative flex items-baseline justify-center gap-2 mb-4 font-display">
+          <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
             <span
               className={`text-4xl font-black tabular-nums ${
                 match.scoreDeclarer === WINNING_SCORE ? 'text-gold text-gold-emboss' : 'text-text-strong'
@@ -111,77 +107,35 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
           </div>
           <div className="text-center text-[10px] text-muted uppercase tracking-wider font-bold mb-4">
             {match.declarerLogin} <span className="opacity-50 mx-1">/</span> toi
+            <span className="block normal-case tracking-normal text-muted-2 mt-1">
+              Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'}. Confirme si c'est exact.
+            </span>
           </div>
 
-          {!confirming ? (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                size="md"
-                onClick={() => {
-                  haptic('light');
-                  setConfirming(true);
-                }}
-                className="py-3 text-sm"
-              >
-                <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
-                Confirmer
-              </Button>
-              <Button
-                size="md"
-                variant="ghost"
-                onClick={() => {
-                  haptic('light');
-                  setContesting(true);
-                }}
-                className="py-3 text-sm text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
-              >
-                <X className="w-4 h-4 mr-1.5" strokeWidth={3} />
-                Contester
-              </Button>
-            </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22 }}
-              className="space-y-3"
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="md"
+              loading={busy}
+              onClick={handleConfirm}
+              className="py-3 text-sm"
             >
-              <div
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-semibold ${
-                  iWon
-                    ? 'bg-gold/10 text-gold border border-gold/30'
-                    : 'bg-red/10 text-red border border-red/30'
-                }`}
-              >
-                <span aria-hidden>{iWon ? '' : ''}</span>
-                <span>
-                  Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'} {WINNING_SCORE}–{loserDeclaredScore}
-                </span>
-              </div>
-              <p className="text-[10px] text-muted leading-relaxed">
-                Ajuste le score si ta version diffère.
-              </p>
-              <AbacusSlider
-                value={loserScore}
-                onChange={setLoserScore}
-                min={LOSER_SCORE_MIN}
-                max={LOSER_SCORE_MAX}
-              />
-              <div className="grid grid-cols-[1fr_auto] gap-2 pt-1">
-                <Button size="md" loading={busy} onClick={handleConfirm} className="py-3 text-sm">
-                  Valider
-                </Button>
-                <Button
-                  size="md"
-                  variant="ghost"
-                  onClick={() => setConfirming(false)}
-                  className="py-3 px-4 text-sm"
-                >
-                  Retour
-                </Button>
-              </div>
-            </motion.div>
-          )}
+              <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
+              Confirmer
+            </Button>
+            <Button
+              size="md"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                haptic('light');
+                setContesting(true);
+              }}
+              className="py-3 text-sm text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+            >
+              <X className="w-4 h-4 mr-1.5" strokeWidth={3} />
+              Contester
+            </Button>
+          </div>
         </div>
       </motion.div>
 

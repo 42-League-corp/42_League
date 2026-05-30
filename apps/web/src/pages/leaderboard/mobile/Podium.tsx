@@ -39,6 +39,17 @@ export function Podium({ top3, statsByLogin }: PodiumProps) {
         }}
       />
 
+      {/* Rayons de soleil tournants (comme le podium desktop) */}
+      <div className="absolute inset-x-0 top-0 h-56 pointer-events-none overflow-hidden opacity-40 [mask-image:radial-gradient(ellipse_70%_100%_at_50%_0%,black,transparent_72%)]">
+        <div
+          className="absolute left-1/2 -translate-x-1/2 top-0 aspect-square w-[680px] max-w-none animate-spin-sun"
+          style={{
+            background:
+              'repeating-conic-gradient(rgba(255,201,74,0.14) 0deg 5deg, transparent 5deg 16deg)',
+          }}
+        />
+      </div>
+
       <div className="relative grid grid-cols-3 items-end gap-2 pt-6">
         {/* 2nd place — left */}
         {p2 && (
@@ -143,9 +154,13 @@ function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: Podiu
         {rank === 1 && (
           <motion.div
             initial={{ y: -20, opacity: 0, rotate: -20 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            transition={{ delay: 0.4, type: 'spring', stiffness: 400, damping: 14 }}
-            className="absolute -top-7 left-1/2 -translate-x-1/2 text-gold"
+            animate={{ y: [0, -4, 0], opacity: 1, rotate: 0 }}
+            transition={{
+              opacity: { delay: 0.4, duration: 0.4 },
+              rotate: { delay: 0.4, type: 'spring', stiffness: 400, damping: 14 },
+              y: { delay: 0.7, duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+            }}
+            className="absolute -top-7 left-1/2 -translate-x-1/2 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.6)]"
           >
             <Crown className="w-7 h-7" strokeWidth={2.5} fill="currentColor" />
           </motion.div>

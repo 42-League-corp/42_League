@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useMotionValue, type PanInfo } from 'framer-motion';
 import { haptic } from '../feedback/useHaptic';
 
@@ -45,6 +45,28 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const y = useMotionValue(0);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Hauteur du clavier virtuel (via visualViewport) → on l'ajoute en padding-bottom
+  // du contenu scrollable pour que le bas (ex. liste d'adversaires) reste atteignable
+  // au-dessus du clavier au lieu d'être caché derrière.
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  useEffect(() => {
+    if (!open) return;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardInset(inset);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      setKeyboardInset(0);
+    };
+  }, [open]);
 
   // Haptique à l'ouverture. (Le scroll derrière est bloqué naturellement par
   // le scrim `fixed inset-0` ci-dessous, et html/body sont déjà overflow:hidden
@@ -140,7 +162,7 @@ export function BottomSheet({
                 Padding-bottom inclut la safe-area. */}
             <div
               className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth-touch custom-scrollbar"
-              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+              style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + 16px + ${keyboardInset}px)` }}
             >
               {children}
             </div>
