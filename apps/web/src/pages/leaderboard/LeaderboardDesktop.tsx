@@ -173,7 +173,7 @@ export function LeaderboardDesktop() {
                   <SortTh label={t('lb.col.player')} k="player" sort={sort} onSort={toggleSort} align="left" />
                   <SortTh label={t('lb.col.elo')} k="elo" sort={sort} onSort={toggleSort} align="right" />
                   <SortTh label={t('lb.col.games')} k="games" sort={sort} onSort={toggleSort} align="right" />
-                  <SortTh label={t('lb.col.winrate')} k="winRate" sort={sort} onSort={toggleSort} align="left" />
+                  <SortTh label={`${t('lb.col.winrate')} %`} k="winRate" sort={sort} onSort={toggleSort} align="center" />
                   <SortTh label={t('lb.col.streak')} k="streak" sort={sort} onSort={toggleSort} align="right" />
                 </tr>
               </thead>
@@ -279,14 +279,14 @@ function SortTh({
   k: SortKey;
   sort: { key: SortKey; dir: SortDir };
   onSort: (k: SortKey) => void;
-  align: 'left' | 'right';
+  align: 'left' | 'right' | 'center';
   tone?: 'gold' | 'red';
 }) {
   const active = sort.key === k;
   const toneCls = tone === 'gold' ? 'text-gold' : tone === 'red' ? 'text-red' : '';
   return (
     <th
-      className={`px-1 sm:px-3 py-2 border-b border-gold/20 select-none ${align === 'left' ? 'text-left' : 'text-right'}`}
+      className={`px-1 sm:px-3 py-2 border-b border-gold/20 select-none ${align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'}`}
     >
       <button
         type="button"
@@ -325,7 +325,7 @@ function WinRateCell({
   losses: number;
 }) {
   if (games === 0) return <span className="text-muted/40 text-xs">—</span>;
-  const color = winRate >= 60 ? '#4ade80' : winRate >= 45 ? '#ffc94a' : '#ff5366';
+  const color = winRate >= 50 ? '#4ade80' : '#ff5366';
   return (
     <Tooltip label={`${wins} V · ${losses} D · ${winRate}%`} className="w-full">
       <span className="flex w-full items-center gap-2">
@@ -334,13 +334,13 @@ function WinRateCell({
             className="flex h-full shrink-0 items-center justify-start overflow-hidden pl-1.5 text-[#1a1100]"
             style={{ width: `${winRate}%`, background: 'rgba(255,201,74,0.92)' }}
           >
-            {wins > 0 && wins}
+            {winRate >= 20 ? wins : winRate >= 8 ? 'W' : ''}
           </span>
           <span
             className="flex h-full flex-1 items-center justify-end overflow-hidden pr-1.5 text-white"
             style={{ background: 'rgba(255,83,102,0.85)' }}
           >
-            {losses > 0 && losses}
+            {100 - winRate >= 20 ? losses : 100 - winRate >= 8 ? 'L' : ''}
           </span>
         </span>
         <span

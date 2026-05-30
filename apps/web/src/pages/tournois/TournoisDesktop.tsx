@@ -118,6 +118,38 @@ export function TournoisDesktop() {
           ))}
         </div>
       )}
+
+      {/* ─── Comment lancer un tournoi ? ─────────────────────────────────── */}
+      <div className="mt-6 pt-6 border-t border-gold/15">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-3 flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+          Comment ça marche ?
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="card-hud rounded-xl p-4">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2">
+              🎲 Tournoi amical
+            </h3>
+            <p className="text-xs text-muted-2 leading-relaxed">
+              Tout le monde peut en lancer un : choisis un nom, 4 ou 8 joueurs, puis
+              démarre le bracket avec le formulaire ci-dessus. Idéal pour s'amuser entre
+              collègues — sans impact sur le classement.
+            </p>
+          </div>
+          <div className="card-hud rounded-xl p-4 border-gold/40">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2">
+              👑 Tournoi officiel
+            </h3>
+            <p className="text-xs text-muted-2 leading-relaxed">
+              Réservé aux admins : seuls les administrateurs peuvent les lancer. En
+              échange, ils donnent lieu à des récompenses très spéciales —{' '}
+              <span className="text-gold font-semibold">titres exclusifs</span>,{' '}
+              <span className="text-gold font-semibold">League Coins</span> et{' '}
+              <span className="text-gold font-semibold">cosmétiques</span>.
+            </p>
+          </div>
+        </div>
+      </div>
     </Panel>
   );
 }

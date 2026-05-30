@@ -45,7 +45,10 @@ export function DefisDesktop() {
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
   const [presetOpp, setPresetOpp] = useState<LeaderboardEntry | null>(null);
+  const [showAllTargets, setShowAllTargets] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
+
+  const TARGETS_PREVIEW = 9;
 
   const openChallengeWith = (player: LeaderboardEntry | null) => {
     setPresetOpp(player);
@@ -156,17 +159,38 @@ export function DefisDesktop() {
             {others.length === 0 ? (
               <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
             ) : (
-              <div
-                className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
-                  hasActivity ? '' : 'xl:grid-cols-3'
-                }`}
-              >
-                {others.map((u) => (
-                  <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
-                ))}
-              </div>
+              <>
+                <div
+                  className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
+                    hasActivity ? '' : 'xl:grid-cols-3'
+                  }`}
+                >
+                  {(showAllTargets ? others : others.slice(0, TARGETS_PREVIEW)).map((u) => (
+                    <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
+                  ))}
+                </div>
+                {others.length > TARGETS_PREVIEW && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTargets((v) => !v)}
+                    className="mt-3 w-full py-2 rounded-lg border border-gold/30 text-gold/90 text-xs font-gaming font-extrabold uppercase tracking-[0.14em] hover:bg-gold/[0.06] hover:border-gold transition-colors"
+                  >
+                    {showAllTargets
+                      ? '▲ Afficher moins'
+                      : `▼ Afficher plus (${others.length - TARGETS_PREVIEW} joueurs)`}
+                  </button>
+                )}
+              </>
             )}
           </Section>
+
+          <ChallengeStats
+            incoming={incoming.length}
+            outgoing={outgoing.length}
+            accepted={accepted.length}
+            pending={pendingToConfirm.length + pendingWaiting.length}
+            available={others.length}
+          />
         </div>
       </div>
     </Panel>
@@ -699,6 +723,43 @@ function RecordResultForm({
 interface ChallengeCardProps {
   player: LeaderboardEntry;
   onChallenge: (player: LeaderboardEntry) => void;
+}
+
+// ─── Stats des défis en cours (comble l'espace sous le roster) ───────────────
+
+function ChallengeStats({
+  incoming,
+  outgoing,
+  accepted,
+  pending,
+  available,
+}: {
+  incoming: number;
+  outgoing: number;
+  accepted: number;
+  pending: number;
+  available: number;
+}) {
+  return (
+    <div className="mt-6">
+      <Section title="Stats des défis">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <StatCard value={String(incoming)} label="Reçus" tone="gold" />
+          <StatCard value={String(outgoing)} label="Envoyés" tone="teal" />
+          <StatCard value={String(accepted)} label="Programmés" tone="win" />
+          <StatCard value={String(pending)} label="À confirmer" tone="loss" />
+          <StatCard value={String(available)} label="À défier" tone="neutral" />
+        </div>
+        <p className="text-[11px] text-muted-2 mt-2 leading-relaxed">
+          {pending > 0
+            ? `${pending} match${pending > 1 ? 's' : ''} en attente de confirmation — pense à valider tes scores.`
+            : accepted > 0
+              ? `${accepted} duel${accepted > 1 ? 's' : ''} programmé${accepted > 1 ? 's' : ''} : saisis le score une fois joué.`
+              : 'Aucun défi en cours — lance-toi en défiant un joueur ci-dessus !'}
+        </p>
+      </Section>
+    </div>
+  );
 }
 
 function ChallengeCard({ player, onChallenge }: ChallengeCardProps) {
