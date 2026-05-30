@@ -167,7 +167,7 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
         </span>
         <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/10 to-transparent ml-2" />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {trophies.map((t) => {
           const winnerEntry = t.winner ? leaderboard.find((u) => u.login === t.winner?.login) : null;
           

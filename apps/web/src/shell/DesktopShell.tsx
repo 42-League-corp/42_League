@@ -174,7 +174,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
       <main className="flex-1 min-w-0 relative overflow-y-auto custom-scrollbar">
         {/* Vignette dorée derrière le contenu */}
         <div className="absolute inset-0 bg-gold-vignette pointer-events-none" />
-        <div className="relative px-6 lg:px-10 py-8 max-w-5xl mx-auto w-full">
+        <div className="relative px-6 lg:px-10 py-8 max-w-[1600px] mx-auto w-full">
           {children}
         </div>
       </main>

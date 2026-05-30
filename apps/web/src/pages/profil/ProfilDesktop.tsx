@@ -55,7 +55,8 @@ export function ProfilDesktop() {
   const u = me.user;
 
   return (
-    <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')}>
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+      <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')}>
       <div className="flex items-center gap-5 mb-6">
         <Avatar login={u.login} imageUrl={u.imageUrl} size="xl" />
         <div className="min-w-0">
@@ -91,11 +92,13 @@ export function ProfilDesktop() {
         />
       </div>
 
-      <div className="space-y-1.5 mb-6 card-hud rounded-xl px-4 py-3">
+      <div className="space-y-1.5 card-hud rounded-xl px-4 py-3">
         <KV label={t('profil.wins')} value={String(stats.wins)} tone="win" />
         <KV label={t('profil.losses')} value={String(stats.losses)} tone="loss" />
       </div>
+      </Panel>
 
+      <Panel title="Évolution & rivalité" sub="ELO · ops">
       {/* ELO progression chart */}
       <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
         <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
@@ -112,7 +115,8 @@ export function ProfilDesktop() {
       </div>
 
       <OpsWidget opsMe={opsMe} locale={locale} />
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 
