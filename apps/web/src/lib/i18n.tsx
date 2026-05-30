@@ -133,6 +133,14 @@ const fr: Dict = {
 
   'login.privacy': 'En te connectant, tu acceptes notre',
   'login.privacyLink': 'politique de confidentialité',
+
+  'login.how.title': 'Comment ça marche ?',
+  'login.how.reassure': 'Nous ne conservons aucune information personnelle sur toi.',
+  'login.how.steps':
+    'La connexion utilise OAuth, le standard sécurisé de 42. Tu t’identifies directement sur l’intranet de 42, qui nous confirme simplement ton identité. Ton mot de passe ne passe jamais par nous, et nous ne stockons aucune donnée privée — uniquement ton pseudo et ton avatar publics, le temps de ta session.',
+  'login.how.link42': 'La doc OAuth officielle de 42',
+  'login.how.linkOauth': 'Comprendre le principe d’OAuth',
+  'login.how.linkPrivacy': 'Notre politique de confidentialité',
 };
 
 const en: Dict = {
@@ -255,6 +263,14 @@ const en: Dict = {
 
   'login.privacy': 'By signing in, you accept our',
   'login.privacyLink': 'privacy policy',
+
+  'login.how.title': 'How does it work?',
+  'login.how.reassure': 'We don’t keep any personal information about you.',
+  'login.how.steps':
+    'Sign-in uses OAuth, 42’s secure standard. You authenticate directly on 42’s intranet, which simply confirms your identity to us. Your password never goes through us, and we don’t store any private data — only your public nickname and avatar, for the duration of your session.',
+  'login.how.link42': '42’s official OAuth documentation',
+  'login.how.linkOauth': 'Understand how OAuth works',
+  'login.how.linkPrivacy': 'Our privacy policy',
 };
 
 const DICTS: Record<Lang, Dict> = { fr, en };
