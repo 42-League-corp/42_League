@@ -32,15 +32,13 @@ export default defineManifest({
     service_worker: 'src/background/index.ts',
     type: 'module',
     scripts: ['src/background/index.ts'],
-  } as unknown as { service_worker: string; type: 'module' },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as chrome.runtime.ManifestBackground,
   browser_specific_settings: {
     gecko: {
       id: '42league@42league.fr',
       strict_min_version: '140.0',
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any,
+  } as Record<string, unknown>,
   permissions: ['storage', 'identity', 'tabs'],
   host_permissions: [
     'https://intra.42.fr/*',

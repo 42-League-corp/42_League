@@ -79,8 +79,8 @@ export function DefisMobile() {
             subtitle="Game passée · 2 clics"
             accessory={
               <>
-                <span aria-hidden className="text-gold/80"></span>
-                <span aria-hidden className="text-muted-2"></span>
+                <span aria-hidden className="text-gold/80">🍌</span>
+                <span aria-hidden className="text-muted-2">🐢</span>
               </>
             }
             onClick={() => setDeclareOpen(true)}
@@ -90,7 +90,7 @@ export function DefisMobile() {
             tone="gold"
             title="Défier un joueur"
             subtitle="Programme un duel à venir"
-            accessory={<span aria-hidden className="text-gold/80"></span>}
+            accessory={<span aria-hidden className="text-gold/80">⚔</span>}
             onClick={() => setChallengeOpen(true)}
           />
         </div>
