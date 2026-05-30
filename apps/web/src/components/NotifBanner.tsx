@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
-import { api, type PendingMatch } from '../lib/api';
+import { useConfirm } from '../hooks/useConfirm';
+import { useOpsStatus } from '../hooks/useOpsStatus';
+import { api, type Challenge, type PendingMatch } from '../lib/api';
 import { ContestModal } from './ContestModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,6 +41,8 @@ const KEYFRAMES = `
 export function NotifBanner() {
   const { me, pending, challenges } = useLeagueData();
   const flash = useFlash();
+  const confirm = useConfirm();
+  const { hunter, forcedLeftAsTarget } = useOpsStatus();
   const myLogin = me?.login ?? null;
 
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -127,18 +131,35 @@ export function NotifBanner() {
   );
 
   const declineDuel = useCallback(
-    async (id: string) => {
-      setBusyId(id, true);
+    async (c: Challenge) => {
+      // Refuser un défi de SON traqueur pendant un match forcé = grosse pénalité.
+      const isForcedByHunter =
+        !!hunter && c.challengerLogin === hunter.ownerLogin && forcedLeftAsTarget > 0;
+      if (isForcedByHunter) {
+        const ok = await confirm({
+          title: 'Refuser un match forcé ?',
+          message: `${c.challengerLogin} t'a déclaré comme son ops. Tu ne peux pas refuser ce défi sans sanction.`,
+          warning: `Refuser maintenant te coûte 3× l'ELO d'une défaite. Il te reste ${forcedLeftAsTarget} match${forcedLeftAsTarget > 1 ? 's' : ''} forcé${forcedLeftAsTarget > 1 ? 's' : ''}.`,
+          confirmLabel: 'Refuser quand même',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      setBusyId(c.id, true);
       try {
-        await api.declineChallenge(id);
-        flash.show('Duel refusé.');
+        const res = await api.declineChallenge(c.id);
+        if (res.isOps && res.eloPenalty > 0) {
+          flash.show(`Match forcé refusé · −${res.eloPenalty} ELO ☠`, 'error');
+        } else {
+          flash.show('Duel refusé.');
+        }
       } catch (err) {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
       } finally {
-        setBusyId(id, false);
+        setBusyId(c.id, false);
       }
     },
-    [flash, setBusyId],
+    [flash, confirm, hunter, forcedLeftAsTarget, setBusyId],
   );
 
   // ─── Actions score ───────────────────────────────────────────────────────────
@@ -291,7 +312,7 @@ export function NotifBanner() {
               <ConfirmBtn disabled={busy.has(c.id)} onClick={() => acceptDuel(c.id)}>
                 ✓ Accepter
               </ConfirmBtn>
-              <ContestBtn disabled={busy.has(c.id)} onClick={() => declineDuel(c.id)}>
+              <ContestBtn disabled={busy.has(c.id)} onClick={() => declineDuel(c)}>
                 Refuser
               </ContestBtn>
             </Actions>

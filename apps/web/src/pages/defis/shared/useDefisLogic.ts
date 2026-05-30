@@ -3,6 +3,7 @@ import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '.
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useFlash } from '../../../hooks/useFlash';
 import { useConfirm } from '../../../hooks/useConfirm';
+import { useOpsStatus } from '../../../hooks/useOpsStatus';
 
 export interface DefisLogic {
   myLogin: string | undefined;
@@ -27,6 +28,7 @@ export function useDefisLogic(): DefisLogic {
   const { challenges, leaderboard, me, pending, matches, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
+  const { hunter, forcedLeftAsTarget } = useOpsStatus();
 
   const myLogin = me?.login;
 
@@ -83,6 +85,23 @@ export function useDefisLogic(): DefisLogic {
       const opponent = iAmChallenger ? challenge.opponentLogin : challenge.challengerLogin;
       const wasAccepted = challenge.status === 'accepted';
 
+      // OPS : refuser un défi de son traqueur pendant un match forcé = 3× l'ELO.
+      const isForcedByHunter =
+        !iAmChallenger &&
+        !!hunter &&
+        challenge.challengerLogin === hunter.ownerLogin &&
+        forcedLeftAsTarget > 0;
+      if (isForcedByHunter) {
+        return {
+          title: 'Refuser un match forcé ?',
+          message: `${opponent} t'a déclaré comme son ops. Tu ne peux pas refuser ce défi sans sanction.`,
+          warning: `⚠ Pénalité : 3× l'ELO d'une défaite. Il te reste ${forcedLeftAsTarget} match${forcedLeftAsTarget > 1 ? 's' : ''} forcé${forcedLeftAsTarget > 1 ? 's' : ''}.`,
+          confirmLabel: 'Refuser quand même',
+          cancelLabel: 'Garder',
+          danger: true,
+        } as const;
+      }
+
       if (wasAccepted) {
         return {
           title: 'Fuir ce match ?',
@@ -103,7 +122,7 @@ export function useDefisLogic(): DefisLogic {
         danger: true,
       } as const;
     },
-    [myLogin],
+    [myLogin, hunter, forcedLeftAsTarget],
   );
 
   const handleAction = useCallback(
@@ -119,8 +138,12 @@ export function useDefisLogic(): DefisLogic {
           await api.acceptChallenge(id);
           flash.show('Défi accepté');
         } else {
-          await api.declineChallenge(id);
-          flash.show('Défi clos');
+          const res = await api.declineChallenge(id);
+          if (res.isOps && res.eloPenalty > 0) {
+            flash.show(`Match forcé refusé · −${res.eloPenalty} ELO ☠`, 'error');
+          } else {
+            flash.show('Défi clos');
+          }
         }
         await refresh();
       } catch (err) {
