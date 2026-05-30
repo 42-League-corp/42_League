@@ -3,7 +3,7 @@ import { TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import type { PlayedMatch } from '../../../lib/api';
-import { fmtDayLabel } from '../../../lib/format';
+import { fmtDatePair } from '../../../lib/format';
 import { useT, type Lang } from '../../../lib/i18n';
 import type { MyMatchStat } from './useHistoriqueLogic';
 
@@ -98,7 +98,9 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
           <WinRateImpact wrAfter={wrAfter} wrImpact={wrImpact} />
         </div>
         <div className="text-[10px] text-muted font-medium mt-0.5">
-          {fmtDayLabel(stat.match.playedAt, lang)}
+          {fmtDatePair(stat.match.playedAt, lang).short}
+          <span className="mx-1 opacity-40">·</span>
+          <span className="text-muted-2">{fmtDatePair(stat.match.playedAt, lang).long}</span>
         </div>
       </div>
 
@@ -161,7 +163,9 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
           </PlayerLink>
         </div>
         <div className="text-[10px] text-muted font-medium mt-0.5">
-          {fmtDayLabel(match.playedAt, lang)}
+          {fmtDatePair(match.playedAt, lang).short}
+          <span className="mx-1 opacity-40">·</span>
+          <span className="text-muted-2">{fmtDatePair(match.playedAt, lang).long}</span>
         </div>
       </div>
 

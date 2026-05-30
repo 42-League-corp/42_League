@@ -244,7 +244,7 @@ export function LeaderboardDesktop() {
                       <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-muted-2">
                         {stats.games}
                       </td>
-                      <td className="px-2 sm:px-3 py-2.5 min-w-[160px]">
+                      <td className="px-2 sm:px-3 py-2.5 min-w-[230px]">
                         <WinRateCell
                           winRate={stats.winRate}
                           games={stats.games}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import type { PlayedMatch } from '../../../lib/api';
 import { useI18n, useT } from '../../../lib/i18n';
-import { fmtDayLabel } from '../../../lib/format';
+import { fmtDatePair } from '../../../lib/format';
 
 interface RecentMatchesListProps {
   matches: PlayedMatch[];
@@ -55,7 +55,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const oppScore = youAreA ? match.scoreB : match.scoreA;
   const delta = youAreA ? match.deltaA : match.deltaB;
 
-  const dateLabel = fmtDayLabel(match.playedAt, lang);
+  const date = fmtDatePair(match.playedAt, lang);
 
   return (
     <motion.div
@@ -87,7 +87,11 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
             {opp}
           </Link>
         </div>
-        <div className="text-[10px] text-muted font-medium">{dateLabel}</div>
+        <div className="text-[10px] text-muted font-medium">
+          {date.short}
+          <span className="mx-1 opacity-40">·</span>
+          <span className="text-muted-2">{date.long}</span>
+        </div>
       </div>
 
       {/* Score */}
