@@ -157,10 +157,22 @@ function RulesSection() {
             L'adversaire accepte ou décline.
           </p>
           <p>
-            Les <span className="text-gold font-semibold">OPS</span> (opérations) sont des gels de classement :
-            un joueur peut cibler un adversaire et bloquer ses points ELO pendant 7 jours. Un seul OPS actif à la fois,
-            avec 7 jours de cooldown après expiration.
+            Un <span className="text-red font-semibold">OPS</span> (opération) désigne ton{' '}
+            <span className="text-text font-semibold">ennemi juré</span> : tu cibles un joueur et la traque
+            s'ouvre. Action unilatérale, aucune acceptation requise.
           </p>
+          <ul className="space-y-1.5 pl-3 border-l border-red/30">
+            <li>La traque dure <span className="text-text font-semibold">24 heures</span>.</li>
+            <li>
+              Pendant ce temps, la cible <span className="text-text font-semibold">ne peut pas refuser</span> les
+              <span className="text-text font-semibold"> 3 premiers défis</span> de son traqueur — elle doit les jouer.
+            </li>
+            <li>
+              Refuser un de ces matchs forcés coûte <span className="text-red font-semibold">3× l'ELO d'une défaite</span>
+              {' '}(bien plus qu'un simple désistement).
+            </li>
+            <li>Un seul OPS actif à la fois, avec un cooldown d'une semaine après expiration.</li>
+          </ul>
         </div>
       </Panel>
 

@@ -19,6 +19,10 @@ import {
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
   shouldCountForElo,
+  estimatedEloLoss,
+  OPS_DURATION_MS,
+  OPS_FORCED_MATCHES,
+  OPS_REFUSE_MULTIPLIER,
 } from '@42-league/shared';
 import { prisma } from './db.js';
 import {
@@ -563,7 +567,28 @@ app.post('/matches/:id/confirm', async (c) => {
         deltaB,
       },
     });
-    return { mismatch: false as const, match: created };
+
+    // ─── OPS : un match réellement joué consomme un match forcé ───────────
+    // Si un OPS actif lie ces deux joueurs (peu importe le sens traqueur/cible),
+    // jouer pour de vrai épuise une des 3 obligations — au-delà, la cible
+    // pourra refuser sans pénalité.
+    const opsBetween = await tx.ops.findFirst({
+      where: {
+        expiresAt: { gt: new Date() },
+        forcedUsed: { lt: OPS_FORCED_MATCHES },
+        OR: [
+          { ownerLogin: a, targetLogin: b },
+          { ownerLogin: b, targetLogin: a },
+        ],
+      },
+    });
+    if (opsBetween) {
+      await tx.ops.update({
+        where: { id: opsBetween.id },
+        data: { forcedUsed: { increment: 1 } },
+      });
+    }
+    return { mismatch: false as const, match: created, opsTouched: !!opsBetween };
   });
 
   // Le 409 est levé hors transaction : le delete du pending est ainsi committé.
@@ -575,6 +600,12 @@ app.post('/matches/:id/confirm', async (c) => {
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
+  if (result.opsTouched) {
+    emit([match.playerALogin, match.playerBLogin], {
+      type: 'ops:update',
+      payload: { reason: 'forced_played' },
+    });
+  }
   return c.json(match);
 });
 
@@ -726,13 +757,51 @@ app.post('/challenges/:id/decline', async (c) => {
       throw new HTTPException(409, { message: `challenge is ${ch.status}` });
     }
     const wasAccepted = ch.status === 'accepted';
+    const isOpponentDeclining = ch.opponentLogin === me;
     const newStatus = ch.challengerLogin === me ? 'cancelled' : 'declined';
     await tx.challenge.update({
       where: { id },
       data: { status: newStatus, decidedAt: new Date() },
     });
+
+    // ─── OPS : refus d'un match forcé ─────────────────────────────────────
+    // Si la cible (me) refuse un défi de SON traqueur (le challenger) pendant
+    // l'OPS actif, et que le quota de 3 matchs forcés n'est pas épuisé, la
+    // pénalité est de 3× l'ELO qu'une défaite « normale » aurait coûté — bien
+    // plus salée qu'un simple dodge. Vaut même pour un défi seulement "pending".
+    let opsPenalty = 0;
+    if (isOpponentDeclining) {
+      const activeOps = await tx.ops.findFirst({
+        where: {
+          ownerLogin: ch.challengerLogin,
+          targetLogin: me,
+          expiresAt: { gt: new Date() },
+        },
+      });
+      if (activeOps && activeOps.forcedUsed < OPS_FORCED_MATCHES) {
+        const [target, hunter] = await Promise.all([
+          tx.user.findUniqueOrThrow({ where: { login: me } }),
+          tx.user.findUniqueOrThrow({ where: { login: ch.challengerLogin } }),
+        ]);
+        opsPenalty = OPS_REFUSE_MULTIPLIER * estimatedEloLoss(target.elo, hunter.elo);
+        await tx.ops.update({
+          where: { id: activeOps.id },
+          data: { forcedUsed: { increment: 1 } },
+        });
+      }
+    }
+
     let penalty = 0;
-    if (wasAccepted) {
+    if (opsPenalty > 0) {
+      penalty = opsPenalty;
+      await tx.user.update({
+        where: { login: me },
+        data: {
+          elo: { decrement: penalty },
+          dodgeCount: { increment: 1 },
+        },
+      });
+    } else if (wasAccepted) {
       penalty = DODGE_ELO_PENALTY;
       await tx.user.update({
         where: { login: me },
@@ -742,7 +811,13 @@ app.post('/challenges/:id/decline', async (c) => {
         },
       });
     }
-    return { status: newStatus, penalty, challengerLogin: ch.challengerLogin, opponentLogin: ch.opponentLogin };
+    return {
+      status: newStatus,
+      penalty,
+      isOps: opsPenalty > 0,
+      challengerLogin: ch.challengerLogin,
+      opponentLogin: ch.opponentLogin,
+    };
   });
   const otherParty = result.challengerLogin === me ? result.opponentLogin : result.challengerLogin;
   emit([otherParty], {
@@ -753,7 +828,12 @@ app.post('/challenges/:id/decline', async (c) => {
   if (result.penalty > 0) {
     broadcast({ type: 'leaderboard:update', payload: {} });
   }
-  return c.json({ id, status: result.status, eloPenalty: result.penalty });
+  // Refus d'un match forcé en OPS : le compteur forcedUsed a bougé → les deux
+  // joueurs concernés doivent rafraîchir leur état OPS.
+  if (result.isOps) {
+    emit([me, otherParty], { type: 'ops:update', payload: { reason: 'forced_refused' } });
+  }
+  return c.json({ id, status: result.status, eloPenalty: result.penalty, isOps: result.isOps });
 });
 
 app.post('/challenges/:id/record', async (c) => {
@@ -1197,14 +1277,15 @@ app.patch('/feature-requests/:id/status', async (c) => {
 });
 
 /* ============ OPS ============ */
-const OPS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+// Durée d'un OPS : 24h (partagée avec le front via @42-league/shared).
+// Le cooldown reste plus long : un seul OPS par semaine pour rester un acte fort.
 const OPS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ─── Expiration des ops en temps réel ──────────────────────────────────────
 // Un ops expire — puis son cooldown se termine — uniquement par le temps, sans
 // aucune mutation HTTP → aucun event SSE n'est émis naturellement. On programme
 // donc des timers serveur qui poussent `ops:update` aux joueurs concernés au
-// moment exact de ces transitions. (OPS_DURATION = 7j < limite setTimeout ~24,8j.)
+// moment exact de ces transitions. (OPS_DURATION = 24h < limite setTimeout ~24,8j.)
 // La marge de +1s garantit que la requête de relecture voie bien l'ops comme
 // expiré (filtre expiresAt > now côté lecture).
 function scheduleOpsTimers(ownerLogin: string, targetLogin: string, expiresAt: Date): void {

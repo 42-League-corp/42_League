@@ -145,9 +145,14 @@ export interface Ops {
   targetLogin: string;
   declaredAt: string;
   expiresAt: string;
+  /** Nombre de matchs forcés déjà consommés (joués ou refusés). Max 3. */
+  forcedUsed: number;
   owner?: { login: string; imageUrl: string | null };
   target?: { login: string; imageUrl: string | null };
 }
+
+/** Nombre de matchs que la cible doit encore affronter sans pouvoir refuser. */
+export const OPS_FORCED_MATCHES = 3;
 
 export interface OpsMeResponse {
   current: Ops | null;
@@ -295,7 +300,7 @@ export const api = {
       body: JSON.stringify({}),
     }),
   declineChallenge: (id: string) =>
-    request<{ id: string; status: string }>(
+    request<{ id: string; status: string; eloPenalty: number; isOps: boolean }>(
       `/challenges/${encodeURIComponent(id)}/decline`,
       { method: 'POST', body: JSON.stringify({}) },
     ),

@@ -84,6 +84,9 @@ model Ops {
   targetLogin String   @map("target_login")
   declaredAt  DateTime @default(now()) @map("declared_at")
   expiresAt   DateTime @map("expires_at")
+  // Nombre de matchs forcés déjà consommés (joués ou refusés) sur cet OPS.
+  // La cible ne peut pas refuser tant que forcedUsed < OPS_FORCED_MATCHES (3).
+  forcedUsed  Int      @default(0) @map("forced_used")
 
   owner  User @relation("opsOwner", fields: [ownerLogin], references: [login])
   target User @relation("opsTarget", fields: [targetLogin], references: [login])
