@@ -277,6 +277,12 @@ export const api = {
         body: JSON.stringify({ contestReason, contestMessage }),
       },
     ),
+  // Annulation de sa propre déclaration (réservé au déclarant, tant que pending).
+  cancelMatch: (id: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/${encodeURIComponent(id)}/cancel`,
+      { method: 'POST' },
+    ),
   challenges: () => request<Challenge[]>('/challenges'),
   createChallenge: (input: { opponentLogin: string; scheduledAt: string }) =>
     request<Challenge>('/challenges', {

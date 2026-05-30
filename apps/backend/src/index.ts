@@ -621,6 +621,35 @@ app.post('/matches/:id/reject', async (c) => {
   return c.json({ id, status: 'rejected', contestReason });
 });
 
+// Annulation par le déclarant lui-même : tant que l'adversaire n'a pas confirmé,
+// celui qui a déclaré le match peut retirer sa déclaration (faute de frappe,
+// mauvais adversaire, etc.). On supprime simplement le pending — aucune trace
+// dans rejectedMatch puisqu'il n'y a pas de contestation.
+app.post('/matches/:id/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+
+  let opponentLogin: string | undefined;
+  await prisma.$transaction(async (tx) => {
+    const p = await tx.pendingMatch.findUnique({ where: { id } });
+    if (!p) {
+      throw new HTTPException(404, { message: 'pending match not found' });
+    }
+    if (p.declarerLogin !== me) {
+      throw new HTTPException(403, {
+        message: 'only the declarer can cancel this match',
+      });
+    }
+    opponentLogin = p.opponentLogin;
+    await tx.pendingMatch.delete({ where: { id } });
+  });
+
+  if (opponentLogin) {
+    emit([opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
 app.get('/challenges', async (c) => {
   const me = await getCurrentLogin(c);
   const list = await prisma.challenge.findMany({
