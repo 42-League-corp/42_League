@@ -4,6 +4,7 @@ import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
 import { OnlineBadge } from '../../components/OnlineBadge';
+import { Tooltip } from '../../components/Tooltip';
 import { DesktopPodium } from './DesktopPodium';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
@@ -327,9 +328,9 @@ function WinRateCell({ winRate, games }: { winRate: number; games: number }) {
   const color =
     winRate >= 60 ? '#4ade80' : winRate >= 45 ? '#ffc94a' : '#ff5366';
   return (
-    <div
-      title={`${winRate}% de victoires sur ${games} game${games > 1 ? 's' : ''}`}
-      className="inline-flex items-center gap-2 justify-end cursor-help"
+    <Tooltip
+      label={`${winRate}% de victoires sur ${games} game${games > 1 ? 's' : ''}`}
+      className="justify-end gap-2 cursor-help"
     >
       <span className="tabular-nums font-bold text-xs" style={{ color }}>
         {winRate}%
@@ -340,7 +341,7 @@ function WinRateCell({ winRate, games }: { winRate: number; games: number }) {
           style={{ width: `${winRate}%`, background: color }}
         />
       </span>
-    </div>
+    </Tooltip>
   );
 }
 
@@ -349,22 +350,20 @@ function StreakCell({ streak }: { streak: number }) {
   if (streak === 0) return <span className="text-muted/40">—</span>;
   if (streak > 0) {
     return (
-      <span
-        title={`Série en cours : ${streak} victoire${streak > 1 ? 's' : ''} d'affilée 🔥`}
-        className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a] cursor-help"
-      >
-        <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
-        {streak}
-      </span>
+      <Tooltip label={`${streak} victoire${streak > 1 ? 's' : ''} d'affilée 🔥`}>
+        <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a] cursor-help">
+          <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
+          {streak}
+        </span>
+      </Tooltip>
     );
   }
   return (
-    <span
-      title={`Série en cours : ${Math.abs(streak)} défaite${Math.abs(streak) > 1 ? 's' : ''} d'affilée ❄️`}
-      className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff] cursor-help"
-    >
-      <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
-      {Math.abs(streak)}
-    </span>
+    <Tooltip label={`${Math.abs(streak)} défaite${Math.abs(streak) > 1 ? 's' : ''} d'affilée ❄️`}>
+      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff] cursor-help">
+        <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
+        {Math.abs(streak)}
+      </span>
+    </Tooltip>
   );
 }
