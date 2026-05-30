@@ -123,7 +123,8 @@ function TournoiCard({ t }: { t: Tournament }) {
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="block card-hud p-4 rounded-xl hover-glow transition-all"
+      title={`${t.name} — ${count}/${t.capacity} joueurs${t.winner ? ` · vainqueur ${t.winner.login}` : ''}`}
+      className="block card-hud p-4 rounded-xl hover-glow transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

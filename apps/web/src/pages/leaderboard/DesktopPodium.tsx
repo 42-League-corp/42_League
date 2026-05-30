@@ -34,7 +34,7 @@ export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
       {/* Rayons de lumière en éventail */}
       <div className="absolute inset-x-0 top-0 h-72 pointer-events-none opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]">
         <div
-          className="absolute left-1/2 top-0 h-full w-[140%] -translate-x-1/2 animate-[spin_28s_linear_infinite]"
+          className="absolute left-[-20%] top-0 h-full w-[140%] origin-top animate-[spin_28s_linear_infinite]"
           style={{
             background:
               'repeating-conic-gradient(from 0deg at 50% 0%, rgba(255,201,74,0.12) 0deg 6deg, transparent 6deg 18deg)',
@@ -132,6 +132,7 @@ function PodiumColumn({
     <motion.button
       type="button"
       onClick={() => navigate(`/player/${entry.login}`)}
+      title={`#${rank} · ${entry.login} · ${entry.elo} ELO${stats && stats.games > 0 ? ` · ${stats.winRate}% sur ${stats.games} games` : ''}`}
       initial={{ opacity: 0, y: 28 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}

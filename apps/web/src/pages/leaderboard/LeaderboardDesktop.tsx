@@ -327,7 +327,10 @@ function WinRateCell({ winRate, games }: { winRate: number; games: number }) {
   const color =
     winRate >= 60 ? '#4ade80' : winRate >= 45 ? '#ffc94a' : '#ff5366';
   return (
-    <div className="inline-flex items-center gap-2 justify-end">
+    <div
+      title={`${winRate}% de victoires sur ${games} game${games > 1 ? 's' : ''}`}
+      className="inline-flex items-center gap-2 justify-end cursor-help"
+    >
       <span className="tabular-nums font-bold text-xs" style={{ color }}>
         {winRate}%
       </span>
@@ -346,14 +349,20 @@ function StreakCell({ streak }: { streak: number }) {
   if (streak === 0) return <span className="text-muted/40">—</span>;
   if (streak > 0) {
     return (
-      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a]">
+      <span
+        title={`Série en cours : ${streak} victoire${streak > 1 ? 's' : ''} d'affilée 🔥`}
+        className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a] cursor-help"
+      >
         <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
         {streak}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
+    <span
+      title={`Série en cours : ${Math.abs(streak)} défaite${Math.abs(streak) > 1 ? 's' : ''} d'affilée ❄️`}
+      className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff] cursor-help"
+    >
       <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
       {Math.abs(streak)}
     </span>

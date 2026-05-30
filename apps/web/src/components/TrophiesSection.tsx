@@ -175,7 +175,9 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
             <TiltCard
               key={t.title}
               color={t.color}
-              className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2`}
+              className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2 ${
+                t.earned ? '' : 'opacity-45 grayscale'
+              }`}
             >
               <div className="flex items-center gap-3">
                 <div className="text-3xl leading-none">{t.emoji}</div>
@@ -187,7 +189,11 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
                 </div>
               </div>
               
-              {t.winner ? (
+              {!t.earned ? (
+                <div className="mt-1 text-xs text-muted-2 italic">
+                  Personne ne l'a encore 🔒
+                </div>
+              ) : t.winner ? (
                 <PlayerLink login={t.winner.login} className="mt-1">
                   <UserBadge 
                     login={t.winner.login} 
