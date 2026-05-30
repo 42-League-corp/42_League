@@ -103,6 +103,21 @@ export function fmtDayLabel(iso: string, lang: Lang): string {
   return fmtDateLong(iso, locale);
 }
 
+/** Locale BCP-47 depuis la langue de l'app. */
+function localeFor(lang: Lang): string {
+  return lang === 'fr' ? 'fr-FR' : lang === 'es' ? 'es-ES' : 'en-GB';
+}
+
+/**
+ * Couple de dates pour les historiques de match : la date numérique courte
+ * (« 30/05/26 ») suivie, à droite, de la date avec le mois en toutes lettres
+ * (« 30 mai »). Localisé selon la langue de l'utilisateur.
+ */
+export function fmtDatePair(iso: string, lang: Lang): { short: string; long: string } {
+  const locale = localeFor(lang);
+  return { short: fmtDate(iso, locale), long: fmtDateLong(iso, locale) };
+}
+
 /** Heure locale « HH:MM » (zéro-paddé). */
 export function fmtTime(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;

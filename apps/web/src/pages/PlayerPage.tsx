@@ -12,7 +12,7 @@ import {
   type OpsUserResponse,
   type UserProfile,
 } from '../lib/api';
-import { fmtCountdown, fmtDate } from '../lib/format';
+import { fmtCountdown, fmtDatePair } from '../lib/format';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
@@ -22,7 +22,7 @@ export function PlayerPage() {
   const { login: rawLogin } = useParams<{ login: string }>();
   const login = rawLogin ?? '';
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, lang } = useI18n();
   const { me, opsMe, locations, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
@@ -245,8 +245,10 @@ export function PlayerPage() {
                   const sOpp = isA ? m.scoreB : m.scoreA;
                   return (
                     <tr key={m.id} className="border-t border-border/40">
-                      <td className="px-2 sm:px-3 py-2 text-muted-2 text-xs">
-                        {fmtDate(m.playedAt, locale)}
+                      <td className="px-2 sm:px-3 py-2 text-muted-2 text-xs whitespace-nowrap">
+                        {fmtDatePair(m.playedAt, lang).short}
+                        <span className="mx-1 opacity-40">·</span>
+                        <span className="text-muted">{fmtDatePair(m.playedAt, lang).long}</span>
                       </td>
                       <td className="px-2 sm:px-3 py-2">
                         <PlayerLink login={opp}>{opp}</PlayerLink>

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useMotionValue, type PanInfo } from 'framer-motion';
+import {
+  AnimatePresence,
+  motion,
+  useDragControls,
+  useMotionValue,
+  type PanInfo,
+} from 'framer-motion';
 import { haptic } from '../feedback/useHaptic';
 
 interface BottomSheetProps {
@@ -45,6 +51,10 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const y = useMotionValue(0);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Le drag de fermeture n'est déclenché QUE par la poignée/header (dragListener
+  // désactivé sur la sheet) → le contenu scrolle librement et les composants
+  // tactiles internes (ex. AbacusSlider du score) ne sont plus volés par le drag.
+  const dragControls = useDragControls();
   // Hauteur du clavier virtuel (via visualViewport) → on l'ajoute en padding-bottom
   // du contenu scrollable pour que le bas (ex. liste d'adversaires) reste atteignable
   // au-dessus du clavier au lieu d'être caché derrière.
@@ -135,6 +145,8 @@ export function BottomSheet({
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.9 }}
             drag={preventSwipeDismiss ? false : 'y'}
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={handleDragEnd}
@@ -144,13 +156,25 @@ export function BottomSheet({
             {/* Reflet doré en haut de la sheet */}
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent pointer-events-none" />
 
-            {/* Drag handle */}
-            <div className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing">
+            {/* Drag handle — zone de saisie du drag (le reste de la sheet scrolle). */}
+            <div
+              onPointerDown={(e) => {
+                if (!preventSwipeDismiss) dragControls.start(e);
+              }}
+              style={{ touchAction: 'none' }}
+              className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing"
+            >
               <div className="w-10 h-1 rounded-full bg-gradient-to-r from-gold/30 via-gold/60 to-gold/30" />
             </div>
 
             {title && (
-              <div className="px-5 pt-1 pb-3 border-b border-gold/15">
+              <div
+                onPointerDown={(e) => {
+                  if (!preventSwipeDismiss) dragControls.start(e);
+                }}
+                style={{ touchAction: 'none' }}
+                className="px-5 pt-1 pb-3 border-b border-gold/15 cursor-grab active:cursor-grabbing"
+              >
                 <div className="font-gaming text-base font-extrabold text-text-strong tracking-wide uppercase">
                   {title}
                 </div>

@@ -106,7 +106,7 @@ export function PlayerRankCard({
           <div className="text-[10px] text-gold italic truncate">« {entry.title} »</div>
         )}
         <div className="mt-1">
-          <WinRateBar wins={wins} losses={losses} />
+          <WinRateBar wins={wins} losses={losses} variant="compact" />
         </div>
         {entry.tournamentsWon !== undefined && entry.tournamentsWon > 0 && (
           <div className="flex items-center gap-1 mt-0.5 text-[9px] text-gold">
