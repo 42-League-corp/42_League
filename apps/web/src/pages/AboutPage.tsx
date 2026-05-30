@@ -51,7 +51,7 @@ export function AboutPage() {
 
   // Authentifié : rendu à l'intérieur du shell (header + scroll <main> + tab bar).
   // On s'appuie sur le scroll du shell — pas de conteneur scrollable imbriqué.
-  return <div className="max-w-2xl mx-auto">{inner}</div>;
+  return <div className="w-full">{inner}</div>;
 }
 
 function TabBtn({
@@ -84,7 +84,7 @@ function TabBtn({
 
 function RulesSection() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
       <Panel title="Format du match">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>

@@ -43,7 +43,7 @@ export function HistoriqueDesktop() {
 
   return (
     <Panel title={t('panel.history.title')} sub={t('history.global.sub')}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         {/* ─── Colonne GLOBALE ─────────────────────────────────────────── */}
         <HistoColumn
           Icon={Globe2}
@@ -119,7 +119,7 @@ function HistoColumn({ Icon, title, count, header, children }: HistoColumnProps)
         </span>
       </div>
       {header && <div className="px-3 pt-3">{header}</div>}
-      <div className="px-3 pt-3 pb-6 space-y-2 overflow-y-auto overscroll-contain custom-scrollbar lg:max-h-[72vh]">
+      <div className="flex-1 px-3 pt-3 pb-6 space-y-2 overflow-y-auto overscroll-contain custom-scrollbar lg:max-h-[72vh]">
         {children}
       </div>
     </div>
