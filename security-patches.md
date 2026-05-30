@@ -6,6 +6,29 @@
 
 ---
 
+## 🚨 ACTION REQUISE — Rotation des secrets OAuth (pour le proprio de l'app intra)
+
+**Statut : NON FAIT — à traiter par le détenteur du compte intra de l'app OAuth.**
+
+**Contexte :** les valeurs `FT_OAUTH_UID` / `FT_OAUTH_SECRET` sont apparues en clair dans une
+conversation Claude → considérées comme **compromises**. Bonne nouvelle : elles n'ont **jamais
+été committées** dans le repo (`.env` est gitignoré ; seul `.env.example`, vide, est versionné).
+Tant que le secret n'est pas régénéré, n'importe qui ayant vu cette conversation peut se faire
+passer pour notre application OAuth.
+
+**À faire (côté intra, ~5 min) :**
+1. https://profile.intra.42.fr/oauth/applications → notre app → **régénérer le secret**
+   (`FT_OAUTH_SECRET`). Si possible, recréer l'app pour changer aussi l'`UID`.
+2. Mettre les nouvelles valeurs dans le `.env` **local** de chaque dev **et** dans le `.env` de **prod**.
+3. Vérifier que `FT_OAUTH_REDIRECT_URI` correspond toujours (localhost en dev, domaine en prod).
+4. Redéployer : `docker compose -f docker-compose.prod.yml up -d --build backend`.
+
+**Impact si on ne le fait pas :** l'app continue de fonctionner normalement (le secret vit dans
+`.env`, pas dans le code) — c'est purement un risque de sécurité, pas un blocage fonctionnel.
+Donc on peut push/déployer le reste sans attendre la rotation, mais **elle reste à faire**.
+
+---
+
 ## Architecture de sécurité (vue d'ensemble)
 
 ```
@@ -28,6 +51,14 @@ Internet → OAuth 42 Intra → Whitelist check → Session cookie (HMAC-SHA256)
 - En cas de divergence (`confirmedSelf !== p.scoreOpponent || confirmedOpponent !== p.scoreDeclarer`), le `PendingMatch` est **supprimé** — aucun des deux scores ne passe en DB.
 - Aucun ELO n'est modifié sans confirmation bilatérale (`PlayedMatch` n'est créé qu'après accord).
 - Même logique sur les `TournamentMatch` (reset des scores, ré-saisie obligatoire).
+
+> **Correctif 2026-05-29 (révélé par les tests d'intégration) :** la suppression du `PendingMatch`
+> sur mismatch se faisait *à l'intérieur* de `prisma.$transaction` suivie d'un `throw` → l'exception
+> provoquait un **rollback**, donc le pending n'était en réalité **pas supprimé**. L'adversaire
+> pouvait alors re-soumettre le score miroir correct et valider le match malgré la divergence
+> initiale. Corrigé : sur mismatch le handler renvoie un marqueur, la transaction **commit** la
+> suppression, et le `409` est levé *après* la transaction. Couvert par `test/matches.itest.ts`
+> (« scores incohérents → 409 et le pending est supprimé »).
 
 **Fichiers concernés :** `index.ts` → `POST /matches/:id/confirm`, `POST /tournaments/:id/matches/:matchId/confirm`
 
@@ -178,6 +209,38 @@ Internet → OAuth 42 Intra → Whitelist check → Session cookie (HMAC-SHA256)
 - Si A refuse de confirmer après enregistrement → la partie reste en `pending` jusqu'à contestation.
 
 **Fichiers concernés :** `index.ts` → `POST /challenges/:id/record`, `POST /matches/:id/confirm`
+
+---
+
+## Patch 013 — Cookies de session sans attribut `Secure`
+
+**Vecteur :** Sans `Secure`, le navigateur peut transmettre le cookie de session (`league_session`)
+ou le cookie OAuth state (`league_oauth_state`) sur une connexion HTTP non chiffrée → interception
+possible (sniffing réseau, MITM, downgrade).
+
+**Mitigation :**
+- Ajout de `secure: COOKIE_SECURE` sur les deux cookies signés, avec
+  `COOKIE_SECURE = process.env.NODE_ENV === 'production'`.
+- En prod (HTTPS via Caddy) le cookie n'est transmis que sur HTTPS ; en dev/test (HTTP localhost)
+  `Secure` reste `false` pour ne pas empêcher le navigateur de stocker le cookie.
+- `NODE_ENV=production` ajouté au service `backend` dans `docker-compose.prod.yml` pour activer le flag.
+- La terminaison TLS est faite par Caddy : l'attribut `Set-Cookie: ...; Secure` reste correct même
+  si le backend reçoit du HTTP en interne derrière le proxy.
+- Les cookies conservent `httpOnly` + `sameSite: 'Lax'` (déjà en place).
+
+**Fichiers concernés :** `auth.ts` → `COOKIE_SECURE`, `startOauth`, `GET /auth/callback` ; `docker-compose.prod.yml`
+
+---
+
+## Patch 014 — Couverture de tests d'intégration (DB réelle)
+
+**Contexte :** jusqu'ici seuls des tests unitaires DB-free existaient. Ajout d'une suite d'intégration
+HTTP tournant contre un vrai Postgres de test (`npm run test:integration`, conteneur `league-test-db`
+sur :55432). Couvre les chemins de sécurité critiques : auth manquante (401), permissions (403),
+validation Zod (400), transitions d'état interdites (409), validation bilatérale du score,
+anti-farming, pénalité de dodge. C'est cette suite qui a révélé le bug de rollback du Patch 001.
+
+**Fichiers concernés :** `apps/backend/test/matches.itest.ts`, `apps/backend/test/challenges.itest.ts`, `vitest.integration.config.ts`
 
 ---
 

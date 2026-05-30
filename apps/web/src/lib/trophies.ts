@@ -19,6 +19,8 @@ export interface TrophyResult {
   value: string;
   hint?: string;
   color: TrophyColor;
+  /** false → personne ne détient ce trophée (carte grisée). */
+  earned: boolean;
 }
 
 interface Acc {
@@ -28,9 +30,22 @@ interface Acc {
   played: number;
   maxGap: number;
   maxGapDate: number;
-  opponents: Map<string, number>;
   biggestUpsetGap: number;
   biggestUpsetVictim: string | null;
+  perfectWins: number; // gagné 10-0
+  closeWins: number; // gagné 10-9
+  negativeWins: number; // gagné 10 contre un score négatif
+  annihilations: number; // gagné 10 à -10 (ou pire)
+  comebacks: number; // gagné alors que l'adversaire avait ≥ 7
+  zeroLosses: number; // perdu en marquant 0
+  negativeFinishes: number; // perdu en finissant dans le négatif
+  nightGames: number; // matchs joués entre 0h et 6h
+  curWinStreak: number;
+  maxWinStreak: number;
+  curLossStreak: number;
+  maxLossStreak: number;
+  beaten: Map<string, number>; // adversaire battu → nb de victoires
+  days: Map<string, number>; // jour ISO → nb de matchs
 }
 
 export function computeTrophies(
@@ -50,32 +65,87 @@ export function computeTrophies(
         played: 0,
         maxGap: -1,
         maxGapDate: 0,
-        opponents: new Map(),
         biggestUpsetGap: 0,
         biggestUpsetVictim: null,
+        perfectWins: 0,
+        closeWins: 0,
+        negativeWins: 0,
+        annihilations: 0,
+        comebacks: 0,
+        zeroLosses: 0,
+        negativeFinishes: 0,
+        nightGames: 0,
+        curWinStreak: 0,
+        maxWinStreak: 0,
+        curLossStreak: 0,
+        maxLossStreak: 0,
+        beaten: new Map(),
+        days: new Map(),
       };
       acc.set(login, a);
     }
     return a;
   };
 
-  for (const m of matches) {
+  // Tri chronologique (indispensable pour les séries en cours).
+  const sorted = [...matches].sort(
+    (a, b) => new Date(a.playedAt).getTime() - new Date(b.playedAt).getTime(),
+  );
+
+  for (const m of sorted) {
     const a = ensure(m.playerALogin);
     const b = ensure(m.playerBLogin);
     a.played++;
     b.played++;
-    a.opponents.set(m.playerBLogin, (a.opponents.get(m.playerBLogin) ?? 0) + 1);
-    b.opponents.set(m.playerALogin, (b.opponents.get(m.playerALogin) ?? 0) + 1);
     const winner = m.winner === 'A' ? a : b;
     const loser = m.winner === 'A' ? b : a;
     winner.wins++;
     loser.losses++;
+
+    // Séries en cours
+    winner.curWinStreak++;
+    winner.curLossStreak = 0;
+    if (winner.curWinStreak > winner.maxWinStreak) winner.maxWinStreak = winner.curWinStreak;
+    loser.curLossStreak++;
+    loser.curWinStreak = 0;
+    if (loser.curLossStreak > loser.maxLossStreak) loser.maxLossStreak = loser.curLossStreak;
+
+    // Adversaires battus
+    winner.beaten.set(loser.login, (winner.beaten.get(loser.login) ?? 0) + 1);
+
+    const winnerScore = m.winner === 'A' ? m.scoreA : m.scoreB;
+    const loserScore = m.winner === 'A' ? m.scoreB : m.scoreA;
+
     const gap = Math.abs(m.scoreA - m.scoreB);
-    const ts = new Date(m.playedAt).getTime();
+    const d = new Date(m.playedAt);
+    const ts = d.getTime();
     if (gap > winner.maxGap || (gap === winner.maxGap && ts > winner.maxGapDate)) {
       winner.maxGap = gap;
       winner.maxGapDate = ts;
     }
+
+    // Heure / jour
+    const hour = d.getHours();
+    if (hour < 6) {
+      a.nightGames++;
+      b.nightGames++;
+    }
+    const dayKey = d.toISOString().slice(0, 10);
+    a.days.set(dayKey, (a.days.get(dayKey) ?? 0) + 1);
+    b.days.set(dayKey, (b.days.get(dayKey) ?? 0) + 1);
+
+    // Exploits du gagnant (la game se gagne à 10)
+    if (winnerScore === 10) {
+      if (loserScore === 0) winner.perfectWins++; // 10-0
+      if (loserScore === 9) winner.closeWins++; // 10-9
+      if (loserScore < 0) winner.negativeWins++; // 10 à négatif
+      if (loserScore <= -10) winner.annihilations++; // 10 à -10 (ou pire)
+      if (loserScore >= 7) winner.comebacks++; // remontée serrée
+    }
+    // Misères du perdant
+    if (loserScore === 0) loser.zeroLosses++; // perdu sans marquer
+    if (loserScore < 0) loser.negativeFinishes++; // fini dans le négatif
+
     const wElo = userMap.get(winner.login)?.elo ?? 1000;
     const lElo = userMap.get(loser.login)?.elo ?? 1000;
     const upsetGap = lElo - wElo;
@@ -85,6 +155,7 @@ export function computeTrophies(
     }
   }
 
+  // Paire la plus active (rivalité)
   let topPair: { a: string; b: string; n: number } | null = null;
   const pairCount = new Map<string, number>();
   for (const m of matches) {
@@ -117,117 +188,302 @@ export function computeTrophies(
     return res;
   }
 
-  const topG = best((a, b) => a.wins - b.wins);
-  const biggestLoser = best((a, b) => a.losses - b.losses);
-  const sniper = best((a, b) => {
-    const wrA = a.played ? a.wins / a.played : 0;
-    const wrB = b.played ? b.wins / b.played : 0;
-    return wrA - wrB;
-  }, 3);
-  const marathonien = best((a, b) => a.played - b.played);
-  const spectacle = best((a, b) => a.maxGap - b.maxGap);
-  const pissetteMaster = best((a, b) => a.biggestUpsetGap - b.biggestUpsetGap);
-  const couard = [...leaderboard].sort(
-    (a, b) => (b.dodgeCount ?? 0) - (a.dodgeCount ?? 0),
-  )[0];
+  function maxOf(m: Map<string, number>): { key: string; val: number } | null {
+    let best: { key: string; val: number } | null = null;
+    for (const [key, val] of m) {
+      if (!best || val > best.val) best = { key, val };
+    }
+    return best;
+  }
+
+  /** Construit un trophée "leader d'une métrique" : grisé si personne ne dépasse 0. */
+  function metricTrophy(opts: {
+    emoji: string;
+    title: string;
+    subtitle: string;
+    color: TrophyColor;
+    pick: (a: Acc) => number;
+    format: (v: number) => string;
+    minPlayed?: number;
+  }): TrophyResult {
+    const leader = best((a, b) => opts.pick(a) - opts.pick(b), opts.minPlayed ?? 0);
+    const v = leader ? opts.pick(leader) : 0;
+    const earned = !!leader && v > 0;
+    return {
+      emoji: opts.emoji,
+      title: opts.title,
+      subtitle: opts.subtitle,
+      color: opts.color,
+      winner: earned ? avatarOf(leader!.login) : null,
+      value: earned ? opts.format(v) : '—',
+      earned,
+    };
+  }
 
   const out: TrophyResult[] = [];
 
-  if (topG && topG.wins > 0) {
-    out.push({
+  // ─── Classement / ELO ──────────────────────────────────────────────
+  const champion = leaderboard[0];
+  out.push({
+    emoji: '💎',
+    title: 'Elo KING',
+    subtitle: 'Plus haut ELO actuel',
+    color: 'sapphire',
+    winner: champion ? avatarOf(champion.login) : null,
+    value: champion ? `${champion.elo} ELO` : '—',
+    earned: !!champion,
+  });
+
+  // ─── Performances positives ────────────────────────────────────────
+  out.push(
+    metricTrophy({
       emoji: '🏆',
       title: 'G.O.A.T',
       subtitle: 'Le plus de victoires',
-      winner: avatarOf(topG.login),
-      value: `${topG.wins} W`,
       color: 'gold',
-    });
-  }
-  if (biggestLoser && biggestLoser.losses > 0) {
-    out.push({
-      emoji: '💀',
-      title: 'Loooooooooser',
-      subtitle: 'Le plus de défaites',
-      winner: avatarOf(biggestLoser.login),
-      value: `${biggestLoser.losses} L`,
-      color: 'red',
-    });
-  }
-  if (sniper && sniper.played >= 3) {
-    const wr = Math.round((sniper.wins / sniper.played) * 100);
-    out.push({
+      pick: (a) => a.wins,
+      format: (v) => `${v} W`,
+    }),
+  );
+  out.push(
+    metricTrophy({
       emoji: '🎯',
       title: 'Sniper',
       subtitle: 'Meilleur win rate (min 3 matchs)',
-      winner: avatarOf(sniper.login),
-      value: `${wr}%`,
-      hint: `${sniper.wins}/${sniper.played}`,
       color: 'cyan',
-    });
-  }
-  if (marathonien && marathonien.played > 0) {
-    out.push({
-      emoji: '🔁',
-      title: 'Marathonien',
-      subtitle: 'Le plus de matchs joués',
-      winner: avatarOf(marathonien.login),
-      value: `${marathonien.played} matchs`,
+      minPlayed: 3,
+      pick: (a) => (a.played ? a.wins / a.played : 0),
+      format: (v) => `${Math.round(v * 100)}%`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🔥',
+      title: 'En feu',
+      subtitle: 'Plus longue série de victoires',
+      color: 'gold',
+      pick: (a) => a.maxWinStreak,
+      format: (v) => `${v} d'affilée`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '💥',
+      title: 'Destroyer',
+      subtitle: 'Le plus de victoires 10-0',
+      color: 'magenta',
+      pick: (a) => a.perfectWins,
+      format: (v) => `${v}× 10-0`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '⚖️',
+      title: 'Le Serré',
+      subtitle: 'Le plus de victoires 10-9',
       color: 'green',
-    });
-  }
-  if (spectacle && spectacle.maxGap > 0) {
-    out.push({
+      pick: (a) => a.closeWins,
+      format: (v) => `${v}× 10-9`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '📉',
+      title: 'Negativer',
+      subtitle: 'Le plus de victoires 10 contre un score négatif',
+      color: 'violet',
+      pick: (a) => a.negativeWins,
+      format: (v) => `${v}× 10-(−)`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '☠️',
+      title: 'Annihilateur',
+      subtitle: 'Le plus de victoires 10 à -10 (ou pire)',
+      color: 'crimson',
+      pick: (a) => a.annihilations,
+      format: (v) => `${v}× 10 à -10`,
+    }),
+  );
+  out.push(
+    metricTrophy({
       emoji: '🎪',
       title: 'Spectacle',
       subtitle: 'Plus grosse marge en victoire',
-      winner: avatarOf(spectacle.login),
-      value: `+${spectacle.maxGap}`,
-      color: 'magenta',
-    });
-  }
-  if (pissetteMaster && pissetteMaster.biggestUpsetGap > 0) {
-    out.push({
-      emoji: '👑',
-      title: 'Pissette Master',
-      subtitle: 'Plus gros upset ELO',
-      winner: avatarOf(pissetteMaster.login),
-      value: `+${pissetteMaster.biggestUpsetGap} ELO`,
-      hint: pissetteMaster.biggestUpsetVictim
-        ? `vs ${pissetteMaster.biggestUpsetVictim}`
-        : undefined,
-      color: 'violet',
-    });
-  }
-  if (couard && (couard.dodgeCount ?? 0) > 0) {
-    out.push({
-      emoji: '🏃',
-      title: 'Le Couard',
-      subtitle: 'Le plus de fuites',
-      winner: avatarOf(couard.login),
-      value: `${couard.dodgeCount} fuites`,
-      color: 'crimson',
-    });
-  }
-  if (topPair && topPair.n >= 2) {
-    out.push({
-      emoji: '🤝',
-      title: 'Rivalité',
-      subtitle: 'Paire la plus active',
-      winner: null,
-      value: `${topPair.a} vs ${topPair.b}`,
-      hint: `${topPair.n} matchs`,
       color: 'bronze',
-    });
-  }
-  if (leaderboard[0]) {
+      pick: (a) => a.maxGap,
+      format: (v) => `+${v}`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🗡️',
+      title: 'Chasseur de primes',
+      subtitle: "Le plus d'adversaires différents battus",
+      color: 'cyan',
+      pick: (a) => a.beaten.size,
+      format: (v) => `${v} victimes`,
+    }),
+  );
+
+  // Némésis — le plus de victoires contre un même joueur (avec la victime)
+  {
+    let leader: Acc | null = null;
+    let leaderVal = 0;
+    let leaderVictim: string | null = null;
+    for (const a of acc.values()) {
+      const top = maxOf(a.beaten);
+      if (top && top.val > leaderVal) {
+        leader = a;
+        leaderVal = top.val;
+        leaderVictim = top.key;
+      }
+    }
+    const earned = !!leader && leaderVal >= 2;
     out.push({
-      emoji: '💎',
-      title: 'Elo KING',
-      subtitle: 'Plus haut ELO actuel',
-      winner: avatarOf(leaderboard[0].login),
-      value: `${leaderboard[0].elo} ELO`,
-      color: 'sapphire',
+      emoji: '😈',
+      title: 'Némésis',
+      subtitle: 'Le plus de victoires contre un même joueur',
+      color: 'crimson',
+      winner: earned ? avatarOf(leader!.login) : null,
+      value: earned ? `${leaderVal}×` : '—',
+      hint: earned && leaderVictim ? `victime : ${leaderVictim}` : undefined,
+      earned,
     });
   }
+
+  // ─── Misères / honte ───────────────────────────────────────────────
+  out.push(
+    metricTrophy({
+      emoji: '💀',
+      title: 'Loooooooooser',
+      subtitle: 'Le plus de défaites',
+      color: 'red',
+      pick: (a) => a.losses,
+      format: (v) => `${v} L`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🥶',
+      title: 'Glissade',
+      subtitle: 'Plus longue série de défaites',
+      color: 'sapphire',
+      pick: (a) => a.maxLossStreak,
+      format: (v) => `${v} d'affilée`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🧊',
+      title: 'Zéro Absolu',
+      subtitle: 'Le plus de défaites en marquant 0',
+      color: 'cyan',
+      pick: (a) => a.zeroLosses,
+      format: (v) => `${v}× 0 pt`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🪨',
+      title: 'Le Boulet',
+      subtitle: 'Le plus de matchs finis dans le négatif',
+      color: 'red',
+      pick: (a) => a.negativeFinishes,
+      format: (v) => `${v}× négatif`,
+    }),
+  );
+
+  // ─── Activité / divers ─────────────────────────────────────────────
+  out.push(
+    metricTrophy({
+      emoji: '🔁',
+      title: 'Marathonien',
+      subtitle: 'Le plus de matchs joués',
+      color: 'green',
+      pick: (a) => a.played,
+      format: (v) => `${v} matchs`,
+    }),
+  );
+  out.push(
+    metricTrophy({
+      emoji: '🌙',
+      title: 'Le Noctambule',
+      subtitle: 'Le plus de matchs entre 0h et 6h',
+      color: 'violet',
+      pick: (a) => a.nightGames,
+      format: (v) => `${v} matchs`,
+    }),
+  );
+
+  // Bourreau de travail — le plus de matchs sur une même journée
+  {
+    let leader: Acc | null = null;
+    let leaderVal = 0;
+    for (const a of acc.values()) {
+      const top = maxOf(a.days);
+      if (top && top.val > leaderVal) {
+        leader = a;
+        leaderVal = top.val;
+      }
+    }
+    const earned = !!leader && leaderVal >= 3;
+    out.push({
+      emoji: '📅',
+      title: 'Bourreau de travail',
+      subtitle: 'Le plus de matchs en une journée',
+      color: 'bronze',
+      winner: earned ? avatarOf(leader!.login) : null,
+      value: earned ? `${leaderVal} en 1 jour` : '—',
+      earned,
+    });
+  }
+
+  // Pissette Master (upset ELO) — porte aussi un indice "vs victime"
+  const pissette = best((a, b) => a.biggestUpsetGap - b.biggestUpsetGap);
+  const pissetteEarned = !!pissette && pissette.biggestUpsetGap > 0;
+  out.push({
+    emoji: '👑',
+    title: 'Pissette Master',
+    subtitle: 'Plus gros upset ELO',
+    color: 'violet',
+    winner: pissetteEarned ? avatarOf(pissette!.login) : null,
+    value: pissetteEarned ? `+${pissette!.biggestUpsetGap} ELO` : '—',
+    hint:
+      pissetteEarned && pissette!.biggestUpsetVictim
+        ? `vs ${pissette!.biggestUpsetVictim}`
+        : undefined,
+    earned: pissetteEarned,
+  });
+
+  // Le Couard (fuites) — basé sur le classement
+  const couard = [...leaderboard].sort(
+    (a, b) => (b.dodgeCount ?? 0) - (a.dodgeCount ?? 0),
+  )[0];
+  const couardEarned = !!couard && (couard.dodgeCount ?? 0) > 0;
+  out.push({
+    emoji: '🏃',
+    title: 'Le Couard',
+    subtitle: 'Le plus de fuites',
+    color: 'crimson',
+    winner: couardEarned ? avatarOf(couard.login) : null,
+    value: couardEarned ? `${couard.dodgeCount} fuites` : '—',
+    earned: couardEarned,
+  });
+
+  // Rivalité (paire la plus active) — winner null mais "earned" si paire ≥ 2
+  const rivalryEarned = !!topPair && topPair.n >= 2;
+  out.push({
+    emoji: '🤝',
+    title: 'Rivalité',
+    subtitle: 'Paire la plus active',
+    color: 'bronze',
+    winner: null,
+    value: rivalryEarned ? `${topPair!.a} vs ${topPair!.b}` : '—',
+    hint: rivalryEarned ? `${topPair!.n} matchs` : undefined,
+    earned: rivalryEarned,
+  });
+
   return out;
 }

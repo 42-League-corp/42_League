@@ -242,7 +242,7 @@ export function DefisMobile() {
           pendingToConfirm.length === 0 &&
           pendingWaiting.length === 0 && (
             <div className="text-center py-10 px-4">
-              <div className="text-4xl mb-3 opacity-60">⚔</div>
+              <div className="text-4xl mb-3 opacity-60"></div>
               <div className="text-sm text-muted-2 font-medium">
                 Aucun défi en cours.<br />
                 <span className="text-xs text-muted">

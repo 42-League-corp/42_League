@@ -1,7 +1,8 @@
 import { getApiBase } from '../lib/config.js';
 import { clearToken, getToken, setToken } from '../lib/storage.js';
 // Ajoute l'import de rawRequest et AuthError
-import { rawRequest, AuthError } from '../lib/api.js'; 
+import { rawRequest, AuthError } from '../lib/api.js';
+import type { AuthStatus } from '../lib/auth-bridge.js';
 
 type Message =
   | { type: 'auth:login' }

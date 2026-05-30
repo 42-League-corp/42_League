@@ -24,6 +24,10 @@ export default defineManifest({
       128: ICON,
     },
   },
+  // `service_worker` (Chrome MV3) + `scripts` (Firefox MV3) cohabitent
+  // volontairement pour rester cross-browser. La combinaison n'est pas exprimable
+  // dans le type strict de defineManifest → on élargit le cast (manifeste émis
+  // inchangé).
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',

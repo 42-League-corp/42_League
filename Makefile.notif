@@ -1,0 +1,90 @@
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Makefile.notif — déclenche des notifs EN TEMPS RÉEL pour tester l'UI      ║
+# ╠══════════════════════════════════════════════════════════════════════════╣
+# ║  Chaque cible tape les VRAIES routes du backend (via la backdoor dev       ║
+# ║  `x-dev-login`, déjà activée dans .env : ALLOW_DEV_LOGIN=true). Le handler  ║
+# ║  émet alors le push SSE → ta page reçoit la notif sans rechargement.       ║
+# ║                                                                            ║
+# ║  Prérequis : le backend tourne (npm run dev -w @42-league/backend),        ║
+# ║  tu es connecté dans le front en tant que ME, et `jq` est installé.        ║
+# ║                                                                            ║
+# ║  Usage   : make -f Makefile.notif <cible>                                  ║
+# ║  Override: make -f Makefile.notif duel ME=monlogin OPP=test                ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+.PHONY: help seed-test duel duel-mine match result accept decline spam
+
+# ── Réglages (override en ligne de commande) ────────────────────────────────
+# Pas de commentaire en fin de ligne : Make garderait les espaces dans la valeur.
+API    ?= http://localhost:3000
+ME     ?= throbert
+OPP    ?= test
+MY_SC  ?= 10
+OP_SC  ?= 7
+
+# curl en tant que <login> : $(call curl,login) -X POST ...
+curl = curl -s -H 'Content-Type: application/json' -H 'x-dev-login: $(1)'
+
+help: ## Liste les cibles
+	@echo ''
+	@echo '  Notifs temps réel — make -f Makefile.notif <cible>   (ME=$(ME) OPP=$(OPP))'
+	@echo '  ───────────────────────────────────────────────────────────────────'
+	@echo '  seed-test   Historique de faux matchs + demandes (one-shot, en base)'
+	@echo '  duel        $(OPP) te défie            → notif "défi reçu"'
+	@echo '  duel-mine   tu défies $(OPP)           → notif chez $(OPP)'
+	@echo '  match       $(OPP) déclare un résultat → notif "match à confirmer"'
+	@echo '  result      match complet (déclaré + confirmé) → notif + classement'
+	@echo '  accept      tu acceptes le dernier défi reçu   → notif "défi accepté"'
+	@echo '  decline     tu refuses le dernier défi reçu'
+	@echo '  spam        enchaîne défi → match → résultat (démo)'
+	@echo ''
+
+seed-test: ## Peuple l'historique ME ↔ OPP (faux matchs/résultats/demandes)
+	@ME=$(ME) npm run db:seed-test -w @42-league/backend
+
+duel: ## $(OPP) envoie une demande de duel à $(ME)
+	@echo "⚔️  $(OPP) défie $(ME)…"
+	@sched=$$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ); \
+	jq -nc --arg op '$(ME)' --arg s "$$sched" '{opponentLogin:$$op,scheduledAt:$$s}' \
+		| $(call curl,$(OPP)) -X POST $(API)/challenges --data @- ; echo
+
+duel-mine: ## $(ME) envoie une demande de duel à $(OPP)
+	@echo "⚔️  $(ME) défie $(OPP)…"
+	@sched=$$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ); \
+	jq -nc --arg op '$(OPP)' --arg s "$$sched" '{opponentLogin:$$op,scheduledAt:$$s}' \
+		| $(call curl,$(ME)) -X POST $(API)/challenges --data @- ; echo
+
+match: ## $(OPP) déclare un résultat contre $(ME) (à confirmer)
+	@echo "📝 $(OPP) déclare $(OP_SC)-$(MY_SC) contre $(ME) (à confirmer)…"
+	@jq -nc --arg op '$(ME)' --argjson a $(OP_SC) --argjson b $(MY_SC) \
+		'{opponentLogin:$$op,scoreSelf:$$a,scoreOpponent:$$b}' \
+		| $(call curl,$(OPP)) -X POST $(API)/matches --data @- ; echo
+
+result: ## Match complet : $(OPP) déclare puis $(ME) confirme → résultat + classement
+	@echo "🎮 $(OPP) déclare $(OP_SC)-$(MY_SC), puis $(ME) confirme…"
+	@id=$$(jq -nc --arg op '$(ME)' --argjson a $(OP_SC) --argjson b $(MY_SC) \
+		'{opponentLogin:$$op,scoreSelf:$$a,scoreOpponent:$$b}' \
+		| $(call curl,$(OPP)) -X POST $(API)/matches --data @- | jq -r '.id'); \
+	if [ "$$id" = "null" ] || [ -z "$$id" ]; then echo "❌ déclaration refusée (voir message ci-dessus)"; exit 1; fi; \
+	echo "   pending id=$$id → confirmation par $(ME)…"; \
+	jq -nc --argjson a $(MY_SC) --argjson b $(OP_SC) '{scoreSelf:$$a,scoreOpponent:$$b}' \
+		| $(call curl,$(ME)) -X POST $(API)/matches/$$id/confirm --data @- ; echo
+
+accept: ## $(ME) accepte la dernière demande de duel reçue de $(OPP)
+	@id=$$($(call curl,$(ME)) $(API)/challenges \
+		| jq -r '[.[]|select(.challengerLogin=="$(OPP)" and .status=="pending")]|last|.id'); \
+	if [ "$$id" = "null" ] || [ -z "$$id" ]; then echo "Aucun défi en attente de $(OPP). Lance d'abord 'make -f Makefile.notif duel'."; exit 1; fi; \
+	echo "✅ $(ME) accepte le défi $$id…"; \
+	$(call curl,$(ME)) -X POST $(API)/challenges/$$id/accept ; echo
+
+decline: ## $(ME) refuse la dernière demande de duel reçue de $(OPP)
+	@id=$$($(call curl,$(ME)) $(API)/challenges \
+		| jq -r '[.[]|select(.challengerLogin=="$(OPP)" and .status=="pending")]|last|.id'); \
+	if [ "$$id" = "null" ] || [ -z "$$id" ]; then echo "Aucun défi en attente de $(OPP)."; exit 1; fi; \
+	echo "🚫 $(ME) refuse le défi $$id…"; \
+	$(call curl,$(ME)) -X POST $(API)/challenges/$$id/decline ; echo
+
+spam: ## Enchaîne défi → match → résultat (pour voir plusieurs notifs)
+	@$(MAKE) -f Makefile.notif duel   ME=$(ME) OPP=$(OPP); sleep 2
+	@$(MAKE) -f Makefile.notif match  ME=$(ME) OPP=$(OPP); sleep 2
+	@$(MAKE) -f Makefile.notif result ME=$(ME) OPP=$(OPP)

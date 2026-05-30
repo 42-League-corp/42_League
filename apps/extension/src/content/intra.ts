@@ -1312,7 +1312,7 @@ function startUserStatsInjector() {
 
     // On a profile page (/users/<login>), show that user's stats, not ours
     const profileMatch = location.pathname.match(/^\/users\/([a-z0-9_-]+)(?:\/|$)/i);
-    const targetLogin = profileMatch ? profileMatch[1].toLowerCase() : myLogin;
+    const targetLogin = profileMatch?.[1]?.toLowerCase() ?? myLogin;
 
     const target = leaderboard.find((u) => u.login === targetLogin);
     if (!target) return;

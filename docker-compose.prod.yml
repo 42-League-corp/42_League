@@ -24,6 +24,7 @@ services:
     env_file:
       - .env
     environment:
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://league:league@postgres:5432/league?schema=public
       - PORT=3000
     depends_on:

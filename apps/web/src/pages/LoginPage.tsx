@@ -45,6 +45,52 @@ export function LoginPage() {
             {t('anon.cta')}
           </Button>
 
+          {/* Bloc rassurant : comment marche l'OAuth de 42 (pour les sceptiques) */}
+          <div className="mt-6 text-left card-hud rounded-xl p-4 border border-brass/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span aria-hidden className="text-brass text-sm">🔒</span>
+              <h2 className="font-gaming text-xs font-extrabold text-text-strong uppercase tracking-wide">
+                {t('login.how.title')}
+              </h2>
+            </div>
+            <p className="text-[11px] text-brass/90 font-semibold mb-1.5">
+              {t('login.how.reassure')}
+            </p>
+            <p className="text-[11px] text-muted-2 leading-relaxed mb-3">
+              {t('login.how.steps')}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              <li>
+                <a
+                  href="https://api.intra.42.fr/apidoc/guides/web_application_flow"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-brass underline underline-offset-2 hover:text-text-strong transition-colors"
+                >
+                  {t('login.how.link42')} ↗
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://oauth.net/2/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-brass underline underline-offset-2 hover:text-text-strong transition-colors"
+                >
+                  {t('login.how.linkOauth')} ↗
+                </a>
+              </li>
+              <li>
+                <Link
+                  to="/about"
+                  className="text-[11px] text-brass underline underline-offset-2 hover:text-text-strong transition-colors"
+                >
+                  {t('login.how.linkPrivacy')}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
           <p className="text-[10px] text-muted-2/60 mt-4 leading-relaxed">
             {t('login.privacy')}{' '}
             <Link to="/about" className="underline underline-offset-2 hover:text-muted-2 transition-colors">

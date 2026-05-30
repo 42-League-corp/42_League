@@ -5,7 +5,7 @@
 - [ ] **Matchmaking** : file d'attente, suggérer un adversaire (proche en ELO, dispo, hors anti-farming)
 - [ ] **Saisons** : reset/archive périodique, leaderboard par saison
 - [ ] **Minimum hebdo** : X matchs/semaine sinon malus / dégradation ELO
-- [ ] **Tests d'intégration HTTP** sur les endpoints (déclaration, confirmation, anti-farming) avec une vraie DB de test
+- [x] **Tests d'intégration HTTP** sur les endpoints (déclaration, confirmation, anti-farming) avec une vraie DB de test — `test/matches.itest.ts` + `test/challenges.itest.ts` (29 tests, `npm run test:integration`)
 - [ ] **Rate-limiting / abuse protection** sur les endpoints publics
 - [x] **Annulation / refus** d'un match pending par l'adversaire (`POST /matches/:id/reject`)
 - [x] **Validation symétrique du score** : l'adversaire ressaisit son score à la confirmation ; mismatch → 409 (corriger ou refuser)
@@ -32,5 +32,5 @@
 - [ ] CI (lint + typecheck + tests sur PR)
 
 ## Sécurité
-- [ ] **Rotate les secrets OAuth** (`FT_OAUTH_UID` / `FT_OAUTH_SECRET`) — les valeurs actuelles sont apparues dans une conversation Claude
-- [ ] Cookie `Secure` en prod (actuellement seulement `HttpOnly` + `SameSite=Lax`)
+- [ ] **Rotate les secrets OAuth** (`FT_OAUTH_UID` / `FT_OAUTH_SECRET`) — les valeurs actuelles sont apparues dans une conversation Claude → **action manuelle sur l'intra** (profile.intra.42.fr → OAuth applications → regénérer le secret), puis mettre à jour `.env` local + prod
+- [x] Cookie `Secure` en prod — `COOKIE_SECURE = NODE_ENV==='production'` appliqué aux cookies session + state (`auth.ts`), `NODE_ENV=production` ajouté au backend dans `docker-compose.prod.yml`

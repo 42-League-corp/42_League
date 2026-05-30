@@ -96,6 +96,7 @@ const EVENT_DOMAINS: Record<string, Domain[]> = {
   'match:pending': ['matches'],
   'match:confirmed': ['matches', 'me'],
   'match:rejected': ['matches'],
+  'match:expired': ['matches'],
   'challenge:received': ['challenges'],
   'challenge:accepted': ['challenges'],
   'challenge:declined': ['challenges'],
@@ -135,7 +136,7 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           api.opsMe().catch(() => null),
           api.opsList().catch(() => [] as Ops[]),
         ]);
-      setData({
+      setData((prev) => ({
         me,
         matches,
         pending,
@@ -144,7 +145,10 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
         tournaments,
         opsMe,
         allOps,
-      });
+        // `locations` est alimenté par un poller séparé → on préserve l'existant
+        // au lieu de l'écraser (sinon le type LeagueData est incomplet + perte des hôtes).
+        locations: prev.locations,
+      }));
     } catch (err) {
       if (err instanceof AuthError) {
         signOut();
