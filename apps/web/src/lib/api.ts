@@ -404,7 +404,9 @@ export const api = {
       body: JSON.stringify({ games }),
     }),
   leaderboard: (game?: Game) =>
-    request<LeaderboardEntry[]>(`/leaderboard${game === 'smash' ? '?game=smash' : ''}`),
+    request<LeaderboardEntry[]>(
+      `/leaderboard${game && game !== 'babyfoot' ? `?game=${game}` : ''}`,
+    ),
   // Token éphémère (scope SSE) à passer en ?token= pour ouvrir le flux /events,
   // afin de ne jamais exposer le Bearer 30 jours dans une URL (logs / Referer).
   streamToken: () => request<{ token: string }>('/auth/stream-token'),
@@ -517,7 +519,7 @@ export const api = {
       },
     ),
   tournaments: (game?: Game) =>
-    request<Tournament[]>(`/tournaments${game === 'smash' ? '?game=smash' : ''}`),
+    request<Tournament[]>(`/tournaments${game && game !== 'babyfoot' ? `?game=${game}` : ''}`),
   tournament: (id: string) =>
     request<Tournament>(`/tournaments/${encodeURIComponent(id)}`),
   createTournament: (input: {
