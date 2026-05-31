@@ -7,24 +7,45 @@ import { useGameMode } from '../hooks/useGameMode';
  * Purement décoratif (image de fond représentant la discipline).
  */
 export function LeaderboardBanner() {
-  const { isSmash } = useGameMode();
+  const { game } = useGameMode();
+  const meta =
+    game === 'smash'
+      ? { name: 'Smash', tag: '1 contre 1 · stocks', cls: 'text-red' }
+      : game === 'chess'
+        ? { name: 'Échecs', tag: '1 contre 1 · victoire / défaite', cls: 'text-[#56c46e]' }
+        : { name: 'Babyfoot', tag: '1 contre 1 · 10 buts', cls: 'text-gold' };
   return (
     <div className="relative h-24 sm:h-28 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden mb-4 border-b sm:border border-border/50">
-      {isSmash ? <SmashField /> : <FoosField />}
+      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : <FoosField />}
       <div className="absolute inset-0 bg-gradient-to-t from-bg-1/90 via-bg-1/30 to-transparent" />
       <div className="absolute left-4 bottom-3">
         <div className="font-display text-xl sm:text-2xl font-black text-text-strong tracking-tight drop-shadow">
-          Classement {isSmash ? 'Smash' : 'Babyfoot'}
+          Classement {meta.name}
         </div>
-        <div
-          className={`text-[10px] uppercase tracking-[0.18em] font-extrabold ${
-            isSmash ? 'text-red' : 'text-gold'
-          }`}
-        >
-          {isSmash ? '1 contre 1 · stocks' : '1 contre 1 · 10 buts'}
+        <div className={`text-[10px] uppercase tracking-[0.18em] font-extrabold ${meta.cls}`}>
+          {meta.tag}
         </div>
       </div>
     </div>
+  );
+}
+
+function ChessField() {
+  // Échiquier vert + pièces stylisées.
+  const cells = [];
+  for (let r = 0; r < 4; r++)
+    for (let col = 0; col < 14; col++)
+      if ((r + col) % 2 === 0) cells.push(<rect key={`${r}-${col}`} x={col * 28.6} y={r * 30} width="28.6" height="30" fill="#0f3d2a" opacity="0.6" />);
+  return (
+    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
+      <rect width="400" height="120" fill="#0c2a1c" />
+      {cells}
+      <g transform="translate(330,60)" fill="#dfeee2" opacity="0.9">
+        <path d="M0 -34 v10 M-7 -29 h14" stroke="#dfeee2" strokeWidth="5" strokeLinecap="round" />
+        <path d="M0 -22 C-12 -22 -15 -8 -7 0 L-12 30 h24 l-5 -30 C15 -8 12 -22 0 -22 Z" />
+        <rect x="-16" y="30" width="32" height="9" rx="3" />
+      </g>
+    </svg>
   );
 }
 

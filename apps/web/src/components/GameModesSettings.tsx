@@ -3,9 +3,10 @@ import { api, type Game } from '../lib/api';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 
-const GAMES: { id: Game; name: string }[] = [
-  { id: 'babyfoot', name: 'Babyfoot' },
-  { id: 'smash', name: 'Smash Bros' },
+const GAMES: { id: Game; name: string; accent: string }[] = [
+  { id: 'babyfoot', name: 'Babyfoot', accent: '#ffc94a' },
+  { id: 'smash', name: 'Smash Bros', accent: '#ff4d5c' },
+  { id: 'chess', name: 'Échecs', accent: '#56c46e' },
 ];
 
 /**
@@ -58,19 +59,15 @@ export function GameModesSettings() {
               type="button"
               disabled={busy === g.id}
               onClick={() => toggle(g.id)}
+              style={active ? { borderColor: g.accent, background: `${g.accent}1a`, color: g.accent } : undefined}
               className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border-2 transition-all disabled:opacity-50 ${
-                active
-                  ? g.id === 'smash'
-                    ? 'border-red bg-red/10 text-red'
-                    : 'border-gold bg-gold/10 text-gold'
-                  : 'border-border bg-bg-2/40 text-muted-2'
+                active ? '' : 'border-border bg-bg-2/40 text-muted-2'
               }`}
             >
               <span className="text-sm font-extrabold uppercase tracking-wide">{g.name}</span>
               <span
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  active ? (g.id === 'smash' ? 'bg-red/70' : 'bg-gold/70') : 'bg-border'
-                }`}
+                className="relative w-10 h-5 rounded-full transition-colors"
+                style={{ background: active ? g.accent : '#3a3022' }}
               >
                 <span
                   className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${

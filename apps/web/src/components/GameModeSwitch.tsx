@@ -2,11 +2,10 @@ import { useEffect } from 'react';
 import { useGameMode } from '../hooks/useGameMode';
 import type { Game } from '../lib/gameMode';
 
-const LABEL: Record<Game, string> = { babyfoot: 'Babyfoot', smash: 'Smash' };
+const ORDER: Game[] = ['babyfoot', 'smash', 'chess'];
+const LABEL: Record<Game, string> = { babyfoot: 'Babyfoot', smash: 'Smash', chess: 'Échecs' };
 
-/**
- * Applique `data-game` sur <html> pour le thème conditionnel (accent rouge en smash).
- */
+/** Applique `data-game` sur <html> pour le thème conditionnel (or / rouge / vert). */
 export function useGameModeTheme(): void {
   const { game } = useGameMode();
   useEffect(() => {
@@ -14,10 +13,9 @@ export function useGameModeTheme(): void {
   }, [game]);
 }
 
-/** Glyphe représentant le jeu (babyfoot : joueur sur barre ; smash : Smash Ball). */
+/** Glyphe représentant le jeu : babyfoot, Smash Ball, ou pièce d'échecs. */
 function ModeGlyph({ game, size = 30 }: { game: Game; size?: number }) {
   if (game === 'smash') {
-    // Smash Ball stylisée : sphère + swirl.
     return (
       <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
         <defs>
@@ -39,7 +37,19 @@ function ModeGlyph({ game, size = 30 }: { game: Game; size?: number }) {
       </svg>
     );
   }
-  // Babyfoot : barre horizontale + figurine + ballon.
+  if (game === 'chess') {
+    // Roi d'échecs stylisé.
+    return (
+      <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
+        <rect x="9" y="4" width="2.2" height="0" />
+        <path d="M16 3 v5 M13.5 5.5 h5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M16 9 C12 9 11 13 14 16 L12 24 h8 l-2 -8 C21 13 20 9 16 9 Z" fill="currentColor" />
+        <rect x="10" y="24" width="12" height="3.5" rx="1.4" fill="currentColor" />
+        <rect x="8.5" y="27" width="15" height="3" rx="1.4" fill="currentColor" />
+      </svg>
+    );
+  }
+  // Babyfoot : barre + figurine + ballon.
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
       <rect x="3" y="6" width="26" height="2.4" rx="1.2" fill="currentColor" opacity="0.65" />
@@ -51,48 +61,55 @@ function ModeGlyph({ game, size = 30 }: { game: Game; size?: number }) {
   );
 }
 
+const STYLE: Record<Game, { ring: string; glow: string; badge: string }> = {
+  babyfoot: {
+    ring: 'bg-bg-2/90 border-gold text-gold',
+    glow: '0 8px 26px -6px rgba(255,201,74,0.6)',
+    badge: 'bg-gold text-[#1a1100] border-bg-1',
+  },
+  smash: {
+    ring: 'bg-[#1a0c0e]/90 border-red text-red',
+    glow: '0 8px 26px -6px rgba(255,77,92,0.7)',
+    badge: 'bg-red text-white border-[#1a0c0e]',
+  },
+  chess: {
+    ring: 'bg-[#0c1a10]/90 border-[#56c46e] text-[#56c46e]',
+    glow: '0 8px 26px -6px rgba(86,196,110,0.6)',
+    badge: 'bg-[#56c46e] text-[#06160c] border-[#0c1a10]',
+  },
+};
+
 /**
- * Bouton rond flottant (bas droite) qui affiche le mode ACTUEL via son glyphe, et
- * bascule au clic. Une pastille « actuel » + le nom du mode lèvent l'ambiguïté.
- * Doré en babyfoot, rouge en smash.
+ * Bouton rond flottant (bas droite) : affiche le glyphe du mode ACTUEL et, au
+ * clic, passe au mode suivant (babyfoot → smash → échecs → …). Une pastille
+ * « actuel » + le nom lèvent l'ambiguïté. Or / rouge / vert selon le mode.
  */
 export function GameModeSwitch() {
   const { game, setGame } = useGameMode();
   useGameModeTheme();
 
-  const isSmash = game === 'smash';
-  const other: Game = isSmash ? 'babyfoot' : 'smash';
-  const toggle = () => setGame(other);
+  const next = ORDER[(ORDER.indexOf(game) + 1) % ORDER.length]!;
+  const s = STYLE[game];
 
   return (
     <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90] flex flex-col items-center gap-1">
       <button
         type="button"
-        onClick={toggle}
-        aria-label={`Mode actuel : ${LABEL[game]}. Cliquer pour passer en ${LABEL[other]}.`}
-        title={`Mode ${LABEL[game]} (actuel) · cliquer pour passer en ${LABEL[other]}`}
-        className={`relative grid place-items-center w-14 h-14 rounded-full border-2 shadow-xl backdrop-blur-md transition-all active:scale-95 ${
-          isSmash
-            ? 'bg-[#1a0c0e]/90 border-red text-red shadow-[0_8px_26px_-6px_rgba(255,77,92,0.7)]'
-            : 'bg-bg-2/90 border-gold text-gold shadow-[0_8px_26px_-6px_rgba(255,201,74,0.6)]'
-        }`}
+        onClick={() => setGame(next)}
+        aria-label={`Mode actuel : ${LABEL[game]}. Cliquer pour passer en ${LABEL[next]}.`}
+        title={`Mode ${LABEL[game]} (actuel) · cliquer pour passer en ${LABEL[next]}`}
+        className={`relative grid place-items-center w-14 h-14 rounded-full border-2 shadow-xl backdrop-blur-md transition-all active:scale-95 ${s.ring}`}
+        style={{ boxShadow: s.glow }}
       >
         <ModeGlyph game={game} />
-        {/* Pastille « actuel » */}
         <span
-          className={`absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase tracking-wider border ${
-            isSmash
-              ? 'bg-red text-white border-[#1a0c0e]'
-              : 'bg-gold text-[#1a1100] border-bg-1'
-          }`}
+          className={`absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase tracking-wider border ${s.badge}`}
         >
           actuel
         </span>
       </button>
       <span
-        className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] border backdrop-blur-md ${
-          isSmash ? 'text-red border-red/50 bg-[#1a0c0e]/80' : 'text-gold border-gold/50 bg-bg-2/80'
-        }`}
+        className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] border backdrop-blur-md ${s.ring}`}
       >
         {LABEL[game]}
       </span>

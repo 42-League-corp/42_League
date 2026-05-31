@@ -24,6 +24,16 @@
     --accent-teal-deep: 120 26 34;
   }
 
+  /* Mode Échecs : thème VERT. */
+  [data-game='chess'] {
+    --accent-gold: 86 196 110; /* vert */
+    --accent-gold-dim: 58 158 80;
+    --accent-gold-deep: 24 88 44;
+    --accent-teal: 86 196 110;
+    --accent-teal-dim: 58 158 80;
+    --accent-teal-deep: 24 88 44;
+  }
+
   html,
   body,
   #root {

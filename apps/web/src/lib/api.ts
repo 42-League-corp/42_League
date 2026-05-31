@@ -96,6 +96,9 @@ export interface MeResponse {
     eloSmash?: number;
     matchesPlayedSmash?: number;
     tournamentsWonSmash?: number;
+    eloChess?: number;
+    matchesPlayedChess?: number;
+    tournamentsWonChess?: number;
     games?: Game[];
     onboardedAt?: string | null;
   } | null;

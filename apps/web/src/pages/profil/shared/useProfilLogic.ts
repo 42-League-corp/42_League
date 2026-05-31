@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
+import { pickRating } from '../../../lib/gameStats';
 import type { PlayedMatch } from '../../../lib/api';
 
 export interface ProfilStats {
@@ -43,7 +44,7 @@ const EMPTY_STATS: ProfilStats = {
 
 export function useProfilLogic(): ProfilLogic {
   const { me, matches } = useLeagueData();
-  const { game, isSmash } = useGameMode();
+  const { game } = useGameMode();
   const myLogin = me?.login;
 
   const data = useMemo(() => {
@@ -122,10 +123,11 @@ export function useProfilLogic(): ProfilLogic {
             (opponentScoresOnWin.reduce((s, v) => s + v, 0) / opponentScoresOnWin.length) * 10,
           ) / 10;
 
+    const rating = pickRating(me.user, game);
     return {
       stats: {
-        elo: (isSmash ? me.user.eloSmash : me.user.elo) ?? 1000,
-        matchesPlayed: (isSmash ? me.user.matchesPlayedSmash : me.user.matchesPlayed) ?? 0,
+        elo: rating.elo,
+        matchesPlayed: rating.matchesPlayed,
         wins,
         losses,
         total,
@@ -138,7 +140,7 @@ export function useProfilLogic(): ProfilLogic {
       },
       recentMatches: mine.slice(0, 10),
     };
-  }, [me, myLogin, matches, game, isSmash]);
+  }, [me, myLogin, matches, game]);
 
   return { myLogin, ...data };
 }

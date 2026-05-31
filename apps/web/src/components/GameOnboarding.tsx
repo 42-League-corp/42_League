@@ -6,12 +6,22 @@ import { useFlash } from '../hooks/useFlash';
 import { setGame as setActiveGame } from '../lib/gameMode';
 import { TournamentCup } from './TournamentCup';
 import { SmashTrophy } from './SmashTrophy';
+import { ChessTrophy } from './ChessTrophy';
 import { Button } from './Button';
 
 const GAMES: { id: Game; name: string; tagline: string }[] = [
   { id: 'babyfoot', name: 'Babyfoot', tagline: '1 contre 1 · 10 buts · gamelles' },
   { id: 'smash', name: 'Smash Bros', tagline: '1 contre 1 · Bo3/Bo5 · stocks' },
+  { id: 'chess', name: 'Échecs', tagline: '1 contre 1 · victoire / défaite' },
 ];
+
+function GameTrophy({ game, accent, className }: { game: Game; accent: string; className?: string }) {
+  if (game === 'smash') return <SmashTrophy accent={accent} className={className} />;
+  if (game === 'chess') return <ChessTrophy accent={accent} className={className} />;
+  return <TournamentCup accent={accent} className={className} />;
+}
+
+const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e' };
 
 /**
  * Onboarding au 1er login : choix des modes de jeu auxquels on adhère. On
@@ -44,9 +54,10 @@ export function GameOnboarding() {
     setBusy(true);
     try {
       await api.setGames(games);
-      // Bascule sur un mode choisi si le mode courant n'en fait pas partie.
-      if (!sel.has('babyfoot') && sel.has('smash')) setActiveGame('smash');
-      else if (sel.has('babyfoot')) setActiveGame('babyfoot');
+      // Bascule sur le 1er mode choisi (ordre babyfoot → smash → échecs).
+      const order: Game[] = ['babyfoot', 'smash', 'chess'];
+      const first = order.find((g) => sel.has(g));
+      if (first) setActiveGame(first);
       await refresh();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -69,37 +80,29 @@ export function GameOnboarding() {
         <div className="grid grid-cols-1 gap-3">
           {GAMES.map((g) => {
             const active = sel.has(g.id);
-            const accent = g.id === 'smash' ? '#ff4d5c' : '#ffc94a';
+            const accent = ACCENT[g.id];
             return (
               <button
                 key={g.id}
                 type="button"
                 onClick={() => toggle(g.id)}
+                style={active ? { borderColor: accent, background: `${accent}1a` } : undefined}
                 className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${
-                  active
-                    ? g.id === 'smash'
-                      ? 'border-red bg-red/10'
-                      : 'border-gold bg-gold/10'
-                    : 'border-border bg-bg-2/40 opacity-70 hover:opacity-100'
+                  active ? '' : 'border-border bg-bg-2/40 opacity-70 hover:opacity-100'
                 }`}
               >
-                {g.id === 'smash' ? (
-                  <SmashTrophy accent={accent} className="w-12 h-12 shrink-0" />
-                ) : (
-                  <TournamentCup accent={accent} className="w-12 h-12 shrink-0" />
-                )}
+                <GameTrophy game={g.id} accent={accent} className="w-12 h-12 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="font-extrabold text-text-strong">{g.name}</div>
                   <div className="text-[11px] text-muted-2">{g.tagline}</div>
                 </div>
                 <span
-                  className={`grid place-items-center w-6 h-6 rounded-full border-2 ${
+                  className="grid place-items-center w-6 h-6 rounded-full border-2"
+                  style={
                     active
-                      ? g.id === 'smash'
-                        ? 'bg-red border-red text-white'
-                        : 'bg-gold border-gold text-[#1a1100]'
-                      : 'border-border text-transparent'
-                  }`}
+                      ? { background: accent, borderColor: accent, color: '#06160c' }
+                      : { borderColor: '#3a3022', color: 'transparent' }
+                  }
                 >
                   <Check className="w-3.5 h-3.5" strokeWidth={3} />
                 </span>

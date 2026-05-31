@@ -8,6 +8,7 @@ import { api, type Tournament } from '../../lib/api';
 import { tournamentArt } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
+import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
@@ -262,6 +263,11 @@ function TournoiCard({ t }: { t: Tournament }) {
               accent={art.accent}
               className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
             />
+          ) : t.game === 'chess' ? (
+            <ChessTrophy
+              accent={art.accent}
+              className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
+            />
           ) : (
             <TournamentCup
               accent={art.accent}
@@ -381,6 +387,8 @@ function CreateTournamentModal({
         <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40">
           {game === 'smash' ? (
             <SmashTrophy accent="#ff4d5c" className="w-10 h-10 shrink-0" />
+          ) : game === 'chess' ? (
+            <ChessTrophy accent="#56c46e" className="w-10 h-10 shrink-0" />
           ) : (
             <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />
           )}
