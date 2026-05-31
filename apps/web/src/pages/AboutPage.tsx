@@ -302,9 +302,9 @@ function EloSection() {
             <span className="text-gold font-semibold">±400 points</span> par match.
           </li>
           <li>
-            <span className="text-text font-semibold">Anti-farming</span> — seul le{' '}
-            <span className="text-text font-semibold">premier match entre deux mêmes joueurs sur une fenêtre de 3 jours</span>{' '}
-            compte pour l'ELO.
+            <span className="text-text font-semibold">Ranked illimité</span> —{' '}
+            <span className="text-text font-semibold">chaque match compte pour l'ELO</span>, sans
+            limite par jour ni par adversaire.
           </li>
         </ul>
       </div>
@@ -534,18 +534,9 @@ type Member = {
   blurb: React.ReactNode;
 };
 
+// Ordre d'affichage du carrousel (gauche → droite). nithomas est centré au
+// démarrage, avec throbert à sa gauche et abidaux à sa droite.
 const TEAM: Member[] = [
-  {
-    login: 'nithomas',
-    role: 'Parrain',
-    accent: 'gold',
-    blurb: (
-      <>
-        Tout est parti d'une <span className="text-text font-semibold">idée qu'il a lâchée</span> un
-        jour, comme ça. Sans cette première étincelle, 42 League serait jamais sorti de terre.
-      </>
-    ),
-  },
   {
     login: 'throbert',
     role: 'Founder',
@@ -555,7 +546,18 @@ const TEAM: Member[] = [
       <>
         Celui qui a transformé l'idée en vrai projet : un{' '}
         <span className="text-text font-semibold">classement ELO de babyfoot 1v1</span> du campus,
-        avec défis programmés, OPS, tournois et trophées — le tout dans une seule app.
+        avec défis programmés, OPS, tournois et trophées.
+      </>
+    ),
+  },
+  {
+    login: 'nithomas',
+    role: 'Parrain',
+    accent: 'gold',
+    blurb: (
+      <>
+        Tout est parti d'une <span className="text-text font-semibold">idée qu'il a lâchée</span> un
+        jour, comme ça. Sans cette première étincelle, 42 League serait jamais sorti de terre.
       </>
     ),
   },
@@ -582,13 +584,13 @@ const TEAM: Member[] = [
     ),
   },
   {
-    login: 'sbonneaux',
-    role: 'Conseiller · Déploiement & hébergement',
+    login: 'sbonneau',
+    role: 'Conseiller',
     accent: 'red',
     blurb: (
       <>
-        Le <span className="text-text font-semibold">boss de la mise en prod</span> : serveurs,
-        déploiement, hébergement. C'est grâce à lui que le site tourne sans qu'on y pense.
+        Passé <span className="text-text font-semibold">donner quelques conseils</span> en chemin,
+        l'œil sur le déploiement. Rien de plus, mais c'est toujours bon d'avoir un avis extérieur.
       </>
     ),
   },
@@ -609,9 +611,11 @@ function TeamSectionAuthed() {
 }
 
 function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
-  // Founder en tête, le reste dans l'ordre déclaré.
-  const members = [...TEAM].sort((a, b) => (b.crown ? 1 : 0) - (a.crown ? 1 : 0));
-  const [active, setActive] = useState(0);
+  // Ordre déclaré tel quel : nithomas centré au démarrage (throbert à gauche,
+  // abidaux à droite).
+  const members = TEAM;
+  const startIndex = Math.max(0, members.findIndex((m) => m.login === 'nithomas'));
+  const [active, setActive] = useState(startIndex);
   const touchX = useRef<number | null>(null);
   const wheelLock = useRef(false);
 
@@ -650,7 +654,7 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
 
       {/* Carrousel « coverflow » : carte centrale nette, voisines en retrait et floutées. */}
       <div
-        className="relative h-[400px] sm:h-[420px] select-none touch-pan-y overflow-hidden"
+        className="relative h-[480px] sm:h-[560px] select-none touch-pan-y overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onWheel={onWheel}
@@ -733,7 +737,7 @@ function MemberCard({
   const showImg = imageUrl && !broken;
   return (
     <div
-      className={`relative w-[230px] sm:w-[260px] h-[360px] sm:h-[380px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
+      className={`relative w-[280px] sm:w-[330px] h-[440px] sm:h-[520px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
         isRed ? 'border-red/40' : member.crown ? 'border-gold/70' : 'border-gold/40'
       } ${active ? 'shadow-[0_24px_60px_-18px_rgba(0,0,0,0.75)]' : 'shadow-lg'}`}
     >

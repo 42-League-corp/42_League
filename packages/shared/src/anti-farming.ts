@@ -1,30 +1,19 @@
-export const ANTI_FARMING_WINDOW_DAYS = 7;
-export const MAX_COUNTED_PER_PAIR_PER_WINDOW = 2;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 export interface PriorMatch {
   playedAt: Date;
   countedForElo: boolean;
 }
 
 /**
- * Two players can have at most MAX_COUNTED_PER_PAIR_PER_WINDOW matches
- * counted toward ELO inside a rolling window. Beyond that, additional
- * matches are still recorded but won't move ratings.
+ * Ranked illimité : tout match compte pour l'ELO, sans plafond par paire ni
+ * par fenêtre. (L'ancien anti-farming limitait à N matchs comptés par paire
+ * sur une fenêtre glissante — supprimé.)
+ *
+ * Signature conservée pour ne pas toucher aux appelants : les arguments sont
+ * ignorés et la fonction renvoie toujours `true`.
  */
 export function shouldCountForElo(
-  priorMatchesBetweenPair: PriorMatch[],
-  newMatchAt: Date,
+  _priorMatchesBetweenPair: PriorMatch[],
+  _newMatchAt: Date,
 ): boolean {
-  const windowStart = new Date(
-    newMatchAt.getTime() - ANTI_FARMING_WINDOW_DAYS * MS_PER_DAY,
-  );
-  const countedInWindow = priorMatchesBetweenPair.filter(
-    (m) =>
-      m.countedForElo &&
-      m.playedAt >= windowStart &&
-      m.playedAt < newMatchAt,
-  ).length;
-  return countedInWindow < MAX_COUNTED_PER_PAIR_PER_WINDOW;
+  return true;
 }
