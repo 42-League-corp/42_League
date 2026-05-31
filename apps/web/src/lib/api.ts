@@ -127,7 +127,11 @@ export type AdminAuditAction =
   | 'EDIT_TITLE'
   | 'DELETE_MATCH'
   | 'EDIT_MATCH'
-  | 'REFRESH_IMAGES';
+  | 'REFRESH_IMAGES'
+  | 'DELETE_CHALLENGE'
+  | 'DELETE_PENDING_MATCH'
+  | 'DELETE_REJECTED_MATCH'
+  | 'DELETE_OPS';
 
 export interface AdminAuditEntry {
   id: string;
@@ -499,6 +503,14 @@ export const api = {
     const qs = params.toString();
     return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
   },
+  adminDeleteChallenge: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/challenges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeletePendingMatch: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/pending-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeleteRejectedMatch: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/rejected-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeleteOps: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; limit?: number }) => {
     const params = new URLSearchParams();
     if (filters?.login) params.set('login', filters.login);
