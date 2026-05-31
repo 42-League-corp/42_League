@@ -38,6 +38,13 @@ model User {
   bannedAt        DateTime? @map("banned_at")
   anonymizedAt    DateTime? @map("anonymized_at")
   deletionScheduledAt DateTime? @map("deletion_scheduled_at")
+  // Preuve du consentement RGPD (CGU API 42, Art. 4.2). `termsAcceptedAt` = date
+  // d'acceptation ; `termsVersion` = version de la politique acceptée. Si la
+  // politique évolue, termsVersion ne correspond plus → le consentement est
+  // re-demandé. Tant que le consentement n'est pas donné, la consent-gate
+  // (cf. index.ts) refuse tout traitement de données 42 côté serveur (403).
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+  termsVersion    String?   @map("terms_version")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   declaredPending     PendingMatch[]     @relation("declarer")

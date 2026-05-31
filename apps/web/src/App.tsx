@@ -10,6 +10,7 @@ import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
 import { GODPage } from './pages/GODPage';
 import { AboutPage } from './pages/AboutPage';
+import { ConsentGate } from './components/ConsentGate';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -94,15 +95,21 @@ export function App() {
 }
 
 function AuthenticatedShell() {
-  const { loading, error } = useLeagueData();
+  const { loading, error, me, refresh } = useLeagueData();
 
   // Précharger tous les chunks de routes en arrière-plan dès que les données sont prêtes.
   // Évite toute suspension Suspense pendant la navigation → transitions AnimatePresence stables.
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !me?.consentRequired) {
       prefetchRouteChunks();
     }
-  }, [loading]);
+  }, [loading, me?.consentRequired]);
+
+  // Barrière de consentement RGPD : tant que l'utilisateur n'a pas consenti, on
+  // n'affiche QUE la modale (le serveur refuse de toute façon le reste des données).
+  if (!loading && me?.consentRequired) {
+    return <ConsentGate login={me.login} onAccepted={() => void refresh()} />;
+  }
 
   return (
     <AppShell>
