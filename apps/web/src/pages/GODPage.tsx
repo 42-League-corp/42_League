@@ -1229,6 +1229,139 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
   return null;
 }
 
+// Modération inline rapide (ban/unban) depuis l'historique
+function QuickBanButton({ login, onDone }: { login: string; onDone: () => void }) {
+  const [userData, setUserData] = useState<AdminUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    api.adminUsers().then((list) => {
+      setUserData(list.find((u) => u.login === login) ?? null);
+    }).finally(() => setLoading(false));
+  }, [login]);
+
+  if (loading) return <span className="text-zinc-600 text-xs font-mono">…</span>;
+  if (!userData) return null;
+
+  async function toggle() {
+    if (!userData) return;
+    setPending(true);
+    try {
+      if (userData.bannedAt) await api.adminUnbanUser(userData.login);
+      else await api.adminBanUser(userData.login);
+      onDone();
+    } finally { setPending(false); }
+  }
+
+  return (
+    <Btn onClick={toggle} disabled={pending} variant={userData.bannedAt ? 'success' : 'danger'}>
+      {userData.bannedAt ? 'Unban' : 'Ban'}
+    </Btn>
+  );
+}
+
+// Ligne expandée avec actions complètes
+function HistoryRowActions({
+  ev,
+  onDelete,
+  onEditSaved,
+}: {
+  ev: AllHistoryEvent;
+  onDelete: () => void;
+  onEditSaved: () => void;
+}) {
+  const [editMode, setEditMode] = useState(false);
+  const [editA, setEditA] = useState(String(ev.scoreA ?? ''));
+  const [editB, setEditB] = useState(String(ev.scoreB ?? ''));
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState('');
+  const [showModo, setShowModo] = useState(false);
+
+  async function handleDelete() {
+    const label = EVENT_TYPE_LABEL[ev.type];
+    if (!confirm(`Supprimer ce ${label} ? Cette action est irréversible.`)) return;
+    setPending(true);
+    setErr('');
+    try {
+      if (ev.type === 'played_match') await api.adminDeleteMatch(ev.id);
+      else if (ev.type === 'pending_match') await api.adminDeletePendingMatch(ev.id);
+      else if (ev.type === 'rejected_match') await api.adminDeleteRejectedMatch(ev.id);
+      else if (ev.type === 'challenge') await api.adminDeleteChallenge(ev.id);
+      else if (ev.type === 'ops') await api.adminDeleteOps(ev.id);
+      onDelete();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(false); }
+  }
+
+  async function handleEdit() {
+    setPending(true);
+    setErr('');
+    try {
+      await api.adminEditMatch(ev.id, Number(editA), Number(editB));
+      setEditMode(false);
+      onEditSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+      {err && <span className="text-red-400 text-xs">{err}</span>}
+
+      {/* Edit score — uniquement pour played_match */}
+      {ev.type === 'played_match' && (
+        editMode ? (
+          <>
+            <input
+              type="number"
+              value={editA}
+              onChange={(e) => setEditA(e.target.value)}
+              className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+            />
+            <span className="text-zinc-500 text-xs">–</span>
+            <input
+              type="number"
+              value={editB}
+              onChange={(e) => setEditB(e.target.value)}
+              className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+            />
+            <Btn onClick={handleEdit} disabled={pending} variant="success">✓</Btn>
+            <Btn onClick={() => setEditMode(false)} variant="ghost">✕</Btn>
+          </>
+        ) : (
+          <Btn onClick={() => { setEditMode(true); setEditA(String(ev.scoreA ?? 0)); setEditB(String(ev.scoreB ?? 0)); }} variant="ghost">✏️</Btn>
+        )
+      )}
+
+      {/* Modération joueurs */}
+      <Btn onClick={() => setShowModo((v) => !v)} variant="ghost" className={showModo ? 'text-blue-400' : ''}>
+        👤
+      </Btn>
+
+      {/* Supprimer */}
+      {!editMode && (
+        <Btn onClick={handleDelete} disabled={pending} variant="danger">🗑️</Btn>
+      )}
+
+      {/* Panel modo inline */}
+      {showModo && (
+        <div className="w-full mt-2 pt-2 border-t border-zinc-800 flex flex-wrap gap-3 items-center">
+          <span className="text-zinc-500 text-xs font-mono">Modération :</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-xs font-mono">{ev.playerA}</span>
+            <QuickBanButton login={ev.playerA} onDone={() => setShowModo(false)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-xs font-mono">{ev.playerB}</span>
+            <QuickBanButton login={ev.playerB} onDone={() => setShowModo(false)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AllHistoryTab() {
   const [events, setEvents] = useState<AllHistoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1253,6 +1386,10 @@ function AllHistoryTab() {
 
   const typeOrder: AllHistoryEventType[] = ['challenge', 'pending_match', 'played_match', 'rejected_match', 'ops'];
 
+  function removeEvent(id: string, type: AllHistoryEventType) {
+    setEvents((prev) => prev.filter((e) => !(e.id === id && e.type === type)));
+  }
+
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1271,7 +1408,7 @@ function AllHistoryTab() {
         <span className="text-zinc-500 text-xs font-mono ml-auto">{events.length} événements</span>
       </div>
 
-      {/* Type pills summary */}
+      {/* Type pills */}
       <div className="mb-4 flex flex-wrap gap-2">
         {typeOrder.map((t) => {
           const count = events.filter((e) => e.type === t).length;
@@ -1307,20 +1444,28 @@ function AllHistoryTab() {
                 <th className="text-left py-1.5 px-2">Joueur A</th>
                 <th className="text-left py-1.5 px-2">Joueur B</th>
                 <th className="text-left py-1.5 px-2">Détail</th>
+                <th className="text-right py-1.5 px-2">Actions</th>
               </tr>
             </thead>
             <tbody>
               {events.map((ev) => (
-                <tr key={`${ev.type}-${ev.id}`} className="border-b border-zinc-800/40 hover:bg-zinc-900/40 transition-colors">
-                  <td className="py-1.5 px-2 text-zinc-500 whitespace-nowrap">{fmtDate(ev.at)}</td>
-                  <td className="py-1.5 px-2">
+                <tr key={`${ev.type}-${ev.id}`} className="border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors">
+                  <td className="py-2 px-2 text-zinc-500 whitespace-nowrap align-top">{fmtDate(ev.at)}</td>
+                  <td className="py-2 px-2 align-top">
                     <span className={`px-1.5 py-0.5 rounded text-xs ${EVENT_TYPE_COLOR[ev.type]}`}>
                       {EVENT_TYPE_ICON[ev.type]} {EVENT_TYPE_LABEL[ev.type]}
                     </span>
                   </td>
-                  <td className="py-1.5 px-2 text-zinc-200">{ev.playerA}</td>
-                  <td className="py-1.5 px-2 text-zinc-400">{ev.playerB}</td>
-                  <td className="py-1.5 px-2"><EventDetail ev={ev} /></td>
+                  <td className="py-2 px-2 text-zinc-200 align-top">{ev.playerA}</td>
+                  <td className="py-2 px-2 text-zinc-400 align-top">{ev.playerB}</td>
+                  <td className="py-2 px-2 align-top"><EventDetail ev={ev} /></td>
+                  <td className="py-2 px-2 align-top">
+                    <HistoryRowActions
+                      ev={ev}
+                      onDelete={() => removeEvent(ev.id, ev.type)}
+                      onEditSaved={load}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

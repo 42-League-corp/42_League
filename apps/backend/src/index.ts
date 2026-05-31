@@ -1915,6 +1915,72 @@ app.get('/admin/rejected-matches', async (c) => {
   return c.json(list);
 });
 
+app.delete('/admin/rejected-matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.rejectedMatch.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'rejected match not found' });
+  await prisma.rejectedMatch.delete({ where: { id } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_REJECTED_MATCH',
+    target: row.declarerLogin,
+    payload: { id, declarerLogin: row.declarerLogin, opponentLogin: row.opponentLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/pending-matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.pendingMatch.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'pending match not found' });
+  await prisma.pendingMatch.delete({ where: { id } });
+  emit([row.declarerLogin, row.opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_PENDING_MATCH',
+    target: row.declarerLogin,
+    payload: { id, declarerLogin: row.declarerLogin, opponentLogin: row.opponentLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/challenges/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.challenge.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'challenge not found' });
+  await prisma.challenge.delete({ where: { id } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_CHALLENGE',
+    target: row.challengerLogin,
+    payload: { id, challengerLogin: row.challengerLogin, opponentLogin: row.opponentLogin, status: row.status },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/ops/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.ops.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'ops not found' });
+  await prisma.ops.delete({ where: { id } });
+  emit([row.ownerLogin, row.targetLogin], { type: 'ops:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_OPS',
+    target: row.ownerLogin,
+    payload: { id, ownerLogin: row.ownerLogin, targetLogin: row.targetLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
 app.get('/admin/suspicious', async (c) => {
   const me = await getCurrentLogin(c);
   await requireAdmin(me);
