@@ -63,7 +63,13 @@ interface OauthStateCookie {
 function isValidExtRedirect(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === 'https:' && u.hostname.endsWith('.chromiumapp.org');
+    if (u.protocol !== 'https:') return false;
+    // Chrome : https://<id>.chromiumapp.org/
+    // Firefox : https://<uuid>.extensions.allizom.org/
+    return (
+      u.hostname.endsWith('.chromiumapp.org') ||
+      u.hostname.endsWith('.extensions.allizom.org')
+    );
   } catch {
     return false;
   }
@@ -125,7 +131,8 @@ export function createAuthRouter(
     const ext = c.req.query('ext_redirect');
     if (!ext || !isValidExtRedirect(ext)) {
       throw new HTTPException(400, {
-        message: 'ext_redirect must be a https://*.chromiumapp.org URL',
+        message:
+          'ext_redirect must be a https://*.chromiumapp.org (Chrome) or https://*.extensions.allizom.org (Firefox) URL',
       });
     }
     return startOauth(c, { ext });

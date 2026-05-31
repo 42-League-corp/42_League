@@ -5,7 +5,7 @@ const ICON = 'icons/42_league.png';
 export default defineManifest({
   manifest_version: 3,
   name: '42 League',
-  version: '0.0.4',
+  version: '0.0.5',
   description:
     '42 League — badges ELO sur les profils intra + raccourci vers la web app.',
   icons: {
@@ -44,7 +44,7 @@ export default defineManifest({
     'https://intra.42.fr/*',
     'https://*.intra.42.fr/*',
     'https://api.intra.42.fr/*',
-    'http://163.172.141.178:3000/*',
+    'https://42league.fr/*',
     ...(process.env.NODE_ENV === 'development'
       ? ['http://localhost:3000/*', 'http://localhost:5173/*']
       : []),

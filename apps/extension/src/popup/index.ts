@@ -3,7 +3,7 @@ import { authBridge } from '../lib/auth-bridge.js';
 
 const WEB_APP_URL =
   (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
-  'http://localhost:5173';
+  'https://42league.fr';
 
 const stateEl = document.getElementById('state') as HTMLDivElement;
 const avatarEl = document.getElementById('avatar') as HTMLDivElement;
