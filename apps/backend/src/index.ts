@@ -250,7 +250,9 @@ async function badgesFor(login: string, role: string): Promise<string[]> {
 async function palmaresFor(login: string): Promise<
   { seasonId: string; seasonName: string; rank: number; elo: number; wins: number; losses: number }[]
 > {
-  const standings = await prisma.seasonStanding.findMany({ where: { login } });
+  // Palmarès = classements babyfoot (un par saison) pour éviter les doublons
+  // multi-jeux dans la liste du profil.
+  const standings = await prisma.seasonStanding.findMany({ where: { login, game: 'babyfoot' } });
   if (!standings.length) return [];
   const seasons = await prisma.season.findMany({
     where: { id: { in: standings.map((s) => s.seasonId) } },
@@ -856,7 +858,10 @@ app.get('/seasons/current', async (c) => {
 app.get('/seasons/:id/standings', async (c) => {
   await getCurrentLogin(c);
   const id = c.req.param('id');
-  return c.json(await prisma.seasonStanding.findMany({ where: { seasonId: id }, orderBy: { rank: 'asc' } }));
+  const game = parseGame(c.req.query('game'));
+  return c.json(
+    await prisma.seasonStanding.findMany({ where: { seasonId: id, game }, orderBy: { rank: 'asc' } }),
+  );
 });
 
 const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
@@ -889,43 +894,84 @@ app.post('/seasons/close', async (c) => {
     const active = await tx.season.findFirst({ where: { isActive: true } });
     if (!active) throw new HTTPException(409, { message: 'Aucune saison active à clôturer.' });
 
-    const users = await tx.user.findMany({ where: VISIBLE_USER_WHERE, orderBy: { elo: 'desc' } });
+    const allUsers = await tx.user.findMany({ where: VISIBLE_USER_WHERE });
     const matches = await tx.playedMatch.findMany({
       where: { seasonId: active.id },
-      select: { playerALogin: true, playerBLogin: true, winner: true },
+      select: { playerALogin: true, playerBLogin: true, winner: true, game: true },
     });
-    const wl = new Map<string, { w: number; l: number }>();
-    for (const u of users) wl.set(u.login, { w: 0, l: 0 });
-    for (const m of matches) {
-      for (const login of [m.playerALogin, m.playerBLogin]) {
-        const rec = wl.get(login);
-        if (!rec) continue;
-        const isA = m.playerALogin === login;
-        const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-        if (won) rec.w++;
-        else rec.l++;
+
+    // Snapshot par discipline : on fige un classement distinct pour chaque jeu
+    // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
+    const GAMES = ['babyfoot', 'smash', 'chess'] as const;
+    const eloOf = (u: (typeof allUsers)[number], g: string) =>
+      g === 'smash' ? u.eloSmash : g === 'chess' ? u.eloChess : u.elo;
+    const champions = new Set<string>();
+    let totalPlayers = 0;
+
+    for (const g of GAMES) {
+      const users = allUsers
+        .filter((u) => (u.games ?? ['babyfoot']).includes(g))
+        .sort((a, b) => eloOf(b, g) - eloOf(a, g));
+      if (users.length === 0) continue;
+      totalPlayers += users.length;
+      const wl = new Map<string, { w: number; l: number }>();
+      for (const u of users) wl.set(u.login, { w: 0, l: 0 });
+      for (const m of matches) {
+        if ((m.game ?? 'babyfoot') !== g) continue;
+        for (const login of [m.playerALogin, m.playerBLogin]) {
+          const rec = wl.get(login);
+          if (!rec) continue;
+          const isA = m.playerALogin === login;
+          const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+          if (won) rec.w++;
+          else rec.l++;
+        }
       }
+      let rank = 0;
+      for (const u of users) {
+        rank++;
+        const s = wl.get(u.login) ?? { w: 0, l: 0 };
+        await tx.seasonStanding.create({
+          data: {
+            id: randomUUID(),
+            seasonId: active.id,
+            game: g,
+            login: u.login,
+            rank,
+            elo: eloOf(u, g),
+            wins: s.w,
+            losses: s.l,
+          },
+        });
+      }
+      const champ = users[0]?.login;
+      if (champ) champions.add(champ);
     }
-    let rank = 0;
-    for (const u of users) {
-      rank++;
-      const s = wl.get(u.login) ?? { w: 0, l: 0 };
-      await tx.seasonStanding.create({
-        data: { id: randomUUID(), seasonId: active.id, login: u.login, rank, elo: u.elo, wins: s.w, losses: s.l },
-      });
-    }
-    const champion = users[0]?.login ?? null;
-    if (champion) {
+
+    // Badge champion pour le n°1 de chaque discipline.
+    for (const champ of champions) {
       await tx.userBadge.upsert({
-        where: { userLogin_code: { userLogin: champion, code: 'season_champion' } },
+        where: { userLogin_code: { userLogin: champ, code: 'season_champion' } },
         update: { seasonId: active.id },
-        create: { id: randomUUID(), userLogin: champion, code: 'season_champion', seasonId: active.id },
+        create: { id: randomUUID(), userLogin: champ, code: 'season_champion', seasonId: active.id },
       });
     }
-    // Reset pour la prochaine ère.
-    await tx.user.updateMany({ data: { elo: 1000, matchesPlayed: 0 } });
+
+    // Reset de toutes les disciplines pour la prochaine ère.
+    await tx.user.updateMany({
+      data: {
+        elo: 1000,
+        matchesPlayed: 0,
+        eloSmash: 1000,
+        matchesPlayedSmash: 0,
+        eloChess: 1000,
+        matchesPlayedChess: 0,
+      },
+    });
     await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
-    return { seasonId: active.id, seasonName: active.name, champion, players: users.length };
+    const babyfootChamp =
+      [...allUsers].filter((u) => (u.games ?? ['babyfoot']).includes('babyfoot')).sort((a, b) => b.elo - a.elo)[0]?.login ?? null;
+    return { seasonId: active.id, seasonName: active.name, champion: babyfootChamp, players: totalPlayers };
   });
   if (result.champion) {
     void notify(result.champion, {
@@ -3123,6 +3169,12 @@ app.get('/admin/all-history', async (c) => {
   const loginFilter = url.searchParams.get('login') ?? undefined;
   const typeFilter = url.searchParams.get('type') ?? undefined;
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 1000);
+  // Filtre par discipline. challenge/pending/played portent `game` ; rejected/ops
+  // sont antérieurs au multi-jeu (babyfoot) → exclus dès qu'on cible smash/échecs.
+  const gq = url.searchParams.get('game');
+  const gameFilter = gq === 'smash' || gq === 'chess' || gq === 'babyfoot' ? gq : null;
+  const gameWhere = gameFilter ? { game: gameFilter } : {};
+  const includeLegacy = !gameFilter || gameFilter === 'babyfoot';
 
   const loginWhere = loginFilter
     ? { OR: [{ challengerLogin: loginFilter }, { opponentLogin: loginFilter }] }
@@ -3139,18 +3191,18 @@ app.get('/admin/all-history', async (c) => {
 
   const [challenges, pending, played, rejected, ops] = await Promise.all([
     (!typeFilter || typeFilter === 'challenge')
-      ? prisma.challenge.findMany({ where: loginWhere, orderBy: { createdAt: 'desc' }, take: limit })
+      ? prisma.challenge.findMany({ where: { ...loginWhere, ...gameWhere }, orderBy: { createdAt: 'desc' }, take: limit })
       : Promise.resolve([]),
     (!typeFilter || typeFilter === 'pending_match')
-      ? prisma.pendingMatch.findMany({ where: loginWhereDO, orderBy: { declaredAt: 'desc' }, take: limit })
+      ? prisma.pendingMatch.findMany({ where: { ...loginWhereDO, ...gameWhere }, orderBy: { declaredAt: 'desc' }, take: limit })
       : Promise.resolve([]),
     (!typeFilter || typeFilter === 'played_match')
-      ? prisma.playedMatch.findMany({ where: loginWhereAB, orderBy: { playedAt: 'desc' }, take: limit })
+      ? prisma.playedMatch.findMany({ where: { ...loginWhereAB, ...gameWhere }, orderBy: { playedAt: 'desc' }, take: limit })
       : Promise.resolve([]),
-    (!typeFilter || typeFilter === 'rejected_match')
+    (includeLegacy && (!typeFilter || typeFilter === 'rejected_match'))
       ? prisma.rejectedMatch.findMany({ where: loginWhereDO, orderBy: { rejectedAt: 'desc' }, take: limit })
       : Promise.resolve([]),
-    (!typeFilter || typeFilter === 'ops')
+    (includeLegacy && (!typeFilter || typeFilter === 'ops'))
       ? prisma.ops.findMany({ where: loginWhereOps, orderBy: { declaredAt: 'desc' }, take: limit })
       : Promise.resolve([]),
   ]);
@@ -3159,6 +3211,7 @@ app.get('/admin/all-history', async (c) => {
     id: string;
     type: 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
     at: string;
+    game: string;
     playerA: string;
     playerB: string;
     status?: string;
@@ -3181,6 +3234,7 @@ app.get('/admin/all-history', async (c) => {
       id: c.id,
       type: 'challenge' as const,
       at: c.createdAt.toISOString(),
+      game: c.game,
       playerA: c.challengerLogin,
       playerB: c.opponentLogin,
       status: c.status,
@@ -3191,6 +3245,7 @@ app.get('/admin/all-history', async (c) => {
       id: p.id,
       type: 'pending_match' as const,
       at: p.declaredAt.toISOString(),
+      game: p.game,
       playerA: p.declarerLogin,
       playerB: p.opponentLogin,
       scoreA: p.scoreDeclarer,
@@ -3200,6 +3255,7 @@ app.get('/admin/all-history', async (c) => {
       id: m.id,
       type: 'played_match' as const,
       at: m.playedAt.toISOString(),
+      game: m.game,
       playerA: m.playerALogin,
       playerB: m.playerBLogin,
       scoreA: m.scoreA,
@@ -3213,6 +3269,7 @@ app.get('/admin/all-history', async (c) => {
       id: r.id,
       type: 'rejected_match' as const,
       at: r.rejectedAt.toISOString(),
+      game: 'babyfoot',
       playerA: r.declarerLogin,
       playerB: r.opponentLogin,
       scoreA: r.scoreDeclarer,
@@ -3224,6 +3281,7 @@ app.get('/admin/all-history', async (c) => {
       id: o.id,
       type: 'ops' as const,
       at: o.declaredAt.toISOString(),
+      game: 'babyfoot',
       playerA: o.ownerLogin,
       playerB: o.targetLogin,
       forcedUsed: o.forcedUsed,

@@ -1885,6 +1885,7 @@ function AllHistoryTab() {
   const [error, setError] = useState('');
   const [loginFilter, setLoginFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<AllHistoryEventType | 'all'>('all');
+  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess'>('all');
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const { selected, toggle, toggleAll, clear } = useSelection();
@@ -1895,12 +1896,13 @@ function AllHistoryTab() {
     api.adminAllHistory({
       login: loginFilter.trim() || undefined,
       type: typeFilter === 'all' ? undefined : typeFilter,
+      game: gameFilter === 'all' ? undefined : gameFilter,
       limit: 500,
     })
       .then(setEvents)
       .catch((e) => setError(e instanceof Error ? e.message : 'Erreur'))
       .finally(() => setLoading(false));
-  }, [loginFilter, typeFilter]);
+  }, [loginFilter, typeFilter, gameFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1959,6 +1961,22 @@ function AllHistoryTab() {
             <option key={t} value={t}>{EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]}</option>
           ))}
         </select>
+        <div className="flex gap-1">
+          {(['all', 'babyfoot', 'smash', 'chess'] as const).map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setGameFilter(g)}
+              className={`px-2.5 py-1.5 rounded font-mono text-xs border transition-colors ${
+                gameFilter === g
+                  ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100'
+                  : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {g === 'all' ? 'Tous jeux' : TOURN_GAME_LABEL[g]}
+            </button>
+          ))}
+        </div>
         <Btn onClick={load} variant="default">Actualiser</Btn>
         <span className="text-zinc-500 text-xs font-mono ml-auto">{events.length} événements</span>
       </div>
@@ -2268,12 +2286,73 @@ function CloseSeasonModal({
   );
 }
 
+// Classements figés d'une saison, par discipline (granularité par mode).
+function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
+  const [game, setGame] = useState<'babyfoot' | 'smash' | 'chess'>('babyfoot');
+  const [rows, setRows] = useState<import('../lib/api').SeasonStanding[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    api.seasonStandings(seasonId, game).then((r) => alive && setRows(r)).catch(() => alive && setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [seasonId, game]);
+
+  return (
+    <div className="border-t border-zinc-800 px-3 py-2.5">
+      <div className="flex gap-1 mb-2">
+        {(['babyfoot', 'smash', 'chess'] as const).map((g) => (
+          <button
+            key={g}
+            type="button"
+            onClick={() => setGame(g)}
+            className={`px-2 py-1 rounded font-mono text-[11px] border transition-colors ${
+              game === g ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {TOURN_GAME_LABEL[g]}
+          </button>
+        ))}
+      </div>
+      {rows === null ? (
+        <div className="text-zinc-600 text-xs font-mono">Chargement…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-zinc-600 text-xs font-mono">Aucun classement figé pour ce mode.</div>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-zinc-500 font-mono uppercase tracking-wider">
+              <th className="text-left py-1 px-2">#</th>
+              <th className="text-left py-1 px-2">Joueur</th>
+              <th className="text-right py-1 px-2">ELO</th>
+              <th className="text-right py-1 px-2">V-D</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.login} className="border-t border-zinc-800/50">
+                <td className="py-1 px-2 tabular-nums text-zinc-400">{r.rank}</td>
+                <td className="py-1 px-2 text-zinc-200">{r.login}</td>
+                <td className="py-1 px-2 text-right tabular-nums text-zinc-100">{r.elo}</td>
+                <td className="py-1 px-2 text-right tabular-nums text-zinc-500">{r.wins}-{r.losses}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function SeasonsTab() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [closing, setClosing] = useState(false);
+  const [openSeason, setOpenSeason] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -2342,15 +2421,23 @@ function SeasonsTab() {
       <Section title="Historique des saisons">
         <div className="space-y-1.5">
           {seasons.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 text-xs bg-zinc-800/30 border border-zinc-800 rounded px-3 py-2">
-              <span className="text-zinc-200 font-bold">{s.name}</span>
-              <span className="text-zinc-500">
-                {s.isActive ? (
-                  <span className="text-emerald-400">en cours</span>
-                ) : (
-                  `clôturée ${s.endedAt ? fmtDate(s.endedAt) : ''}`
-                )}
-              </span>
+            <div key={s.id} className="bg-zinc-800/30 border border-zinc-800 rounded">
+              <button
+                type="button"
+                onClick={() => setOpenSeason(openSeason === s.id ? null : s.id)}
+                className="w-full flex items-center justify-between gap-2 text-xs px-3 py-2 cursor-pointer hover:bg-zinc-800/40"
+              >
+                <span className="text-zinc-200 font-bold">{s.name}</span>
+                <span className="flex items-center gap-2 text-zinc-500">
+                  {s.isActive ? (
+                    <span className="text-emerald-400">en cours</span>
+                  ) : (
+                    `clôturée ${s.endedAt ? fmtDate(s.endedAt) : ''}`
+                  )}
+                  {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : '▼ classements'}</span>}
+                </span>
+              </button>
+              {openSeason === s.id && !s.isActive && <SeasonStandingsBlock seasonId={s.id} />}
             </div>
           ))}
           {seasons.length === 0 && <div className="text-zinc-600 text-xs">Aucune saison.</div>}
