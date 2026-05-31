@@ -2623,12 +2623,33 @@ app.patch('/admin/users/:login/stats', async (c) => {
     matchesPlayed: z.number().int().min(0).optional(),
     dodgeCount: z.number().int().min(0).optional(),
     tournamentsWon: z.number().int().min(0).optional(),
+    // Gestion granulaire par discipline (smash / échecs).
+    eloSmash: z.number().int().min(0).optional(),
+    matchesPlayedSmash: z.number().int().min(0).optional(),
+    tournamentsWonSmash: z.number().int().min(0).optional(),
+    eloChess: z.number().int().min(0).optional(),
+    matchesPlayedChess: z.number().int().min(0).optional(),
+    tournamentsWonChess: z.number().int().min(0).optional(),
+    // Modes auxquels le joueur adhère.
+    games: z.array(z.enum(['babyfoot', 'smash', 'chess'])).min(1).optional(),
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
   const before = await prisma.user.findUnique({
     where: { login },
-    select: { elo: true, matchesPlayed: true, dodgeCount: true, tournamentsWon: true },
+    select: {
+      elo: true,
+      matchesPlayed: true,
+      dodgeCount: true,
+      tournamentsWon: true,
+      eloSmash: true,
+      matchesPlayedSmash: true,
+      tournamentsWonSmash: true,
+      eloChess: true,
+      matchesPlayedChess: true,
+      tournamentsWonChess: true,
+      games: true,
+    },
   });
   const user = await prisma.user.update({ where: { login }, data: parsed.data })
     .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
