@@ -58,12 +58,19 @@ export function DefisMobile() {
 
   const totalChallenges = incoming.length + accepted.length + outgoing.length;
 
-  useFAB({
-    Icon: Plus,
-    label: 'Game',
-    onClick: () => setFabMenuOpen(true),
-    pulse: pendingToConfirm.length === 0 && totalChallenges === 0,
-  });
+  // Le FAB disparaît dès qu'une sheet/menu est ouvert → il ne recouvre plus le
+  // contenu (cartes à confirmer, formulaire de déclaration) pendant l'opération.
+  const anySheetOpen = declareOpen || challengeOpen || fabMenuOpen;
+  useFAB(
+    anySheetOpen
+      ? null
+      : {
+          Icon: Plus,
+          label: 'Game',
+          onClick: () => setFabMenuOpen(true),
+          pulse: pendingToConfirm.length === 0 && totalChallenges === 0,
+        },
+  );
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -255,6 +262,8 @@ export function DefisMobile() {
             </div>
           )}
 
+        {/* Dégagement pour que le FAB ne recouvre pas la dernière carte. */}
+        <div className="h-16" aria-hidden />
       </div>
 
       {/* Mini-menu du FAB : Déclarer / Défier */}

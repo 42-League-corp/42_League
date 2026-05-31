@@ -15,6 +15,7 @@
     "db:add-notif": "dotenv -e ../../.env -- tsx prisma/add-test-notif.ts",
     "db:seed-test": "dotenv -e ../../.env -- tsx prisma/seed-test.ts",
     "db:add-players": "dotenv -e ../../.env -- tsx prisma/add-test-players.ts",
+    "db:add-players:prod": "tsx prisma/add-test-players.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:generate": "dotenv -e ../../.env -- prisma generate"
   },
