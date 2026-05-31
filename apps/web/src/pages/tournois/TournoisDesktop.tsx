@@ -32,7 +32,7 @@ export function TournoisDesktop() {
   const past = tournaments.filter((t) => t.status === 'finished' || t.status === 'cancelled');
 
   return (
-    <Panel title="Tournois" sub="Brackets · single-élim">
+    <Panel title="Tournois" sub="Brackets · single-élim" accent="trophy">
       <div className="mb-6 border-b border-gold/15 pb-6">
         <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-2 flex items-center gap-2">
           <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />

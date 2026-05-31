@@ -1,16 +1,19 @@
 import type { ReactNode } from 'react';
+import { PanelAccent, type PanelAccentVariant } from './PanelAccent';
 
 interface PanelProps {
   title: string;
   sub?: string;
   children: ReactNode;
   className?: string;
+  /** Emblème animé optionnel dans l'en-tête, pour donner du caractère à la page. */
+  accent?: PanelAccentVariant;
 }
 
 /**
  * Panneau cartouche RPG : fond anthracite, bordure dorée subtile, accent gold sur titre.
  */
-export function Panel({ title, sub, children, className = '' }: PanelProps) {
+export function Panel({ title, sub, children, className = '', accent }: PanelProps) {
   return (
     <section
       className={`relative card-hud overflow-hidden p-5 sm:p-6 ${className}`}
@@ -29,6 +32,7 @@ export function Panel({ title, sub, children, className = '' }: PanelProps) {
             {sub}
           </span>
         )}
+        {accent && <PanelAccent variant={accent} className="ml-auto self-center" />}
       </header>
 
       <div className="relative">{children}</div>

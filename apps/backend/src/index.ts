@@ -1811,6 +1811,7 @@ async function rescheduleOpsTimers(): Promise<void> {
 }
 
 app.get('/ops', async (c) => {
+  await getCurrentLogin(c);
   const now = new Date();
   const list = await prisma.ops.findMany({
     where: { expiresAt: { gt: now } },
@@ -1921,6 +1922,7 @@ app.post('/ops', async (c) => {
 });
 
 app.get('/ops/user/:login', async (c) => {
+  await getCurrentLogin(c);
   const login = c.req.param('login');
   const now = new Date();
   const [asOwner, asTarget] = await Promise.all([

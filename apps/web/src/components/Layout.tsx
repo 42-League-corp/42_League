@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
+import { RankedBadge } from './RankedBadge';
 import { NotifBanner } from './NotifBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -118,8 +119,9 @@ export function Layout({ children }: LayoutProps) {
                 <div className="text-sm font-semibold text-text-strong truncate">
                   {login}
                 </div>
-                <div className="text-[10px] text-gold uppercase tracking-wider">
+                <div className="text-[10px] text-gold uppercase tracking-wider flex items-center gap-1">
                   {me.user.elo} ELO
+                  <RankedBadge size="xs" />
                 </div>
               </div>
             </NavLink>

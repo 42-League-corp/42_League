@@ -42,7 +42,7 @@ export function HistoriqueDesktop() {
   }, [data.mine]);
 
   return (
-    <Panel title={t('panel.history.title')} sub={t('history.global.sub')}>
+    <Panel title={t('panel.history.title')} sub={t('history.global.sub')} accent="history">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:items-start">
         {/* ─── Colonne GLOBALE ─────────────────────────────────────────── */}
         <HistoColumn

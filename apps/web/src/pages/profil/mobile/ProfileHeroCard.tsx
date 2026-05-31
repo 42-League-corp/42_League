@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
+import { RankedBadge } from '../../../components/RankedBadge';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useT } from '../../../lib/i18n';
@@ -136,8 +137,9 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
             <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
-            <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5">
+            <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5 flex items-center gap-1.5">
               ELO
+              <RankedBadge size="xs" />
             </div>
           </div>
 

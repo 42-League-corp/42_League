@@ -166,7 +166,7 @@ export function LeaderboardDesktop() {
     <div>
       {top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
-      <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`}>
+      <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
         <div className="flex justify-end mb-3">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />
         </div>

@@ -17,7 +17,12 @@ interface EloPoint {
   date: string;
   delta: number;
   isStart: boolean;
+  opponent?: string;
+  scoreFor?: number;
+  scoreAgainst?: number;
 }
+
+const STARTING_ELO = 1000;
 
 function computeEloHistory(
   matches: PlayedMatch[],
@@ -40,9 +45,18 @@ function computeEloHistory(
   let elo = startElo;
   for (let i = 0; i < mine.length; i++) {
     const delta = deltas[i] ?? 0;
-    const match = mine[i];
+    const match = mine[i]!;
+    const isA = match.playerALogin === myLogin;
     elo += delta;
-    points.push({ elo, date: match?.playedAt ?? '', delta, isStart: false });
+    points.push({
+      elo,
+      date: match.playedAt,
+      delta,
+      isStart: false,
+      opponent: isA ? match.playerBLogin : match.playerALogin,
+      scoreFor: isA ? match.scoreA : match.scoreB,
+      scoreAgainst: isA ? match.scoreB : match.scoreA,
+    });
   }
   return points;
 }
@@ -67,6 +81,16 @@ const GOLD = '#ffc94a';
 const RED = '#ff5366';
 const MUTED = '#8a8f9a';
 
+/** Date courte en français : "02 janv.". */
+function fmtDateFr(iso: string): string {
+  if (!iso) return '';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(new Date(iso));
+  } catch {
+    return '';
+  }
+}
+
 export function EloChart({
   matches,
   myLogin,
@@ -77,6 +101,7 @@ export function EloChart({
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(360);
+  const [hovered, setHovered] = useState<number | null>(null);
 
   // Measure the real pixel width so dots stay round and labels stay legible
   // (no preserveAspectRatio="none" stretching).
@@ -108,6 +133,8 @@ export function EloChart({
   }
 
   const eloValues = points.map((p) => p.elo);
+  // On inclut la ligne de départ (1000) dans l'échelle si elle est proche, pour
+  // qu'elle reste visible quand l'ELO a peu bougé.
   const minElo = Math.min(...eloValues);
   const maxElo = Math.max(...eloValues);
   const range = maxElo - minElo || 80;
@@ -117,25 +144,29 @@ export function EloChart({
 
   const W = width;
   const H = height;
-  // Leave room left/right so the first/last dots + their labels aren't clipped.
   const padL = 16;
   const padR = 16;
-  // Vertical inset so labels sitting above the top point don't get cut off.
   const padTop = 16;
-  const padBot = 12;
+  // Place pour une rangée de dates en bas.
+  const padBot = 24;
   const plotH = H - padTop - padBot;
+
+  const yOf = (elo: number) => padTop + (1 - (elo - yMin) / (yMax - yMin)) * plotH;
 
   const mapped = points.map((p, i) => ({
     x: padL + (i / Math.max(points.length - 1, 1)) * (W - padL - padR),
-    y: padTop + (1 - (p.elo - yMin) / (yMax - yMin)) * plotH,
+    y: yOf(p.elo),
     elo: p.elo,
     delta: p.delta,
     isStart: p.isStart,
+    date: p.date,
+    opponent: p.opponent,
+    scoreFor: p.scoreFor,
+    scoreAgainst: p.scoreAgainst,
   }));
 
   const lastPt = mapped[mapped.length - 1];
   const firstPt = mapped[0];
-
   if (!lastPt || !firstPt) return null;
 
   const linePath = buildSvgPath(mapped);
@@ -145,8 +176,11 @@ export function EloChart({
   const lineColor = isUp ? GOLD : RED;
   const gradId = `elo-grad-${myLogin.replace(/\W/g, '')}`;
 
-  // Adaptive labels: greedily keep a minimum horizontal gap so numbers never
-  // overlap, and always label the very last (current) point.
+  // Ligne de référence à 1000 (ELO de départ), seulement si dans l'échelle visible.
+  const showStartLine = STARTING_ELO >= yMin && STARTING_ELO <= yMax;
+  const startLineY = yOf(STARTING_ELO);
+
+  // Labels numériques d'ELO : espacement mini pour éviter le chevauchement.
   const minGap = 34;
   const labelSet = new Set<number>();
   let lastLabelX = -Infinity;
@@ -159,7 +193,6 @@ export function EloChart({
   const lastIdx = mapped.length - 1;
   if (!labelSet.has(lastIdx)) {
     if (lastPt.x - lastLabelX < minGap) {
-      // Drop the previous label to make room for the current ELO.
       let prevLabeled = -1;
       labelSet.forEach((i) => {
         if (i > prevLabeled) prevLabeled = i;
@@ -169,16 +202,15 @@ export function EloChart({
     labelSet.add(lastIdx);
   }
 
+  // Dates en abscisse : premier, milieu, dernier (évite la surcharge).
+  const dateIdx = new Set<number>([0, Math.floor(lastIdx / 2), lastIdx]);
+
   const dotR = points.length > 40 ? 1.8 : points.length > 22 ? 2.2 : 2.8;
+  const hoveredPt = hovered != null ? mapped[hovered] : null;
 
   return (
     <div ref={containerRef} className="relative w-full select-none" style={{ height }}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        height={H}
-        className="overflow-visible"
-      >
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="overflow-visible">
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
@@ -186,18 +218,43 @@ export function EloChart({
           </linearGradient>
         </defs>
 
-        {/* Subtle grid lines */}
-        {[0.25, 0.5, 0.75].map((t) => (
+        {/* Grid lines */}
+        {[0.25, 0.5, 0.75].map((g) => (
           <line
-            key={t}
+            key={g}
             x1={0}
-            y1={padTop + plotH * t}
+            y1={padTop + plotH * g}
             x2={W}
-            y2={padTop + plotH * t}
+            y2={padTop + plotH * g}
             stroke="rgba(255,201,74,0.06)"
             strokeWidth="1"
           />
         ))}
+
+        {/* Ligne de référence ELO de départ (1000), pointillés */}
+        {showStartLine && (
+          <>
+            <line
+              x1={padL}
+              y1={startLineY}
+              x2={W - padR}
+              y2={startLineY}
+              stroke="rgba(228,231,237,0.28)"
+              strokeWidth="1"
+              strokeDasharray="4 4"
+            />
+            <text
+              x={padL}
+              y={startLineY - 3}
+              fontSize={8}
+              fontWeight={700}
+              className="font-mono uppercase"
+              fill="rgba(228,231,237,0.45)"
+            >
+              départ
+            </text>
+          </>
+        )}
 
         {/* Area fill */}
         <motion.path
@@ -208,7 +265,7 @@ export function EloChart({
           transition={{ duration: 0.6, delay: 0.3 }}
         />
 
-        {/* Main line — animated draw-on */}
+        {/* Main line */}
         <motion.path
           d={linePath}
           fill="none"
@@ -220,6 +277,18 @@ export function EloChart({
           animate={{ pathLength: 1, opacity: 1 }}
           transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         />
+
+        {/* Repère vertical sur le point survolé */}
+        {hoveredPt && (
+          <line
+            x1={hoveredPt.x}
+            y1={padTop}
+            x2={hoveredPt.x}
+            y2={H - padBot}
+            stroke="rgba(255,201,74,0.25)"
+            strokeWidth="1"
+          />
+        )}
 
         {/* Per-match dots — coloured by gain (gold) / loss (red) */}
         {mapped.map((p, i) => {
@@ -249,11 +318,24 @@ export function EloChart({
         {/* Glow on the current point */}
         <circle cx={lastPt.x} cy={lastPt.y} r={dotR + 5} fill={lineColor} fillOpacity="0.12" />
 
+        {/* Zones de survol transparentes (plus larges que les points) */}
+        {mapped.map((p, i) => (
+          <circle
+            key={`hit-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r={10}
+            fill="transparent"
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered((h) => (h === i ? null : h))}
+          />
+        ))}
+
         {/* Numeric labels */}
         {mapped.map((p, i) => {
           if (!labelSet.has(i)) return null;
           const isLast = i === lastIdx;
-          // Label above the dot, unless that would clip the top → drop below.
           const above = p.y > padTop + 12;
           const ly = above ? p.y - (isLast ? 9 : 7) : p.y + (isLast ? 16 : 13);
           const lx = Math.min(Math.max(p.x, padL + 2), W - padR - 2);
@@ -278,7 +360,56 @@ export function EloChart({
             </motion.text>
           );
         })}
+
+        {/* Dates en abscisse (FR) */}
+        {mapped.map((p, i) => {
+          if (!dateIdx.has(i)) return null;
+          const lx = Math.min(Math.max(p.x, padL + 10), W - padR - 10);
+          const anchor = i === 0 ? 'start' : i === lastIdx ? 'end' : 'middle';
+          return (
+            <text
+              key={`d-${i}`}
+              x={anchor === 'start' ? padL : anchor === 'end' ? W - padR : lx}
+              y={H - 6}
+              textAnchor={anchor}
+              fontSize={8}
+              className="font-mono"
+              fill="rgba(228,231,237,0.4)"
+            >
+              {fmtDateFr(p.date)}
+            </text>
+          );
+        })}
       </svg>
+
+      {/* Tooltip HTML au survol */}
+      {hoveredPt && (
+        <div
+          className="absolute z-20 pointer-events-none -translate-x-1/2 -translate-y-full card-hud rounded-lg px-2.5 py-1.5 shadow-xl whitespace-nowrap"
+          style={{
+            left: Math.min(Math.max(hoveredPt.x, 60), W - 60),
+            top: Math.max(hoveredPt.y - 8, 4),
+          }}
+        >
+          <div className="text-[10px] font-mono text-muted-2 leading-tight">{fmtDateFr(hoveredPt.date)}</div>
+          <div className="text-xs font-extrabold text-text-strong leading-tight">
+            {Math.round(hoveredPt.elo)} ELO
+            {!hoveredPt.isStart && (
+              <span className={`ml-1.5 font-mono ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
+                {hoveredPt.delta >= 0 ? '+' : ''}
+                {hoveredPt.delta}
+              </span>
+            )}
+          </div>
+          {hoveredPt.isStart ? (
+            <div className="text-[10px] text-muted-2 leading-tight">Départ</div>
+          ) : (
+            <div className="text-[10px] text-muted-2 leading-tight">
+              vs {hoveredPt.opponent} · {hoveredPt.scoreFor}-{hoveredPt.scoreAgainst}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
