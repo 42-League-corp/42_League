@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Swords } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { UserBadge } from '../components/Avatar';
 import { OnlineBadge } from '../components/OnlineBadge';
@@ -21,6 +22,7 @@ import { useI18n, useT } from '../lib/i18n';
 export function PlayerPage() {
   const { login: rawLogin } = useParams<{ login: string }>();
   const login = rawLogin ?? '';
+  const navigate = useNavigate();
   const t = useT();
   const { locale, lang } = useI18n();
   const { me, opsMe, locations, refresh } = useLeagueData();
@@ -102,6 +104,19 @@ export function PlayerPage() {
           </div>
           {p.user.title && (
             <div className="text-gold italic text-sm mt-1.5">« {p.user.title} »</div>
+          )}
+          {!isMe && myLogin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() =>
+                navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
+              }
+            >
+              <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+              Voir le Head-to-Head
+            </Button>
           )}
         </div>
       </div>

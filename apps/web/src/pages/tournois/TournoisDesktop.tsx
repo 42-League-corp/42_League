@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
 import { Trophy, Lock } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
+import { tournamentArt } from '../../lib/tournamentArt';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
 
@@ -24,6 +25,7 @@ export function TournoisDesktop() {
   const [capacity, setCapacity] = useState<Capacity>(8);
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [imageUrl, setImageUrl] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Regroupement par état : en cours (vivants) → en préparation (inscriptions) → historique (terminés/annulés).
@@ -95,11 +97,13 @@ export function TournoisDesktop() {
               }
               setBusy(true);
               try {
+                const img = imageUrl.trim();
                 const tNew = await api.createTournament({
                   name: n,
                   capacity,
                   kind,
                   private: visibility === 'private',
+                  ...(img ? { imageUrl: img } : {}),
                 });
                 flash.show(`Tournoi "${tNew.name}" créé`);
                 await refresh();
@@ -114,6 +118,13 @@ export function TournoisDesktop() {
             Créer
           </Button>
         </div>
+        {/* Image de couverture optionnelle (URL) — sinon visuel par défaut généré. */}
+        <input
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Image de couverture (URL, optionnel)"
+          className="mt-2 w-full px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
+        />
       </div>
 
       {tournaments.length === 0 ? (
@@ -241,44 +252,70 @@ const STATUS_TONE: Record<Tournament['status'], string> = {
 
 function TournoiCard({ t }: { t: Tournament }) {
   const count = t.entries?.length ?? 0;
+  const art = tournamentArt(t.id);
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="block card-hud p-4 rounded-xl hover-glow transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01]"
+      className="group relative block aspect-square rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="font-extrabold text-text-strong text-base truncate">{t.name}</div>
-          <span
-            className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${
-              t.kind === 'official'
-                ? 'text-gold border-gold/50 bg-gold/10'
-                : 'text-muted-2 border-border'
-            }`}
-          >
-            {t.kind === 'official' ? '★ OFFICIEL' : 'AMICAL'}
-          </span>
-          {t.isPrivate && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border text-teal border-teal/40 bg-teal/10">
-              <Lock className="w-2.5 h-2.5" strokeWidth={2.5} />
-              Privé
-            </span>
-          )}
-        </div>
+      {/* Fond : image fournie, sinon visuel par défaut généré */}
+      {t.imageUrl ? (
+        <img
+          src={t.imageUrl}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+      ) : (
+        <div className="absolute inset-0" style={{ background: art.background }} />
+      )}
+      {/* Motif trophée discret sur les visuels par défaut */}
+      {!t.imageUrl && (
+        <Trophy
+          className="absolute -right-2 -bottom-2 w-24 h-24 opacity-10"
+          style={{ color: art.accent }}
+          strokeWidth={1.5}
+        />
+      )}
+      {/* Voile pour la lisibilité du texte */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/10" />
+
+      {/* Badges haut */}
+      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between gap-2">
         <span
-          className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border ${STATUS_TONE[t.status]}`}
+          className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border bg-black/40 backdrop-blur-sm ${STATUS_TONE[t.status]}`}
         >
           {STATUS_LABEL[t.status]}
         </span>
+        {t.isPrivate && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border text-teal border-teal/40 bg-black/40 backdrop-blur-sm">
+            <Lock className="w-2.5 h-2.5" strokeWidth={2.5} />
+            Privé
+          </span>
+        )}
       </div>
-      <div className="text-xs text-muted-2 mt-1.5">
-        {count}/{t.capacity} joueurs · org.{' '}
-        <span className="text-text-strong">{t.createdByLogin}</span>
+
+      {/* Contenu bas */}
+      <div className="absolute inset-x-0 bottom-0 p-3">
+        <span
+          className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border mb-1.5 ${
+            t.kind === 'official'
+              ? 'text-gold border-gold/50 bg-gold/10'
+              : 'text-muted-2 border-border bg-black/30'
+          }`}
+        >
+          {t.kind === 'official' ? '★ OFFICIEL' : 'AMICAL'}
+        </span>
+        <div
+          className="font-extrabold text-text-strong text-base leading-tight overflow-hidden"
+          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+        >
+          {t.name}
+        </div>
+        <div className="text-[11px] text-muted-2 mt-1">
+          {count}/{t.capacity} joueurs · org. <span className="text-text">{t.createdByLogin}</span>
+        </div>
         {t.winner && (
-          <>
-            {' · vainqueur '}
-            <span className="text-gold font-bold">{t.winner.login}</span>
-          </>
+          <div className="text-[11px] text-gold font-bold mt-0.5 truncate">🏆 {t.winner.login}</div>
         )}
       </div>
     </Link>

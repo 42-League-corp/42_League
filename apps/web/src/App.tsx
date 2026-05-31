@@ -58,6 +58,9 @@ const ReglagesPage = lazy(() =>
 const TropheesPage = lazy(() =>
   import('./pages/TropheesPage').then((m) => ({ default: m.TropheesPage })),
 );
+const H2HPage = lazy(() =>
+  import('./pages/H2HPage').then((m) => ({ default: m.H2HPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
@@ -120,6 +123,7 @@ function AuthenticatedShell() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/profile" element={<ProfilPage />} />
               <Route path="/player/:login" element={<PlayerPage />} />
+              <Route path="/h2h" element={<H2HPage />} />
               <Route path="/history" element={<HistoriquePage />} />
               <Route path="/settings" element={<ReglagesPage />} />
               <Route path="*" element={<Navigate to="/challenges" replace />} />

@@ -102,6 +102,7 @@ model Tournament {
   name          String
   kind          String   @default("friendly")  // 'friendly' | 'official'
   isPrivate     Boolean  @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
+  imageUrl      String?  @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
   capacity      Int      // 4 or 8
   status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String  @map("created_by_login")

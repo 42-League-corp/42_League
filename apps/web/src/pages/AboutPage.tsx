@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
 import { Panel } from '../components/Panel';
-import { Avatar } from '../components/Avatar';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';

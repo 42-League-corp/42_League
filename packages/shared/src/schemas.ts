@@ -86,6 +86,8 @@ export const CreateTournamentSchema = z.object({
   kind: z.enum(['friendly', 'official']).default('friendly'),
   // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
   private: z.boolean().default(false),
+  // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.
+  imageUrl: z.string().trim().url().max(500).optional(),
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
