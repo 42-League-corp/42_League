@@ -113,6 +113,13 @@ export interface AdminUser {
   matchesPlayed: number;
   dodgeCount: number;
   tournamentsWon: number;
+  eloSmash?: number;
+  matchesPlayedSmash?: number;
+  tournamentsWonSmash?: number;
+  eloChess?: number;
+  matchesPlayedChess?: number;
+  tournamentsWonChess?: number;
+  games?: Game[];
   title: string | null;
   imageUrl: string | null;
   campus: string | null;
@@ -589,7 +596,19 @@ export const api = {
     ),
   adminSetStats: (
     login: string,
-    stats: { elo?: number; matchesPlayed?: number; dodgeCount?: number; tournamentsWon?: number },
+    stats: {
+      elo?: number;
+      matchesPlayed?: number;
+      dodgeCount?: number;
+      tournamentsWon?: number;
+      eloSmash?: number;
+      matchesPlayedSmash?: number;
+      tournamentsWonSmash?: number;
+      eloChess?: number;
+      matchesPlayedChess?: number;
+      tournamentsWonChess?: number;
+      games?: Game[];
+    },
   ) =>
     request<AdminUser>(`/admin/users/${encodeURIComponent(login)}/stats`, {
       method: 'PATCH',

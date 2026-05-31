@@ -39,6 +39,34 @@ function RoleBadge({ role }: { role: string }) {
   return <span className="px-1.5 py-0.5 text-xs bg-zinc-700/50 text-zinc-400 rounded font-mono tracking-wide">USER</span>;
 }
 
+// Pastilles des modes auxquels le joueur adhère, avec son ELO par discipline en tooltip.
+function GameModeBadges({ user }: { user: AdminUser }) {
+  const games = (user.games as string[] | undefined) ?? ['babyfoot'];
+  const defs: { id: string; label: string; cls: string; elo: number }[] = [
+    { id: 'babyfoot', label: 'B', cls: 'bg-amber-400/15 text-amber-400', elo: user.elo },
+    { id: 'smash', label: 'S', cls: 'bg-red-400/15 text-red-400', elo: user.eloSmash ?? 1000 },
+    { id: 'chess', label: 'É', cls: 'bg-emerald-400/15 text-emerald-400', elo: user.eloChess ?? 1000 },
+  ];
+  return (
+    <span className="inline-flex gap-1">
+      {defs.map((d) => {
+        const on = games.includes(d.id);
+        return (
+          <span
+            key={d.id}
+            title={`${d.id} · ${on ? `${d.elo} ELO` : 'non inscrit'}`}
+            className={`w-5 h-5 grid place-items-center rounded text-[10px] font-mono font-bold ${
+              on ? d.cls : 'bg-zinc-800 text-zinc-600'
+            }`}
+          >
+            {d.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function StatusBadge({ banned }: { banned: boolean }) {
   if (banned)
     return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">BANNI</span>;
@@ -272,10 +300,31 @@ function StatsEditModal({
   const [matches, setMatches] = useState(String(user.matchesPlayed));
   const [dodges, setDodges] = useState(String(user.dodgeCount));
   const [trophies, setTrophies] = useState(String(user.tournamentsWon));
+  const [eloS, setEloS] = useState(String(user.eloSmash ?? 1000));
+  const [matchesS, setMatchesS] = useState(String(user.matchesPlayedSmash ?? 0));
+  const [trophiesS, setTrophiesS] = useState(String(user.tournamentsWonSmash ?? 0));
+  const [eloC, setEloC] = useState(String(user.eloChess ?? 1000));
+  const [matchesC, setMatchesC] = useState(String(user.matchesPlayedChess ?? 0));
+  const [trophiesC, setTrophiesC] = useState(String(user.tournamentsWonChess ?? 0));
+  const [games, setGames] = useState<Set<'babyfoot' | 'smash' | 'chess'>>(
+    new Set((user.games as ('babyfoot' | 'smash' | 'chess')[] | undefined) ?? ['babyfoot']),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const toggleGame = (g: 'babyfoot' | 'smash' | 'chess') =>
+    setGames((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
+
   async function handleSave() {
+    if (games.size === 0) {
+      setError('Au moins un mode doit rester actif');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -284,6 +333,13 @@ function StatsEditModal({
         matchesPlayed: Number(matches),
         dodgeCount: Number(dodges),
         tournamentsWon: Number(trophies),
+        eloSmash: Number(eloS),
+        matchesPlayedSmash: Number(matchesS),
+        tournamentsWonSmash: Number(trophiesS),
+        eloChess: Number(eloC),
+        matchesPlayedChess: Number(matchesC),
+        tournamentsWonChess: Number(trophiesC),
+        games: [...games],
       });
       onSave();
       onClose();
@@ -294,28 +350,89 @@ function StatsEditModal({
     }
   }
 
+  const GAME_GROUPS: { title: string; accent: string; rows: { label: string; value: string; set: (v: string) => void }[] }[] = [
+    {
+      title: '⚽ Babyfoot',
+      accent: 'text-amber-400',
+      rows: [
+        { label: 'ELO', value: elo, set: setElo },
+        { label: 'Matches', value: matches, set: setMatches },
+        { label: 'Tournois gagnés', value: trophies, set: setTrophies },
+      ],
+    },
+    {
+      title: '🎮 Smash',
+      accent: 'text-red-400',
+      rows: [
+        { label: 'ELO', value: eloS, set: setEloS },
+        { label: 'Matches', value: matchesS, set: setMatchesS },
+        { label: 'Tournois gagnés', value: trophiesS, set: setTrophiesS },
+      ],
+    },
+    {
+      title: '♟️ Échecs',
+      accent: 'text-emerald-400',
+      rows: [
+        { label: 'ELO', value: eloC, set: setEloC },
+        { label: 'Matches', value: matchesC, set: setMatchesC },
+        { label: 'Tournois gagnés', value: trophiesC, set: setTrophiesC },
+      ],
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-80 shadow-2xl"
+        className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-[28rem] max-w-full max-h-[88vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-sm font-mono text-zinc-300 mb-4">
           Modifier stats — <span className="text-zinc-100 font-bold">{user.login}</span>
         </div>
-        <div className="space-y-3">
-          {[
-            { label: 'ELO', value: elo, set: setElo },
-            { label: 'Matches joués', value: matches, set: setMatches },
-            { label: 'Dodges', value: dodges, set: setDodges },
-            { label: 'Tournois gagnés', value: trophies, set: setTrophies },
-          ].map(({ label, value, set }) => (
-            <div key={label} className="flex items-center gap-3">
-              <span className="text-xs font-mono text-zinc-400 w-32">{label}</span>
-              <Input type="number" value={value} onChange={set} className="flex-1" />
+
+        {/* Adhésion aux modes */}
+        <div className="mb-4">
+          <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">Modes actifs</div>
+          <div className="flex gap-2">
+            {(['babyfoot', 'smash', 'chess'] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => toggleGame(g)}
+                className={`px-3 py-1.5 rounded font-mono text-xs border transition-colors ${
+                  games.has(g)
+                    ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100'
+                    : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats par discipline */}
+        <div className="space-y-4">
+          {GAME_GROUPS.map((grp) => (
+            <div key={grp.title}>
+              <div className={`text-xs font-mono uppercase tracking-widest mb-2 ${grp.accent}`}>{grp.title}</div>
+              <div className="space-y-2">
+                {grp.rows.map(({ label, value, set }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-zinc-400 w-28">{label}</span>
+                    <Input type="number" value={value} onChange={set} className="flex-1" />
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
+          {/* Dodges (transversal) */}
+          <div className="flex items-center gap-3 border-t border-zinc-800 pt-3">
+            <span className="text-xs font-mono text-zinc-400 w-28">Dodges</span>
+            <Input type="number" value={dodges} onChange={setDodges} className="flex-1" />
+          </div>
         </div>
+
         {error && <div className="mt-3 text-xs text-red-400 font-mono">{error}</div>}
         <div className="mt-5 flex gap-2 justify-end">
           <Btn onClick={onClose} variant="ghost">Annuler</Btn>
@@ -615,6 +732,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                 </th>
                 <th className="text-left py-2 px-3">Login</th>
                 <th className="text-left py-2 px-3">Rôle</th>
+                <th className="text-left py-2 px-3">Modes</th>
                 <th className="text-right py-2 px-3">ELO</th>
                 <th className="text-right py-2 px-3">Matches</th>
                 <th className="text-right py-2 px-3">Dodges</th>
@@ -637,6 +755,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     </td>
                     <td className="py-2 px-3 text-zinc-100">{u.login}</td>
                     <td className="py-2 px-3"><RoleBadge role={u.role} /></td>
+                    <td className="py-2 px-3"><GameModeBadges user={u} /></td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{u.elo}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.matchesPlayed}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.dodgeCount}</td>
@@ -2250,18 +2369,30 @@ const TOURN_STATUS: Record<Tournament['status'], { label: string; cls: string }>
   cancelled: { label: 'ANNULÉ', cls: 'bg-red-400/15 text-red-400' },
 };
 
+const TOURN_GAME_LABEL: Record<string, string> = {
+  babyfoot: '⚽ Babyfoot',
+  smash: '🎮 Smash',
+  chess: '♟️ Échecs',
+};
+
 function TournamentsTab() {
   const [rows, setRows] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess'>('all');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Le GOD gère TOUTES les disciplines : on agrège les 3 listes (chaque endpoint
+  // est filtré par jeu côté serveur).
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
-    api
-      .tournaments()
-      .then(setRows)
+    Promise.all([
+      api.tournaments('babyfoot'),
+      api.tournaments('smash'),
+      api.tournaments('chess'),
+    ])
+      .then((lists) => setRows(lists.flat()))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
@@ -2293,9 +2424,10 @@ function TournamentsTab() {
 
   const filtered = rows.filter(
     (t) =>
-      t.name.toLowerCase().includes(filter.toLowerCase()) ||
-      t.createdByLogin.includes(filter) ||
-      (t.winner?.login ?? '').includes(filter),
+      (gameFilter === 'all' || (t.game ?? 'babyfoot') === gameFilter) &&
+      (t.name.toLowerCase().includes(filter.toLowerCase()) ||
+        t.createdByLogin.includes(filter) ||
+        (t.winner?.login ?? '').includes(filter)),
   );
 
   const order: Tournament['status'][] = ['in_progress', 'registration', 'finished', 'cancelled'];
@@ -2307,8 +2439,24 @@ function TournamentsTab() {
 
   return (
     <div className="p-4">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Input value={filter} onChange={setFilter} placeholder="Filtrer (nom, organisateur, vainqueur)…" className="w-72" />
+        <div className="flex gap-1">
+          {(['all', 'babyfoot', 'smash', 'chess'] as const).map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setGameFilter(g)}
+              className={`px-2.5 py-1.5 rounded font-mono text-xs border transition-colors ${
+                gameFilter === g
+                  ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100'
+                  : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {g === 'all' ? 'Tous' : TOURN_GAME_LABEL[g]}
+            </button>
+          ))}
+        </div>
         <Btn onClick={() => load()} variant="ghost">↻ Recharger</Btn>
         <span className="text-zinc-600 text-xs font-mono">{sorted.length} tournoi(s)</span>
       </div>
@@ -2323,6 +2471,7 @@ function TournamentsTab() {
             <thead>
               <tr className="text-zinc-500 text-xs font-mono uppercase tracking-wider border-b border-zinc-800">
                 <th className="text-left py-2 px-3">Nom</th>
+                <th className="text-left py-2 px-3">Jeu</th>
                 <th className="text-left py-2 px-3">Type</th>
                 <th className="text-left py-2 px-3">Format</th>
                 <th className="text-center py-2 px-3">Joueurs</th>
@@ -2343,6 +2492,9 @@ function TournamentsTab() {
                     >
                       {t.name}
                     </button>
+                  </td>
+                  <td className="py-2 px-3 text-zinc-300 font-mono text-xs whitespace-nowrap">
+                    {TOURN_GAME_LABEL[t.game ?? 'babyfoot']}
                   </td>
                   <td className="py-2 px-3">
                     <span className={t.kind === 'official' ? 'text-amber-400 font-mono text-xs' : 'text-zinc-400 font-mono text-xs'}>
