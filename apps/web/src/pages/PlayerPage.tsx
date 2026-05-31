@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
 import { BadgesRow } from '../components/Badges';
+import { Palmares } from '../components/Palmares';
 import { EloChart } from '../components/EloChart';
 import {
   api,
@@ -169,6 +170,12 @@ export function PlayerPage() {
           )}
         </div>
       </div>
+
+      {p.palmares && p.palmares.length > 0 && (
+        <div className="mb-6">
+          <Palmares entries={p.palmares} />
+        </div>
+      )}
 
       {/* Préférences de suivi — quand on suit ce joueur */}
       {!isMe && myLogin && following && followPrefs && (

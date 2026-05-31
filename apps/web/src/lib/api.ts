@@ -53,6 +53,8 @@ export interface MeResponse {
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Palmarès par saison. */
+  palmares?: PalmaresEntry[];
   user: {
     login: string;
     firstName?: string | null;
@@ -198,6 +200,8 @@ export interface UserProfile {
   following?: boolean;
   /** Préférences de notif pour ce suivi (null si non suivi). */
   followPrefs?: FollowPrefs | null;
+  /** Palmarès par saison (classements finaux). */
+  palmares?: PalmaresEntry[];
 }
 
 export interface FollowPrefs {
@@ -205,6 +209,33 @@ export interface FollowPrefs {
   notifyTop3: boolean;
   notifyTrophy: boolean;
   notifyOps: boolean;
+}
+
+export interface Season {
+  id: string;
+  name: string;
+  isActive: boolean;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface SeasonStanding {
+  id: string;
+  seasonId: string;
+  login: string;
+  rank: number;
+  elo: number;
+  wins: number;
+  losses: number;
+}
+
+export interface PalmaresEntry {
+  seasonId: string;
+  seasonName: string;
+  rank: number;
+  elo: number;
+  wins: number;
+  losses: number;
 }
 
 export interface TournamentMatch {
@@ -326,6 +357,17 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(prefs),
     }),
+  seasons: () => request<Season[]>('/seasons'),
+  currentSeason: () => request<Season | null>('/seasons/current'),
+  seasonStandings: (id: string) =>
+    request<SeasonStanding[]>(`/seasons/${encodeURIComponent(id)}/standings`),
+  createSeason: (name: string) =>
+    request<Season>('/seasons', { method: 'POST', body: JSON.stringify({ name }) }),
+  closeSeason: () =>
+    request<{ closed: true; champion: string | null; players: number; seasonName: string }>(
+      '/seasons/close',
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: {

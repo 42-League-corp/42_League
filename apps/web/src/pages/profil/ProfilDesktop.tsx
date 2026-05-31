@@ -6,6 +6,7 @@ import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
 import { RankedBadge } from '../../components/RankedBadge';
 import { BadgesRow } from '../../components/Badges';
+import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -194,6 +195,12 @@ export function ProfilDesktop() {
           height={140}
         />
       </div>
+
+      {me.palmares && me.palmares.length > 0 && (
+        <div className="mb-6">
+          <Palmares entries={me.palmares} />
+        </div>
+      )}
 
       <OpsWidget opsMe={opsMe} locale={locale} />
       </Panel>
