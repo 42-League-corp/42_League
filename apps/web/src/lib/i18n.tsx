@@ -136,6 +136,7 @@ const fr: Dict = {
   'panel.about.title': 'À propos',
   'about.rules.title': 'Règles du jeu',
   'about.privacy.title': 'Confidentialité',
+  'about.tech.title': 'Technique',
 
   'settings.gdpr.title': 'Données personnelles',
   'settings.gdpr.export': 'Exporter mes données',
@@ -283,6 +284,7 @@ const en: Dict = {
   'panel.about.title': 'About',
   'about.rules.title': 'Game rules',
   'about.privacy.title': 'Privacy',
+  'about.tech.title': 'Tech',
 
   'settings.gdpr.title': 'Personal data',
   'settings.gdpr.export': 'Export my data',
@@ -430,6 +432,7 @@ const es: Dict = {
   'panel.about.title': 'Acerca de',
   'about.rules.title': 'Reglas del juego',
   'about.privacy.title': 'Privacidad',
+  'about.tech.title': 'Técnica',
 
   'settings.gdpr.title': 'Datos personales',
   'settings.gdpr.export': 'Exportar mis datos',

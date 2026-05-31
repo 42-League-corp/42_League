@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, BookOpen, Shield } from 'lucide-react';
+import { ChevronLeft, BookOpen, Shield, Terminal } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 
-type Tab = 'rules' | 'privacy';
+type Tab = 'rules' | 'privacy' | 'tech';
 
 export function AboutPage() {
   const t = useT();
@@ -22,9 +22,12 @@ export function AboutPage() {
         <TabBtn active={tab === 'privacy'} onClick={() => setTab('privacy')} Icon={Shield}>
           {t('about.privacy.title')}
         </TabBtn>
+        <TabBtn active={tab === 'tech'} onClick={() => setTab('tech')} Icon={Terminal}>
+          {t('about.tech.title')}
+        </TabBtn>
       </div>
 
-      {tab === 'rules' ? <RulesSection /> : <PrivacySection />}
+      {tab === 'rules' ? <RulesSection /> : tab === 'privacy' ? <PrivacySection /> : <TechSection />}
     </>
   );
 
@@ -68,13 +71,13 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-extrabold uppercase tracking-[0.14em] transition-all duration-150 ${
+      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] sm:text-xs font-extrabold uppercase tracking-[0.1em] leading-tight transition-all duration-150 ${
         active
           ? 'bg-gold/10 border border-gold/30 text-gold shadow-[inset_0_1px_0_rgba(255,215,120,0.12)]'
           : 'text-muted-2 hover:text-text'
       }`}
     >
-      <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+      <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
       {children}
     </button>
   );
@@ -394,6 +397,75 @@ function PrivacySection() {
           à l'exception du webhook Discord interne utilisé pour les alertes admin
           (sans données personnelles).
         </p>
+      </Panel>
+    </div>
+  );
+}
+
+// ─── Coulisses techniques ─────────────────────────────────────────────────────
+
+/**
+ * Parenthèse « sous le capot » : un site utilisé par 42, autant en exposer le
+ * fonctionnement. Volontairement court et synthétique, dans le ton du reste.
+ */
+function TechSection() {
+  return (
+    <div className="flex flex-col gap-4">
+      <Panel title="Architecture">
+        <div className="space-y-3 text-sm text-muted leading-relaxed">
+          <p>
+            Monorepo <span className="text-text font-semibold">TypeScript</span> de bout en bout, en trois morceaux :
+          </p>
+          <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+            <li>
+              <span className="text-gold font-semibold">Front</span> — React 18 + Vite, installable en{' '}
+              <span className="text-text font-semibold">PWA</span> (service worker, plein écran sur mobile).
+            </li>
+            <li>
+              <span className="text-gold font-semibold">Back</span> — API <span className="text-text font-semibold">Hono</span>{' '}
+              sur Node, base <span className="text-text font-semibold">PostgreSQL</span> via Prisma. Connexion 42 en OAuth.
+            </li>
+            <li>
+              <span className="text-gold font-semibold">Temps réel</span> — le serveur pousse les changements en{' '}
+              <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">SSE</code> ; le classement, les défis et les OPS
+              se mettent à jour <span className="text-text font-semibold">sans rechargement</span>.
+            </li>
+          </ul>
+        </div>
+      </Panel>
+
+      <Panel title="Hébergement & déploiement">
+        <div className="space-y-3 text-sm text-muted leading-relaxed">
+          <p>
+            Le site tourne sur un serveur <span className="text-gold font-semibold">Scaleway</span>, derrière un reverse-proxy{' '}
+            <span className="text-text font-semibold">Caddy</span> qui gère le <span className="text-text font-semibold">TLS</span>{' '}
+            automatiquement (Let's Encrypt).
+          </p>
+          <p>
+            Chaque <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">push</code> sur la branche principale
+            déclenche une <span className="text-gold font-semibold">GitHub Action</span> : elle construit une{' '}
+            <span className="text-text font-semibold">image Docker</span>, la scanne (Trivy) puis la pousse sur le serveur, qui
+            redémarre sur la nouvelle version. <span className="text-text font-semibold">Zéro déploiement manuel.</span>
+          </p>
+        </div>
+      </Panel>
+
+      <Panel title="Friendly hack" sub="la transparence est volontaire">
+        <div className="space-y-3 text-sm text-muted leading-relaxed">
+          <p>
+            Détailler la stack ici, c'est assumé : un site fait <span className="text-text font-semibold">par</span> et{' '}
+            <span className="text-text font-semibold">pour</span> 42 mérite d'être curieux de l'intérieur. Le code applicatif
+            reste en dépôt <span className="text-gold font-semibold">privé</span>, mais le fonctionnement n'a rien d'un secret.
+          </p>
+          <p>
+            Tu trouves une faille, un comportement louche, une idée de contournement ? <span className="text-gold font-semibold">Préviens
+            plutôt que d'exploiter</span> — divulgation responsable à{' '}
+            <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+              abidaux@student.42lehavre.fr
+            </a>
+            . Les bons reports finissent crédités. 🏴‍☠️
+          </p>
+        </div>
       </Panel>
     </div>
   );
