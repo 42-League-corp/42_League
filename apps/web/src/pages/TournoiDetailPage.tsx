@@ -33,12 +33,13 @@ function roundLabel(round: number, totalRounds: number): string {
 export function TournoiDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = rawId ?? '';
-  const { me } = useLeagueData();
+  const { me, leaderboard } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inviteLogin, setInviteLogin] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,8 +75,20 @@ export function TournoiDetailPage() {
 
   const myLogin = me?.login;
   const isOrganizer = tournament.createdByLogin === myLogin;
+  const isAdmin = !!me?.isAdmin;
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
+  const entryLogins = new Set((tournament.entries ?? []).map((e) => e.login));
+  const invitable = leaderboard
+    .filter((u) => !entryLogins.has(u.login))
+    .sort((a, b) => a.login.localeCompare(b.login));
+
+  const handleInvite = async () => {
+    if (!inviteLogin) return;
+    const login = inviteLogin;
+    setInviteLogin('');
+    await runAction(() => api.addTournamentPlayer(tournament.id, login), `${login} ajouté au tournoi`);
+  };
   const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
   const sub = `${kindLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
 
@@ -137,6 +150,34 @@ export function TournoiDetailPage() {
               <Button variant="danger" onClick={handleCancel}>Annuler</Button>
             )}
           </div>
+
+          {(isOrganizer || isAdmin) && entriesCount < tournament.capacity && invitable.length > 0 && (
+            <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
+              <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
+                Inviter un joueur
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={inviteLogin}
+                  onChange={(e) => setInviteLogin(e.target.value)}
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
+                >
+                  <option value="">Choisir un joueur…</option>
+                  {invitable.map((u) => (
+                    <option key={u.login} value={u.login}>
+                      {u.login} · {u.elo} ELO
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={handleInvite} disabled={!inviteLogin}>
+                  Ajouter
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted mt-1.5">
+                En tant qu'{isOrganizer ? 'organisateur' : 'admin'}, tu peux inscrire directement un joueur.
+              </p>
+            </div>
+          )}
 
           <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
             Inscrits

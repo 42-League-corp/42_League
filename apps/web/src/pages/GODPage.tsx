@@ -7,6 +7,7 @@ import {
   type ModerationStats,
   type FeatureRequestWithAuthor,
   type PlayedMatch,
+  type PendingMatch,
   type SuspiciousFlag,
   type AdminAuditEntry,
   type AdminAuditAction,
@@ -14,7 +15,7 @@ import {
   type AllHistoryEventType,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'ideas' | 'alertes' | 'audit' | 'history';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // ── Shared primitives ──────────────────────────────────────────────────────
@@ -195,6 +196,12 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
   const [error, setError] = useState('');
 
+  // Création d'un faux joueur (SUPERADMIN).
+  const [newLogin, setNewLogin] = useState('');
+  const [newCampus, setNewCampus] = useState('Le Havre');
+  const [newElo, setNewElo] = useState('1000');
+  const [creating, setCreating] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
     api.adminUsers()
@@ -215,11 +222,62 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     finally { setPending(null); }
   }
 
+  async function createUser() {
+    const login = newLogin.trim();
+    if (!login) return;
+    setCreating(true);
+    setError('');
+    try {
+      await api.adminCreateUser(login, {
+        campus: newCampus.trim() || undefined,
+        elo: Number(newElo) || 1000,
+      });
+      setNewLogin('');
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function deleteFakeUser(login: string) {
+    if (!confirm(`Supprimer DÉFINITIVEMENT le faux joueur "${login}" et toutes ses données ? (irréversible)`)) return;
+    await withPending(login, () => api.adminDeleteUser(login));
+  }
+
   return (
     <div className="p-4">
       {editingStats && (
         <StatsEditModal user={editingStats} onClose={() => setEditingStats(null)} onSave={load} />
       )}
+
+      {myRole === 'SUPERADMIN' && (
+        <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-wrap items-end gap-3">
+          <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest w-full mb-1">
+            Créer un faux joueur
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Login</span>
+            <Input value={newLogin} onChange={setNewLogin} placeholder="ex. test9" className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Campus</span>
+            <Input value={newCampus} onChange={setNewCampus} placeholder="Le Havre" className="w-36" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">ELO</span>
+            <Input type="number" value={newElo} onChange={setNewElo} className="w-24" />
+          </div>
+          <Btn onClick={createUser} disabled={creating || !newLogin.trim()} variant="success">
+            {creating ? 'Création…' : '+ Créer'}
+          </Btn>
+          <span className="text-[10px] text-zinc-600 font-mono">
+            Compte factice (sans 42) — supprimable ensuite.
+          </span>
+        </div>
+      )}
+
       <div className="mb-4 flex items-center gap-3">
         <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} utilisateurs</span>
@@ -273,6 +331,9 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                             : <Btn onClick={() => withPending(u.login, () => api.adminBanUser(u.login))} disabled={pending === u.login} variant="danger">Ban</Btn>
                           }
                           <Btn onClick={() => setEditingStats(u)} variant="ghost">Stats</Btn>
+                          {myRole === 'SUPERADMIN' && u.ftId === null && (
+                            <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">Suppr</Btn>
+                          )}
                         </div>
                       )}
                     </td>
@@ -1270,13 +1331,167 @@ function AllHistoryTab() {
   );
 }
 
+// ── Tab: EN ATTENTE (SUPERADMIN) ───────────────────────────────────────────
+
+function PendingTab() {
+  const [rows, setRows] = useState<PendingMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const [fA, setFA] = useState('');
+  const [fB, setFB] = useState('');
+  const [fScoreA, setFScoreA] = useState('10');
+  const [fScoreB, setFScoreB] = useState('0');
+  const [forcing, setForcing] = useState(false);
+  const [forceMsg, setForceMsg] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.pendingMatches()
+      .then(setRows)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function act(id: string, fn: () => Promise<unknown>) {
+    setPending(id);
+    setError('');
+    try { await fn(); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(null); }
+  }
+
+  async function forceResult() {
+    const a = fA.trim();
+    const b = fB.trim();
+    if (!a || !b) return;
+    setForcing(true);
+    setForceMsg('');
+    try {
+      await api.adminForceResult(a, b, Number(fScoreA), Number(fScoreB));
+      setForceMsg(`✓ Résultat enregistré : ${a} ${fScoreA}–${fScoreB} ${b}`);
+      setFA('');
+      setFB('');
+    } catch (e) {
+      setForceMsg(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setForcing(false);
+    }
+  }
+
+  return (
+    <div className="p-4">
+      {/* Forcer un résultat directement */}
+      <div className="mb-5 bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+        <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest mb-2">
+          Forcer un résultat (faux comme vrais joueurs)
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Joueur A</span>
+            <Input value={fA} onChange={setFA} placeholder="login A" className="w-36" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Score A</span>
+            <Input type="number" value={fScoreA} onChange={setFScoreA} className="w-20" />
+          </div>
+          <span className="text-zinc-600 pb-2">–</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Score B</span>
+            <Input type="number" value={fScoreB} onChange={setFScoreB} className="w-20" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">Joueur B</span>
+            <Input value={fB} onChange={setFB} placeholder="login B" className="w-36" />
+          </div>
+          <Btn onClick={forceResult} disabled={forcing || !fA.trim() || !fB.trim()} variant="success">
+            {forcing ? 'Enregistrement…' : 'Forcer le résultat'}
+          </Btn>
+        </div>
+        {forceMsg && <div className="mt-2 text-xs font-mono text-zinc-300">{forceMsg}</div>}
+        <div className="mt-1 text-[10px] text-zinc-600 font-mono">
+          L'ELO des deux joueurs est appliqué immédiatement. Il faut un vainqueur (scores différents).
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center gap-3">
+        <span className="text-zinc-500 text-xs font-mono">
+          {rows.length} match{rows.length !== 1 ? 's' : ''} en attente de confirmation
+        </span>
+        <Btn onClick={load} variant="ghost">↻ Rafraîchir</Btn>
+      </div>
+      {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucun match en attente.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                <th className="text-left py-2 px-2">Déclaré le</th>
+                <th className="text-left py-2 px-2">Déclarant</th>
+                <th className="text-center py-2 px-2">Score</th>
+                <th className="text-left py-2 px-2">Opposant (doit confirmer)</th>
+                <th className="text-right py-2 px-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/50 transition-colors">
+                  <td className="py-1.5 px-2 text-zinc-500 whitespace-nowrap">{fmtDate(p.declaredAt)}</td>
+                  <td className="py-1.5 px-2 text-zinc-200">{p.declarerLogin}</td>
+                  <td className="py-1.5 px-2 text-center tabular-nums text-zinc-100">{p.scoreDeclarer}–{p.scoreOpponent}</td>
+                  <td className="py-1.5 px-2 text-zinc-300">{p.opponentLogin}</td>
+                  <td className="py-1.5 px-2">
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <Btn
+                        onClick={() => {
+                          if (confirm(`Forcer la validation du score ${p.scoreDeclarer}–${p.scoreOpponent} (${p.declarerLogin} vs ${p.opponentLogin}) ? L'ELO s'appliquera immédiatement.`)) {
+                            act(p.id, () => api.adminForceConfirmMatch(p.id));
+                          }
+                        }}
+                        disabled={pending === p.id}
+                        variant="success"
+                      >
+                        Forcer ✓
+                      </Btn>
+                      <Btn
+                        onClick={() => {
+                          if (confirm('Annuler ce match en attente ? Aucun ELO ne bougera, le match est supprimé.')) {
+                            act(p.id, () => api.adminForceCancelMatch(p.id));
+                          }
+                        }}
+                        disabled={pending === p.id}
+                        variant="danger"
+                      >
+                        Annuler
+                      </Btn>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string }[] = [
+// `pending` (force-valider/annuler) est réservé au SUPERADMIN → filtré à l'affichage.
+const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'users', label: 'UTILISATEURS' },
   { id: 'moderation', label: 'MODÉRATION' },
   { id: 'rejets', label: 'REJETS' },
   { id: 'matches', label: 'MATCHES' },
+  { id: 'pending', label: 'EN ATTENTE', superAdminOnly: true },
   { id: 'ideas', label: 'IDÉES' },
   { id: 'alertes', label: 'ALERTES' },
   { id: 'audit', label: 'AUDIT' },
@@ -1348,7 +1563,7 @@ export function GODPage() {
       {/* Tab bar */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/30">
         <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0">
-          {TABS.map((tab) => (
+          {TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN').map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -1371,6 +1586,7 @@ export function GODPage() {
           {activeTab === 'moderation' && <ModerationTab />}
           {activeTab === 'rejets' && <RejetsTab />}
           {activeTab === 'matches' && <MatchesTab />}
+          {activeTab === 'pending' && myRole === 'SUPERADMIN' && <PendingTab />}
           {activeTab === 'ideas' && <IdeasTab />}
           {activeTab === 'alertes' && <AlertesTab />}
           {activeTab === 'audit' && <AuditTab />}
