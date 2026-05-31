@@ -34,6 +34,7 @@ import {
   createAuthRouter,
   getAllowedWebOrigins,
   getSessionLogin,
+  isTrusted42Origin,
   type FtProfile,
 } from './auth.js';
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
@@ -367,19 +368,6 @@ async function getStreamLogin(c: Context): Promise<string> {
 
 const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
-// Vrai contrôle de hostname : seul l'intra 42 (intra.42.fr ou un sous-domaine
-// *.intra.42.fr) est accepté. Un `includes('intra.42.fr')` laisserait passer
-// `https://intra.42.fr.evil.com` — d'où le parsing strict de l'origine.
-function isIntra42Origin(origin: string): boolean {
-  try {
-    const { protocol, hostname } = new URL(origin);
-    if (protocol !== 'https:') return false;
-    return hostname === 'intra.42.fr' || hostname.endsWith('.intra.42.fr');
-  } catch {
-    return false;
-  }
-}
-
 export const app = new Hono();
 // =========================================================================
 // MIDDLEWARE CORS + PNA BLINDÉ
@@ -389,7 +377,7 @@ app.use('*', async (c, next) => {
   
   // Autoriser l'origine si elle est dans la liste WEB_APP_ORIGINS (chargée depuis .env) 
   // ou si c'est l'intra 42
-  const isAllowed = !!reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isIntra42Origin(reqOrigin));
+  const isAllowed = !!reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isTrusted42Origin(reqOrigin));
   const allowedOrigin = isAllowed ? reqOrigin : 'https://profile.intra.42.fr';
 
   c.header('Access-Control-Allow-Origin', allowedOrigin);
@@ -538,7 +526,7 @@ app.onError((err, c) => {
   // sous-chaîne) — et on reflète aussi les origines de l'app web pour qu'elle
   // puisse lire le corps des erreurs (401/403…).
   const allowedOrigin =
-    reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isIntra42Origin(reqOrigin))
+    reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isTrusted42Origin(reqOrigin))
       ? reqOrigin
       : 'https://profile.intra.42.fr';
 

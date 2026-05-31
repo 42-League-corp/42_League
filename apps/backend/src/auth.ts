@@ -83,6 +83,26 @@ export function getAllowedWebOrigins(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Vrai si `origin` est un domaine officiel de l'intra 42 (intra.42.fr ou un de ses
+ * sous-domaines), servi en HTTPS. Sert à autoriser le CORS pour l'extension qui
+ * appelle l'API depuis les pages de l'intra.
+ *
+ * SÉCURITÉ : on compare le HOSTNAME exact, jamais une sous-chaîne. Un test naïf
+ * `origin.includes('intra.42.fr')` autoriserait `https://intra.42.fr.evil.com`
+ * ou `https://evilintra.42.fr` — ici rejetés.
+ */
+export function isTrusted42Origin(origin: string | undefined | null): boolean {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'https:') return false;
+    return u.hostname === 'intra.42.fr' || u.hostname.endsWith('.intra.42.fr');
+  } catch {
+    return false;
+  }
+}
+
 function isValidWebRedirect(url: string): boolean {
   try {
     const u = new URL(url);
