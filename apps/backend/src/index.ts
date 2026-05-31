@@ -15,6 +15,8 @@ import {
   SetTitleSchema,
   DeclareOpsSchema,
   FeatureRequestSchema,
+  BugReportSchema,
+  SetBugReportStatusSchema,
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
@@ -426,6 +428,7 @@ if (process.env.NODE_ENV !== 'test') {
     '/tournaments/*',
     '/ops',
     '/feature-requests',
+    '/bug-reports',
   ]) {
     app.use(path, writeLimiter);
   }
@@ -471,6 +474,8 @@ app.use('/challenges', panelUpdate);
 app.use('/challenges/*', panelUpdate);
 app.use('/feature-requests', panelUpdate);
 app.use('/feature-requests/*', panelUpdate);
+app.use('/bug-reports', panelUpdate);
+app.use('/bug-reports/*', panelUpdate);
 
 // Gestionnaire d'erreurs global (pour que le CORS soit là même sur une erreur 401 !)
 app.onError((err, c) => {
@@ -574,7 +579,7 @@ app.patch('/me/games', async (c) => {
 // ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
 app.get('/me/export', async (c) => {
   const login = await getCurrentLogin(c);
-  const [user, matches, challenges, tournamentEntries, featureRequests, ops] = await Promise.all([
+  const [user, matches, challenges, tournamentEntries, featureRequests, bugReports, ops] = await Promise.all([
     prisma.user.findUnique({ where: { login } }),
     prisma.playedMatch.findMany({
       where: { OR: [{ playerALogin: login }, { playerBLogin: login }] },
@@ -592,6 +597,10 @@ app.get('/me/export', async (c) => {
       where: { authorId: login },
       orderBy: { createdAt: 'desc' },
     }),
+    prisma.bugReport.findMany({
+      where: { authorId: login },
+      orderBy: { createdAt: 'desc' },
+    }),
     prisma.ops.findMany({
       where: { OR: [{ ownerLogin: login }, { targetLogin: login }] },
       orderBy: { declaredAt: 'desc' },
@@ -606,6 +615,7 @@ app.get('/me/export', async (c) => {
     challenges,
     tournaments: tournamentEntries,
     featureRequests,
+    bugReports,
     ops,
   });
 });
@@ -1511,6 +1521,7 @@ app.delete('/admin/users/:login', async (c) => {
       where: { OR: [{ declarerLogin: login }, { opponentLogin: login }] },
     });
     await tx.featureRequest.deleteMany({ where: { authorId: login } });
+    await tx.bugReport.deleteMany({ where: { authorId: login } });
     await tx.tournamentEntry.deleteMany({ where: { login } });
     await tx.tournamentMatch.updateMany({ where: { playerALogin: login }, data: { playerALogin: null } });
     await tx.tournamentMatch.updateMany({ where: { playerBLogin: login }, data: { playerBLogin: null } });
@@ -1570,6 +1581,7 @@ app.post('/admin/reset-database', async (c) => {
       .filter((l) => !SUPERADMINS.has(l.toLowerCase()));
     if (removeLogins.length > 0) {
       await tx.featureRequest.deleteMany({ where: { authorId: { in: removeLogins } } });
+      await tx.bugReport.deleteMany({ where: { authorId: { in: removeLogins } } });
       await tx.user.deleteMany({ where: { login: { in: removeLogins } } });
     }
 
@@ -2466,6 +2478,54 @@ app.patch('/feature-requests/:id/status', async (c) => {
     data: { status: parsed.data.status },
   }).catch(() => { throw new HTTPException(404, { message: 'feature request not found' }); });
   return c.json(fr);
+});
+
+/* ============ BUG REPORTS (boîte à tickets) ============ */
+
+app.post('/bug-reports', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = BugReportSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  await getOrCreateUser(me);
+  const br = await prisma.bugReport.create({
+    data: { id: randomUUID(), text: parsed.data.text, authorId: me },
+  });
+  return c.json(br, 201);
+});
+
+app.get('/bug-reports', async (c) => {
+  const me = await getCurrentLogin(c);
+  const role = await getUserRole(me);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+  const list = await prisma.bugReport.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { author: { select: { login: true, imageUrl: true } } },
+  });
+  return c.json(list);
+});
+
+app.patch('/bug-reports/:id/status', async (c) => {
+  const me = await getCurrentLogin(c);
+  const role = await getUserRole(me);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = SetBugReportStatusSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const br = await prisma.bugReport.update({
+    where: { id },
+    data: { status: parsed.data.status },
+  }).catch(() => { throw new HTTPException(404, { message: 'bug report not found' }); });
+  return c.json(br);
 });
 
 /* ============ OPS ============ */
