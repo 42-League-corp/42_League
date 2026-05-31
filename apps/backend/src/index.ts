@@ -1823,6 +1823,126 @@ app.get('/admin/audit-log', async (c) => {
   return c.json(entries);
 });
 
+// ── Admin all-history : timeline unifiée ──────────────────────────────────
+app.get('/admin/all-history', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const url = new URL(c.req.url);
+  const loginFilter = url.searchParams.get('login') ?? undefined;
+  const typeFilter = url.searchParams.get('type') ?? undefined;
+  const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 1000);
+
+  const loginWhere = loginFilter
+    ? { OR: [{ challengerLogin: loginFilter }, { opponentLogin: loginFilter }] }
+    : {};
+  const loginWhereAB = loginFilter
+    ? { OR: [{ playerALogin: loginFilter }, { playerBLogin: loginFilter }] }
+    : {};
+  const loginWhereDO = loginFilter
+    ? { OR: [{ declarerLogin: loginFilter }, { opponentLogin: loginFilter }] }
+    : {};
+  const loginWhereOps = loginFilter
+    ? { OR: [{ ownerLogin: loginFilter }, { targetLogin: loginFilter }] }
+    : {};
+
+  const [challenges, pending, played, rejected, ops] = await Promise.all([
+    (!typeFilter || typeFilter === 'challenge')
+      ? prisma.challenge.findMany({ where: loginWhere, orderBy: { createdAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'pending_match')
+      ? prisma.pendingMatch.findMany({ where: loginWhereDO, orderBy: { declaredAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'played_match')
+      ? prisma.playedMatch.findMany({ where: loginWhereAB, orderBy: { playedAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'rejected_match')
+      ? prisma.rejectedMatch.findMany({ where: loginWhereDO, orderBy: { rejectedAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'ops')
+      ? prisma.ops.findMany({ where: loginWhereOps, orderBy: { declaredAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+  ]);
+
+  type Event = {
+    id: string;
+    type: 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
+    at: string;
+    playerA: string;
+    playerB: string;
+    status?: string;
+    scoreA?: number;
+    scoreB?: number;
+    winner?: string;
+    deltaA?: number;
+    deltaB?: number;
+    countedForElo?: boolean;
+    contestReason?: string;
+    contestMessage?: string;
+    forcedUsed?: number;
+    scheduledAt?: string;
+    decidedAt?: string | null;
+    expiresAt?: string;
+  };
+
+  const events: Event[] = [
+    ...challenges.map((c) => ({
+      id: c.id,
+      type: 'challenge' as const,
+      at: c.createdAt.toISOString(),
+      playerA: c.challengerLogin,
+      playerB: c.opponentLogin,
+      status: c.status,
+      scheduledAt: c.scheduledAt.toISOString(),
+      decidedAt: c.decidedAt?.toISOString() ?? null,
+    })),
+    ...pending.map((p) => ({
+      id: p.id,
+      type: 'pending_match' as const,
+      at: p.declaredAt.toISOString(),
+      playerA: p.declarerLogin,
+      playerB: p.opponentLogin,
+      scoreA: p.scoreDeclarer,
+      scoreB: p.scoreOpponent,
+    })),
+    ...played.map((m) => ({
+      id: m.id,
+      type: 'played_match' as const,
+      at: m.playedAt.toISOString(),
+      playerA: m.playerALogin,
+      playerB: m.playerBLogin,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+      winner: m.winner,
+      deltaA: m.deltaA,
+      deltaB: m.deltaB,
+      countedForElo: m.countedForElo,
+    })),
+    ...rejected.map((r) => ({
+      id: r.id,
+      type: 'rejected_match' as const,
+      at: r.rejectedAt.toISOString(),
+      playerA: r.declarerLogin,
+      playerB: r.opponentLogin,
+      scoreA: r.scoreDeclarer,
+      scoreB: r.scoreOpponent,
+      contestReason: r.contestReason,
+      contestMessage: r.contestMessage,
+    })),
+    ...ops.map((o) => ({
+      id: o.id,
+      type: 'ops' as const,
+      at: o.declaredAt.toISOString(),
+      playerA: o.ownerLogin,
+      playerB: o.targetLogin,
+      forcedUsed: o.forcedUsed,
+      expiresAt: o.expiresAt.toISOString(),
+    })),
+  ];
+
+  events.sort((a, b) => b.at.localeCompare(a.at));
+  return c.json(events.slice(0, limit));
+});
+
 // ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──
 async function purgeOldAuditLogs(): Promise<void> {
   const cutoff = new Date();

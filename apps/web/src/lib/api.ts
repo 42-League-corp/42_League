@@ -223,6 +223,29 @@ export interface Tournament {
   winner?: { login: string; imageUrl: string | null } | null;
 }
 
+export type AllHistoryEventType = 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
+
+export interface AllHistoryEvent {
+  id: string;
+  type: AllHistoryEventType;
+  at: string;
+  playerA: string;
+  playerB: string;
+  status?: string;
+  scoreA?: number;
+  scoreB?: number;
+  winner?: string;
+  deltaA?: number;
+  deltaB?: number;
+  countedForElo?: boolean;
+  contestReason?: string;
+  contestMessage?: string;
+  forcedUsed?: number;
+  scheduledAt?: string;
+  decidedAt?: string | null;
+  expiresAt?: string;
+}
+
 export class AuthError extends Error {}
 
 async function request<T>(
@@ -441,6 +464,14 @@ export const api = {
     if (filters?.limit) params.set('limit', String(filters.limit));
     const qs = params.toString();
     return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
+  },
+  adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.login) params.set('login', filters.login);
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.limit) params.set('limit', String(filters.limit));
+    const qs = params.toString();
+    return request<AllHistoryEvent[]>(`/admin/all-history${qs ? `?${qs}` : ''}`);
   },
   createFeatureRequest: (text: string) =>
     request<{ id: string; text: string; status: string; createdAt: string }>(
