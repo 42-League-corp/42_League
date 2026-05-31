@@ -95,7 +95,7 @@ function RulesSection() {
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
             <li>
               Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
-              être <span className="text-gold font-semibold">touchée au moins une fois</span> avant qu'un but
+              être <span className="text-gold font-semibold">touchée au moins deux fois</span> avant qu'un but
               ne compte.
             </li>
             <li>
@@ -217,13 +217,49 @@ function EloSection() {
             gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
             <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
           </EloTerm>
-          <EloTerm symbol="Bonus d'upset" label="Anti-inflation">
-            Un bonus <span className="text-text font-semibold">proportionnel à l'écart réel de classement</span>{' '}
-            (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">écart × 0,04</code>), appliqué{' '}
-            <span className="text-text font-semibold">uniquement quand l'outsider l'emporte</span>. Contrairement au
-            facteur ELO classique, il ne sature pas : un classement gonflé fond réellement vers la moyenne quand
-            son détenteur perd contre plus faible.
+          <EloTerm symbol="Bonus d'upset" label="Récompense l'exploit">
+            En clair :{' '}
+            <span className="text-text font-semibold">
+              si tu bats quelqu'un de bien mieux classé que toi, tu gagnes beaucoup plus de points
+            </span>{' '}
+            — et lui en perd d'autant. Battre un adversaire de niveau proche ne rapporte que peu :
+            plus l'écart de classement est grand, plus l'exploit paie.
           </EloTerm>
+        </div>
+
+        {/* Exemple chiffré : à score égal, seul l'écart de classement change le gain. */}
+        <div className="rounded-xl border border-gold/20 bg-bg-2/40 overflow-hidden">
+          <div className="px-4 py-2.5 bg-bg-2/60 border-b border-gold/15 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2">
+            Exemple — tu es à 1000 ELO et tu gagnes 10–5
+          </div>
+          <div className="divide-y divide-border/20">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-text font-semibold text-sm">Petit écart</div>
+                <div className="text-xs text-muted-2">tu bats un joueur à 1050 ELO</div>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0 font-mono tabular-nums text-sm">
+                <span className="text-[#7fd66e] font-extrabold">+29</span>
+                <span className="text-muted-2 text-[11px]">/ il perd</span>
+                <span className="text-red font-extrabold">−29</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-text font-semibold text-sm">Gros écart</div>
+                <div className="text-xs text-muted-2">tu bats un joueur à 1400 ELO</div>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0 font-mono tabular-nums text-sm">
+                <span className="text-[#7fd66e] font-extrabold">+60</span>
+                <span className="text-muted-2 text-[11px]">/ il perd</span>
+                <span className="text-red font-extrabold">−60</span>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-2.5 text-xs text-muted leading-relaxed border-t border-gold/15">
+            Même score, même victoire : l'exploit face au joueur à +400 d'écart rapporte{' '}
+            <span className="text-text font-semibold">deux fois plus de points</span>.
+          </div>
         </div>
 
         {/* Garde-fous & règles annexes */}

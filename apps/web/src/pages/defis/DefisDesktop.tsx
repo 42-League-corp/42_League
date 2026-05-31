@@ -454,6 +454,9 @@ function PendingConfirmRow({
   const flash = useFlash();
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Une fois tranché (confirmé/contesté), la ligne se retire immédiatement —
+  // sans attendre le refresh réseau.
+  const [resolved, setResolved] = useState(false);
 
   const iWon = match.scoreOpponent === WINNING_SCORE;
 
@@ -463,10 +466,10 @@ function PendingConfirmRow({
       // Confirmation directe du score déclaré (point de vue « toi ») — pas de re-saisie.
       await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer);
       flash.show('✓ Match confirmé — ELO mis à jour !');
+      setResolved(true);
       await onDone();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
       setBusy(false);
     }
   };
@@ -475,18 +478,21 @@ function PendingConfirmRow({
     reason: 'never_played' | 'wrong_score',
     message: string,
   ) => {
+    // Ferme la popup tout de suite et retire la ligne au succès.
+    setContesting(false);
     setBusy(true);
     try {
       await api.rejectMatch(match.id, reason, message);
       flash.show('Contestation envoyée.');
+      setResolved(true);
       await onDone();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
       setBusy(false);
-      setContesting(false);
     }
   };
+
+  if (resolved) return null;
 
   return (
     <>

@@ -127,7 +127,8 @@ export type AdminAuditAction =
   | 'EDIT_TITLE'
   | 'DELETE_MATCH'
   | 'EDIT_MATCH'
-  | 'REFRESH_IMAGES';
+  | 'REFRESH_IMAGES'
+  | 'RESET_DATABASE';
 
 export interface AdminAuditEntry {
   id: string;
@@ -437,6 +438,12 @@ export const api = {
   adminDeleteUser: (login: string) =>
     request<{ login: string; deleted: true }>(`/admin/users/${encodeURIComponent(login)}`, {
       method: 'DELETE',
+    }),
+  // SUPERADMIN : reset total de la ligue. `confirm` doit valoir la phrase exacte.
+  adminResetDatabase: (confirm: string) =>
+    request<{ reset: true; removedUsers: number; resetUsers: number }>('/admin/reset-database', {
+      method: 'POST',
+      body: JSON.stringify({ confirm }),
     }),
   adminForceResult: (playerA: string, playerB: string, scoreA: number, scoreB: number) =>
     request<PlayedMatch>('/admin/matches/force-result', {

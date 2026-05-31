@@ -6,7 +6,8 @@ import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
 import { AbacusSlider } from '../components/AbacusSlider';
 import { OutcomeButton } from '../components/OutcomeButton';
-import { api, type Tournament, type TournamentMatch } from '../lib/api';
+import { api, type Tournament, type TournamentMatch, type LeaderboardEntry } from '../lib/api';
+import { PlayerSearch } from './defis/shared/PlayerSearch';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
@@ -33,13 +34,13 @@ function roundLabel(round: number, totalRounds: number): string {
 export function TournoiDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = rawId ?? '';
-  const { me, leaderboard } = useLeagueData();
+  const { me, leaderboard, locations } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
-  const [inviteLogin, setInviteLogin] = useState('');
+  const [invitee, setInvitee] = useState<LeaderboardEntry | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,11 +83,13 @@ export function TournoiDetailPage() {
   const invitable = leaderboard
     .filter((u) => !entryLogins.has(u.login))
     .sort((a, b) => a.login.localeCompare(b.login));
+  // Réutilise le compteur de la combobox pour afficher le total de matchs joués de chaque joueur.
+  const invitableCounts = Object.fromEntries(invitable.map((u) => [u.login, u.matchesPlayed]));
 
   const handleInvite = async () => {
-    if (!inviteLogin) return;
-    const login = inviteLogin;
-    setInviteLogin('');
+    if (!invitee) return;
+    const login = invitee.login;
+    setInvitee(null);
     await runAction(() => api.addTournamentPlayer(tournament.id, login), `${login} ajouté au tournoi`);
   };
   const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
@@ -156,21 +159,18 @@ export function TournoiDetailPage() {
               <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
                 Inviter un joueur
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={inviteLogin}
-                  onChange={(e) => setInviteLogin(e.target.value)}
-                  className="flex-1 min-w-[180px] px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
-                >
-                  <option value="">Choisir un joueur…</option>
-                  {invitable.map((u) => (
-                    <option key={u.login} value={u.login}>
-                      {u.login} · {u.elo} ELO
-                    </option>
-                  ))}
-                </select>
-                <Button onClick={handleInvite} disabled={!inviteLogin}>
-                  Ajouter
+              <div className="flex flex-col gap-2">
+                <PlayerSearch
+                  players={invitable}
+                  recentPlayers={[]}
+                  opponentCounts={invitableCounts}
+                  selected={invitee}
+                  onSelect={setInvitee}
+                  onClear={() => setInvitee(null)}
+                  locations={locations}
+                />
+                <Button onClick={handleInvite} disabled={!invitee} full>
+                  {invitee ? `Ajouter ${invitee.login} au tournoi` : 'Ajouter au tournoi'}
                 </Button>
               </div>
               <p className="text-[10px] text-muted mt-1.5">

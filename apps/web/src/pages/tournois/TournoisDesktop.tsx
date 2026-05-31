@@ -25,6 +25,11 @@ export function TournoisDesktop() {
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
   const [busy, setBusy] = useState(false);
 
+  // Regroupement par état : en cours (vivants) → en préparation (inscriptions) → historique (terminés/annulés).
+  const active = tournaments.filter((t) => t.status === 'in_progress');
+  const inPrep = tournaments.filter((t) => t.status === 'registration');
+  const past = tournaments.filter((t) => t.status === 'finished' || t.status === 'cancelled');
+
   return (
     <Panel title="Tournois" sub="Brackets · single-élim">
       <div className="mb-6 border-b border-gold/15 pb-6">
@@ -112,10 +117,14 @@ export function TournoisDesktop() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
-          {tournaments.map((t) => (
-            <TournoiCard key={t.id} t={t} />
-          ))}
+        <div className="space-y-6">
+          {active.length > 0 && (
+            <TournoiGroup label="Tournois en cours" tone="gold" items={active} />
+          )}
+          {inPrep.length > 0 && (
+            <TournoiGroup label="Tournois en préparation" tone="teal" items={inPrep} />
+          )}
+          <TournoiGroup label="Historique des tournois" tone="muted" items={past} />
         </div>
       )}
 
@@ -151,6 +160,49 @@ export function TournoisDesktop() {
         </div>
       </div>
     </Panel>
+  );
+}
+
+type GroupTone = 'gold' | 'teal' | 'muted';
+
+const GROUP_BAR: Record<GroupTone, string> = {
+  gold: 'from-gold to-gold-dim',
+  teal: 'from-teal to-teal',
+  muted: 'from-muted to-muted/40',
+};
+const GROUP_TXT: Record<GroupTone, string> = {
+  gold: 'text-gold',
+  teal: 'text-teal',
+  muted: 'text-muted-2',
+};
+
+/**
+ * Section de tournois groupée par état, avec en-tête doré façon « cartouche ».
+ * L'historique s'affiche même vide (donne du contenu à la page).
+ */
+function TournoiGroup({ label, tone, items }: { label: string; tone: GroupTone; items: Tournament[] }) {
+  return (
+    <section>
+      <div
+        className={`font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold mb-3 flex items-center gap-2 ${GROUP_TXT[tone]}`}
+      >
+        <span className={`inline-block w-1 h-2.5 bg-gradient-to-b ${GROUP_BAR[tone]} rounded-sm`} />
+        {label}
+        <span className="text-muted-2 font-mono text-[10px] normal-case">· {items.length}</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent ml-1" />
+      </div>
+      {items.length === 0 ? (
+        <div className="card-hud rounded-xl px-4 py-6 text-center text-xs text-muted-2">
+          Aucun tournoi terminé pour l'instant — les champions s'afficheront ici.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
+          {items.map((t) => (
+            <TournoiCard key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

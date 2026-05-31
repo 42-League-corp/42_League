@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, Users, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useFAB } from '../../mobile/primitives/FAB';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
-import { DefisFabMenu } from './mobile/DefisFabMenu';
 import { BigActionButton } from './mobile/BigActionButton';
 import { OpponentBubble } from './mobile/OpponentBubble';
 import { PendingMatchCard } from './mobile/PendingMatchCard';
@@ -37,7 +35,6 @@ export function DefisMobile() {
 
   const [declareOpen, setDeclareOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
-  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
 
   // Map login → imageUrl pour les cartes de défis
@@ -56,20 +53,6 @@ export function DefisMobile() {
   const showOutgoing = filter === 'all' || filter === 'sent';
 
   const totalChallenges = incoming.length + accepted.length + outgoing.length;
-
-  // Le FAB disparaît dès qu'une sheet/menu est ouvert → il ne recouvre plus le
-  // contenu (cartes à confirmer, formulaire de déclaration) pendant l'opération.
-  const anySheetOpen = declareOpen || challengeOpen || fabMenuOpen;
-  useFAB(
-    anySheetOpen
-      ? null
-      : {
-          Icon: Plus,
-          label: 'Game',
-          onClick: () => setFabMenuOpen(true),
-          pulse: pendingToConfirm.length === 0 && totalChallenges === 0,
-        },
-  );
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -251,18 +234,7 @@ export function DefisMobile() {
               </div>
             </div>
           )}
-
-        {/* Dégagement pour que le FAB ne recouvre pas la dernière carte. */}
-        <div className="h-16" aria-hidden />
       </div>
-
-      {/* Mini-menu du FAB : Déclarer / Défier */}
-      <DefisFabMenu
-        open={fabMenuOpen}
-        onClose={() => setFabMenuOpen(false)}
-        onDeclare={() => setDeclareOpen(true)}
-        onChallenge={() => setChallengeOpen(true)}
-      />
 
       {/* Sheet de déclaration (game passée) */}
       <DeclareGameSheet

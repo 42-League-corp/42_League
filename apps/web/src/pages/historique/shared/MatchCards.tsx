@@ -126,9 +126,9 @@ interface GlobalMatchCardProps {
 }
 
 /**
- * Carte « game de la league » (historique global) — même type de bloc que la
- * carte perso (MyMatchCard) : badge à gauche, avatar du vainqueur, opposants
- * « winner vs loser », et à droite le score + le Δ ELO du vainqueur.
+ * Carte « game de la league » (historique global) — affichage tête-à-tête :
+ * le VAINQUEUR à gauche (🏆 + avatar + nom + Δ ELO), le score au centre, et le
+ * PERDANT à droite (nom + Δ ELO + avatar), en miroir.
  */
 export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMatchCardProps) {
   const aWon = match.winner === 'A';
@@ -137,46 +137,50 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
   const winnerScore = aWon ? match.scoreA : match.scoreB;
   const loserScore = aWon ? match.scoreB : match.scoreA;
   const winnerDelta = aWon ? match.deltaA : match.deltaB;
+  const loserDelta = aWon ? match.deltaB : match.deltaA;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-      className="relative card-hud rounded-2xl p-3.5 flex items-center gap-3 hover-glow border border-gold/25"
+      className="relative card-hud rounded-2xl p-3.5 flex items-center gap-2.5 hover-glow border border-gold/25"
     >
-      {/* Badge résultat (trophée) — pendant du badge W/L de la carte perso */}
+      {/* Vainqueur — gauche */}
       <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-gold/15 text-base">
         🏆
       </div>
 
       <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" />
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <PlayerLink login={winnerLogin} className="text-sm font-bold text-gold truncate">
-            {winnerLogin}
-          </PlayerLink>
-          <span className="text-[11px] text-muted">vs</span>
-          <PlayerLink login={loserLogin} className="text-xs font-semibold text-muted-2 truncate">
-            {loserLogin}
-          </PlayerLink>
-        </div>
-        <div className="text-[10px] text-muted font-medium mt-0.5">
-          {fmtDatePair(match.playedAt, lang).short}
-          <span className="mx-1 opacity-40">·</span>
-          <span className="text-muted-2">{fmtDatePair(match.playedAt, lang).long}</span>
-        </div>
+      <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
+        <PlayerLink login={winnerLogin} className="text-sm font-bold text-gold truncate max-w-full">
+          {winnerLogin}
+        </PlayerLink>
+        <EloDeltaPill delta={winnerDelta} counted={match.countedForElo} />
       </div>
 
-      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      {/* Score + date — centre */}
+      <div className="flex-shrink-0 flex flex-col items-center gap-0.5 px-1">
         <div className="font-display tabular-nums text-base font-black">
           <span className="text-gold text-gold-emboss">{winnerScore}</span>
           <span className="text-muted mx-1 opacity-60">–</span>
           <span className="text-text-strong">{loserScore}</span>
         </div>
-        <EloDeltaPill delta={winnerDelta} counted={match.countedForElo} />
+        <div className="text-[10px] text-muted font-medium whitespace-nowrap">
+          {fmtDatePair(match.playedAt, lang).short}
+        </div>
       </div>
+
+      {/* Perdant — droite (miroir) */}
+      <div className="flex-1 min-w-0 flex flex-col items-end gap-1">
+        <PlayerLink login={loserLogin} className="text-sm font-semibold text-muted-2 truncate max-w-full text-right">
+          {loserLogin}
+        </PlayerLink>
+        <EloDeltaPill delta={loserDelta} counted={match.countedForElo} />
+      </div>
+
+      <Avatar login={loserLogin} imageUrl={imgByLogin.get(loserLogin) ?? null} size="sm" />
     </motion.div>
   );
 }

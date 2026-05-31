@@ -19,6 +19,7 @@ const ACTION_EMOJI: Record<AdminAction, string> = {
   DELETE_MATCH: '🗑️',
   EDIT_MATCH: '📝',
   REFRESH_IMAGES: '🖼️',
+  RESET_DATABASE: '💣',
 };
 
 function extractIp(c: Context): string | null {

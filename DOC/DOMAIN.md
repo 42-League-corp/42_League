@@ -21,11 +21,22 @@ des *gamelles* (auto-but qui retire un point). D'où :
 
 ## 2. ELO — `calculateBabyfootElo` (`elo.ts`)
 
-ELO classique **adapté au babyfoot** : le score (l'écart de buts) module le gain.
+ELO classique **adapté au babyfoot**, avec deux leviers : l'écart de **buts** module le transfert de
+base, et l'écart de **rating** ajoute un bonus d'upset asymétrique et non saturant.
+
+> ⚠️ **Refonte (mai 2026).** Le modèle n'est **plus à somme nulle** sur les gros upsets. L'ancienne
+> version transférait `P` symétriquement (`+P` / `−P`) ; désormais, quand l'outsider gagne, le perdant
+> surcoté encaisse tout le bonus tandis que le gagnant n'en touche qu'une part plafonnée.
 
 ### Constantes
 - `DEFAULT_ELO = 1000` — note de départ de tout joueur.
 - `K = 32` — facteur K de base.
+- `UPSET_GAP_COEFF = 0.04` — bonus de points **par point d'écart de rating**, appliqué uniquement
+  quand l'outsider l'emporte. Contrairement au facteur de surprise Elo `(1 − E)` qui sature vers
+  ~800 pts d'écart, ce terme **ne sature pas** → un rating gonflé fond réellement vers la moyenne.
+- `WINNER_BONUS_CAP = 50` — plafond du bonus d'upset encaissé par le **gagnant** (battre un seul boss
+  gonflé ne doit pas faire exploser son rating).
+- `MAX_DELTA_PER_MATCH = 400` — variation maximale (en magnitude) d'un joueur sur un seul match (garde-fou).
 
 ### Signature
 ```ts
@@ -40,26 +51,35 @@ calculateBabyfootElo(ratingA, ratingB, winner: 'A'|'B', scoreA, scoreB): {
 2. **Multiplicateur d'écart de buts** :
    `goalDiff = 10 − scorePerdant` (1 pour un 10-9, jusqu'à 20 pour un 10‑(−10))
    `M = 1 + goalDiff × 0.1` → varie de **1.1** (10-9) à **3.0** (10‑(−10) gamelle totale)
-3. **Points transférés** : `P = round(K × M × (1 − E))`
-4. **Jeu à somme nulle** : `deltaGagnant = +P`, `deltaPerdant = −P`. `deltaA + deltaB = 0` toujours.
+3. **Transfert de base** (façon Elo classique, non arrondi) : `baseP = K × M × (1 − E)`
+4. **Bonus d'upset** (proportionnel à l'écart RÉEL, upset uniquement) :
+   `gap = max(0, ratingPerdant − ratingGagnant)` ; `gapBonus = gap × UPSET_GAP_COEFF`
+5. **Application asymétrique**, bornée par `MAX_DELTA_PER_MATCH` :
+   - `gain = round( min( baseP + min(gapBonus, WINNER_BONUS_CAP), 400 ) )` → `deltaGagnant = +gain`
+   - `loss = round( min( baseP + gapBonus, 400 ) )` → `deltaPerdant = −loss`
 
 ### En clair
-- Le gagnant prend exactement ce que le perdant perd (somme nulle, pool d'ELO constant).
-- **Upset bonus** : battre plus fort que soi (`E` faible) → on gagne plus de points.
+- **Résultat attendu** (favori qui gagne, ou ratings égaux) : `gap = 0` → bonus nul → transfert
+  **symétrique classique** `±baseP` (identique à l'ancienne formule).
+- **Upset** (outsider qui gagne) : le perdant gonflé **fond** (perte jusqu'à −400), le gagnant ne
+  grimpe que modérément (bonus plafonné à +50 au-dessus du transfert de base). La somme n'est plus nulle.
 - **Bonus de marge** : un 10-0 transfère plus qu'un 10-9 ; une gamelle (10‑(−10)) transfère le plus.
 
-### Exemples (1000 vs 1000, donc `E = 0.5`)
-| Score | `M` | `P = round(32·M·0.5)` |
+### Exemples (1000 vs 1000, donc `E = 0.5`, `gap = 0` → symétrique)
+| Score | `M` | `±round(32·M·0.5)` |
 |---|---|---|
-| 10-9 | 1.1 | **18** |
-| 10-5 | 1.5 | **24** |
-| 10-0 | 2.0 | **32** (= K) |
-| 10‑(−10) | 3.0 | **48** |
+| 10-9 | 1.1 | **±18** |
+| 10-5 | 1.5 | **±24** |
+| 10-0 | 2.0 | **±32** (= K) |
+| 10‑(−10) | 3.0 | **±48** |
 
-Underdog (1000 bat 1400, 10-5) : `E≈0.24` → `P = round(32·1.5·0.76) ≈ 36` (plus que le favori).
+Gros upset (un joueur à **100** bat un joueur à **2800**, 10-0) : `E≈0`, `M=2.0` → `baseP≈64`,
+`gap=2700` → `gapBonus=108`. Gagnant `+round(64+min(108,50))=+114`, perdant `−round(64+108)=−172`
+(asymétrique : le rating gonflé fond). Si `gapBonus` dépasse 400, le perdant est plafonné à **−400**.
 
 ### Invariants verrouillés par les tests (`elo.test.ts`)
-- `deltaA + deltaB === 0` toujours ; deltas entiers ; aucun NaN/Infinity même pour des ratings 0–10000.
+- Sur un résultat attendu / ratings égaux : `deltaA + deltaB === 0` (symétrie préservée).
+- Deltas entiers ; bornés à `±400` ; aucun NaN/Infinity même pour des ratings 0–15000.
 
 ---
 
@@ -123,6 +143,8 @@ Bracket à élimination directe, capacité **2 ou 4** (puissance de 2). `kind` `
 (officiel réservé à `isAdmin`). États : `registration → in_progress → finished` (ou `cancelled`).
 
 - Inscription via `join` ; auto-démarrage quand le bracket est plein, ou `start` manuel par l'organisateur.
+- L'**organisateur** (ou un `isAdmin`) peut aussi **inviter** un joueur existant via `add-player` ;
+  remplir la dernière place déclenche l'auto-démarrage.
 - Chaque `TournamentMatch` se joue en **record → confirm** (confirmé par l'**autre** joueur, jamais
   celui qui a saisi). À la confirmation, le vainqueur avance ; la finale clôt le tournoi
   (`winnerLogin`, `tournamentsWon++`). Génération/avancement dans `apps/backend/src/tournament.ts`.
@@ -177,7 +199,10 @@ Le package réexporte tout via `src/index.ts` (`export * from './elo.js' | './an
 
 ## 10. Glossaire métier
 
-- **ELO** — note de classement. Départ 1000. Évolue à somme nulle selon le résultat et la marge.
+- **ELO** — note de classement. Départ 1000. Évolue selon le résultat et la marge ; symétrique sur un
+  résultat attendu, **asymétrique sur un upset** (le rating surcoté fond, bonus plafonné pour le gagnant).
+- **Upset bonus** — bonus proportionnel et non saturant à l'écart de rating quand l'outsider gagne
+  (`UPSET_GAP_COEFF`) ; plafonné à +50 côté gagnant, jusqu'à −400 côté perdant gonflé.
 - **Gamelle** — auto-but ; fait descendre le score du fautif (jusqu'à −10), d'où le bonus de marge max.
 - **Match pending** — déclaré, en attente de confirmation de l'adversaire.
 - **Validation bilatérale** — l'adversaire ressaisit le score ; il doit être le miroir, sinon annulation.
