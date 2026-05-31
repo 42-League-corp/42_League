@@ -11,36 +11,81 @@ export const LoginSchema = z
 // gagnant n'atteigne 10. Borne supérieure 10 = victoire stricte d'un seul camp.
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
+// ─── Multi-jeu (babyfoot | smash) ──────────────────────────────────────────
+export const GameSchema = z.enum(['babyfoot', 'smash']);
+export type Game = z.infer<typeof GameSchema>;
+export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
+export const SmashCharSchema = z.string().trim().min(1).max(40);
+export const SmashStockSchema = z.number().int().min(1).max(3);
+
+/** Champs communs aux déclarations/confirmations, indépendants du jeu. */
+const matchScoreShape = {
+  scoreSelf: MatchScoreSchema,
+  scoreOpponent: MatchScoreSchema,
+  game: GameSchema.default('babyfoot'),
+  // Smash uniquement :
+  bestOf: SmashBestOfSchema.optional(),
+  charSelf: SmashCharSchema.optional(),
+  charOpponent: SmashCharSchema.optional(),
+  // Vies (stocks) restantes du gagnant au game décisif.
+  stocks: SmashStockSchema.optional(),
+};
+
+interface MatchScores {
+  scoreSelf: number;
+  scoreOpponent: number;
+  game: Game;
+  bestOf?: number;
+  charSelf?: string;
+  charOpponent?: string;
+}
+
+/**
+ * Validation des scores selon le jeu :
+ *  - babyfoot : un seul camp atteint 10 ;
+ *  - smash : set Bo3/Bo5, le gagnant atteint exactement la cible (2 ou 3),
+ *    le perdant en dessous, et les deux persos sont renseignés.
+ */
+function makeRefiner(requireChars: boolean) {
+  return (m: MatchScores, ctx: z.RefinementCtx): void => {
+    if (m.game === 'smash') {
+      if (!m.bestOf) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for smash (3 or 5)' });
+        return;
+      }
+      const target = Math.ceil(m.bestOf / 2);
+      const hi = Math.max(m.scoreSelf, m.scoreOpponent);
+      const lo = Math.min(m.scoreSelf, m.scoreOpponent);
+      if (hi !== target) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `winner must win exactly ${target} games` });
+      }
+      if (lo < 0 || lo >= target) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'loser games must be between 0 and target-1' });
+      }
+      if (requireChars && (!m.charSelf || !m.charOpponent)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'both characters are required for smash' });
+      }
+    } else {
+      if (!(m.scoreSelf === 10 || m.scoreOpponent === 10)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'one side must reach 10 goals' });
+      }
+      if (m.scoreSelf === 10 && m.scoreOpponent === 10) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'only one side can reach 10 goals' });
+      }
+    }
+  };
+}
+
 export const DeclareMatchSchema = z
-  .object({
-    opponentLogin: LoginSchema,
-    scoreSelf: MatchScoreSchema,
-    scoreOpponent: MatchScoreSchema,
-  })
-  .refine(
-    (m) => m.scoreSelf === 10 || m.scoreOpponent === 10,
-    'one side must reach 10 goals',
-  )
-  .refine(
-    (m) => !(m.scoreSelf === 10 && m.scoreOpponent === 10),
-    'only one side can reach 10 goals',
-  );
+  .object({ opponentLogin: LoginSchema, ...matchScoreShape })
+  .superRefine(makeRefiner(true));
 
 export type DeclareMatchInput = z.infer<typeof DeclareMatchSchema>;
 
+// Confirmation : pas besoin de re-fournir les persos (déjà posés par le déclarant).
 export const ConfirmMatchSchema = z
-  .object({
-    scoreSelf: MatchScoreSchema,
-    scoreOpponent: MatchScoreSchema,
-  })
-  .refine(
-    (m) => m.scoreSelf === 10 || m.scoreOpponent === 10,
-    'one side must reach 10 goals',
-  )
-  .refine(
-    (m) => !(m.scoreSelf === 10 && m.scoreOpponent === 10),
-    'only one side can reach 10 goals',
-  );
+  .object(matchScoreShape)
+  .superRefine(makeRefiner(false));
 
 export type ConfirmMatchInput = z.infer<typeof ConfirmMatchSchema>;
 
@@ -59,23 +104,14 @@ export const CreateChallengeSchema = z.object({
     .refine((s) => new Date(s).getTime() > Date.now() - 60_000, {
       message: 'scheduledAt must be in the future (or within the last minute)',
     }),
+  game: GameSchema.default('babyfoot'),
 });
 
 export type CreateChallengeInput = z.infer<typeof CreateChallengeSchema>;
 
 export const RecordResultSchema = z
-  .object({
-    scoreSelf: MatchScoreSchema,
-    scoreOpponent: MatchScoreSchema,
-  })
-  .refine(
-    (m) => m.scoreSelf === 10 || m.scoreOpponent === 10,
-    'one side must reach 10 goals',
-  )
-  .refine(
-    (m) => !(m.scoreSelf === 10 && m.scoreOpponent === 10),
-    'only one side can reach 10 goals',
-  );
+  .object(matchScoreShape)
+  .superRefine(makeRefiner(true));
 
 export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 

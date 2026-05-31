@@ -80,3 +80,69 @@ export function calculateBabyfootElo(
     deltaB,
   };
 }
+
+// ─── SMASH BROS ───────────────────────────────────────────────────────────────
+
+/** Formats de set autorisés pour Smash. */
+export const SMASH_BEST_OF = [3, 5] as const;
+export type SmashBestOf = (typeof SMASH_BEST_OF)[number];
+/** Nombre de vies (stocks) par game. */
+export const SMASH_STOCKS = 3;
+
+/** Nombre de games à gagner pour remporter un set Bo3/Bo5. */
+export function smashTarget(bestOf: number): number {
+  return Math.ceil(bestOf / 2);
+}
+
+/**
+ * Variation d'Elo pour un set de Smash (Bo3 / Bo5).
+ *
+ * Même ossature que le babyfoot (probabilité attendue + bonus d'upset non
+ * saturant), mais le multiplicateur de domination `M` est dérivé de DEUX
+ * signaux propres à Smash :
+ *   - l'écart de games du set (2-0 plus net qu'un 2-1) ;
+ *   - les vies (stocks) restantes du gagnant au game décisif.
+ *
+ * `gamesA`/`gamesB` = games gagnés par chaque joueur dans le set.
+ * `winnerStocks` = vies restantes du gagnant au dernier game (1..SMASH_STOCKS).
+ */
+export function calculateSmashElo(
+  ratingA: number,
+  ratingB: number,
+  winner: Winner,
+  gamesA: number,
+  gamesB: number,
+  bestOf: number,
+  winnerStocks: number = 1,
+): EloUpdate {
+  const winnerRating = winner === 'A' ? ratingA : ratingB;
+  const loserRating = winner === 'A' ? ratingB : ratingA;
+
+  const winnerGames = Math.max(gamesA, gamesB);
+  const loserGames = Math.min(gamesA, gamesB);
+  const maxSetMargin = smashTarget(bestOf); // 2 (Bo3) ou 3 (Bo5)
+  const setMargin = Math.max(1, winnerGames - loserGames);
+  const setDom = maxSetMargin > 1 ? (setMargin - 1) / (maxSetMargin - 1) : 0; // 0..1
+  const stocks = Math.min(SMASH_STOCKS, Math.max(1, winnerStocks));
+  const stockDom = SMASH_STOCKS > 1 ? (stocks - 1) / (SMASH_STOCKS - 1) : 0; // 0..1
+
+  // M ∈ [1, 2] — même amplitude que le babyfoot (1 + goalDiff*0.1).
+  const M = 1 + 0.5 * setDom + 0.5 * stockDom;
+
+  const E = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
+  const baseP = K * M * (1 - E);
+
+  const gap = Math.max(0, loserRating - winnerRating);
+  const gapBonus = gap * UPSET_GAP_COEFF;
+
+  const winnerGain = Math.min(baseP + Math.min(gapBonus, WINNER_BONUS_CAP), MAX_DELTA_PER_MATCH);
+  const loserLoss = Math.min(baseP + gapBonus, MAX_DELTA_PER_MATCH);
+
+  const gain = Math.round(winnerGain);
+  const loss = Math.round(loserLoss);
+
+  const deltaA = winner === 'A' ? gain : -loss;
+  const deltaB = winner === 'A' ? -loss : gain;
+
+  return { newA: ratingA + deltaA, newB: ratingB + deltaB, deltaA, deltaB };
+}

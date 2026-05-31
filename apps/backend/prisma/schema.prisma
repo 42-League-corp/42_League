@@ -24,6 +24,10 @@ model User {
   matchesPlayed   Int       @default(0) @map("matches_played")
   dodgeCount      Int       @default(0) @map("dodge_count")
   tournamentsWon  Int       @default(0) @map("tournaments_won")
+  // Classement Smash Bros (jeu parallèle) — rating/compteurs distincts du babyfoot.
+  eloSmash            Int   @default(1000) @map("elo_smash")
+  matchesPlayedSmash  Int   @default(0)    @map("matches_played_smash")
+  tournamentsWonSmash Int   @default(0)    @map("tournaments_won_smash")
   bannedAt        DateTime? @map("banned_at")
   anonymizedAt    DateTime? @map("anonymized_at")
   deletionScheduledAt DateTime? @map("deletion_scheduled_at")
@@ -217,6 +221,7 @@ model Challenge {
   challengerLogin String    @map("challenger_login")
   opponentLogin   String    @map("opponent_login")
   status          String    // 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled'
+  game            String    @default("babyfoot") // 'babyfoot' | 'smash'
   scheduledAt     DateTime  @map("scheduled_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   decidedAt       DateTime? @map("decided_at")
@@ -236,6 +241,12 @@ model PendingMatch {
   scoreDeclarer   Int      @map("score_declarer")
   scoreOpponent   Int      @map("score_opponent")
   declaredAt      DateTime @default(now()) @map("declared_at")
+  // Multi-jeu : babyfoot par défaut ; champs smash optionnels.
+  game            String   @default("babyfoot")
+  bestOf          Int?     @map("best_of")
+  charDeclarer    String?  @map("char_declarer")
+  charOpponent    String?  @map("char_opponent")
+  stocks          Int?     // vies restantes du gagnant au game décisif
 
   declarer User @relation("declarer", fields: [declarerLogin], references: [login])
   opponent User @relation("opponent", fields: [opponentLogin], references: [login])
@@ -256,6 +267,13 @@ model PlayedMatch {
   deltaA        Int      @map("delta_a")
   deltaB        Int      @map("delta_b")
   seasonId      String?  @map("season_id") // saison à laquelle appartient ce match
+  // Multi-jeu : babyfoot par défaut ; champs smash optionnels.
+  game          String   @default("babyfoot")
+  bestOf        Int?     @map("best_of")
+  charA         String?  @map("char_a")
+  charB         String?  @map("char_b")
+  stocksA       Int?     @map("stocks_a")
+  stocksB       Int?     @map("stocks_b")
 
   playerA User @relation("playerA", fields: [playerALogin], references: [login])
   playerB User @relation("playerB", fields: [playerBLogin], references: [login])

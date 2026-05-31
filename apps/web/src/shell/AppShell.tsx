@@ -4,6 +4,7 @@ import { MobileShell } from './MobileShell';
 import { ViewportSwitch } from './ViewportSwitch';
 import { NotifBanner } from '../components/NotifBanner';
 import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
+import { GameModeSwitch } from '../components/GameModeSwitch';
 
 interface AppShellProps {
   children: ReactNode;
@@ -28,6 +29,7 @@ export function AppShell({ children }: AppShellProps) {
       />
       <NotifBanner />
       <OpsRevealOverlay />
+      <GameModeSwitch />
     </>
   );
 }

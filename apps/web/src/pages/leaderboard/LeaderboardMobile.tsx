@@ -10,9 +10,15 @@ import { LeaderboardScatter, RankingViewToggle, type RankingView } from './Leade
 import { PlayerLink } from '../../components/PlayerLink';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 
 export function LeaderboardMobile() {
-  const { leaderboard, matches, me, allOps, locations, refresh } = useLeagueData();
+  const { leaderboard, matches: allMatches, me, allOps, locations, refresh } = useLeagueData();
+  const { game } = useGameMode();
+  const matches = useMemo(
+    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
+    [allMatches, game],
+  );
   const myLogin = me?.login;
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<RankingView>('list');

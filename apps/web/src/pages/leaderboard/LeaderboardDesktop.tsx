@@ -11,6 +11,7 @@ import { WinRateBar } from '../../components/WinRateBar';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
 
 // ─── Stats dérivées par joueur ───────────────────────────────────────────────
@@ -58,8 +59,15 @@ type SortDir = 'asc' | 'desc';
  */
 export function LeaderboardDesktop() {
   const t = useT();
-  const { leaderboard, matches, me, allOps, locations } = useLeagueData();
+  const { leaderboard, matches: allMatches, me, allOps, locations } = useLeagueData();
+  const { game } = useGameMode();
   const myLogin = me?.login;
+  // Le classement courant est celui du mode (babyfoot|smash) → on ne calcule les
+  // stats dérivées que sur les matchs de ce jeu.
+  const matches = useMemo(
+    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
+    [allMatches, game],
+  );
 
   // Statistiques complètes par login : W/L, games, winrate, série en cours.
   const statsByLogin = useMemo(() => {

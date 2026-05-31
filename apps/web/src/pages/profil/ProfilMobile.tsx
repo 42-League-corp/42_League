@@ -9,12 +9,14 @@ import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useAuth } from '../../hooks/useAuth';
 import { haptic } from '../../mobile/feedback/useHaptic';
 
 export function ProfilMobile() {
   const { stats, recentMatches, myLogin } = useProfilLogic();
   const { me, matches, refresh } = useLeagueData();
+  const { game } = useGameMode();
   const { signOut } = useAuth();
 
   if (!me?.user) {
@@ -45,6 +47,7 @@ export function ProfilMobile() {
               matches={matches}
               myLogin={myLogin}
               currentElo={stats.elo}
+              game={game}
               height={96}
             />
           </div>
