@@ -149,10 +149,13 @@
 
 **Dans le code :**
 - Le webhook Discord (`audit.ts`) envoie des notifications admin mais **sans données personnelles identifiables** (login anonymisé avant envoi selon le code).
-- **Toutes les routes exposant des données 42 exigent désormais une authentification** (`getCurrentLogin`). Audit effectué sur `index.ts` : sur ~60 routes, seule `GET /health` est publique (et ne renvoie que `{ ok: true }`).
-- Les 3 routes qui fuyaient des données sans auth ont été corrigées : `GET /tournaments`, `GET /tournaments/:id`, `GET /ops`.
+- **Audit exhaustif des ~62 routes effectué** : chaque route exposant des données 42 appelle `getCurrentLogin`/`getStreamLogin`. Seule `GET /health` est publique (renvoie `{ ok: true }`, aucune donnée).
+- **4 routes qui fuyaient des données sans auth ont été corrigées** : `GET /tournaments`, `GET /tournaments/:id`, `GET /ops`, `GET /ops/user/:login`.
+- **`POST /admin/refresh-images`** n'avait **aucune** authentification (déclenchait des appels en masse vers l'API 42) → désormais protégée par `requireAdmin` + journalisée.
+- **Durcissement CORS** : le test d'origine intra par sous-chaîne (`includes('intra.42.fr')`, contournable via `intra.42.fr.evil.com`) est remplacé par une validation stricte par hostname (`isTrusted42Origin`).
+- **Couverture par tests** : `auth-coverage.itest.ts` fige le 401-sans-auth de toutes les routes de lecture + le 403 d'élévation de privilège ; toute future route qui oublierait l'auth casse la CI.
 
-**Statut : ✅** — Aucune donnée 42 (login, photo, ELO) n'est accessible sans être un étudiant 42 connecté. Le cloisonnement « strictement au sein du Réseau 42 » est respecté, l'hébergement externe (Scaleway) étant sans incidence puisque l'accès aux données reste réservé aux utilisateurs 42 authentifiés.
+**Statut : ✅** — Aucune donnée 42 (login, photo, ELO) n'est accessible sans être un étudiant 42 connecté. Cloisonnement « strictement au sein du Réseau 42 » respecté et verrouillé par tests. L'hébergement externe (Scaleway) est sans incidence : l'accès aux données reste réservé aux utilisateurs 42 authentifiés.
 
 #### Accès par un tiers non autorisé
 
@@ -178,9 +181,9 @@
 | Droit à l'effacement | `DELETE /me/account` — anonymisation |
 | Droit de rectification | Via email de contact |
 | Contact responsable | `abidaux@student.42lehavre.fr` |
-| Consentement au moment du login | **Non formalisé par action explicite** |
+| Consentement au moment du login | ✅ Écran-barrière `ConsentGate` + preuve horodatée/versionnée |
 
-**Statut : ⚠️** — La politique de confidentialité est complète. Mais le consentement n'est pas recueilli par une action dédiée (case à cocher, écran de consentement). La base légale « intérêt légitime » doit être documentée et justifiée formellement.
+**Statut : ✅** — La politique de confidentialité est complète et le consentement est recueilli par une action utilisateur dédiée (bouton « Accepter »), avant tout traitement, avec preuve conservée et application stricte côté serveur (voir sections 3.1 & 4.1).
 
 ### 4.3 Sécurité des Données et Applications
 
@@ -197,12 +200,14 @@
 | Rate limiting | `rate-limit.ts` — global (600/min), auth (50/15min), write (120/min) |
 | Validation des entrées | Zod schemas sur toutes les mutations |
 | Audit log admin | `audit.ts` — toutes les actions admin tracées |
+| Contrôle d'accès par rôle | Chaque route `/admin/*` exige `requireAdmin`/`requireSuperAdmin` (testé : USER → 403) |
+| Validation d'origine CORS | `isTrusted42Origin` — hostname exact, non contournable par sous-chaîne |
 | Rotation secret mensuelle | Gérée par 42 (côté API 42) |
 | Chiffrement au repos | Non documenté dans le code (dépend de la config PostgreSQL/Scaleway) |
 | Pseudonymisation | Anonymisation via `anon_{hash}` sur suppression de compte |
 | Sauvegardes | Non documenté dans le code (dépend de l'infra Scaleway) |
 
-**Statut : ⚠️** — Sécurité applicative solide. Les points non documentés (chiffrement au repos PostgreSQL, politique de sauvegardes) dépendent de la configuration serveur Scaleway, mais doivent être vérifiés et documentés.
+**Statut : ⚠️** — Sécurité applicative solide (auth, RBAC testé, CORS durci, rate limiting, audit). Restent deux points **infra** non vérifiables dans le code et qui dépendent de la config Scaleway : **chiffrement au repos** de PostgreSQL et **politique de sauvegardes** — à confirmer et documenter (seul écart restant côté serveur).
 
 ### 4.4 Accès et modification des Données
 
@@ -300,20 +305,22 @@
 
 ## Synthèse et actions prioritaires
 
-### ✅ Corrigé dans cette itération (2026-05-31)
+### ✅ Corrigé et testé dans cette itération (2026-05-31)
 
-- **Consentement RGPD explicite** : écran-barrière `ConsentGate.tsx` au premier login, preuve horodatée + versionnée (`termsAcceptedAt`/`termsVersion`), application stricte côté serveur via consent-gate (`403 consent_required`). Refus = suppression/anonymisation immédiate. *(Articles 3.1, 4.2)*
-- **Cloisonnement complet des routes** : `GET /tournaments`, `GET /tournaments/:id` et `GET /ops` exigent désormais une authentification 42 League — plus aucune donnée 42 accessible hors du Réseau 42. *(Article 3, 4.1)*
+- **Consentement RGPD explicite** : écran-barrière `ConsentGate.tsx` au premier login, preuve horodatée + versionnée (`termsAcceptedAt`/`termsVersion`), application stricte côté serveur via consent-gate (`403 consent_required`). Refus = suppression/anonymisation immédiate. *(Articles 3.1, 4.2)* — couvert par `consent.itest.ts` (19 tests).
+- **Cloisonnement complet des routes** : 4 routes corrigées (`/tournaments`, `/tournaments/:id`, `/ops`, `/ops/user/:login`) + `POST /admin/refresh-images` (qui n'avait aucune auth) → plus aucune donnée 42 hors authentification. *(Articles 3, 4.1)* — verrouillé par `auth-coverage.itest.ts` (29 tests).
+- **Durcissement CORS** : validation d'origine intra par hostname exact (`isTrusted42Origin`) au lieu d'un `includes` contournable. *(Article 4.3)* — couvert par tests unitaires.
+- **Contrôle de privilège vérifié** : audit des 22 routes `/admin/*` → toutes gardées par `requireAdmin`/`requireSuperAdmin` (testé : USER → 403).
 
-### ⚠️ Actions recommandées restantes
+**Vérification : 118 tests unitaires + 80 tests d'intégration au vert.**
 
-1. **Documenter la durée de conservation** des données des utilisateurs actifs dans la politique de confidentialité (actuellement, seule la durée des logs admin — 24 mois — est mentionnée).
+### ⚠️ Actions restantes (hors code — infra & juridique)
 
-2. **Vérifier et documenter le chiffrement au repos** de la base PostgreSQL sur Scaleway.
-
-3. **Rédiger des CGU 42 League** accessibles aux utilisateurs finaux (distinctes de la politique de confidentialité).
-
-4. **Envisager la vérification du statut `kind`** via l'API 42 pour bloquer les candidats non-étudiants.
+1. **Appliquer la migration** `20260531120000_add_terms_consent` en production (`npm run db:migrate`).
+2. **Vérifier et documenter le chiffrement au repos** de PostgreSQL + la **politique de sauvegardes** sur Scaleway *(seuls écarts techniques restants, non vérifiables dans le code)*.
+3. **Documenter la durée de conservation** des données des utilisateurs actifs dans la politique de confidentialité.
+4. **Rédiger des CGU 42 League** accessibles aux utilisateurs finaux (distinctes de la politique de confidentialité).
+5. **Envisager la vérification du statut `kind`** via l'API 42 pour bloquer les candidats non-étudiants.
 
 ### ℹ️ Écarté (choix assumé)
 
