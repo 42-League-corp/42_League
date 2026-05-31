@@ -46,8 +46,23 @@ model User {
   rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
   rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
   notifications       Notification[]     @relation("notif")
+  badges              UserBadge[]        @relation("userBadges")
 
   @@map("users")
+}
+
+model UserBadge {
+  id        String   @id @default(uuid())
+  userLogin String   @map("user_login")
+  code      String   // code du badge (cf. catalogue front), ex. 'beta_tester', 'season_champion'
+  seasonId  String?  @map("season_id") // saison associée (badges de palmarès), si pertinent
+  awardedAt DateTime @default(now()) @map("awarded_at")
+
+  user User @relation("userBadges", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([userLogin, code])
+  @@index([userLogin])
+  @@map("user_badges")
 }
 
 model Notification {

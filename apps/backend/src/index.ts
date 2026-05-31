@@ -185,6 +185,22 @@ async function announceNewPlayer(login: string): Promise<void> {
   }
 }
 
+// Badges d'un joueur : badges par défaut dérivés du rôle (admin/superadmin) et
+// du fondateur (throbert), suivis des badges gagnés (stockés en base).
+async function badgesFor(login: string, role: string): Promise<string[]> {
+  const earned = await prisma.userBadge.findMany({
+    where: { userLogin: login },
+    select: { code: true },
+    orderBy: { awardedAt: 'asc' },
+  });
+  const out: string[] = [];
+  if (login.toLowerCase() === 'throbert') out.push('founder');
+  if (role === 'SUPERADMIN') out.push('superadmin');
+  else if (role === 'ADMIN') out.push('admin');
+  for (const e of earned) out.push(e.code);
+  return [...new Set(out)];
+}
+
 async function getOrCreateUser(login: string, profile?: FtProfile) {
   const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
   // Sert à détecter un tout nouveau compte (pour notifier la league).
@@ -441,7 +457,8 @@ app.get('/me', async (c) => {
   const login = await getCurrentLogin(c);
   const user = await prisma.user.findUnique({ where: { login } });
   const role = await getUserRole(login);
-  return c.json({ login, user, role, isAdmin: isAdmin(login) });
+  const badges = user ? await badgesFor(login, role) : [];
+  return c.json({ login, user, role, isAdmin: isAdmin(login), badges });
 });
 
 // ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
@@ -613,7 +630,8 @@ app.get('/users/:login', async (c) => {
     return (isA && m.winner === 'A') || (!isA && m.winner === 'B');
   }).length;
   const losses = played.length - wins;
-  return c.json({ user, rank: rank || null, wins, losses, recent: played });
+  const badges = await badgesFor(login, user.role);
+  return c.json({ user, rank: rank || null, wins, losses, recent: played, badges });
 });
 
 app.get('/leaderboard', async (c) => {

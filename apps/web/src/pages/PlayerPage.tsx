@@ -7,6 +7,7 @@ import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
 import { StatCard } from '../components/StatCard';
 import { PlayerLink } from '../components/PlayerLink';
+import { BadgesRow } from '../components/Badges';
 import { EloChart } from '../components/EloChart';
 import {
   api,
@@ -104,6 +105,11 @@ export function PlayerPage() {
           </div>
           {p.user.title && (
             <div className="text-gold italic text-sm mt-1.5">« {p.user.title} »</div>
+          )}
+          {p.badges && p.badges.length > 0 && (
+            <div className="mt-2">
+              <BadgesRow codes={p.badges} />
+            </div>
           )}
           {!isMe && myLogin && (
             <Button
