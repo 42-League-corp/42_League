@@ -3,6 +3,16 @@ www.42league.fr {
 }
 
 42league.fr {
+    # Headers de durcissement appliqués à toutes les réponses (front + API).
+    # Vérifiés quotidiennement par .github/workflows/daily-security-audit.yml.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
     handle /api/* {
         uri strip_prefix /api
         reverse_proxy backend:3000 {

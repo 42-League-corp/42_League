@@ -1,14 +1,12 @@
 name: Security alerts → Discord
 
 on:
-  # Temps réel : déclenché quand CodeQL/Trivy créent une nouvelle alerte
+  # Temps réel UNIQUEMENT : déclenché quand CodeQL/Trivy créent une nouvelle alerte.
+  # Le résumé quotidien consolidé (tests + npm audit + sondes live + alertes) est
+  # désormais géré par `daily-security-audit.yml` — on évite ici le doublon de message.
   code_scanning_alert:
     types: [created, reopened]
-  # Résumé quotidien ~8h Paris. Minute décalée (≠ :00) car GitHub retarde/abandonne
-  # souvent les crons pile à l'heure pendant les pics de charge.
-  # Note : 6h UTC = 8h Paris en été (CEST) ; 7h Paris en hiver (CET).
-  schedule:
-    - cron: '23 6 * * *'
+  # Dispatch manuel : produit un résumé des alertes ouvertes à la demande.
   workflow_dispatch:
 
 jobs:
@@ -44,6 +42,10 @@ jobs:
               "$WEBHOOK"
           }
 
+          # NL : vrai saut de ligne en variable. Sans ça, une ligne à la colonne 0
+          # dans un "msg=..." multi-ligne fermerait prématurément le bloc YAML `|`.
+          NL=$'\n'
+
           if [ "$EVENT_NAME" = "code_scanning_alert" ]; then
             emoji="🚨"
             case "${ALERT_SEVERITY:-}" in
@@ -52,12 +54,10 @@ jobs:
               medium)   emoji="⚠️" ;;
               low|note) emoji="🔎" ;;
             esac
-            msg="$emoji **New code-scanning alert** [\`${ALERT_SEVERITY:-?}\`]
-\`${ALERT_RULE:-?}\` — ${ALERT_DESC:-no description}
-${ALERT_URL:-}"
+            msg="$emoji **New code-scanning alert** [\`${ALERT_SEVERITY:-?}\`]${NL}\`${ALERT_RULE:-?}\` — ${ALERT_DESC:-no description}${NL}${ALERT_URL:-}"
             send "$msg"
           else
-            # Cron ou manuel : résumé des alertes ouvertes
+            # Dispatch manuel : résumé des alertes ouvertes
             open=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$REPO/code-scanning/alerts?state=open&per_page=100" \
               | jq 'length')
@@ -65,9 +65,7 @@ ${ALERT_URL:-}"
               by_sev=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
                 "https://api.github.com/repos/$REPO/code-scanning/alerts?state=open&per_page=100" \
                 | jq -r '[.[] | .rule.severity] | group_by(.) | map("\(.[0]): \(length)") | join(" · ")')
-              msg="🛡️ **Daily security summary** — $open open alert(s)
-$by_sev
-https://github.com/$REPO/security/code-scanning"
+              msg="🛡️ **Daily security summary** — $open open alert(s)${NL}${by_sev}${NL}https://github.com/$REPO/security/code-scanning"
               send "$msg"
             else
               send "✅ **Tout va bien aujourd'hui — aucune faille de sécu détectée !**"

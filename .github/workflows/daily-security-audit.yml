@@ -1,0 +1,192 @@
+name: Daily security audit → Discord
+
+# Audit sécurité quotidien CONSOLIDÉ. Un seul run, un seul message Discord :
+#   1. Tests sécu (unit + intégration : auth, permissions, validation Zod, SQL via Prisma)
+#   2. npm audit (vulnérabilités des dépendances de prod)
+#   3. Sondes live sur le site déployé (routes /admin protégées, redirect TLS, headers)
+#   4. Résumé des alertes CodeQL/Trivy ouvertes
+# Résultat : "✅ RAS" si tout est vert, sinon "🚨" avec la liste des failles.
+on:
+  workflow_dispatch:
+  schedule:
+    # ~8h30 Paris (été) / 7h30 (hiver). Après CodeQL (3h UTC) pour avoir des alertes fraîches.
+    # Minute décalée (≠ :00) : GitHub retarde/abandonne souvent les crons pile à l'heure.
+    - cron: '34 6 * * *'
+
+permissions:
+  contents: read
+  security-events: read
+
+concurrency:
+  group: daily-security-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: league_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:55432/league_test
+      SITE: https://42league.fr
+      WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK_URL }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/backend
+        run: npx prisma generate
+
+      - name: Run audit & post consolidated report
+        if: always()
+        run: |
+          set -uo pipefail
+
+          checks=()    # lignes d'état affichées dans le rapport (✅ / ⚠️ / ❌)
+          findings=()  # vraies failles → déclenchent le 🚨
+          add_check()   { checks+=("$1"); }
+          add_finding() { findings+=("$1"); }
+
+          # ── 1. Tests sécurité (unit + intégration) ──────────────────────────
+          if npm test > /tmp/unit.log 2>&1; then
+            add_check "✅ Tests unitaires (backend + shared)"
+          else
+            add_check "❌ Tests unitaires en échec"
+            add_finding "Tests unitaires \`npm test\` en échec (régression possible)"
+          fi
+
+          if (cd apps/backend && npm run test:integration) > /tmp/itest.log 2>&1; then
+            add_check "✅ Tests d'intégration sécu (auth / permissions / SQL / validation)"
+          else
+            add_check "❌ Tests d'intégration sécu en échec"
+            add_finding "Tests d'intégration en échec : chemins auth/permissions/validation"
+          fi
+
+          # ── 2. npm audit (dépendances de prod) ──────────────────────────────
+          audit_json=$(npm audit --omit=dev --json 2>/dev/null || true)
+          crit=$(printf '%s' "$audit_json" | jq -r '.metadata.vulnerabilities.critical // 0' 2>/dev/null || echo 0)
+          high=$(printf '%s' "$audit_json" | jq -r '.metadata.vulnerabilities.high // 0' 2>/dev/null || echo 0)
+          if [ "$((crit + high))" -gt 0 ]; then
+            add_check "❌ npm audit : ${crit} critical · ${high} high"
+            add_finding "Dépendances vulnérables : ${crit} critical / ${high} high (\`npm audit --omit=dev\`)"
+          else
+            add_check "✅ npm audit (prod) : 0 high/critical"
+          fi
+
+          # ── 3. Sondes live sur le site déployé ──────────────────────────────
+          http_code() { curl -sS -m 15 -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || echo 000; }
+
+          # 3a. Liveness
+          health=$(http_code "$SITE/api/health")
+          if [ "$health" = "200" ]; then
+            add_check "✅ Site joignable (/api/health → 200)"
+          else
+            add_check "❌ Site injoignable (/api/health → ${health})"
+            add_finding "Site potentiellement down : /api/health renvoie ${health}"
+          fi
+
+          # 3b. Routes /admin : DOIVENT exiger l'auth (401). Un 200 = route exposée.
+          exposed=0
+          for path in /api/admin/users /api/admin/audit-log /api/admin/all-history /api/admin/suspicious; do
+            code=$(http_code "$SITE$path")
+            case "$code" in
+              401|403) : ;;                                   # protégé, OK
+              200)     exposed=1
+                       add_finding "🔴 Route admin EXPOSÉE sans auth : \`${path}\` (HTTP 200)" ;;
+              000|5*)  : ;;                                   # bruit réseau / déjà couvert par health
+              *)       add_check "⚠️ \`${path}\` → ${code} (attendu 401)" ;;
+            esac
+          done
+          # /api/me sans session doit aussi renvoyer 401
+          me=$(http_code "$SITE/api/me")
+          [ "$me" = "200" ] && { exposed=1; add_finding "🔴 \`/api/me\` accessible sans authentification (HTTP 200)"; }
+          if [ "$exposed" -eq 0 ]; then
+            add_check "✅ Routes /admin + /me protégées (401 sans auth)"
+          fi
+
+          # 3c. Redirection HTTP → HTTPS
+          redir=$(http_code "http://42league.fr")
+          case "$redir" in
+            301|302|308) add_check "✅ Redirection HTTP → HTTPS active (${redir})" ;;
+            000)         : ;;
+            *)           add_check "⚠️ Pas de redirection HTTPS sur http:// (${redir})" ;;
+          esac
+
+          # 3d. Headers de sécurité (durcissement, non bloquant)
+          headers=$(curl -sS -m 15 -D - -o /dev/null "$SITE/" 2>/dev/null | tr 'A-Z' 'a-z' || true)
+          missing=""
+          printf '%s' "$headers" | grep -q 'strict-transport-security' || missing="${missing}HSTS "
+          printf '%s' "$headers" | grep -q 'x-content-type-options'     || missing="${missing}X-Content-Type-Options "
+          printf '%s' "$headers" | grep -q 'x-frame-options'            || missing="${missing}X-Frame-Options "
+          if [ -z "$missing" ]; then
+            add_check "✅ Headers sécu présents (HSTS, nosniff, frame-options)"
+          else
+            add_check "⚠️ Headers manquants : ${missing}(durcissement Caddy, recharger la prod)"
+          fi
+
+          # ── 4. Alertes CodeQL / Trivy ouvertes ──────────────────────────────
+          alerts=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/code-scanning/alerts?state=open&per_page=100" 2>/dev/null || echo '[]')
+          open=$(printf '%s' "$alerts" | jq 'if type=="array" then length else 0 end' 2>/dev/null || echo 0)
+          if [ "$open" -gt 0 ]; then
+            by_sev=$(printf '%s' "$alerts" | jq -r '[.[].rule.severity] | group_by(.) | map("\(.[0]): \(length)") | join(" · ")' 2>/dev/null || echo '?')
+            add_check "❌ CodeQL/Trivy : ${open} alerte(s) ouverte(s)"
+            add_finding "Code-scanning : ${open} alerte(s) ouverte(s) — ${by_sev}"
+          else
+            add_check "✅ CodeQL/Trivy : 0 alerte ouverte"
+          fi
+
+          # ── 5. Composition du message + envoi Discord ───────────────────────
+          # NL : on construit le message avec un vrai saut de ligne en variable, sinon
+          # une ligne à la colonne 0 fermerait le bloc YAML `|` ci-dessus.
+          NL=$'\n'
+          checks_block=$(printf '%s\n' "${checks[@]}")
+          if [ "${#findings[@]}" -eq 0 ]; then
+            msg="✅ **Audit sécurité quotidien — RAS, tout va bien aujourd'hui !**${NL}${NL}${checks_block}"
+          else
+            findings_block=$(printf '• %s\n' "${findings[@]}")
+            msg="🚨 **Audit sécurité quotidien — ${#findings[@]} problème(s) détecté(s)**${NL}${NL}${findings_block}${NL}__Détail des contrôles__${NL}${checks_block}${NL}🔗 ${RUN_URL}"
+          fi
+
+          # Résumé aussi dans l'onglet Actions
+          { echo "## Audit sécurité quotidien"; echo '```'; echo "$msg"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::warning::DISCORD_SECURITY_WEBHOOK_URL absent — message non envoyé"
+          else
+            # Discord limite à 2000 caractères : on tronque par sécurité.
+            msg=$(printf '%s' "$msg" | cut -c1-1900)
+            curl -sS -X POST -H "Content-Type: application/json" \
+              -d "$(jq -nc --arg c "$msg" '{content: $c, allowed_mentions: {parse: []}}')" \
+              "$WEBHOOK" > /dev/null
+          fi
+
+          # Run rouge dans Actions si vraie faille (signal + email aux mainteneurs).
+          if [ "${#findings[@]}" -gt 0 ]; then
+            echo "::error::${#findings[@]} problème(s) de sécurité détecté(s) — voir le rapport Discord"
+            exit 1
+          fi
