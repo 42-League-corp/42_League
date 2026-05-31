@@ -239,6 +239,31 @@ async function badgesFor(login: string, role: string): Promise<string[]> {
   return [...new Set(out)];
 }
 
+// Palmarès d'un joueur : ses classements finaux par saison (récents d'abord).
+async function palmaresFor(login: string): Promise<
+  { seasonId: string; seasonName: string; rank: number; elo: number; wins: number; losses: number }[]
+> {
+  const standings = await prisma.seasonStanding.findMany({ where: { login } });
+  if (!standings.length) return [];
+  const seasons = await prisma.season.findMany({
+    where: { id: { in: standings.map((s) => s.seasonId) } },
+    select: { id: true, name: true, startedAt: true },
+  });
+  const byId = new Map(seasons.map((s) => [s.id, s]));
+  return standings
+    .map((s) => ({
+      seasonId: s.seasonId,
+      seasonName: byId.get(s.seasonId)?.name ?? 'Saison',
+      rank: s.rank,
+      elo: s.elo,
+      wins: s.wins,
+      losses: s.losses,
+      _t: byId.get(s.seasonId)?.startedAt?.getTime() ?? 0,
+    }))
+    .sort((a, b) => b._t - a._t)
+    .map(({ _t, ...rest }) => rest);
+}
+
 async function getOrCreateUser(login: string, profile?: FtProfile) {
   const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
   // Sert à détecter un tout nouveau compte (pour notifier la league).
@@ -496,7 +521,8 @@ app.get('/me', async (c) => {
   const user = await prisma.user.findUnique({ where: { login } });
   const role = await getUserRole(login);
   const badges = user ? await badgesFor(login, role) : [];
-  return c.json({ login, user, role, isAdmin: isAdmin(login), badges });
+  const palmares = user ? await palmaresFor(login) : [];
+  return c.json({ login, user, role, isAdmin: isAdmin(login), badges, palmares });
 });
 
 // ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
@@ -676,6 +702,7 @@ app.get('/users/:login', async (c) => {
       : await prisma.follow.findUnique({
           where: { followerLogin_followeeLogin: { followerLogin: me, followeeLogin: login } },
         });
+  const palmares = await palmaresFor(login);
   return c.json({
     user,
     rank: rank || null,
@@ -683,6 +710,7 @@ app.get('/users/:login', async (c) => {
     losses,
     recent: played,
     badges,
+    palmares,
     following: !!follow,
     followPrefs: follow
       ? {
@@ -731,6 +759,104 @@ app.post('/notifications/read', async (c) => {
     data: { read: true },
   });
   return c.json({ ok: true });
+});
+
+// ── Saisons ───────────────────────────────────────────────────────────────
+app.get('/seasons', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(await prisma.season.findMany({ orderBy: { startedAt: 'desc' } }));
+});
+
+app.get('/seasons/current', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(await prisma.season.findFirst({ where: { isActive: true } }));
+});
+
+app.get('/seasons/:id/standings', async (c) => {
+  await getCurrentLogin(c);
+  const id = c.req.param('id');
+  return c.json(await prisma.seasonStanding.findMany({ where: { seasonId: id }, orderBy: { rank: 'asc' } }));
+});
+
+const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
+
+// Crée une nouvelle saison active. Refuse s'il y a déjà une saison en cours.
+app.post('/seasons', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = CreateSeasonSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const active = await prisma.season.findFirst({ where: { isActive: true } });
+  if (active) {
+    throw new HTTPException(409, { message: "Clôture la saison en cours avant d'en créer une nouvelle." });
+  }
+  const season = await prisma.season.create({
+    data: { id: randomUUID(), name: parsed.data.name, isActive: true },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json(season, 201);
+});
+
+// Clôture la saison active : snapshot du classement final, badge champion, reset
+// ELO/compteurs à 1000/0 pour tout le monde. L'historique des matchs est conservé
+// (taggé par saison). IRRÉVERSIBLE.
+app.post('/seasons/close', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const result = await prisma.$transaction(async (tx) => {
+    const active = await tx.season.findFirst({ where: { isActive: true } });
+    if (!active) throw new HTTPException(409, { message: 'Aucune saison active à clôturer.' });
+
+    const users = await tx.user.findMany({ where: VISIBLE_USER_WHERE, orderBy: { elo: 'desc' } });
+    const matches = await tx.playedMatch.findMany({
+      where: { seasonId: active.id },
+      select: { playerALogin: true, playerBLogin: true, winner: true },
+    });
+    const wl = new Map<string, { w: number; l: number }>();
+    for (const u of users) wl.set(u.login, { w: 0, l: 0 });
+    for (const m of matches) {
+      for (const login of [m.playerALogin, m.playerBLogin]) {
+        const rec = wl.get(login);
+        if (!rec) continue;
+        const isA = m.playerALogin === login;
+        const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+        if (won) rec.w++;
+        else rec.l++;
+      }
+    }
+    let rank = 0;
+    for (const u of users) {
+      rank++;
+      const s = wl.get(u.login) ?? { w: 0, l: 0 };
+      await tx.seasonStanding.create({
+        data: { id: randomUUID(), seasonId: active.id, login: u.login, rank, elo: u.elo, wins: s.w, losses: s.l },
+      });
+    }
+    const champion = users[0]?.login ?? null;
+    if (champion) {
+      await tx.userBadge.upsert({
+        where: { userLogin_code: { userLogin: champion, code: 'season_champion' } },
+        update: { seasonId: active.id },
+        create: { id: randomUUID(), userLogin: champion, code: 'season_champion', seasonId: active.id },
+      });
+    }
+    // Reset pour la prochaine ère.
+    await tx.user.updateMany({ data: { elo: 1000, matchesPlayed: 0 } });
+    await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
+    return { seasonId: active.id, seasonName: active.name, champion, players: users.length };
+  });
+  if (result.champion) {
+    void notify(result.champion, {
+      type: 'badge',
+      title: '🏆 Champion de saison !',
+      body: `Tu remportes ${result.seasonName} — badge débloqué.`,
+      link: '/profile',
+    });
+  }
+  broadcast({ type: 'data:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ closed: true, ...result });
 });
 
 // ── Followers / Following ─────────────────────────────────────────────────
@@ -887,6 +1013,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
 
   await tx.pendingMatch.delete({ where: { id: p.id } });
 
+  const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
+
   return tx.playedMatch.create({
     data: {
       id: p.id,
@@ -899,6 +1027,7 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
       countedForElo: countsForElo,
       deltaA,
       deltaB,
+      seasonId: activeSeason?.id ?? null,
     },
   });
 }

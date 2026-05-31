@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
+import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
@@ -105,6 +106,29 @@ export function LeaderboardDesktop() {
   // ─── Vue (liste / nuage) ─────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<RankingView>('list');
 
+  // ─── Saison affichée : '' = en cours (live), sinon snapshot d'une saison passée ───
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonId, setSeasonId] = useState<string>('');
+  const [standings, setStandings] = useState<SeasonStanding[] | null>(null);
+
+  useEffect(() => {
+    api.seasons().then(setSeasons).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!seasonId) {
+      setStandings(null);
+      return;
+    }
+    let alive = true;
+    api.seasonStandings(seasonId).then((s) => alive && setStandings(s)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [seasonId]);
+
+  const viewingPast = standings !== null;
+
   // ─── Tri ───────────────────────────────────────────────────────────────────
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'rank', dir: 'asc' });
 
@@ -164,13 +188,16 @@ export function LeaderboardDesktop() {
 
   return (
     <div>
-      {top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
+      {!viewingPast && top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
-        <div className="flex justify-end mb-3">
-          <RankingViewToggle view={viewMode} onChange={setViewMode} />
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
+          {!viewingPast && <RankingViewToggle view={viewMode} onChange={setViewMode} />}
         </div>
-        {leaderboard.length === 0 ? (
+        {viewingPast ? (
+          <SnapshotTable standings={standings ?? []} />
+        ) : leaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
         ) : viewMode === 'graph' ? (
           <LeaderboardScatter entries={leaderboard} myLogin={myLogin} className="h-[640px]" />
@@ -272,6 +299,77 @@ export function LeaderboardDesktop() {
           </div>
         )}
       </Panel>
+    </div>
+  );
+}
+
+// ─── Sélecteur de saison (en cours / saisons passées) ────────────────────────
+function SeasonSelect({
+  seasons,
+  value,
+  onChange,
+}: {
+  seasons: Season[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const past = seasons.filter((s) => !s.isActive);
+  if (past.length === 0) return <div />;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-bold uppercase tracking-wider text-text focus:border-gold outline-none transition-colors"
+    >
+      <option value="">En cours</option>
+      {past.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ─── Classement figé d'une saison passée ──────────────────────────────────────
+function SnapshotTable({ standings }: { standings: SeasonStanding[] }) {
+  if (standings.length === 0) {
+    return <div className="text-center text-muted-2 py-10">Aucun classement archivé pour cette saison.</div>;
+  }
+  return (
+    <div className="overflow-x-auto -mx-4 sm:mx-0">
+      <table className="w-full text-sm border-separate border-spacing-0">
+        <thead>
+          <tr className="font-gaming text-[10px] uppercase tracking-[0.14em] text-gold/80 font-extrabold">
+            <th className="px-3 py-2 border-b border-gold/20 text-left">#</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-left">Joueur</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-right">ELO final</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-right">V-D</th>
+          </tr>
+        </thead>
+        <tbody>
+          {standings.map((s) => {
+            const rankCls =
+              s.rank === 1 ? 'text-gold' : s.rank === 2 ? 'text-muted-2' : s.rank === 3 ? 'text-[#cd7f32]' : 'text-muted';
+            return (
+              <tr key={s.login} className="border-t border-gold/10 hover:bg-gold/[0.04] transition-colors">
+                <td className={`px-3 py-2.5 font-display font-black tabular-nums ${rankCls}`}>
+                  {s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : `#${s.rank}`}
+                </td>
+                <td className="px-3 py-2.5">
+                  <PlayerLink login={s.login}>
+                    <span className="font-semibold truncate">{s.login}</span>
+                  </PlayerLink>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-display font-extrabold text-gold">{s.elo}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-muted-2">
+                  {s.wins}-{s.losses}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

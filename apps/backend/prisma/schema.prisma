@@ -252,12 +252,39 @@ model PlayedMatch {
   countedForElo Boolean  @map("counted_for_elo")
   deltaA        Int      @map("delta_a")
   deltaB        Int      @map("delta_b")
+  seasonId      String?  @map("season_id") // saison à laquelle appartient ce match
 
   playerA User @relation("playerA", fields: [playerALogin], references: [login])
   playerB User @relation("playerB", fields: [playerBLogin], references: [login])
 
   @@index([playerALogin, playerBLogin, playedAt])
+  @@index([seasonId])
   @@map("played_matches")
+}
+
+model Season {
+  id        String    @id @default(uuid())
+  name      String
+  isActive  Boolean   @default(false) @map("is_active")
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  @@map("seasons")
+}
+
+// Snapshot du classement final d'une saison (figé à la clôture).
+model SeasonStanding {
+  id       String @id @default(uuid())
+  seasonId String @map("season_id")
+  login    String
+  rank     Int
+  elo      Int
+  wins     Int
+  losses   Int
+
+  @@index([seasonId])
+  @@index([login])
+  @@map("season_standings")
 }
 
 enum AdminAction {

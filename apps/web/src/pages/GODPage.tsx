@@ -15,9 +15,10 @@ import {
   type AdminAuditAction,
   type AllHistoryEvent,
   type AllHistoryEventType,
+  type Season,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history' | 'seasons';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -1785,6 +1786,159 @@ function PendingTab() {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 // `pending` (force-valider/annuler) est réservé au SUPERADMIN → filtré à l'affichage.
+// ── Saisons (SUPERADMIN) ────────────────────────────────────────────────────
+const CLOSE_CONFIRM_PHRASE = 'cloturer la saison';
+
+function CloseSeasonModal({
+  season,
+  onClose,
+  onDone,
+}: {
+  season: Season;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ champion: string | null; players: number } | null>(null);
+  const ok = typed.trim() === CLOSE_CONFIRM_PHRASE;
+
+  async function handleClose() {
+    setBusy(true);
+    try {
+      const r = await api.closeSeason();
+      setResult({ champion: r.champion, players: r.players });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
+      <div className="bg-zinc-900 border border-red-500/40 rounded-lg w-full max-w-md p-5 font-mono" onClick={(e) => e.stopPropagation()}>
+        {result ? (
+          <div className="space-y-3 text-sm text-zinc-200">
+            <div className="text-emerald-400 font-bold">Saison clôturée ✓</div>
+            <div>{result.players} joueur·s remis à zéro (ELO 1000).</div>
+            {result.champion && <div>🏆 Champion : <span className="text-yellow-400 font-bold">{result.champion}</span></div>}
+            <Btn variant="default" onClick={() => { onDone(); onClose(); }} className="mt-2">Fermer</Btn>
+          </div>
+        ) : (
+          <>
+            <div className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">Clôturer « {season.name} »</div>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              Snapshot du classement final + badge champion, puis <span className="text-red-400 font-bold">reset ELO 1000 pour tous</span>.
+              L'historique des matchs est conservé (taggé saison). <span className="text-red-400">Irréversible.</span>
+            </p>
+            <p className="text-[11px] text-zinc-500 mb-1">Recopie pour confirmer :</p>
+            <div className="text-yellow-400 text-xs mb-2 select-none">{CLOSE_CONFIRM_PHRASE}</div>
+            <Input value={typed} onChange={setTyped} placeholder={CLOSE_CONFIRM_PHRASE} className="w-full mb-3" />
+            <div className="flex gap-2 justify-end">
+              <Btn variant="ghost" onClick={onClose}>Annuler</Btn>
+              <Btn variant="danger" onClick={handleClose} disabled={!ok || busy}>
+                {busy ? 'Clôture…' : 'Clôturer la saison'}
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SeasonsTab() {
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [closing, setClosing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setSeasons(await api.seasons());
+    } catch {
+      /* noop */
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const active = seasons.find((s) => s.isActive) ?? null;
+
+  const create = async () => {
+    const n = name.trim();
+    if (!n) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await api.createSeason(n);
+      setName('');
+      setMsg('Saison créée ✓');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4">
+      {closing && active && (
+        <CloseSeasonModal season={active} onClose={() => setClosing(false)} onDone={load} />
+      )}
+
+      <Section title="Saison en cours">
+        {active ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-800/50 border border-zinc-700 rounded p-3">
+            <div className="text-sm text-zinc-200">
+              <span className="text-emerald-400 font-bold">{active.name}</span>
+              <span className="text-zinc-500 text-xs ml-2">depuis {fmtDate(active.startedAt)}</span>
+            </div>
+            <Btn variant="danger" onClick={() => setClosing(true)}>Clôturer la saison en cours</Btn>
+          </div>
+        ) : (
+          <div className="text-sm text-zinc-500">Aucune saison active.</div>
+        )}
+      </Section>
+
+      <Section title="Créer une nouvelle saison">
+        {active ? (
+          <div className="text-xs text-zinc-500">Clôture d'abord la saison en cours.</div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input value={name} onChange={setName} placeholder="Nom (ex. Saison 2)" className="flex-1 min-w-[180px]" />
+            <Btn variant="success" onClick={create} disabled={busy || !name.trim()}>
+              {busy ? 'Création…' : 'Créer la saison'}
+            </Btn>
+          </div>
+        )}
+        {msg && <div className="text-xs text-zinc-400 mt-2">{msg}</div>}
+      </Section>
+
+      <Section title="Historique des saisons">
+        <div className="space-y-1.5">
+          {seasons.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-2 text-xs bg-zinc-800/30 border border-zinc-800 rounded px-3 py-2">
+              <span className="text-zinc-200 font-bold">{s.name}</span>
+              <span className="text-zinc-500">
+                {s.isActive ? (
+                  <span className="text-emerald-400">en cours</span>
+                ) : (
+                  `clôturée ${s.endedAt ? fmtDate(s.endedAt) : ''}`
+                )}
+              </span>
+            </div>
+          ))}
+          {seasons.length === 0 && <div className="text-zinc-600 text-xs">Aucune saison.</div>}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'users', label: 'UTILISATEURS' },
   { id: 'moderation', label: 'MODÉRATION' },
@@ -1795,6 +1949,7 @@ const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'alertes', label: 'ALERTES' },
   { id: 'audit', label: 'AUDIT' },
   { id: 'history', label: 'ALL HISTORY' },
+  { id: 'seasons', label: 'SAISONS', superAdminOnly: true },
 ];
 
 export function GODPage() {
@@ -1898,6 +2053,7 @@ export function GODPage() {
           {activeTab === 'alertes' && <AlertesTab />}
           {activeTab === 'audit' && <AuditTab />}
           {activeTab === 'history' && <AllHistoryTab />}
+          {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
         </div>
       </div>
     </div>
