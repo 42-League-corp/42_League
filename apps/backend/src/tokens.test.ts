@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { issueToken, verifyToken } from './tokens.js';
+import { issueToken, verifyToken, issueStreamToken, verifyStreamToken } from './tokens.js';
 
 // Helpers locaux pour reproduire le format des tokens sans dépendre du module
 // (base64url(JSON payload).base64url(HMAC-SHA256(payloadB64, secret)))
@@ -184,6 +184,54 @@ describe('tokens — FORGERY: usurpation par altération du payload (SÉCURITÉ 
     const forged = issueToken('abidaux', 'guessed-wrong-secret');
     const forgedSig = forged.split('.')[1]!;
     expect(verifyToken(`${payloadB64}.${forgedSig}`, realSecret)).toBeNull();
+  });
+});
+
+describe('tokens — scope SSE (cloisonnement Bearer / stream)', () => {
+  const SECRET = 'super-secret-server-key';
+
+  it('round-trip : un stream token est validé par verifyStreamToken', () => {
+    const t = issueStreamToken('alice', SECRET);
+    expect(verifyStreamToken(t, SECRET)).toBe('alice');
+  });
+
+  it('SÉCURITÉ : un stream token (scope sse) est REFUSÉ comme Bearer', () => {
+    // C'est le cœur du correctif : un token de stream qui fuite (logs / Referer)
+    // ne doit jamais authentifier une mutation via Authorization: Bearer.
+    const t = issueStreamToken('alice', SECRET);
+    expect(verifyToken(t, SECRET)).toBeNull();
+  });
+
+  it('SÉCURITÉ : un Bearer (scope auth) ne peut PAS ouvrir le flux SSE', () => {
+    // Réciproque : on n'accepte plus le Bearer complet en query string.
+    const t = issueToken('alice', SECRET);
+    expect(verifyStreamToken(t, SECRET)).toBeNull();
+  });
+
+  it('rétro-compat : un token historique SANS scope reste un Bearer valide', () => {
+    // Les tokens 'auth' sont émis sans champ scope (format identique à l'existant).
+    const t = issueToken('alice', SECRET);
+    const payload = decodePayload(t) as Record<string, unknown>;
+    expect(payload.scope).toBeUndefined();
+    expect(verifyToken(t, SECRET)).toBe('alice');
+  });
+
+  it('un stream token expire vite (TTL ~60 s)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const t = issueStreamToken('alice', SECRET);
+    expect(verifyStreamToken(t, SECRET)).toBe('alice');
+    vi.setSystemTime(new Date('2026-01-01T00:01:01Z')); // +61 s
+    expect(verifyStreamToken(t, SECRET)).toBeNull();
+  });
+
+  it('un scope falsifié (sse → auth) sans re-signature valide est rejeté', () => {
+    const t = issueStreamToken('attacker', SECRET);
+    const [, sig] = t.split('.') as [string, string];
+    const payload = decodePayload(t) as Record<string, unknown>;
+    delete payload.scope; // tentative : faire passer un stream token pour un Bearer
+    const forged = `${b64urlEncode(JSON.stringify(payload))}.${sig}`;
+    expect(verifyToken(forged, SECRET)).toBeNull();
   });
 });
 

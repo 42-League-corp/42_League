@@ -38,7 +38,7 @@ import { advanceWinner, generateBracket } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
-import { verifyToken } from './tokens.js';
+import { issueStreamToken, verifyStreamToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
 import { rateLimit } from './rate-limit.js';
 
@@ -321,7 +321,9 @@ async function getStreamLogin(c: Context): Promise<string> {
   const secret = process.env.SESSION_SECRET;
   const queryToken = c.req.query('token');
   if (secret && queryToken) {
-    const login = verifyToken(queryToken, secret);
+    // Uniquement un token de scope 'sse' (éphémère) — surtout pas le Bearer
+    // complet : la query string fuite dans les logs / l'historique / le Referer.
+    const login = verifyStreamToken(queryToken, secret);
     if (login) return login;
   }
   const devLogin = c.req.header('x-dev-login');
@@ -385,7 +387,18 @@ if (process.env.NODE_ENV !== 'test') {
   app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600 }));
 
   // Auth : protège l'échange OAuth contre le brute-force / spam de state.
-  app.use('/auth/*', rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 50 }));
+  // On exclut /auth/stream-token : il exige déjà un Bearer valide (pas une cible
+  // de brute-force) et le front l'appelle plusieurs fois par page (un EventSource
+  // par panneau + reconnexions). Le backstop global (600/min/IP) le couvre.
+  app.use(
+    '/auth/*',
+    rateLimit({
+      name: 'auth',
+      windowMs: 15 * 60_000,
+      max: 50,
+      skip: (c) => c.req.path === '/auth/stream-token',
+    }),
+  );
 
   // Écriture : ne compte que les mutations (déclarations de matchs, défis, ops,
   // tournois, feature-requests). Généreux pour un humain, bloque les floods.
@@ -631,9 +644,22 @@ app.delete('/me/account', async (c) => {
   return c.json({ ok: true, graceDays: ACCOUNT_GRACE_DAYS });
 });
 
+// Échange le credential complet (Bearer / session) contre un token éphémère
+// dédié au SSE. Le front l'appelle juste avant d'ouvrir l'EventSource — et à
+// chaque reconnexion — pour ne jamais mettre le Bearer 30 jours en query string.
+app.get('/auth/stream-token', async (c) => {
+  const me = await getCurrentLogin(c);
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new HTTPException(500, { message: 'server misconfigured: SESSION_SECRET missing' });
+  }
+  return c.json({ token: issueStreamToken(me, secret) });
+});
+
 app.get('/events', async (c) => {
   // EventSource ne peut pas envoyer de header Authorization → on accepte aussi
-  // le token en query param (?token=...) en plus de la session/cookie habituels.
+  // un token éphémère de scope 'sse' en query param (?token=...), en plus de la
+  // session/cookie habituels. Voir GET /auth/stream-token.
   const me = await getStreamLogin(c);
   return streamSSE(c, async (stream) => {
     const cleanup = registerSse(me, stream);

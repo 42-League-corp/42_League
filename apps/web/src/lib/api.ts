@@ -342,6 +342,9 @@ export interface AppNotification {
 export const api = {
   me: () => request<MeResponse>('/me'),
   leaderboard: () => request<LeaderboardEntry[]>('/leaderboard'),
+  // Token éphémère (scope SSE) à passer en ?token= pour ouvrir le flux /events,
+  // afin de ne jamais exposer le Bearer 30 jours dans une URL (logs / Referer).
+  streamToken: () => request<{ token: string }>('/auth/stream-token'),
   notifications: () => request<{ notifications: AppNotification[]; unread: number }>('/notifications'),
   markNotificationsRead: (ids?: string[]) =>
     request<{ ok: true }>('/notifications/read', {
