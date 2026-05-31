@@ -8,6 +8,7 @@ import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { PlayerLink } from '../../components/PlayerLink';
+import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -162,6 +163,7 @@ export function LeaderboardMobile() {
           </div>
         ) : (
         <>
+        <LeaderboardBanner />
         {/* Bascule liste / nuage + accès G.O.A.T */}
         <div className="flex items-center justify-center gap-2 pt-1">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />

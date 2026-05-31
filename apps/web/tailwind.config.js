@@ -16,18 +16,19 @@ export default {
         'border-strong': '#5c4a2a',
 
         // « teal » conservé comme NOM d'API (utilisé partout dans le code), mais
-        // remappé sur la nouvelle palette OR pour basculer tout le chrome en doré
-        // sans toucher chaque fichier. Utilisé pour les accents primaires et les CTA.
+        // remappé sur la palette d'accent via variables CSS : OR en babyfoot,
+        // ROUGE en mode smash ([data-game] dans index.css). Accents primaires/CTA.
         teal: {
-          DEFAULT: '#f5b942',
-          dim: '#d49620',
-          deep: '#6b4a14',
+          DEFAULT: 'rgb(var(--accent-teal) / <alpha-value>)',
+          dim: 'rgb(var(--accent-teal-dim) / <alpha-value>)',
+          deep: 'rgb(var(--accent-teal-deep) / <alpha-value>)',
         },
-        // Or saturé — utilisé pour les bordures décoratives, titres, glyphes.
+        // Accent saturé (« gold ») — bordures décoratives, titres, glyphes.
+        // Pilotée par variable → vire au rouge en mode smash.
         gold: {
-          DEFAULT: '#ffc94a',
-          dim: '#e0a82a',
-          deep: '#8a6310',
+          DEFAULT: 'rgb(var(--accent-gold) / <alpha-value>)',
+          dim: 'rgb(var(--accent-gold-dim) / <alpha-value>)',
+          deep: 'rgb(var(--accent-gold-deep) / <alpha-value>)',
         },
         // Cuivre / laiton — pour tuyaux décoratifs, accents secondaires.
         brass: {

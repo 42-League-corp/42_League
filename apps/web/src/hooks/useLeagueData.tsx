@@ -81,9 +81,9 @@ const DOMAIN_FETCHERS: Record<Domain, () => Promise<Partial<LeagueData>>> = {
     return { matches, pending };
   },
   challenges: async () => ({ challenges: await api.challenges() }),
-  // Le classement est par jeu : on interroge celui du mode courant.
+  // Classement ET tournois sont par jeu : on interroge ceux du mode courant.
   leaderboard: async () => ({ leaderboard: await api.leaderboard(getGame()) }),
-  tournaments: async () => ({ tournaments: await api.tournaments() }),
+  tournaments: async () => ({ tournaments: await api.tournaments(getGame()) }),
   ops: async () => {
     const [opsMe, allOps] = await Promise.all([
       api.opsMe().catch(() => null),
@@ -135,7 +135,7 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           api.pendingMatches(),
           api.challenges(),
           api.leaderboard(getGame()),
-          api.tournaments(),
+          api.tournaments(getGame()),
           api.opsMe().catch(() => null),
           api.opsList().catch(() => [] as Ops[]),
         ]);
@@ -188,7 +188,7 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authenticated) return;
     return subscribeGame(() => {
-      void refreshDomains(['leaderboard']);
+      void refreshDomains(['leaderboard', 'tournaments']);
     });
   }, [authenticated, refreshDomains]);
 

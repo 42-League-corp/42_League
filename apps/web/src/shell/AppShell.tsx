@@ -5,6 +5,7 @@ import { ViewportSwitch } from './ViewportSwitch';
 import { NotifBanner } from '../components/NotifBanner';
 import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
 import { GameModeSwitch } from '../components/GameModeSwitch';
+import { GameOnboarding } from '../components/GameOnboarding';
 
 interface AppShellProps {
   children: ReactNode;
@@ -30,6 +31,7 @@ export function AppShell({ children }: AppShellProps) {
       <NotifBanner />
       <OpsRevealOverlay />
       <GameModeSwitch />
+      <GameOnboarding />
     </>
   );
 }

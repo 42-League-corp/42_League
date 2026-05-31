@@ -1,0 +1,117 @@
+import { useState } from 'react';
+import { Check } from 'lucide-react';
+import { api, type Game } from '../lib/api';
+import { useLeagueData } from '../hooks/useLeagueData';
+import { useFlash } from '../hooks/useFlash';
+import { setGame as setActiveGame } from '../lib/gameMode';
+import { TournamentCup } from './TournamentCup';
+import { SmashTrophy } from './SmashTrophy';
+import { Button } from './Button';
+
+const GAMES: { id: Game; name: string; tagline: string }[] = [
+  { id: 'babyfoot', name: 'Babyfoot', tagline: '1 contre 1 · 10 buts · gamelles' },
+  { id: 'smash', name: 'Smash Bros', tagline: '1 contre 1 · Bo3/Bo5 · stocks' },
+];
+
+/**
+ * Onboarding au 1er login : choix des modes de jeu auxquels on adhère. On
+ * n'apparaît dans les classements/stats que des modes choisis. Affiché tant que
+ * `onboardedAt` est nul.
+ */
+export function GameOnboarding() {
+  const { me, refresh } = useLeagueData();
+  const flash = useFlash();
+  const [sel, setSel] = useState<Set<Game>>(new Set<Game>(['babyfoot']));
+  const [busy, setBusy] = useState(false);
+
+  // Affiché uniquement si le compte existe et n'a pas encore choisi ses modes.
+  if (!me?.user || me.user.onboardedAt) return null;
+
+  const toggle = (g: Game) =>
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
+
+  const submit = async () => {
+    const games = [...sel];
+    if (games.length === 0) {
+      flash.show('Choisis au moins un mode', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.setGames(games);
+      // Bascule sur un mode choisi si le mode courant n'en fait pas partie.
+      if (!sel.has('babyfoot') && sel.has('smash')) setActiveGame('smash');
+      else if (sel.has('babyfoot')) setActiveGame('babyfoot');
+      await refresh();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
+        <div className="text-center mb-5">
+          <div className="font-display text-2xl font-black text-text-strong">Bienvenue dans la League</div>
+          <p className="text-sm text-muted-2 mt-1">
+            À quels modes veux-tu participer ? Tu n'apparais dans les classements et stats que des
+            modes choisis (modifiable plus tard dans les réglages).
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          {GAMES.map((g) => {
+            const active = sel.has(g.id);
+            const accent = g.id === 'smash' ? '#ff4d5c' : '#ffc94a';
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => toggle(g.id)}
+                className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${
+                  active
+                    ? g.id === 'smash'
+                      ? 'border-red bg-red/10'
+                      : 'border-gold bg-gold/10'
+                    : 'border-border bg-bg-2/40 opacity-70 hover:opacity-100'
+                }`}
+              >
+                {g.id === 'smash' ? (
+                  <SmashTrophy accent={accent} className="w-12 h-12 shrink-0" />
+                ) : (
+                  <TournamentCup accent={accent} className="w-12 h-12 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-extrabold text-text-strong">{g.name}</div>
+                  <div className="text-[11px] text-muted-2">{g.tagline}</div>
+                </div>
+                <span
+                  className={`grid place-items-center w-6 h-6 rounded-full border-2 ${
+                    active
+                      ? g.id === 'smash'
+                        ? 'bg-red border-red text-white'
+                        : 'bg-gold border-gold text-[#1a1100]'
+                      : 'border-border text-transparent'
+                  }`}
+                >
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <Button loading={busy} onClick={submit} className="w-full mt-5 py-3" disabled={sel.size === 0}>
+          C'est parti
+        </Button>
+      </div>
+    </div>
+  );
+}

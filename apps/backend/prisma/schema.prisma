@@ -28,6 +28,9 @@ model User {
   eloSmash            Int   @default(1000) @map("elo_smash")
   matchesPlayedSmash  Int   @default(0)    @map("matches_played_smash")
   tournamentsWonSmash Int   @default(0)    @map("tournaments_won_smash")
+  // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
+  games               String[] @default(["babyfoot"])
+  onboardedAt         DateTime? @map("onboarded_at") // a choisi ses modes (1er login)
   bannedAt        DateTime? @map("banned_at")
   anonymizedAt    DateTime? @map("anonymized_at")
   deletionScheduledAt DateTime? @map("deletion_scheduled_at")
@@ -163,6 +166,7 @@ model Tournament {
   imageUrl      String?  @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
   capacity      Int      // nombre de joueurs (>= 6) ; phase de poule activée à partir de 12
   format        String   @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
+  game          String   @default("babyfoot") // 'babyfoot' | 'smash'
   status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String  @map("created_by_login")
   winnerLogin   String?  @map("winner_login")

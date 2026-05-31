@@ -124,6 +124,8 @@ export const CreateTournamentSchema = z
     kind: z.enum(['friendly', 'official']).default('friendly'),
     // Format : élimination directe, ou phase de poules (puis bracket des qualifiés).
     format: z.enum(['elimination', 'pools']).default('elimination'),
+    // Discipline du tournoi (babyfoot | smash).
+    game: GameSchema.default('babyfoot'),
     // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
     private: z.boolean().default(false),
     // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.

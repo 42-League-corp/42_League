@@ -537,11 +537,33 @@ app.route(
 
 app.get('/me', async (c) => {
   const login = await getCurrentLogin(c);
+  // S'assure que le compte existe (1er login) → permet l'onboarding des modes.
+  await getOrCreateUser(login);
   const user = await prisma.user.findUnique({ where: { login } });
   const role = await getUserRole(login);
   const badges = user ? await badgesFor(login, role) : [];
   const palmares = user ? await palmaresFor(login) : [];
   return c.json({ login, user, role, isAdmin: isAdmin(login), badges, palmares });
+});
+
+// Adhésion aux modes de jeu (onboarding + réglages). Un joueur n'apparaît dans
+// les classements/stats d'un mode que s'il y adhère. Côté back, les ratings de
+// tous les modes existent pour tout le monde (colonnes par défaut).
+app.patch('/me/games', async (c) => {
+  const login = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => ({}));
+  const raw = Array.isArray(body.games) ? body.games : [];
+  const games = [...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash'))] as string[];
+  if (games.length === 0) {
+    throw new HTTPException(400, { message: 'choisis au moins un mode de jeu' });
+  }
+  await getOrCreateUser(login);
+  const user = await prisma.user.update({
+    where: { login },
+    data: { games, onboardedAt: new Date() },
+  });
+  emit([login], { type: 'leaderboard:update', payload: {} });
+  return c.json({ games: user.games, onboardedAt: user.onboardedAt });
 });
 
 // ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
@@ -760,8 +782,9 @@ app.get('/leaderboard', async (c) => {
   // Classement par jeu : ?game=smash trie sur l'Elo Smash et expose ses compteurs
   // sous les mêmes clés (elo / matchesPlayed / tournamentsWon) pour un front unifié.
   const game = c.req.query('game') === 'smash' ? 'smash' : 'babyfoot';
+  // N'apparaissent au classement d'un mode que les joueurs qui y adhèrent (games).
   const users = await prisma.user.findMany({
-    where: VISIBLE_USER_WHERE,
+    where: { ...VISIBLE_USER_WHERE, games: { has: game } },
     orderBy: game === 'smash' ? { eloSmash: 'desc' } : { elo: 'desc' },
   });
   return c.json(
@@ -1832,7 +1855,11 @@ async function launchTournamentMatches(
 
 app.get('/tournaments', async (c) => {
   const me = await getCurrentLogin(c);
+  // Tournois filtrés par discipline (mode courant) : babyfoot invisibles en smash
+  // et inversement.
+  const game = c.req.query('game') === 'smash' ? 'smash' : 'babyfoot';
   const list = await prisma.tournament.findMany({
+    where: { game },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     include: {
       entries: { select: { login: true } },
@@ -1913,6 +1940,7 @@ app.post('/tournaments', async (c) => {
       imageUrl: parsed.data.imageUrl ?? null,
       capacity: parsed.data.capacity,
       format: parsed.data.format,
+      game: parsed.data.game,
       status: 'registration',
       createdByLogin: me,
       entries: { create: { login: me } },
@@ -2243,17 +2271,22 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
     const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
     let finished = false;
     if (adv.isFinal) {
-      await tx.tournament.update({
+      const tour = await tx.tournament.update({
         where: { id },
         data: {
           status: 'finished',
           finishedAt: new Date(),
           winnerLogin,
         },
+        select: { game: true },
       });
+      // Crédite le bon compteur de titres selon la discipline du tournoi.
       await tx.user.update({
         where: { login: winnerLogin },
-        data: { tournamentsWon: { increment: 1 } },
+        data:
+          tour.game === 'smash'
+            ? { tournamentsWonSmash: { increment: 1 } }
+            : { tournamentsWon: { increment: 1 } },
       });
       finished = true;
     }
@@ -2836,7 +2869,10 @@ app.delete('/admin/tournaments/:id', async (c) => {
     if (row.status === 'finished' && row.winnerLogin) {
       await tx.user.update({
         where: { login: row.winnerLogin },
-        data: { tournamentsWon: { decrement: 1 } },
+        data:
+          row.game === 'smash'
+            ? { tournamentsWonSmash: { decrement: 1 } }
+            : { tournamentsWon: { decrement: 1 } },
       });
     }
     await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs
