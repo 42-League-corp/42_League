@@ -78,6 +78,10 @@ export interface MeResponse {
   login: string;
   isAdmin?: boolean;
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
+  consentRequired?: boolean;
+  /** Version de la politique de confidentialité en vigueur côté serveur. */
+  termsVersion?: string;
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
   /** Palmarès par saison. */
@@ -408,6 +412,13 @@ export interface AppNotification {
 
 export const api = {
   me: () => request<MeResponse>('/me'),
+  // RGPD / CGU 42 — enregistre (accept=true) ou refuse (accept=false, supprime le compte)
+  // le consentement de l'utilisateur final.
+  consent: (accept: boolean) =>
+    request<{ ok: boolean; accepted: boolean; deleted?: boolean }>('/me/consent', {
+      method: 'POST',
+      body: JSON.stringify({ accept }),
+    }),
   setGames: (games: Game[]) =>
     request<{ games: Game[]; onboardedAt: string | null }>('/me/games', {
       method: 'PATCH',

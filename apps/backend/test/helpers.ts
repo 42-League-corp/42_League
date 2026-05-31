@@ -1,4 +1,4 @@
-import { app } from '../src/index.js';
+import { app, CURRENT_TERMS_VERSION } from '../src/index.js';
 import { prisma } from '../src/db.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,9 +40,13 @@ export interface SeedUserOpts {
   tournamentsWon?: number;
   bannedAt?: Date | null;
   title?: string | null;
+  /** Par défaut le user a consenti (sinon la consent-gate renvoie 403). Mettre false
+   *  pour tester explicitement le comportement avant consentement. */
+  consented?: boolean;
 }
 
 export async function seedUser(login: string, opts: SeedUserOpts = {}) {
+  const consented = opts.consented ?? true;
   return prisma.user.create({
     data: {
       login,
@@ -55,6 +59,9 @@ export async function seedUser(login: string, opts: SeedUserOpts = {}) {
       tournamentsWon: opts.tournamentsWon ?? 0,
       bannedAt: opts.bannedAt ?? null,
       title: opts.title ?? null,
+      // Consentement RGPD pré-enregistré pour ne pas buter sur la consent-gate.
+      termsAcceptedAt: consented ? new Date() : null,
+      termsVersion: consented ? CURRENT_TERMS_VERSION : null,
     },
   });
 }
