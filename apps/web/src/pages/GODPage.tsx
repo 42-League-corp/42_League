@@ -125,6 +125,137 @@ function fmtDate(iso: string) {
   });
 }
 
+// ── Primitives : confirmation soignée + mode sudo + sélection multi-lignes ───
+
+function ConfirmModal({
+  message,
+  danger,
+  confirmLabel = 'Confirmer',
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  danger?: boolean;
+  confirmLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/70 font-mono" onClick={onCancel}>
+      <div
+        className={`bg-zinc-900 border rounded-lg w-full max-w-sm p-5 ${danger ? 'border-red-500/40' : 'border-zinc-700'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-sm text-zinc-200 mb-4 whitespace-pre-wrap leading-relaxed">{message}</div>
+        <div className="flex gap-2 justify-end">
+          <Btn variant="ghost" onClick={onCancel}>Annuler</Btn>
+          <Btn variant={danger ? 'danger' : 'default'} onClick={onConfirm}>{confirmLabel}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Confirmation impérative : requestConfirm(msg) renvoie une Promise<boolean>. */
+function useConfirmDialog() {
+  const [state, setState] = useState<
+    { message: string; danger?: boolean; confirmLabel?: string; resolve: (v: boolean) => void } | null
+  >(null);
+  const requestConfirm = useCallback(
+    (message: string, opts?: { danger?: boolean; confirmLabel?: string }) =>
+      new Promise<boolean>((resolve) =>
+        setState({ message, danger: opts?.danger, confirmLabel: opts?.confirmLabel, resolve }),
+      ),
+    [],
+  );
+  const confirmNode = state ? (
+    <ConfirmModal
+      message={state.message}
+      danger={state.danger}
+      confirmLabel={state.confirmLabel}
+      onConfirm={() => {
+        state.resolve(true);
+        setState(null);
+      }}
+      onCancel={() => {
+        state.resolve(false);
+        setState(null);
+      }}
+    />
+  ) : null;
+  return { requestConfirm, confirmNode };
+}
+
+/** Sélection multi-lignes (par id/login). */
+function useSelection() {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const toggleAll = (ids: string[]) =>
+    setSelected((prev) => (ids.length > 0 && ids.every((i) => prev.has(i)) ? new Set() : new Set(ids)));
+  const clear = () => setSelected(new Set());
+  return { selected, toggle, toggleAll, clear };
+}
+
+function Check({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      className="w-3.5 h-3.5 cursor-pointer accent-red-500 align-middle"
+    />
+  );
+}
+
+/**
+ * Barre en haut d'un tableau : interrupteur « sudo » (activation confirmée ;
+ * une fois ON, les actions destructrices ne re-demandent plus confirmation) +
+ * bouton de suppression groupée de la sélection.
+ */
+function SudoBar({
+  sudo,
+  onToggle,
+  selectedCount,
+  onBulkDelete,
+  bulkLabel = 'Supprimer la sélection',
+}: {
+  sudo: boolean;
+  onToggle: () => void;
+  selectedCount?: number;
+  onBulkDelete?: () => void;
+  bulkLabel?: string;
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-2 text-xs font-mono cursor-pointer select-none"
+      >
+        <span className={`relative w-9 h-5 rounded-full transition-colors ${sudo ? 'bg-red-500/70' : 'bg-zinc-700'}`}>
+          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${sudo ? 'left-[18px]' : 'left-0.5'}`} />
+        </span>
+        <span className={sudo ? 'text-red-400 font-bold' : 'text-zinc-400'}>MODE SUDO {sudo ? 'ON' : 'OFF'}</span>
+        <span className="text-[10px] text-zinc-600">
+          {sudo ? '· suppressions sans confirmation' : '· suppressions confirmées'}
+        </span>
+      </button>
+      {onBulkDelete && (selectedCount ?? 0) > 0 && (
+        <Btn variant="danger" onClick={onBulkDelete} className="border border-red-500/40">
+          {bulkLabel} ({selectedCount})
+        </Btn>
+      )}
+    </div>
+  );
+}
+
 // ── Stats edit modal ───────────────────────────────────────────────────────
 
 function StatsEditModal({
@@ -306,6 +437,9 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
   const [showReset, setShowReset] = useState(false);
   const [error, setError] = useState('');
+  const [sudo, setSudo] = useState(false);
+  const { requestConfirm, confirmNode } = useConfirmDialog();
+  const { selected, toggle, toggleAll, clear } = useSelection();
 
   // Création d'un faux joueur (SUPERADMIN).
   const [newLogin, setNewLogin] = useState('');
@@ -353,9 +487,47 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     }
   }
 
+  // Confirme l'action, SAUF si le mode sudo est actif (le toggle a déjà été confirmé).
+  async function confirmOrSudo(message: string, confirmLabel = 'Supprimer') {
+    return sudo ? true : requestConfirm(message, { danger: true, confirmLabel });
+  }
+  async function toggleSudo() {
+    if (sudo) {
+      setSudo(false);
+      return;
+    }
+    const ok = await requestConfirm(
+      'Activer le mode SUDO ?\nLes suppressions / bans ne demanderont plus de confirmation dans ce tableau.',
+      { danger: true, confirmLabel: 'Activer sudo' },
+    );
+    if (ok) setSudo(true);
+  }
+
+  // Comptes supprimables : faux joueurs (sans 42), hors soi-même et superadmins.
+  const deletableLogins =
+    myRole === 'SUPERADMIN'
+      ? filtered.filter((u) => u.ftId === null && u.login !== myLogin && u.role !== 'SUPERADMIN').map((u) => u.login)
+      : [];
+
   async function deleteFakeUser(login: string) {
-    if (!confirm(`Supprimer DÉFINITIVEMENT le faux joueur "${login}" et toutes ses données ? (irréversible)`)) return;
+    if (!(await confirmOrSudo(`Supprimer DÉFINITIVEMENT le faux joueur "${login}" et toutes ses données ? (irréversible)`)))
+      return;
     await withPending(login, () => api.adminDeleteUser(login));
+  }
+
+  async function banUser(login: string) {
+    if (!(await confirmOrSudo(`Bannir @${login} ? Ses défis/tournois en cours seront annulés.`, 'Bannir'))) return;
+    await withPending(login, () => api.adminBanUser(login));
+  }
+
+  async function bulkDelete() {
+    const ids = [...selected].filter((l) => deletableLogins.includes(l));
+    if (ids.length === 0) return;
+    if (!(await confirmOrSudo(`Supprimer DÉFINITIVEMENT ${ids.length} faux joueur(s) ? (irréversible)`))) return;
+    setError('');
+    for (const l of ids) await api.adminDeleteUser(l).catch((e) => setError(String(e)));
+    clear();
+    load();
   }
 
   return (
@@ -409,10 +581,21 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
         </div>
       )}
 
-      <div className="mb-4 flex items-center gap-3">
+      {confirmNode}
+
+      <div className="mb-3 flex items-center gap-3">
         <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} utilisateurs</span>
       </div>
+
+      <SudoBar
+        sudo={sudo}
+        onToggle={toggleSudo}
+        selectedCount={selected.size}
+        onBulkDelete={deletableLogins.length > 0 ? bulkDelete : undefined}
+        bulkLabel="Supprimer les joueurs"
+      />
+
       {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
       {loading ? (
         <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
@@ -421,6 +604,14 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
           <table className="w-full text-sm font-mono border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
+                <th className="py-2 px-3 w-8">
+                  {deletableLogins.length > 0 && (
+                    <Check
+                      checked={deletableLogins.every((l) => selected.has(l))}
+                      onChange={() => toggleAll(deletableLogins)}
+                    />
+                  )}
+                </th>
                 <th className="text-left py-2 px-3">Login</th>
                 <th className="text-left py-2 px-3">Rôle</th>
                 <th className="text-right py-2 px-3">ELO</th>
@@ -437,8 +628,12 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                 const isSelf = u.login === myLogin;
                 const isSuperAdmin = u.role === 'SUPERADMIN';
                 const isLocked = isSelf || isSuperAdmin;
+                const isDeletable = deletableLogins.includes(u.login);
                 return (
-                  <tr key={u.login} className="border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors">
+                  <tr key={u.login} className={`border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors ${selected.has(u.login) ? 'bg-red-500/5' : ''}`}>
+                    <td className="py-2 px-3">
+                      {isDeletable && <Check checked={selected.has(u.login)} onChange={() => toggle(u.login)} />}
+                    </td>
                     <td className="py-2 px-3 text-zinc-100">{u.login}</td>
                     <td className="py-2 px-3"><RoleBadge role={u.role} /></td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{u.elo}</td>
@@ -459,7 +654,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                           )}
                           {u.bannedAt
                             ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">Unban</Btn>
-                            : <Btn onClick={() => withPending(u.login, () => api.adminBanUser(u.login))} disabled={pending === u.login} variant="danger">Ban</Btn>
+                            : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">Ban</Btn>
                           }
                           <Btn onClick={() => setEditingStats(u)} variant="ghost">Stats</Btn>
                           {myRole === 'SUPERADMIN' && u.ftId === null && (
@@ -751,6 +946,9 @@ function MatchesTab() {
   const [editB, setEditB] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [sudo, setSudo] = useState(false);
+  const { requestConfirm, confirmNode } = useConfirmDialog();
+  const { selected, toggle, toggleAll, clear } = useSelection();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -785,8 +983,23 @@ function MatchesTab() {
     } finally { setPending(null); }
   }
 
+  async function confirmOrSudo(message: string) {
+    return sudo ? true : requestConfirm(message, { danger: true, confirmLabel: 'Supprimer' });
+  }
+  async function toggleSudo() {
+    if (sudo) {
+      setSudo(false);
+      return;
+    }
+    const ok = await requestConfirm(
+      'Activer le mode SUDO ?\nLes suppressions de matchs ne demanderont plus de confirmation.',
+      { danger: true, confirmLabel: 'Activer sudo' },
+    );
+    if (ok) setSudo(true);
+  }
+
   async function deleteMatch(id: string) {
-    if (!confirm('Supprimer ce match ? L\'ELO sera reversé.')) return;
+    if (!(await confirmOrSudo("Supprimer ce match ? L'ELO sera reversé."))) return;
     setPending(id);
     setError('');
     try {
@@ -797,12 +1010,30 @@ function MatchesTab() {
     } finally { setPending(null); }
   }
 
+  async function bulkDelete() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!(await confirmOrSudo(`Supprimer ${ids.length} match(s) ? L'ELO sera reversé.`))) return;
+    setError('');
+    for (const id of ids) await api.adminDeleteMatch(id).catch((e) => setError(String(e)));
+    clear();
+    load();
+  }
+
   return (
     <div className="p-4">
-      <div className="mb-4 flex items-center gap-3">
+      {confirmNode}
+      <div className="mb-3 flex items-center gap-3">
         <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} affiché{filtered.length > 1 ? 's' : ''} / {matches.length} total</span>
       </div>
+      <SudoBar
+        sudo={sudo}
+        onToggle={toggleSudo}
+        selectedCount={selected.size}
+        onBulkDelete={bulkDelete}
+        bulkLabel="Supprimer les matchs"
+      />
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
       {loading ? (
         <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
@@ -811,6 +1042,14 @@ function MatchesTab() {
           <table className="w-full text-xs font-mono border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                <th className="py-2 px-2 w-8">
+                  {filtered.length > 0 && (
+                    <Check
+                      checked={filtered.every((m) => selected.has(m.id))}
+                      onChange={() => toggleAll(filtered.map((m) => m.id))}
+                    />
+                  )}
+                </th>
                 <th className="text-left py-2 px-2">Date</th>
                 <th className="text-left py-2 px-2">Joueur A</th>
                 <th className="text-center py-2 px-2">Score</th>
@@ -823,7 +1062,10 @@ function MatchesTab() {
             </thead>
             <tbody>
               {filtered.map((m) => (
-                <tr key={m.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/50 transition-colors">
+                <tr key={m.id} className={`border-b border-zinc-800/40 hover:bg-zinc-900/50 transition-colors ${selected.has(m.id) ? 'bg-red-500/5' : ''}`}>
+                  <td className="py-1.5 px-2">
+                    <Check checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
+                  </td>
                   <td className="py-1.5 px-2 text-zinc-500">{fmtDate(m.playedAt)}</td>
                   <td className={`py-1.5 px-2 ${m.winner === 'A' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerALogin}</td>
                   <td className="py-1.5 px-2 text-center">
