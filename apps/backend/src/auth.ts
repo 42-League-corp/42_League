@@ -63,7 +63,13 @@ interface OauthStateCookie {
 function isValidExtRedirect(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === 'https:' && u.hostname.endsWith('.chromiumapp.org');
+    if (u.protocol !== 'https:') return false;
+    // Chrome : https://<id>.chromiumapp.org/
+    // Firefox : https://<uuid>.extensions.allizom.org/
+    return (
+      u.hostname.endsWith('.chromiumapp.org') ||
+      u.hostname.endsWith('.extensions.allizom.org')
+    );
   } catch {
     return false;
   }
@@ -75,6 +81,26 @@ export function getAllowedWebOrigins(): string[] {
     .split(',')
     .map((s) => s.trim().replace(/\/$/, ''))
     .filter(Boolean);
+}
+
+/**
+ * Vrai si `origin` est un domaine officiel de l'intra 42 (intra.42.fr ou un de ses
+ * sous-domaines), servi en HTTPS. Sert à autoriser le CORS pour l'extension qui
+ * appelle l'API depuis les pages de l'intra.
+ *
+ * SÉCURITÉ : on compare le HOSTNAME exact, jamais une sous-chaîne. Un test naïf
+ * `origin.includes('intra.42.fr')` autoriserait `https://intra.42.fr.evil.com`
+ * ou `https://evilintra.42.fr` — ici rejetés.
+ */
+export function isTrusted42Origin(origin: string | undefined | null): boolean {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'https:') return false;
+    return u.hostname === 'intra.42.fr' || u.hostname.endsWith('.intra.42.fr');
+  } catch {
+    return false;
+  }
 }
 
 function isValidWebRedirect(url: string): boolean {
@@ -125,7 +151,8 @@ export function createAuthRouter(
     const ext = c.req.query('ext_redirect');
     if (!ext || !isValidExtRedirect(ext)) {
       throw new HTTPException(400, {
-        message: 'ext_redirect must be a https://*.chromiumapp.org URL',
+        message:
+          'ext_redirect must be a https://*.chromiumapp.org (Chrome) or https://*.extensions.allizom.org (Firefox) URL',
       });
     }
     return startOauth(c, { ext });

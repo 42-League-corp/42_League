@@ -34,6 +34,7 @@ import {
   createAuthRouter,
   getAllowedWebOrigins,
   getSessionLogin,
+  isTrusted42Origin,
   type FtProfile,
 } from './auth.js';
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
@@ -59,6 +60,29 @@ const SUPERADMINS = new Set(['abidaux', 'throbert']);
 // local et n'est honoré que si ALLOW_DEV_LOGIN=true est explicitement positionné.
 // Fail-secure : par défaut (prod) le flag est absent → le header est ignoré.
 const ALLOW_DEV_LOGIN = process.env.ALLOW_DEV_LOGIN === 'true';
+
+// =========================================================================
+// CONSENTEMENT RGPD — preuve + version (CGU API 42, Art. 4.2 et Art. 3.1)
+// =========================================================================
+// Les CGU 42 exigent le consentement explicite de l'utilisateur final AVANT
+// tout traitement de ses Données personnelles. On versionne la politique : si
+// elle évolue, on bumpe CURRENT_TERMS_VERSION → tous les utilisateurs doivent
+// re-consentir. La preuve (date + version) est stockée sur la ligne User.
+// Format : 'YYYY-MM-DD' (date de la dernière révision de la politique affichée).
+export const CURRENT_TERMS_VERSION = '2026-05-31';
+
+/** Un consentement est requis si jamais donné, ou donné pour une version périmée. */
+function consentRequired(user: { termsAcceptedAt: Date | null; termsVersion: string | null } | null): boolean {
+  if (!user) return false; // pas encore en base → géré par l'auth, pas par la gate
+  return !user.termsAcceptedAt || user.termsVersion !== CURRENT_TERMS_VERSION;
+}
+
+// Chemins exemptés de la consent-gate : ils DOIVENT fonctionner avant consentement
+// (découverte de l'état, prise/retrait du consentement, droits RGPD, auth, SSE).
+const CONSENT_EXEMPT_PATHS = new Set(['/health', '/me', '/me/consent', '/me/export', '/me/account', '/events']);
+function isConsentExempt(path: string): boolean {
+  return CONSENT_EXEMPT_PATHS.has(path) || path.startsWith('/auth/');
+}
 
 async function getUserRole(login: string): Promise<'USER' | 'ADMIN' | 'SUPERADMIN'> {
   if (SUPERADMINS.has(login.toLowerCase())) return 'SUPERADMIN';
@@ -344,19 +368,6 @@ async function getStreamLogin(c: Context): Promise<string> {
 
 const WEB_APP_ORIGINS = new Set(getAllowedWebOrigins());
 
-// Vrai contrôle de hostname : seul l'intra 42 (intra.42.fr ou un sous-domaine
-// *.intra.42.fr) est accepté. Un `includes('intra.42.fr')` laisserait passer
-// `https://intra.42.fr.evil.com` — d'où le parsing strict de l'origine.
-function isIntra42Origin(origin: string): boolean {
-  try {
-    const { protocol, hostname } = new URL(origin);
-    if (protocol !== 'https:') return false;
-    return hostname === 'intra.42.fr' || hostname.endsWith('.intra.42.fr');
-  } catch {
-    return false;
-  }
-}
-
 export const app = new Hono();
 // =========================================================================
 // MIDDLEWARE CORS + PNA BLINDÉ
@@ -366,7 +377,7 @@ app.use('*', async (c, next) => {
   
   // Autoriser l'origine si elle est dans la liste WEB_APP_ORIGINS (chargée depuis .env) 
   // ou si c'est l'intra 42
-  const isAllowed = !!reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isIntra42Origin(reqOrigin));
+  const isAllowed = !!reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isTrusted42Origin(reqOrigin));
   const allowedOrigin = isAllowed ? reqOrigin : 'https://profile.intra.42.fr';
 
   c.header('Access-Control-Allow-Origin', allowedOrigin);
@@ -435,6 +446,37 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // =========================================================================
+// CONSENT-GATE — application côté serveur du consentement RGPD
+// =========================================================================
+// Défense en profondeur : la modale frontend peut être contournée (appel direct
+// à l'API, client modifié…). Cette gate garantit qu'AUCUNE donnée 42 n'est lue ni
+// écrite tant que l'utilisateur n'a pas consenti — conformément aux CGU 42 qui
+// interdisent tout traitement sans consentement explicite préalable.
+//
+// Logique fail-safe :
+//  - Requête non authentifiée → on laisse passer (la route renverra 401 elle-même).
+//  - Chemin exempté (auth, /me, consentement, droits RGPD, SSE) → on laisse passer.
+//  - Sinon, on vérifie le consentement en base ; s'il manque → 403 consent_required.
+app.use('*', async (c, next) => {
+  if (c.req.method === 'OPTIONS') return next();
+  if (isConsentExempt(c.req.path)) return next();
+
+  const login = await getSessionLogin(c);
+  if (!login && !(ALLOW_DEV_LOGIN && c.req.header('x-dev-login'))) return next();
+  const effectiveLogin = login ?? c.req.header('x-dev-login');
+  if (!effectiveLogin) return next();
+
+  const user = await prisma.user.findUnique({
+    where: { login: effectiveLogin },
+    select: { termsAcceptedAt: true, termsVersion: true },
+  });
+  if (consentRequired(user)) {
+    throw new HTTPException(403, { message: 'consent_required' });
+  }
+  return next();
+});
+
+// =========================================================================
 // TEMPS RÉEL — events SSE ciblés
 // =========================================================================
 // Stratégie :
@@ -480,8 +522,14 @@ app.use('/bug-reports/*', panelUpdate);
 // Gestionnaire d'erreurs global (pour que le CORS soit là même sur une erreur 401 !)
 app.onError((err, c) => {
   const reqOrigin = c.req.header('origin') || c.req.header('Origin');
-  const allowedOrigin = (reqOrigin && reqOrigin.includes('intra.42.fr')) ? reqOrigin : 'https://profile.intra.42.fr';
-  
+  // Même validation stricte que le middleware CORS (hostname exact, pas de
+  // sous-chaîne) — et on reflète aussi les origines de l'app web pour qu'elle
+  // puisse lire le corps des erreurs (401/403…).
+  const allowedOrigin =
+    reqOrigin && (WEB_APP_ORIGINS.has(reqOrigin) || isTrusted42Origin(reqOrigin))
+      ? reqOrigin
+      : 'https://profile.intra.42.fr';
+
   c.header('Access-Control-Allow-Origin', allowedOrigin);
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
@@ -551,7 +599,62 @@ app.get('/me', async (c) => {
   const role = await getUserRole(login);
   const badges = user ? await badgesFor(login, role) : [];
   const palmares = user ? await palmaresFor(login) : [];
-  return c.json({ login, user, role, isAdmin: isAdmin(login), badges, palmares });
+  return c.json({
+    login,
+    user,
+    role,
+    isAdmin: isAdmin(login),
+    badges,
+    palmares,
+    // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
+    consentRequired: consentRequired(user),
+    termsVersion: CURRENT_TERMS_VERSION,
+  });
+});
+
+// ── RGPD / CGU 42 Art. 4.2 — Consentement explicite préalable ──
+// Enregistre (accept=true) ou refuse (accept=false) le consentement de l'utilisateur
+// final. La preuve = date + version stockées sur la ligne User. Sur refus, le compte
+// est supprimé/anonymisé immédiatement (aucune donnée conservée sans consentement).
+const ConsentSchema = z.object({ accept: z.boolean() });
+app.post('/me/consent', async (c) => {
+  const login = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = ConsentSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+
+  if (parsed.data.accept) {
+    await getOrCreateUser(login);
+    await prisma.user.update({
+      where: { login },
+      data: { termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION },
+    });
+    return c.json({ ok: true, accepted: true });
+  }
+
+  // Refus → on ne conserve aucune donnée. Un superadmin ne peut pas s'auto-supprimer.
+  if (SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(400, { message: 'superadmin accounts cannot be deleted' });
+  }
+  const existing = await prisma.user.findUnique({
+    where: { login },
+    select: { matchesPlayed: true, termsAcceptedAt: true },
+  });
+  // Compte vierge (jamais consenti, aucun match) → suppression sèche, propre et complète.
+  // Sinon (re-consentement refusé après évolution de la politique) → anonymisation
+  // pour préserver l'intégrité de l'historique des matchs déjà joués.
+  const isPristine = !!existing && existing.matchesPlayed === 0 && !existing.termsAcceptedAt;
+  if (isPristine) {
+    await prisma.user.delete({ where: { login } }).catch(async () => {
+      // Garde-fou : si une FK inattendue bloque la suppression, on bascule sur l'anonymisation.
+      await anonymizeAccount(login);
+    });
+  } else if (existing) {
+    await anonymizeAccount(login);
+  }
+  return c.json({ ok: true, accepted: false, deleted: true });
 });
 
 // Adhésion aux modes de jeu (onboarding + réglages). Un joueur n'apparaît dans
