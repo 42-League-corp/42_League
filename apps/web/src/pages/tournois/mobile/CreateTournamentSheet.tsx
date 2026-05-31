@@ -9,7 +9,7 @@ import { useFlash } from '../../../hooks/useFlash';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
-type Capacity = 4 | 8;
+type Capacity = 8 | 16;
 type Kind = 'friendly' | 'official';
 
 interface CreateTournamentSheetProps {
@@ -18,7 +18,7 @@ interface CreateTournamentSheetProps {
   onDone: () => Promise<void>;
 }
 
-const CAPACITY_CHOICES: Capacity[] = [4, 8];
+const CAPACITY_CHOICES: Capacity[] = [8, 16];
 
 /**
  * BottomSheet de création de tournoi.
@@ -31,13 +31,13 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
-  const [capacity, setCapacity] = useState<Capacity>(4);
+  const [capacity, setCapacity] = useState<Capacity>(8);
   const [kind, setKind] = useState<Kind>('friendly');
   const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setName('');
-    setCapacity(4);
+    setCapacity(8);
     setKind('friendly');
   };
 

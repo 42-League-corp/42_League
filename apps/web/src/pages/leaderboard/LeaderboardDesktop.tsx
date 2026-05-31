@@ -173,7 +173,7 @@ export function LeaderboardDesktop() {
         {leaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
         ) : viewMode === 'graph' ? (
-          <LeaderboardScatter entries={leaderboard} myLogin={myLogin} className="h-[560px]" />
+          <LeaderboardScatter entries={leaderboard} myLogin={myLogin} className="h-[640px]" />
         ) : (
           <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm border-separate border-spacing-0">

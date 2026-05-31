@@ -5,10 +5,12 @@ import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
 
-/** Marges réservées aux axes (px). */
-const M = { l: 46, r: 16, t: 16, b: 32 };
-/** Marge intérieure du nuage pour éviter de coller les têtes aux bords (px). */
-const PAD = 24;
+/** Marges réservées à l'axe ELO (gauche) et au padding (px). */
+const M = { l: 46, r: 16, t: 16, b: 16 };
+/** Marge intérieure (haut/bas) pour ne pas coller les têtes aux bords (px). */
+const PAD = 30;
+/** Rayon « d'occupation » d'une tête (px, base) — espace mini entre deux têtes. */
+const NODE_R = 26;
 const SCALE_MIN = 0.5;
 const SCALE_MAX = 8;
 
@@ -16,6 +18,12 @@ interface View {
   scale: number;
   tx: number;
   ty: number;
+}
+
+interface Node {
+  entry: LeaderboardEntry;
+  bx: number; // position horizontale de base (px)
+  by: number; // position verticale de base (px) — dérivée de l'ELO
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -28,9 +36,13 @@ function ticks(min: number, max: number, count = 5): number[] {
 }
 
 /**
- * Vue « nuage de points » du classement : chaque joueur est placé selon son ELO
- * (axe vertical) et son nombre de matchs joués (axe horizontal), avec sa photo
- * intra. Molette / pincement pour zoomer, glisser pour se déplacer.
+ * Vue « nuage de points » du classement — réparti par ELO (beeswarm).
+ *
+ * La position VERTICALE encode l'ELO : deux joueurs de niveau proche sont à la
+ * même hauteur, donc proches l'un de l'autre. L'axe horizontal n'a pas de sens
+ * métier : on ne s'en sert que pour écarter les têtes de même ELO afin qu'elles
+ * ne se chevauchent pas (essaim centré). Molette / pincement pour zoomer,
+ * glisser pour se déplacer.
  */
 export function LeaderboardScatter({
   entries,
@@ -62,39 +74,74 @@ export function LeaderboardScatter({
   const domain = useMemo(() => {
     let eMin = Infinity;
     let eMax = -Infinity;
-    let gMax = 0;
     for (const e of entries) {
       if (e.elo < eMin) eMin = e.elo;
       if (e.elo > eMax) eMax = e.elo;
-      if (e.matchesPlayed > gMax) gMax = e.matchesPlayed;
     }
     if (!Number.isFinite(eMin)) {
       eMin = 1000;
       eMax = 1000;
     }
-    // Petite marge sur l'ELO pour respirer.
+    // Marge sur l'ELO pour respirer en haut / en bas.
     const span = eMax - eMin || 1;
-    return { eMin: eMin - span * 0.04, eMax: eMax + span * 0.04, gMin: 0, gMax: Math.max(1, gMax) };
+    return { eMin: eMin - span * 0.06, eMax: eMax + span * 0.06 };
   }, [entries]);
 
   const plotW = Math.max(10, size.w - M.l - M.r);
   const plotH = Math.max(10, size.h - M.t - M.b);
 
-  // Coordonnées « locales » (relatives à l'origine du nuage) après transform.
-  const project = (g: number, e: number) => {
-    const nx = domain.gMax > domain.gMin ? (g - domain.gMin) / (domain.gMax - domain.gMin) : 0.5;
-    const ny = domain.eMax > domain.eMin ? (e - domain.eMin) / (domain.eMax - domain.eMin) : 0.5;
-    const plotX = PAD + nx * (plotW - 2 * PAD);
-    const plotY = PAD + (1 - ny) * (plotH - 2 * PAD);
-    return { lx: view.tx + plotX * view.scale, ly: view.ty + plotY * view.scale };
+  // ELO → ordonnée de base (px). Haut = ELO élevé.
+  const yOfElo = (elo: number) => {
+    const ny = domain.eMax > domain.eMin ? (elo - domain.eMin) / (domain.eMax - domain.eMin) : 0.5;
+    return PAD + (1 - ny) * (plotH - 2 * PAD);
   };
+
+  // Placement « beeswarm » : pour chaque joueur (ELO décroissant), on cherche le
+  // décalage horizontal le plus proche du centre qui n'entre en collision avec
+  // aucune tête déjà posée. Résultat : un essaim centré, hauteur = ELO.
+  const nodes = useMemo<Node[]>(() => {
+    const cx = plotW / 2;
+    const D = NODE_R * 2; // distance mini entre deux centres
+    const step = D * 0.95;
+    const sorted = [...entries].sort((a, b) => b.elo - a.elo || a.login.localeCompare(b.login));
+    const placed: Node[] = [];
+    for (const e of sorted) {
+      const by = yOfElo(e.elo);
+      let bx = cx;
+      for (let k = 0; k < 400; k++) {
+        // 0, +1, -1, +2, -2 … × step
+        const rank = Math.ceil(k / 2);
+        const dir = k % 2 === 1 ? 1 : -1;
+        const candX = cx + rank * step * dir;
+        const collides = placed.some((n) => {
+          const dy = n.by - by;
+          if (Math.abs(dy) >= D) return false; // assez loin verticalement
+          const dx = n.bx - candX;
+          return dx * dx + dy * dy < D * D;
+        });
+        if (!collides) {
+          bx = candX;
+          break;
+        }
+      }
+      placed.push({ entry: e, bx, by });
+    }
+    return placed;
+    // yOfElo dépend de plotH/domain → déps explicites
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, plotW, plotH, domain.eMin, domain.eMax]);
+
+  // base → coordonnées écran locales (dans la zone de tracé).
+  const toLocal = (bx: number, by: number) => ({
+    lx: view.tx + bx * view.scale,
+    ly: view.ty + by * view.scale,
+  });
 
   // Zoom centré sur un point écran (relatif au conteneur).
   const zoomAt = (factor: number, cx: number, cy: number) => {
     setView((v) => {
       const next = clamp(v.scale * factor, SCALE_MIN, SCALE_MAX);
       const k = next / v.scale;
-      // px dans l'espace plot sous le curseur (cx,cy relatifs au conteneur).
       const px = cx - M.l;
       const py = cy - M.t;
       return { scale: next, tx: px - (px - v.tx) * k, ty: py - (py - v.ty) * k };
@@ -113,7 +160,6 @@ export function LeaderboardScatter({
       onPinch: ({ offset: [s], origin: [ox, oy], memo }) => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return memo;
-        // memo mémorise l'échelle précédente pour appliquer un facteur incrémental.
         const prev = (memo as number) ?? view.scale;
         zoomAt(s / prev, ox - rect.left, oy - rect.top);
         return s;
@@ -128,9 +174,8 @@ export function LeaderboardScatter({
   );
 
   const reset = () => setView({ scale: 1, tx: 0, ty: 0 });
-
   const eloTicks = ticks(domain.eMin, domain.eMax, 5);
-  const gameTicks = ticks(domain.gMin, domain.gMax, 5);
+  const hoveredNode = hovered ? nodes.find((n) => n.entry.login === hovered) : null;
 
   return (
     <div className={`relative ${className}`}>
@@ -147,9 +192,9 @@ export function LeaderboardScatter({
         </ZoomBtn>
       </div>
 
-      {/* Légende des axes */}
+      {/* Légende */}
       <div className="absolute top-2 left-2 z-20 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2 pointer-events-none">
-        ELO ↑ · matchs joués →
+        ELO ↑ · réparti par niveau
       </div>
 
       <div
@@ -157,55 +202,38 @@ export function LeaderboardScatter({
         className="relative w-full h-full overflow-hidden rounded-xl card-hud cursor-grab active:cursor-grabbing select-none touch-none"
       >
         {/* Graduations ELO (axe Y) */}
-        <div className="absolute left-0 top-0 overflow-hidden pointer-events-none" style={{ width: M.l, top: M.t, height: plotH }}>
-          {eloTicks.map((v, i) => {
-            const { ly } = project(0, v);
-            return (
-              <span
-                key={i}
-                className="absolute right-1.5 -translate-y-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
-                style={{ top: ly }}
-              >
-                {Math.round(v)}
-              </span>
-            );
-          })}
-        </div>
-
-        {/* Graduations matchs (axe X) */}
         <div
-          className="absolute overflow-hidden pointer-events-none"
-          style={{ left: M.l, top: M.t + plotH, width: plotW, height: M.b }}
+          className="absolute left-0 overflow-hidden pointer-events-none"
+          style={{ width: M.l, top: M.t, height: plotH }}
         >
-          {gameTicks.map((v, i) => {
-            const { lx } = project(v, 0);
-            return (
-              <span
-                key={i}
-                className="absolute top-1.5 -translate-x-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
-                style={{ left: lx }}
-              >
-                {Math.round(v)}
-              </span>
-            );
-          })}
+          {eloTicks.map((v, i) => (
+            <span
+              key={i}
+              className="absolute right-1.5 -translate-y-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
+              style={{ top: view.ty + yOfElo(v) * view.scale }}
+            >
+              {Math.round(v)}
+            </span>
+          ))}
         </div>
 
         {/* Zone du nuage (clippée) */}
-        <div className="absolute overflow-hidden" style={{ left: M.l, top: M.t, width: plotW, height: plotH }}>
-          {/* Grille */}
-          {eloTicks.map((v, i) => {
-            const { ly } = project(0, v);
-            return <div key={`h${i}`} className="absolute left-0 right-0 h-px bg-gold/[0.06]" style={{ top: ly }} />;
-          })}
-          {gameTicks.map((v, i) => {
-            const { lx } = project(v, 0);
-            return <div key={`v${i}`} className="absolute top-0 bottom-0 w-px bg-gold/[0.06]" style={{ left: lx }} />;
-          })}
+        <div
+          className="absolute overflow-hidden"
+          style={{ left: M.l, top: M.t, width: plotW, height: plotH }}
+        >
+          {/* Lignes ELO horizontales */}
+          {eloTicks.map((v, i) => (
+            <div
+              key={`h${i}`}
+              className="absolute left-0 right-0 h-px bg-gold/[0.06]"
+              style={{ top: view.ty + yOfElo(v) * view.scale }}
+            />
+          ))}
 
           {/* Têtes des joueurs */}
-          {entries.map((e) => {
-            const { lx, ly } = project(e.matchesPlayed, e.elo);
+          {nodes.map(({ entry: e, bx, by }) => {
+            const { lx, ly } = toLocal(bx, by);
             const isMe = e.login === myLogin;
             const isHover = e.login === hovered;
             return (
@@ -237,24 +265,23 @@ export function LeaderboardScatter({
         </div>
 
         {/* Infobulle (hors zone clippée pour ne pas être coupée) */}
-        {hovered && <ScatterTooltip entry={entries.find((e) => e.login === hovered)!} project={project} />}
+        {hoveredNode && (
+          <ScatterTooltip
+            entry={hoveredNode.entry}
+            left={M.l + toLocal(hoveredNode.bx, hoveredNode.by).lx}
+            top={M.t + toLocal(hoveredNode.bx, hoveredNode.by).ly - 26}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function ScatterTooltip({
-  entry,
-  project,
-}: {
-  entry: LeaderboardEntry;
-  project: (g: number, e: number) => { lx: number; ly: number };
-}) {
-  const { lx, ly } = project(entry.matchesPlayed, entry.elo);
+function ScatterTooltip({ entry, left, top }: { entry: LeaderboardEntry; left: number; top: number }) {
   return (
     <div
       className="absolute z-50 pointer-events-none -translate-x-1/2 -translate-y-full"
-      style={{ left: M.l + lx, top: M.t + ly - 26 }}
+      style={{ left, top }}
     >
       <div className="card-hud rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-xl">
         <div className="text-xs font-extrabold text-text-strong leading-tight">{entry.login}</div>

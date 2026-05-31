@@ -81,8 +81,11 @@ export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 
 export const CreateTournamentSchema = z.object({
   name: z.string().min(2).max(60),
-  capacity: z.union([z.literal(2), z.literal(4)]),
+  // Minimum 8 joueurs (même en amical). Bracket à élimination directe → puissance de 2.
+  capacity: z.union([z.literal(8), z.literal(16)]),
   kind: z.enum(['friendly', 'official']).default('friendly'),
+  // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
+  private: z.boolean().default(false),
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

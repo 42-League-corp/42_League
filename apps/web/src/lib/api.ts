@@ -218,6 +218,7 @@ export interface Tournament {
   id: string;
   name: string;
   kind: 'friendly' | 'official';
+  isPrivate?: boolean;
   capacity: number;
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
   createdByLogin: string;
@@ -370,8 +371,9 @@ export const api = {
     request<Tournament>(`/tournaments/${encodeURIComponent(id)}`),
   createTournament: (input: {
     name: string;
-    capacity: 4 | 8;
+    capacity: 8 | 16;
     kind: 'friendly' | 'official';
+    private?: boolean;
   }) =>
     request<Tournament>('/tournaments', {
       method: 'POST',
