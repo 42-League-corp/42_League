@@ -24,15 +24,14 @@ export default defineManifest({
       128: ICON,
     },
   },
-  // `service_worker` (Chrome MV3) + `scripts` (Firefox MV3) cohabitent
-  // volontairement pour rester cross-browser. La combinaison n'est pas exprimable
-  // dans le type strict de defineManifest → on élargit le cast (manifeste émis
-  // inchangé).
+  // Source = manifest Chrome MV3 (service_worker only). Chrome REFUSE la clé
+  // `background.scripts` ('requires manifest version 2 or lower'). La variante
+  // Firefox (event page `scripts`) est générée séparément par patch-manifest.js
+  // dans dist-firefox/ — voir ce script.
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',
-    scripts: ['src/background/index.ts'],
-  } as chrome.runtime.ManifestBackground,
+  },
   browser_specific_settings: {
     gecko: {
       id: '42league@42league.fr',
