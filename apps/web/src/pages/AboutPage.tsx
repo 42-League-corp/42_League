@@ -632,7 +632,7 @@ function TeamSectionAuthed() {
     void Promise.all(
       TEAM.map(async (m) => {
         try {
-          const { user } = await api.user(m.login);
+          const { user } = await api.userProfile(m.login);
           return [m.login, user.imageUrl] as const;
         } catch {
           return [m.login, null] as const;
