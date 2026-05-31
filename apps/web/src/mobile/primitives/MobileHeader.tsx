@@ -64,11 +64,7 @@ export function MobileHeader() {
           onClick={() => haptic('selection')}
           className="flex items-center gap-1.5 active:opacity-70 transition-opacity tap-transparent"
         >
-          <span className="relative inline-flex items-center justify-center w-7 h-7 rounded-md metal-plate-gold">
-            <span className="font-display font-black text-[10px] tracking-tight text-[#3a1e00]">
-              42L
-            </span>
-          </span>
+          <img src="/icon-192.png" alt="42L" className="w-7 h-7 rounded-md" />
         </NavLink>
 
         {/* Titre de page animé — change avec la route */}
