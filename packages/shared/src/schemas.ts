@@ -79,16 +79,24 @@ export const RecordResultSchema = z
 
 export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 
-export const CreateTournamentSchema = z.object({
-  name: z.string().min(2).max(60),
-  // Minimum 8 joueurs (même en amical). Bracket à élimination directe → puissance de 2.
-  capacity: z.union([z.literal(8), z.literal(16)]),
-  kind: z.enum(['friendly', 'official']).default('friendly'),
-  // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
-  private: z.boolean().default(false),
-  // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.
-  imageUrl: z.string().trim().url().max(500).optional(),
-});
+export const CreateTournamentSchema = z
+  .object({
+    name: z.string().min(2).max(60),
+    // Nombre de joueurs : libre à partir de 6 (le bracket gère les byes si ce n'est
+    // pas une puissance de 2). Les poules s'activent à partir de 12.
+    capacity: z.number().int().min(6).max(64),
+    kind: z.enum(['friendly', 'official']).default('friendly'),
+    // Format : élimination directe, ou phase de poules (puis bracket des qualifiés).
+    format: z.enum(['elimination', 'pools']).default('elimination'),
+    // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
+    private: z.boolean().default(false),
+    // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.
+    imageUrl: z.string().trim().url().max(500).optional(),
+  })
+  .refine((d) => d.format !== 'pools' || d.capacity >= 12, {
+    message: 'les poules nécessitent au moins 12 joueurs',
+    path: ['format'],
+  });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
 

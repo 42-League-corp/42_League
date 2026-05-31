@@ -157,7 +157,8 @@ model Tournament {
   kind          String   @default("friendly")  // 'friendly' | 'official'
   isPrivate     Boolean  @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
   imageUrl      String?  @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
-  capacity      Int      // 4 or 8
+  capacity      Int      // nombre de joueurs (>= 6) ; phase de poule activée à partir de 12
+  format        String   @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
   status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String  @map("created_by_login")
   winnerLogin   String?  @map("winner_login")
@@ -189,8 +190,10 @@ model TournamentEntry {
 model TournamentMatch {
   id            String   @id @default(uuid())
   tournamentId  String   @map("tournament_id")
-  round         Int      // 1, 2, 3...
-  slot          Int      // position in the round (0-indexed)
+  stage         String   @default("bracket") // 'pool' | 'bracket'
+  poolIndex     Int?     @map("pool_index") // index de poule (stage='pool')
+  round         Int      // bracket: 1,2,3... ; pool: 0
+  slot          Int      // position in the round (0-indexed) ; pool: index global
   playerALogin  String?  @map("player_a_login")
   playerBLogin  String?  @map("player_b_login")
   scoreA        Int?     @map("score_a")
@@ -301,6 +304,7 @@ enum AdminAction {
   DELETE_PENDING_MATCH
   DELETE_REJECTED_MATCH
   DELETE_OPS
+  DELETE_TOURNAMENT
 }
 
 model AdminAuditLog {

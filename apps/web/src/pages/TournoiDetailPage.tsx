@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -37,6 +37,7 @@ export function TournoiDetailPage() {
   const { me, leaderboard, locations } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
+  const navigate = useNavigate();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +95,8 @@ export function TournoiDetailPage() {
   };
   const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
   const visLabel = tournament.isPrivate ? ' · 🔒 PRIVÉ' : '';
-  const sub = `${kindLabel}${visLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
+  const formatLabel = tournament.format === 'pools' ? ' · POULES' : '';
+  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
 
   const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
@@ -121,13 +123,20 @@ export function TournoiDetailPage() {
   const handleCancel = async () => {
     const ok = await confirm({
       title: 'Annuler ce tournoi ?',
-      message: 'Tous les participants seront retirés.',
-      confirmLabel: 'Annuler le tournoi',
+      message: 'Le tournoi sera supprimé définitivement et disparaîtra de la liste.',
+      warning: 'Cette action est irréversible.',
+      confirmLabel: 'Supprimer le tournoi',
       cancelLabel: 'Garder',
       danger: true,
     });
     if (!ok) return;
-    await runAction(() => api.cancelTournament(tournament.id), 'Tournoi annulé');
+    try {
+      await api.cancelTournament(tournament.id);
+      flash.show('Tournoi supprimé');
+      navigate('/tournaments');
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
   };
 
   return (
@@ -156,8 +165,8 @@ export function TournoiDetailPage() {
                 Lancer le tournoi
               </Button>
             )}
-            {isOrganizer && (
-              <Button variant="danger" onClick={handleCancel}>Annuler</Button>
+            {(isOrganizer || isAdmin) && (
+              <Button variant="danger" onClick={handleCancel}>Supprimer</Button>
             )}
           </div>
 
@@ -235,7 +244,15 @@ export function TournoiDetailPage() {
             </div>
           )}
 
-          <Bracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
+          <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
+
+          {tournament.status === 'in_progress' && (isOrganizer || isAdmin) && (
+            <div className="mt-6 pt-4 border-t border-border/40 flex justify-end">
+              <Button size="sm" variant="danger" onClick={handleCancel}>
+                Supprimer le tournoi
+              </Button>
+            </div>
+          )}
         </>
       )}
     </Panel>
@@ -253,7 +270,49 @@ function BackLink() {
   );
 }
 
-function Bracket({
+interface Standing {
+  login: string;
+  played: number;
+  wins: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  diff: number;
+}
+
+// Classement d'une poule (miroir de poolStandings côté serveur) : victoires, puis
+// différence de buts, puis buts marqués.
+function computeStandings(matches: TournamentMatch[]): Standing[] {
+  const table = new Map<string, Standing>();
+  const ensure = (login: string): Standing => {
+    let s = table.get(login);
+    if (!s) {
+      s = { login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 };
+      table.set(login, s);
+    }
+    return s;
+  };
+  for (const m of matches) {
+    if (!m.playerALogin || !m.playerBLogin || m.scoreA == null || m.scoreB == null) continue;
+    const a = ensure(m.playerALogin);
+    const b = ensure(m.playerBLogin);
+    a.played++;
+    b.played++;
+    a.goalsFor += m.scoreA;
+    a.goalsAgainst += m.scoreB;
+    b.goalsFor += m.scoreB;
+    b.goalsAgainst += m.scoreA;
+    if (m.winnerLogin === m.playerALogin) a.wins++;
+    else if (m.winnerLogin === m.playerBLogin) b.wins++;
+  }
+  const rows = [...table.values()];
+  for (const r of rows) r.diff = r.goalsFor - r.goalsAgainst;
+  rows.sort((x, y) => y.wins - x.wins || y.diff - x.diff || y.goalsFor - x.goalsFor);
+  return rows;
+}
+
+const QUALIFY_PER_POOL = 2;
+
+function PoolsAndBracket({
   tournament,
   myLogin,
   onChange,
@@ -262,45 +321,199 @@ function Bracket({
   myLogin: string | null;
   onChange: () => Promise<void>;
 }) {
-  // Pré-calcule les rounds une fois — recompute uniquement si la liste des matchs change.
-  // Math.log2 est valide tant que capacity est une puissance de 2 (garanti par CreateTournamentSchema).
-  const { totalRounds, roundsByIndex } = useMemo(() => {
-    const total = Math.log2(tournament.capacity);
-    const byIndex = new Map<number, TournamentMatch[]>();
-    for (const m of tournament.matches ?? []) {
-      const arr = byIndex.get(m.round) ?? [];
+  const { poolGroups, bracketRounds, totalBracketRounds, poolsComplete } = useMemo(() => {
+    const all = tournament.matches ?? [];
+    const poolMatches = all.filter((m) => m.stage === 'pool');
+    const bracketMatches = all.filter((m) => (m.stage ?? 'bracket') === 'bracket');
+
+    // Poules regroupées par index.
+    const byPool = new Map<number, TournamentMatch[]>();
+    for (const m of poolMatches) {
+      const p = m.poolIndex ?? 0;
+      const arr = byPool.get(p) ?? [];
       arr.push(m);
-      byIndex.set(m.round, arr);
+      byPool.set(p, arr);
     }
-    for (const arr of byIndex.values()) {
-      arr.sort((a, b) => a.slot - b.slot);
+    const groups = [...byPool.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([index, matches]) => ({
+        index,
+        matches: [...matches].sort((a, b) => a.slot - b.slot),
+        standings: computeStandings(matches),
+      }));
+    const complete = poolMatches.length > 0 && poolMatches.every((m) => m.confirmedAt);
+
+    // Bracket : nombre de rounds = round max réel (byes/poules font diverger la capacité).
+    const total = bracketMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
+    const byRound = new Map<number, TournamentMatch[]>();
+    for (const m of bracketMatches) {
+      const arr = byRound.get(m.round) ?? [];
+      arr.push(m);
+      byRound.set(m.round, arr);
     }
-    return { totalRounds: total, roundsByIndex: byIndex };
-  }, [tournament.capacity, tournament.matches]);
+    for (const arr of byRound.values()) arr.sort((a, b) => a.slot - b.slot);
+
+    return {
+      poolGroups: groups,
+      bracketRounds: byRound,
+      totalBracketRounds: total,
+      poolsComplete: complete,
+    };
+  }, [tournament.matches]);
+
+  const hasPools = poolGroups.length > 0;
+  const hasBracket = totalBracketRounds > 0;
 
   return (
-    <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2">
-      {Array.from({ length: totalRounds }, (_, i) => i + 1).map((round) => {
-        const matches = roundsByIndex.get(round) ?? [];
-        return (
-          <div key={round} className="min-w-[240px] flex flex-col gap-3 justify-around">
-            <div className="text-[10px] uppercase tracking-wider text-muted font-semibold text-center">
-              {roundLabel(round, totalRounds)}
-            </div>
-            <div className="flex flex-col gap-3">
-              {matches.map((m) => (
-                <BracketMatch
-                  key={m.id}
-                  tournament={tournament}
-                  match={m}
-                  myLogin={myLogin}
-                  onChange={onChange}
-                />
-              ))}
-            </div>
+    <div className="space-y-6">
+      {hasPools && (
+        <section>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-3 flex items-center gap-2">
+            <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+            Phase de poules
+            <span className="text-muted-2 normal-case font-mono">
+              · top {QUALIFY_PER_POOL} qualifiés / poule
+            </span>
           </div>
-        );
-      })}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {poolGroups.map((g) => (
+              <PoolCard
+                key={g.index}
+                tournament={tournament}
+                pool={g}
+                myLogin={myLogin}
+                onChange={onChange}
+              />
+            ))}
+          </div>
+          {!poolsComplete && (
+            <p className="text-[11px] text-muted-2 mt-3">
+              Le bracket des qualifiés est généré automatiquement une fois tous les matchs de
+              poule confirmés.
+            </p>
+          )}
+        </section>
+      )}
+
+      {hasBracket ? (
+        <section>
+          {hasPools && (
+            <div className="text-[10px] uppercase tracking-[0.16em] text-teal font-extrabold mb-3 flex items-center gap-2">
+              <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-teal to-teal rounded-sm" />
+              Phase finale
+            </div>
+          )}
+          <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2">
+            {Array.from({ length: totalBracketRounds }, (_, i) => i + 1).map((round) => {
+              const matches = bracketRounds.get(round) ?? [];
+              return (
+                <div key={round} className="min-w-[240px] flex flex-col gap-3 justify-around">
+                  <div className="text-[10px] uppercase tracking-wider text-muted font-semibold text-center">
+                    {roundLabel(round, totalBracketRounds)}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {matches.map((m) => (
+                      <BracketMatch
+                        key={m.id}
+                        tournament={tournament}
+                        match={m}
+                        myLogin={myLogin}
+                        onChange={onChange}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        !hasPools && (
+          <div className="text-center text-muted-2 py-8 text-sm">Bracket en préparation…</div>
+        )
+      )}
+    </div>
+  );
+}
+
+function PoolCard({
+  tournament,
+  pool,
+  myLogin,
+  onChange,
+}: {
+  tournament: Tournament;
+  pool: { index: number; matches: TournamentMatch[]; standings: Standing[] };
+  myLogin: string | null;
+  onChange: () => Promise<void>;
+}) {
+  const poolName = String.fromCharCode(65 + pool.index); // A, B, C…
+  return (
+    <div className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
+      <div className="px-3 py-2 bg-bg-2/60 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-text-strong">
+        Poule {poolName}
+      </div>
+      {/* Classement */}
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted-2 border-b border-border/40">
+            <th className="text-left font-semibold py-1.5 pl-3">#</th>
+            <th className="text-left font-semibold py-1.5">Joueur</th>
+            <th className="text-center font-semibold py-1.5">J</th>
+            <th className="text-center font-semibold py-1.5">V</th>
+            <th className="text-center font-semibold py-1.5 pr-3">+/−</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pool.standings.map((s, i) => {
+            const qualified = i < QUALIFY_PER_POOL;
+            return (
+              <tr
+                key={s.login}
+                className={`border-b border-border/20 last:border-0 ${
+                  qualified ? 'bg-teal/5' : ''
+                }`}
+              >
+                <td className="py-1.5 pl-3">
+                  <span
+                    className={`inline-flex w-4 justify-center font-bold ${
+                      qualified ? 'text-teal' : 'text-muted-2'
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                </td>
+                <td className="py-1.5">
+                  <PlayerLink login={s.login} className="text-sm truncate">
+                    <span className={qualified ? 'text-text-strong font-semibold' : ''}>
+                      {s.login}
+                    </span>
+                  </PlayerLink>
+                </td>
+                <td className="py-1.5 text-center tabular-nums text-muted-2">{s.played}</td>
+                <td className="py-1.5 text-center tabular-nums font-bold">{s.wins}</td>
+                <td className="py-1.5 text-center tabular-nums pr-3">
+                  <span className={s.diff > 0 ? 'text-[#7fd66e]' : s.diff < 0 ? 'text-red' : ''}>
+                    {s.diff > 0 ? `+${s.diff}` : s.diff}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {/* Matchs de la poule */}
+      <div className="p-2.5 space-y-2 border-t border-border/40">
+        {pool.matches.map((m) => (
+          <BracketMatch
+            key={m.id}
+            tournament={tournament}
+            match={m}
+            myLogin={myLogin}
+            onChange={onChange}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -34,7 +34,12 @@ import {
 } from './auth.js';
 import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
 import { getCampusLocations } from './locations.js';
-import { advanceWinner, generateBracket } from './tournament.js';
+import {
+  advanceWinner,
+  generateBracket,
+  generatePools,
+  qualifiersFromPools,
+} from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
@@ -904,6 +909,17 @@ app.get('/follows', async (c) => {
   return c.json(rows);
 });
 
+// Abonnés : les joueurs qui ME suivent (pour l'onglet « followers » du profil).
+app.get('/followers', async (c) => {
+  const me = await getCurrentLogin(c);
+  const rows = await prisma.follow.findMany({
+    where: { followeeLogin: me },
+    include: { follower: { select: { login: true, imageUrl: true, elo: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  return c.json(rows);
+});
+
 app.post('/follows', async (c) => {
   const me = await getCurrentLogin(c);
   const body = await c.req.json().catch(() => ({}));
@@ -1737,6 +1753,17 @@ app.post('/challenges/:id/record', async (c) => {
 
 /* ============ TOURNAMENTS ============ */
 
+// Génère les matchs au démarrage : phase de poules (format 'pools') ou bracket à
+// élimination directe (format 'elimination', byes inclus si nécessaire).
+async function launchTournamentMatches(
+  tournamentId: string,
+  format: string,
+  logins: string[],
+): Promise<void> {
+  if (format === 'pools') await generatePools(tournamentId, logins);
+  else await generateBracket(tournamentId, logins);
+}
+
 app.get('/tournaments', async (c) => {
   const me = await getCurrentLogin(c);
   const list = await prisma.tournament.findMany({
@@ -1746,14 +1773,23 @@ app.get('/tournaments', async (c) => {
       winner: { select: { login: true, imageUrl: true } },
     },
   });
-  // Tournoi privé : visible uniquement par son créateur, ses invités (entries) ou un admin.
-  const visible = list.filter(
-    (t) =>
-      !t.isPrivate ||
-      t.createdByLogin === me ||
-      isAdmin(me) ||
-      t.entries.some((e) => e.login === me),
-  );
+  const isParticipant = (t: (typeof list)[number]) =>
+    t.createdByLogin === me || t.entries.some((e) => e.login === me);
+  const visible = list.filter((t) => {
+    // Tournoi privé : visible uniquement par son créateur, ses invités ou un admin.
+    if (t.isPrivate && !isParticipant(t) && !isAdmin(me)) return false;
+    // Historique amical : un tournoi amical terminé/annulé n'apparaît que pour ses
+    // participants. Les officiels (et tout ce qui est encore vivant) restent publics.
+    if (
+      t.kind !== 'official' &&
+      (t.status === 'finished' || t.status === 'cancelled') &&
+      !isParticipant(t) &&
+      !isAdmin(me)
+    ) {
+      return false;
+    }
+    return true;
+  });
   return c.json(visible);
 });
 
@@ -1810,6 +1846,7 @@ app.post('/tournaments', async (c) => {
       isPrivate: parsed.data.private,
       imageUrl: parsed.data.imageUrl ?? null,
       capacity: parsed.data.capacity,
+      format: parsed.data.format,
       status: 'registration',
       createdByLogin: me,
       entries: { create: { login: me } },
@@ -1849,7 +1886,7 @@ app.post('/tournaments/:id/join', async (c) => {
     const newCount = t.entries.length + 1;
     if (newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), me];
-      await generateBracket(id, t.capacity, logins);
+      await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
@@ -1912,7 +1949,7 @@ app.post('/tournaments/:id/add-player', async (c) => {
     const newCount = t.entries.length + 1;
     if (newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), login];
-      await generateBracket(id, t.capacity, logins);
+      await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
@@ -1975,7 +2012,7 @@ app.post('/tournaments/:id/start', async (c) => {
         message: `need exactly ${t.capacity} players (have ${t.entries.length})`,
       });
     }
-    await generateBracket(id, t.capacity, t.entries.map((e) => e.login));
+    await launchTournamentMatches(id, t.format, t.entries.map((e) => e.login));
     await tx.tournament.update({
       where: { id },
       data: { status: 'in_progress', startedAt: new Date() },
@@ -1991,26 +2028,25 @@ app.post('/tournaments/:id/start', async (c) => {
   return c.json({ id, started: result });
 });
 
+// Annulation par l'organisateur (ou un admin) : le tournoi est supprimé pour de bon
+// et disparaît des listes (cascade → entries + matchs). Pas de statut « annulé ».
 app.post('/tournaments/:id/cancel', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
   await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me) {
+    if (t.createdByLogin !== me && !isAdmin(me)) {
       throw new HTTPException(403, {
         message: 'only the organizer can cancel',
       });
     }
-    if (t.status === 'finished' || t.status === 'cancelled') {
-      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    if (t.status === 'finished') {
+      throw new HTTPException(409, { message: 'tournament is finished' });
     }
-    await tx.tournament.update({
-      where: { id },
-      data: { status: 'cancelled', finishedAt: new Date() },
-    });
+    await tx.tournament.delete({ where: { id } });
   });
-  return c.json({ id, cancelled: true });
+  return c.json({ id, cancelled: true, deleted: true });
 });
 
 app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
@@ -2104,8 +2140,41 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       where: { id: matchId },
       data: { winnerLogin, confirmedAt: new Date() },
     });
-    const t = await tx.tournament.findUniqueOrThrow({ where: { id } });
-    const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, t.capacity);
+
+    // Match de poule : pas de propagation. Quand toutes les poules sont terminées,
+    // on génère le bracket des qualifiés (top 2 par poule, seeding croisé).
+    if (m.stage === 'pool') {
+      const remaining = await tx.tournamentMatch.count({
+        where: { tournamentId: id, stage: 'pool', confirmedAt: null },
+      });
+      let bracketGenerated = false;
+      if (remaining === 0) {
+        const poolMatches = await tx.tournamentMatch.findMany({
+          where: { tournamentId: id, stage: 'pool' },
+          select: {
+            poolIndex: true,
+            playerALogin: true,
+            playerBLogin: true,
+            scoreA: true,
+            scoreB: true,
+            winnerLogin: true,
+          },
+        });
+        const qualifiers = qualifiersFromPools(poolMatches);
+        await generateBracket(id, qualifiers, { preSeeded: true });
+        bracketGenerated = true;
+      }
+      return { winnerLogin, finished: false, bracketGenerated };
+    }
+
+    // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
+    // les matchs réels (byes / poules font diverger taille du bracket et capacité).
+    const agg = await tx.tournamentMatch.aggregate({
+      where: { tournamentId: id, stage: 'bracket' },
+      _max: { round: true },
+    });
+    const totalBracketRounds = agg._max.round ?? 1;
+    const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
     let finished = false;
     if (adv.isFinal) {
       await tx.tournament.update({
@@ -2122,8 +2191,20 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       });
       finished = true;
     }
-    return { winnerLogin, finished };
+    return { winnerLogin, finished, bracketGenerated: false };
   });
+  if (result.bracketGenerated) {
+    const players = await prisma.tournamentEntry.findMany({
+      where: { tournamentId: id },
+      select: { login: true },
+    });
+    void notifyMany(players.map((p) => p.login), {
+      type: 'tournament',
+      title: 'Phase de poules terminée',
+      body: 'Le bracket des qualifiés est prêt — place à l’élimination directe !',
+      link: `/tournaments/${id}`,
+    });
+  }
   return c.json({ id: matchId, ...result });
 });
 
@@ -2673,6 +2754,34 @@ app.delete('/admin/ops/:id', async (c) => {
     action: 'DELETE_OPS',
     target: row.ownerLogin,
     payload: { id, ownerLogin: row.ownerLogin, targetLogin: row.targetLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
+// Suppression d'un tournoi par un admin (n'importe quel statut, y compris terminé).
+// Si le tournoi était terminé, on décrémente le compteur de victoires du vainqueur.
+app.delete('/admin/tournaments/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.tournament.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'tournament not found' });
+  await prisma.$transaction(async (tx) => {
+    if (row.status === 'finished' && row.winnerLogin) {
+      await tx.user.update({
+        where: { login: row.winnerLogin },
+        data: { tournamentsWon: { decrement: 1 } },
+      });
+    }
+    await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'DELETE_TOURNAMENT',
+    target: row.createdByLogin,
+    payload: { id, name: row.name, kind: row.kind, status: row.status, winnerLogin: row.winnerLogin },
   });
   return c.json({ id, deleted: true });
 });

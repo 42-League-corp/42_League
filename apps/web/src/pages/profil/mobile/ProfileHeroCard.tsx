@@ -23,7 +23,12 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const user = me?.user;
   if (!user) return null;
 
-  const myRank = leaderboard.find((u) => u.login === user.login)?.rank ?? 0;
+  const myEntry = leaderboard.find((u) => u.login === user.login);
+  const myRank = myEntry?.rank ?? 0;
+  const fullName =
+    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
+    user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
   const isTop10 = myRank > 0 && myRank <= 10;
@@ -95,11 +100,12 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-extrabold text-text-strong tracking-tight truncate">
-              {user.login}
+            <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate">
+              {fullName}
             </h2>
+            <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
             {user.title && (
-              <div className="text-[11px] text-gold italic mt-0.5 truncate">
+              <div className="text-sm text-gold italic font-semibold mt-0.5 truncate">
                 « {user.title} »
               </div>
             )}
@@ -110,8 +116,8 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               </div>
             )}
             {me?.badges && me.badges.length > 0 && (
-              <div className="mt-1.5">
-                <BadgesRow codes={me.badges} size="xs" />
+              <div className="mt-2">
+                <BadgesRow codes={me.badges} size="md" />
               </div>
             )}
           </div>
@@ -187,7 +193,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
 
         {/* Footer stats */}
         <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-3 gap-3 text-center">
-          <FooterStat label="Tournois" value={user.tournamentsWon} tone="gold" />
+          <FooterStat label="Tournois remportés" value={user.tournamentsWon} tone="gold" />
           <FooterStat
             label="Best Streak"
             value={stats.longestWinStreak}

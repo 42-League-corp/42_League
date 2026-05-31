@@ -2,6 +2,9 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import type { PlayedMatch } from '../../../lib/api';
+import { Avatar } from '../../../components/Avatar';
+import { PlayerLink } from '../../../components/PlayerLink';
+import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDatePair } from '../../../lib/format';
 
@@ -48,9 +51,11 @@ interface RecentMatchRowProps {
 function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const t = useT();
   const { lang } = useI18n();
+  const { leaderboard } = useLeagueData();
   const youAreA = match.playerALogin === myLogin;
   const youWon = (youAreA && match.winner === 'A') || (!youAreA && match.winner === 'B');
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
+  const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const myScore = youAreA ? match.scoreA : match.scoreB;
   const oppScore = youAreA ? match.scoreB : match.scoreA;
   const delta = youAreA ? match.deltaA : match.deltaB;
@@ -80,12 +85,10 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted">vs</span>
-          <Link
-            to={`/player/${opp}`}
-            className="text-sm font-bold text-text-strong truncate hover:text-teal transition-colors"
-          >
-            {opp}
-          </Link>
+          <PlayerLink login={opp} className="min-w-0">
+            <Avatar login={opp} imageUrl={oppImg} size="xs" />
+            <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
+          </PlayerLink>
         </div>
         <div className="text-[10px] text-muted font-medium">
           {date.short}

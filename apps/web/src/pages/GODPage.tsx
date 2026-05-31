@@ -16,9 +16,10 @@ import {
   type AllHistoryEvent,
   type AllHistoryEventType,
   type Season,
+  type Tournament,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history' | 'seasons';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -1428,6 +1429,7 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   DELETE_PENDING_MATCH: 'text-red-400',
   DELETE_REJECTED_MATCH: 'text-red-400',
   DELETE_OPS: 'text-red-400',
+  DELETE_TOURNAMENT: 'text-red-400',
 };
 
 function AuditTab() {
@@ -2239,6 +2241,146 @@ function SeasonsTab() {
   );
 }
 
+// ── Onglet TOURNOIS : liste complète + suppression précise ───────────────────
+
+const TOURN_STATUS: Record<Tournament['status'], { label: string; cls: string }> = {
+  registration: { label: 'INSCRIPTIONS', cls: 'bg-teal-400/15 text-teal-300' },
+  in_progress: { label: 'EN COURS', cls: 'bg-amber-400/15 text-amber-400' },
+  finished: { label: 'TERMINÉ', cls: 'bg-zinc-600/30 text-zinc-400' },
+  cancelled: { label: 'ANNULÉ', cls: 'bg-red-400/15 text-red-400' },
+};
+
+function TournamentsTab() {
+  const [rows, setRows] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    api
+      .tournaments()
+      .then(setRows)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  useServerEvents(() => load(true), [...PANEL_EVENTS, 'tournament:update']);
+
+  async function handleDelete(t: Tournament) {
+    if (
+      !confirm(
+        `Supprimer le tournoi « ${t.name} » (${t.kind}, ${TOURN_STATUS[t.status].label}) ?\n` +
+          `Cette action est irréversible — entries et matchs seront effacés.`,
+      )
+    )
+      return;
+    setBusyId(t.id);
+    setError('');
+    try {
+      await api.adminDeleteTournament(t.id);
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const filtered = rows.filter(
+    (t) =>
+      t.name.toLowerCase().includes(filter.toLowerCase()) ||
+      t.createdByLogin.includes(filter) ||
+      (t.winner?.login ?? '').includes(filter),
+  );
+
+  const order: Tournament['status'][] = ['in_progress', 'registration', 'finished', 'cancelled'];
+  const sorted = [...filtered].sort(
+    (a, b) =>
+      order.indexOf(a.status) - order.indexOf(b.status) ||
+      (a.createdAt < b.createdAt ? 1 : -1),
+  );
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-3 mb-4">
+        <Input value={filter} onChange={setFilter} placeholder="Filtrer (nom, organisateur, vainqueur)…" className="w-72" />
+        <Btn onClick={() => load()} variant="ghost">↻ Recharger</Btn>
+        <span className="text-zinc-600 text-xs font-mono">{sorted.length} tournoi(s)</span>
+      </div>
+      {error && <div className="text-red-400 text-xs font-mono mb-3">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-600 text-sm font-mono">Chargement…</div>
+      ) : sorted.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucun tournoi.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-zinc-500 text-xs font-mono uppercase tracking-wider border-b border-zinc-800">
+                <th className="text-left py-2 px-3">Nom</th>
+                <th className="text-left py-2 px-3">Type</th>
+                <th className="text-left py-2 px-3">Format</th>
+                <th className="text-center py-2 px-3">Joueurs</th>
+                <th className="text-left py-2 px-3">Statut</th>
+                <th className="text-left py-2 px-3">Organisateur</th>
+                <th className="text-left py-2 px-3">Vainqueur</th>
+                <th className="text-left py-2 px-3">Créé</th>
+                <th className="text-right py-2 px-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((t) => (
+                <tr key={t.id} className="border-b border-zinc-800/60 hover:bg-zinc-800/30">
+                  <td className="py-2 px-3 text-zinc-100 font-medium max-w-[200px] truncate">
+                    <button
+                      onClick={() => window.open(`/tournaments/${encodeURIComponent(t.id)}`, '_blank')}
+                      className="hover:text-amber-400 cursor-pointer text-left truncate w-full"
+                    >
+                      {t.name}
+                    </button>
+                  </td>
+                  <td className="py-2 px-3">
+                    <span className={t.kind === 'official' ? 'text-amber-400 font-mono text-xs' : 'text-zinc-400 font-mono text-xs'}>
+                      {t.kind === 'official' ? '★ OFFICIEL' : 'amical'}
+                      {t.isPrivate ? ' 🔒' : ''}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-zinc-400 font-mono text-xs">
+                    {t.format === 'pools' ? 'poules' : 'élim.'}
+                  </td>
+                  <td className="py-2 px-3 text-center tabular-nums text-zinc-300">
+                    {(t.entries?.length ?? 0)}/{t.capacity}
+                  </td>
+                  <td className="py-2 px-3">
+                    <span className={`px-1.5 py-0.5 text-xs rounded font-mono ${TOURN_STATUS[t.status].cls}`}>
+                      {TOURN_STATUS[t.status].label}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-zinc-400 font-mono text-xs">{t.createdByLogin}</td>
+                  <td className="py-2 px-3 text-zinc-300 font-mono text-xs">
+                    {t.winner?.login ? `🏆 ${t.winner.login}` : '—'}
+                  </td>
+                  <td className="py-2 px-3 text-zinc-500 font-mono text-xs whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                  <td className="py-2 px-3 text-right">
+                    <Btn onClick={() => handleDelete(t)} disabled={busyId === t.id} variant="danger">
+                      🗑️ Supprimer
+                    </Btn>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'users', label: 'UTILISATEURS' },
   { id: 'moderation', label: 'MODÉRATION' },
@@ -2249,6 +2391,7 @@ const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'alertes', label: 'ALERTES' },
   { id: 'audit', label: 'AUDIT' },
   { id: 'history', label: 'ALL HISTORY' },
+  { id: 'tournaments', label: 'TOURNOIS' },
   { id: 'seasons', label: 'SAISONS', superAdminOnly: true },
 ];
 
@@ -2353,6 +2496,7 @@ export function GODPage() {
           {activeTab === 'alertes' && <AlertesTab />}
           {activeTab === 'audit' && <AuditTab />}
           {activeTab === 'history' && <AllHistoryTab />}
+          {activeTab === 'tournaments' && <TournamentsTab />}
           {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
         </div>
       </div>

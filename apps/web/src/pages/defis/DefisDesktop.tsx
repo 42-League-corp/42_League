@@ -91,7 +91,7 @@ export function DefisDesktop() {
       {/* Command center : à gauche le flux d'activité (à confirmer + défis),
           à droite le roster d'adversaires. Quand il n'y a aucune activité, le
           roster s'étale sur toute la largeur (réagencement « Uber Eats »). */}
-      <div className={`grid gap-5 ${hasActivity ? 'lg:grid-cols-12' : ''}`}>
+      <div className={`grid gap-5 items-stretch lg:min-h-[58vh] ${hasActivity ? 'lg:grid-cols-12' : ''}`}>
         {hasActivity && (
           <div className="lg:col-span-5 space-y-4">
             {pendingToConfirm.length > 0 && (
@@ -156,7 +156,7 @@ export function DefisDesktop() {
           </div>
         )}
 
-        <div className={hasActivity ? 'lg:col-span-7' : ''}>
+        <div className={`flex flex-col ${hasActivity ? 'lg:col-span-7' : ''}`}>
           <Section title={t('defis.challenge')}>
             {others.length === 0 ? (
               <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
@@ -185,6 +185,10 @@ export function DefisDesktop() {
               </>
             )}
           </Section>
+
+          {/* Espace souple : pousse les stats vers le bas pour que la colonne
+              occupe toute la hauteur disponible (au lieu de laisser un grand vide). */}
+          <div className="flex-1 min-h-[24px]" />
 
           <ChallengeStats
             incoming={incoming.length}

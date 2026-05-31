@@ -184,10 +184,12 @@ function RulesSection() {
       <Panel title="Tournois">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
-            Les tournois sont en format <span className="text-text font-semibold">élimination directe</span> (8 ou 16 joueurs).
-            Les tournois <span className="text-gold font-semibold">officiels</span> sont créés par les admins et
-            peuvent affecter le classement. Les tournois <span className="text-text font-semibold">amicaux</span>
-            sont ouverts à tous et n'ont pas d'impact ELO.
+            Deux formats : <span className="text-text font-semibold">élimination directe</span> (bracket,
+            byes auto si besoin) ou <span className="text-text font-semibold">phase de poules</span> (dès 12
+            joueurs — poules de 4, 2 qualifiés par poule, puis bracket des qualifiés). Les tournois{' '}
+            <span className="text-gold font-semibold">officiels</span> sont créés par les admins et donnent des
+            récompenses spéciales ; les <span className="text-text font-semibold">amicaux</span> sont ouverts à
+            tous, sans impact ELO, et ne figurent dans l'historique que pour leurs participants.
           </p>
         </div>
       </Panel>
@@ -529,7 +531,7 @@ function TechSection() {
 type Member = {
   login: string;
   role: string;
-  accent: 'gold' | 'red';
+  accent: 'gold' | 'red' | 'violet';
   crown?: boolean;
   blurb: React.ReactNode;
 };
@@ -541,7 +543,6 @@ const TEAM: Member[] = [
     login: 'throbert',
     role: 'Founder',
     accent: 'gold',
-    crown: true,
     blurb: (
       <>
         Celui qui a transformé l'idée en vrai projet : un{' '}
@@ -574,12 +575,25 @@ const TEAM: Member[] = [
   },
   {
     login: 'jagharra',
-    role: 'Conseiller · Bêta-test',
-    accent: 'red',
+    role: 'Conseiller · Pentester',
+    accent: 'violet',
     blurb: (
       <>
         Le mec qui <span className="text-text font-semibold">casse tout avant les autres</span> pour
         qu'on répare à temps. Retours sans filtre et chasse aux bugs pendant toute la bêta.
+      </>
+    ),
+  },
+  {
+    login: 'rbardet-',
+    role: 'Conseiller UX/UI',
+    accent: 'red',
+    blurb: (
+      <>
+        Son <span className="text-text font-semibold">expertise e-sport</span> et sa connaissance
+        des sites de ranked ont beaucoup pesé : c'est lui qui a apporté l'
+        <span className="text-text font-semibold">analyse UX/UI</span> pour rendre l'app nette et
+        lisible.
       </>
     ),
   },
@@ -723,6 +737,16 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
   );
 }
 
+// Styles d'accent par membre (bordure de carte + pastille de rôle).
+const ACCENT: Record<Member['accent'], { border: string; badge: string }> = {
+  gold: { border: 'border-gold/50', badge: 'text-gold border-gold/40 bg-gold/15' },
+  red: { border: 'border-red/40', badge: 'text-red border-red/40 bg-red/15' },
+  violet: {
+    border: 'border-[#c97bff]/55',
+    badge: 'text-[#c97bff] border-[#c97bff]/40 bg-[#c97bff]/15',
+  },
+};
+
 function MemberCard({
   member,
   imageUrl,
@@ -732,13 +756,13 @@ function MemberCard({
   imageUrl: string | null;
   active: boolean;
 }) {
-  const isRed = member.accent === 'red';
+  const accent = ACCENT[member.accent];
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
   return (
     <div
       className={`relative w-[280px] sm:w-[330px] h-[440px] sm:h-[520px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
-        isRed ? 'border-red/40' : member.crown ? 'border-gold/70' : 'border-gold/40'
+        accent.border
       } ${active ? 'shadow-[0_24px_60px_-18px_rgba(0,0,0,0.75)]' : 'shadow-lg'}`}
     >
       {/* Image intra plein cadre (ou initiale en repli) */}
@@ -778,18 +802,16 @@ function MemberCard({
       )}
 
       {/* Contenu texte en bas */}
-      <div className="absolute inset-x-0 bottom-0 p-4">
-        <div className="font-gaming text-lg font-extrabold text-white tracking-wide">
+      <div className="absolute inset-x-0 bottom-0 p-5">
+        <div className="font-gaming text-xl sm:text-2xl font-extrabold text-white tracking-wide">
           {member.login}
         </div>
         <div
-          className={`inline-block mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
-            isRed ? 'text-red border-red/40 bg-red/15' : 'text-gold border-gold/40 bg-gold/15'
-          }`}
+          className={`inline-block mt-2 text-[11px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-md border ${accent.badge}`}
         >
           {member.role}
         </div>
-        <p className="mt-2.5 text-[13px] text-white/85 leading-relaxed">{member.blurb}</p>
+        <p className="mt-3 text-sm text-white/85 leading-relaxed">{member.blurb}</p>
       </div>
     </div>
   );

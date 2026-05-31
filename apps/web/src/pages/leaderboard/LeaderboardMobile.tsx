@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, X } from 'lucide-react';
+import { Search, X, Crown } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { Podium } from './mobile/Podium';
@@ -52,6 +53,16 @@ export function LeaderboardMobile() {
     }
     return map;
   }, [leaderboard, matches]);
+
+  // Win rate par login — abscisse du nuage de points.
+  const winRates = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [login, wl] of winsLossesByLogin) {
+      const g = wl.wins + wl.losses;
+      map.set(login, g === 0 ? 0 : Math.round((wl.wins / g) * 100));
+    }
+    return map;
+  }, [winsLossesByLogin]);
 
   // Tri par rang officiel (ELO) — comme la vue desktop.
   const sortedLeaderboard = useMemo(
@@ -145,13 +156,25 @@ export function LeaderboardMobile() {
           </div>
         ) : (
         <>
-        {/* Bascule liste / nuage de points */}
-        <div className="flex justify-center pt-1">
+        {/* Bascule liste / nuage + accès G.O.A.T */}
+        <div className="flex items-center justify-center gap-2 pt-1">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />
+          <Link
+            to="/goat"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold/40 bg-gold/10 text-gold text-[10px] font-extrabold uppercase tracking-[0.12em]"
+          >
+            <Crown className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
+            G.O.A.T
+          </Link>
         </div>
 
         {viewMode === 'graph' ? (
-          <LeaderboardScatter entries={sortedLeaderboard} myLogin={myLogin} className="h-[70vh]" />
+          <LeaderboardScatter
+            entries={sortedLeaderboard}
+            myLogin={myLogin}
+            winRates={winRates}
+            className="h-[70vh]"
+          />
         ) : (
         <>
         {/* Podium top 3 — toujours en haut (masqué seulement pendant une recherche). */}

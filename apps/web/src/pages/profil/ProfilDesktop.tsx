@@ -9,6 +9,8 @@ import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
+import { FollowLists } from '../../components/FollowLists';
+import { TournamentCup } from '../../components/TournamentCup';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
 import { fmtCountdown } from '../../lib/format';
@@ -20,7 +22,7 @@ import { fmtCountdown } from '../../lib/format';
 export function ProfilDesktop() {
   const t = useT();
   const { locale } = useI18n();
-  const { me, matches, opsMe, leaderboard } = useLeagueData();
+  const { me, matches, opsMe, leaderboard, tournaments } = useLeagueData();
   const reducedMotion = useReducedMotion();
 
   const stats = useMemo(() => {
@@ -39,6 +41,14 @@ export function ProfilDesktop() {
       .filter((m) => m.countedForElo)
       .map((m) => (m.playerALogin === myLogin ? m.deltaA : m.deltaB));
     const totalDelta = moves.reduce((s, d) => s + d, 0);
+    // Tournois remportés, séparés amicaux / officiels (coupe rouge = officiel).
+    let officialTitles = 0;
+    let friendlyTitles = 0;
+    for (const tour of tournaments) {
+      if (tour.status !== 'finished' || tour.winnerLogin !== myLogin) continue;
+      if (tour.kind === 'official') officialTitles++;
+      else friendlyTitles++;
+    }
     return {
       elo: meUser?.elo ?? 1000,
       matchesPlayed: meUser?.matchesPlayed ?? 0,
@@ -47,8 +57,10 @@ export function ProfilDesktop() {
       losses: total - wins,
       winRate,
       totalDelta,
+      officialTitles,
+      friendlyTitles,
     };
-  }, [me, matches]);
+  }, [me, matches, tournaments]);
 
   if (!me?.user) {
     return (
@@ -59,8 +71,14 @@ export function ProfilDesktop() {
   }
 
   const u = me.user;
-  const myRank = leaderboard.find((x) => x.login === u.login)?.rank ?? 0;
+  const myEntry = leaderboard.find((x) => x.login === u.login);
+  const myRank = myEntry?.rank ?? 0;
   const isTop1 = myRank === 1;
+  // Affiche prénom + nom (depuis l'intra) plutôt que le login.
+  const fullName =
+    [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
+    u.login;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
@@ -109,13 +127,14 @@ export function ProfilDesktop() {
           {/* Identité */}
           <div className="flex-1 min-w-0">
             <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
-              {u.login}
+              {fullName}
             </div>
+            <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>
             {u.title && (
-              <div className="mt-1.5 inline-flex items-center gap-1.5 max-w-full">
-                <span className="text-gold/70 text-base leading-none">❝</span>
-                <span className="text-gold italic text-sm font-semibold truncate">{u.title}</span>
-                <span className="text-gold/70 text-base leading-none">❞</span>
+              <div className="mt-2 inline-flex items-center gap-1.5 max-w-full">
+                <span className="text-gold/70 text-xl leading-none">❝</span>
+                <span className="text-gold italic text-lg font-bold truncate">{u.title}</span>
+                <span className="text-gold/70 text-xl leading-none">❞</span>
               </div>
             )}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -137,21 +156,21 @@ export function ProfilDesktop() {
               )}
             </div>
             {me.badges && me.badges.length > 0 && (
-              <div className="mt-2">
-                <BadgesRow codes={me.badges} />
+              <div className="mt-3">
+                <BadgesRow codes={me.badges} size="md" />
               </div>
             )}
           </div>
 
-          {/* Bloc ELO mis en valeur */}
-          <div className="text-right flex-shrink-0 pl-2">
+          {/* Bloc ELO mis en valeur — libellé aligné sur le 1er chiffre. */}
+          <div className="text-left flex-shrink-0 pl-2">
             <div
               className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
               style={{ textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 18px rgba(255,201,74,0.35)' }}
             >
               {stats.elo}
             </div>
-            <div className="mt-1.5 flex items-center justify-end gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
+            <div className="mt-1.5 flex items-center justify-start gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
               ELO
               <RankedBadge size="xs" />
             </div>
@@ -177,6 +196,25 @@ export function ProfilDesktop() {
       <div className="space-y-1.5 card-hud rounded-xl px-4 py-3">
         <KV label={t('profil.wins')} value={String(stats.wins)} tone="win" />
         <KV label={t('profil.losses')} value={String(stats.losses)} tone="loss" />
+      </div>
+
+      {/* Tournois remportés — amicaux vs officiels (coupe rouge = officiel). */}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <TitlesCard
+          label="Tournois officiels remportés"
+          value={stats.officialTitles}
+          accent="#ff6b6b"
+        />
+        <TitlesCard
+          label="Tournois amicaux remportés"
+          value={stats.friendlyTitles}
+          accent="#ffc94a"
+        />
+      </div>
+
+      {/* Following / Followers (style GitHub) */}
+      <div className="mt-4">
+        <FollowLists />
       </div>
       </Panel>
 
@@ -204,6 +242,22 @@ export function ProfilDesktop() {
 
       <OpsWidget opsMe={opsMe} locale={locale} />
       </Panel>
+    </div>
+  );
+}
+
+function TitlesCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <div className="card-hud rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+      <TournamentCup accent={accent} className="w-9 h-9 shrink-0" />
+      <div className="min-w-0">
+        <div className="font-display text-2xl font-black tabular-nums leading-none" style={{ color: accent }}>
+          {value}
+        </div>
+        <div className="text-[9px] uppercase tracking-wider text-muted-2 font-bold mt-0.5 leading-tight">
+          {label}
+        </div>
+      </div>
     </div>
   );
 }

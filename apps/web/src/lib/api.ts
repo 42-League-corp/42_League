@@ -136,6 +136,7 @@ export type AdminAuditAction =
   | 'DELETE_PENDING_MATCH'
   | 'DELETE_REJECTED_MATCH'
   | 'DELETE_OPS'
+  | 'DELETE_TOURNAMENT'
   | 'RESET_DATABASE';
 
 export interface AdminAuditEntry {
@@ -211,6 +212,16 @@ export interface FollowPrefs {
   notifyOps: boolean;
 }
 
+/** Arête de suivi : `followee` rempli côté /follows, `follower` côté /followers. */
+export interface FollowEdge {
+  id: string;
+  followerLogin: string;
+  followeeLogin: string;
+  createdAt: string;
+  follower?: { login: string; imageUrl: string | null; elo: number };
+  followee?: { login: string; imageUrl: string | null; elo: number };
+}
+
 export interface Season {
   id: string;
   name: string;
@@ -241,6 +252,8 @@ export interface PalmaresEntry {
 export interface TournamentMatch {
   id: string;
   tournamentId: string;
+  stage?: 'pool' | 'bracket';
+  poolIndex?: number | null;
   round: number;
   slot: number;
   playerALogin: string | null;
@@ -267,6 +280,7 @@ export interface Tournament {
   isPrivate?: boolean;
   imageUrl?: string | null;
   capacity: number;
+  format?: 'elimination' | 'pools';
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
   createdByLogin: string;
   winnerLogin: string | null;
@@ -351,6 +365,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(ids ? { ids } : {}),
     }),
+  // Liste des joueurs que JE suis (following).
+  follows: () => request<FollowEdge[]>('/follows'),
+  // Liste des joueurs qui ME suivent (followers).
+  followers: () => request<FollowEdge[]>('/followers'),
   follow: (login: string) =>
     request<unknown>('/follows', { method: 'POST', body: JSON.stringify({ login }) }),
   unfollow: (login: string) =>
@@ -457,8 +475,9 @@ export const api = {
     request<Tournament>(`/tournaments/${encodeURIComponent(id)}`),
   createTournament: (input: {
     name: string;
-    capacity: 8 | 16;
+    capacity: number;
     kind: 'friendly' | 'official';
+    format?: 'elimination' | 'pools';
     private?: boolean;
     imageUrl?: string;
   }) =>
@@ -607,6 +626,8 @@ export const api = {
     request<{ id: string; deleted: true }>(`/admin/rejected-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminDeleteOps: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeleteTournament: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/tournaments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; limit?: number }) => {
     const params = new URLSearchParams();
     if (filters?.login) params.set('login', filters.login);
