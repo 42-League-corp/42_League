@@ -1,5 +1,20 @@
 import { getApiBase } from './config';
 import { clearToken, getToken } from './storage';
+import type { Game } from './gameMode';
+
+export type { Game };
+
+/** Champs d'un résultat de match, communs à la déclaration et à l'enregistrement. */
+export interface MatchResultInput {
+  scoreSelf: number;
+  scoreOpponent: number;
+  game?: Game;
+  // Smash uniquement :
+  bestOf?: 3 | 5;
+  charSelf?: string;
+  charOpponent?: string;
+  stocks?: number;
+}
 
 export interface LeaderboardEntry {
   rank: number;
@@ -22,6 +37,11 @@ export interface PendingMatch {
   scoreDeclarer: number;
   scoreOpponent: number;
   declaredAt: string;
+  game?: Game;
+  bestOf?: number | null;
+  charDeclarer?: string | null;
+  charOpponent?: string | null;
+  stocks?: number | null;
 }
 
 export interface Challenge {
@@ -32,6 +52,7 @@ export interface Challenge {
   scheduledAt: string;
   createdAt: string;
   decidedAt: string | null;
+  game?: Game;
 }
 
 export interface PlayedMatch {
@@ -45,6 +66,12 @@ export interface PlayedMatch {
   countedForElo: boolean;
   deltaA: number;
   deltaB: number;
+  game?: Game;
+  bestOf?: number | null;
+  charA?: string | null;
+  charB?: string | null;
+  stocksA?: number | null;
+  stocksB?: number | null;
 }
 
 export interface MeResponse {
@@ -66,6 +93,9 @@ export interface MeResponse {
     title: string | null;
     dodgeCount: number;
     tournamentsWon: number;
+    eloSmash?: number;
+    matchesPlayedSmash?: number;
+    tournamentsWonSmash?: number;
   } | null;
 }
 
@@ -355,7 +385,8 @@ export interface AppNotification {
 
 export const api = {
   me: () => request<MeResponse>('/me'),
-  leaderboard: () => request<LeaderboardEntry[]>('/leaderboard'),
+  leaderboard: (game?: Game) =>
+    request<LeaderboardEntry[]>(`/leaderboard${game === 'smash' ? '?game=smash' : ''}`),
   // Token éphémère (scope SSE) à passer en ?token= pour ouvrir le flux /events,
   // afin de ne jamais exposer le Bearer 30 jours dans une URL (logs / Referer).
   streamToken: () => request<{ token: string }>('/auth/stream-token'),
@@ -391,19 +422,20 @@ export const api = {
     ),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
-  declareMatch: (input: {
-    opponentLogin: string;
-    scoreSelf: number;
-    scoreOpponent: number;
-  }) =>
+  declareMatch: (input: { opponentLogin: string } & MatchResultInput) =>
     request<{ id: string; status: 'pending' }>('/matches', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  confirmMatch: (id: string, scoreSelf: number, scoreOpponent: number) =>
+  confirmMatch: (
+    id: string,
+    scoreSelf: number,
+    scoreOpponent: number,
+    extra?: { game?: Game; bestOf?: 3 | 5 },
+  ) =>
     request<PlayedMatch>(`/matches/${encodeURIComponent(id)}/confirm`, {
       method: 'POST',
-      body: JSON.stringify({ scoreSelf, scoreOpponent }),
+      body: JSON.stringify({ scoreSelf, scoreOpponent, ...extra }),
     }),
   rejectMatch: (
     id: string,
@@ -424,7 +456,7 @@ export const api = {
       { method: 'POST' },
     ),
   challenges: () => request<Challenge[]>('/challenges'),
-  createChallenge: (input: { opponentLogin: string; scheduledAt: string }) =>
+  createChallenge: (input: { opponentLogin: string; scheduledAt: string; game?: Game }) =>
     request<Challenge>('/challenges', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -439,16 +471,12 @@ export const api = {
       `/challenges/${encodeURIComponent(id)}/decline`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
-  recordChallengeResult: (
-    id: string,
-    scoreSelf: number,
-    scoreOpponent: number,
-  ) =>
+  recordChallengeResult: (id: string, result: MatchResultInput) =>
     request<{ pendingId: string; status: 'pending_confirmation' }>(
       `/challenges/${encodeURIComponent(id)}/record`,
       {
         method: 'POST',
-        body: JSON.stringify({ scoreSelf, scoreOpponent }),
+        body: JSON.stringify(result),
       },
     ),
   userProfile: (login: string) =>

@@ -18,6 +18,7 @@ import {
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
+  calculateSmashElo,
   shouldCountForElo,
   estimatedEloLoss,
   OPS_DURATION_MS,
@@ -756,12 +757,28 @@ app.get('/users/:login', async (c) => {
 
 app.get('/leaderboard', async (c) => {
   await getCurrentLogin(c);
-  // Bannis / désactivés / anonymisés ne figurent jamais au classement.
+  // Classement par jeu : ?game=smash trie sur l'Elo Smash et expose ses compteurs
+  // sous les mêmes clés (elo / matchesPlayed / tournamentsWon) pour un front unifié.
+  const game = c.req.query('game') === 'smash' ? 'smash' : 'babyfoot';
   const users = await prisma.user.findMany({
     where: VISIBLE_USER_WHERE,
-    orderBy: { elo: 'desc' },
+    orderBy: game === 'smash' ? { eloSmash: 'desc' } : { elo: 'desc' },
   });
-  return c.json(users.map((u, i) => ({ rank: i + 1, ...u })));
+  return c.json(
+    users.map((u, i) => {
+      if (game === 'smash') {
+        const { eloSmash, matchesPlayedSmash, tournamentsWonSmash, ...rest } = u;
+        return {
+          rank: i + 1,
+          ...rest,
+          elo: eloSmash,
+          matchesPlayed: matchesPlayedSmash,
+          tournamentsWon: tournamentsWonSmash,
+        };
+      }
+      return { rank: i + 1, ...u };
+    }),
+  );
 });
 
 // ── Notifications in-app ──────────────────────────────────────────────────
@@ -977,7 +994,8 @@ app.post('/matches', async (c) => {
   if (!parsed.success) {
     throw new HTTPException(400, { message: parsed.error.message });
   }
-  const { opponentLogin, scoreSelf, scoreOpponent } = parsed.data;
+  const { opponentLogin, scoreSelf, scoreOpponent, game, bestOf, charSelf, charOpponent, stocks } =
+    parsed.data;
   if (opponentLogin === me) {
     throw new HTTPException(400, {
       message: 'cannot declare a match against yourself',
@@ -993,6 +1011,11 @@ app.post('/matches', async (c) => {
       opponentLogin,
       scoreDeclarer: scoreSelf,
       scoreOpponent,
+      game,
+      bestOf: bestOf ?? null,
+      charDeclarer: charSelf ?? null,
+      charOpponent: charOpponent ?? null,
+      stocks: stocks ?? null,
     },
   });
   emit([opponentLogin], {
@@ -1018,16 +1041,32 @@ type PendingForSettle = {
   scoreDeclarer: number;
   scoreOpponent: number;
   declaredAt: Date;
+  game?: string;
+  bestOf?: number | null;
+  charDeclarer?: string | null;
+  charOpponent?: string | null;
+  stocks?: number | null;
 };
 
 async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingForSettle) {
   const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
-  const scoreA = p.declarerLogin === a ? p.scoreDeclarer : p.scoreOpponent;
-  const scoreB = p.declarerLogin === a ? p.scoreOpponent : p.scoreDeclarer;
+  const declarerIsA = p.declarerLogin === a;
+  const scoreA = declarerIsA ? p.scoreDeclarer : p.scoreOpponent;
+  const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
   const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
+  const game = p.game === 'smash' ? 'smash' : 'babyfoot';
+  const isSmash = game === 'smash';
 
+  // Champs Smash mappés sur les côtés A/B.
+  const charA = declarerIsA ? p.charDeclarer ?? null : p.charOpponent ?? null;
+  const charB = declarerIsA ? p.charOpponent ?? null : p.charDeclarer ?? null;
+  const winnerStocks = p.stocks ?? 1;
+  const stocksA = isSmash ? (winner === 'A' ? winnerStocks : 0) : null;
+  const stocksB = isSmash ? (winner === 'B' ? winnerStocks : 0) : null;
+
+  // Anti-farming par paire ET par jeu (cooldown indépendant babyfoot / smash).
   const priors = await tx.playedMatch.findMany({
-    where: { playerALogin: a, playerBLogin: b },
+    where: { playerALogin: a, playerBLogin: b, game },
     select: { playedAt: true, countedForElo: true },
   });
   const countsForElo = shouldCountForElo(priors, p.declaredAt);
@@ -1040,16 +1079,30 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   let deltaA = 0;
   let deltaB = 0;
   if (countsForElo) {
-    const update = calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
+    const update = isSmash
+      ? calculateSmashElo(
+          userA.eloSmash,
+          userB.eloSmash,
+          winner,
+          scoreA,
+          scoreB,
+          p.bestOf ?? 3,
+          winnerStocks,
+        )
+      : calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
     deltaA = update.deltaA;
     deltaB = update.deltaB;
     await tx.user.update({
       where: { login: a },
-      data: { elo: update.newA, matchesPlayed: { increment: 1 } },
+      data: isSmash
+        ? { eloSmash: update.newA, matchesPlayedSmash: { increment: 1 } }
+        : { elo: update.newA, matchesPlayed: { increment: 1 } },
     });
     await tx.user.update({
       where: { login: b },
-      data: { elo: update.newB, matchesPlayed: { increment: 1 } },
+      data: isSmash
+        ? { eloSmash: update.newB, matchesPlayedSmash: { increment: 1 } }
+        : { elo: update.newB, matchesPlayed: { increment: 1 } },
     });
   }
 
@@ -1070,6 +1123,12 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
       deltaA,
       deltaB,
       seasonId: activeSeason?.id ?? null,
+      game,
+      bestOf: isSmash ? p.bestOf ?? null : null,
+      charA,
+      charB,
+      stocksA,
+      stocksB,
     },
   });
 }
@@ -1561,7 +1620,7 @@ app.post('/challenges', async (c) => {
   if (!parsed.success) {
     throw new HTTPException(400, { message: parsed.error.message });
   }
-  const { opponentLogin, scheduledAt } = parsed.data;
+  const { opponentLogin, scheduledAt, game } = parsed.data;
   if (opponentLogin === me) {
     throw new HTTPException(400, { message: 'cannot challenge yourself' });
   }
@@ -1576,6 +1635,7 @@ app.post('/challenges', async (c) => {
       opponentLogin,
       status: 'pending',
       scheduledAt: new Date(scheduledAt),
+      game,
     },
   });
   emit([opponentLogin], { type: 'challenge:received', payload: challenge });
@@ -1713,7 +1773,7 @@ app.post('/challenges/:id/record', async (c) => {
   if (!parsed.success) {
     throw new HTTPException(400, { message: parsed.error.message });
   }
-  const { scoreSelf, scoreOpponent } = parsed.data;
+  const { scoreSelf, scoreOpponent, bestOf, charSelf, charOpponent, stocks } = parsed.data;
 
   const pending = await prisma.$transaction(async (tx) => {
     const ch = await tx.challenge.findUnique({ where: { id } });
@@ -1732,6 +1792,7 @@ app.post('/challenges/:id/record', async (c) => {
       where: { id },
       data: { status: 'recorded' },
     });
+    // Le jeu du match en attente est celui du défi (babyfoot / smash).
     return tx.pendingMatch.create({
       data: {
         id: randomUUID(),
@@ -1739,6 +1800,11 @@ app.post('/challenges/:id/record', async (c) => {
         opponentLogin: opponentOfMe,
         scoreDeclarer: scoreSelf,
         scoreOpponent,
+        game: ch.game,
+        bestOf: bestOf ?? null,
+        charDeclarer: charSelf ?? null,
+        charOpponent: charOpponent ?? null,
+        stocks: stocks ?? null,
       },
     });
   });

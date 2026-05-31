@@ -99,7 +99,12 @@ export function NotifBanner() {
     try {
       await Promise.allSettled([
         ...duels.map((d) => api.acceptChallenge(d.id)),
-        ...scores.map((p) => api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer)),
+        ...scores.map((p) =>
+          api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer, {
+            game: p.game,
+            bestOf: p.bestOf as 3 | 5 | undefined,
+          }),
+        ),
       ]);
       flash.show(`${ids.length} demande${ids.length > 1 ? 's' : ''} acceptée${ids.length > 1 ? 's' : ''} ✓`, 'info');
     } catch (err) {
@@ -168,7 +173,10 @@ export function NotifBanner() {
       setBusyId(p.id, true);
       try {
         // Côté moi : mon score = scoreOpponent, celui du déclarant = scoreDeclarer.
-        await api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer);
+        await api.confirmMatch(p.id, p.scoreOpponent, p.scoreDeclarer, {
+          game: p.game,
+          bestOf: p.bestOf as 3 | 5 | undefined,
+        });
         flash.show('Game confirmée ✓', 'info');
       } catch (err) {
         flash.show(err instanceof Error ? err.message : String(err), 'error');

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useGameMode } from '../../../hooks/useGameMode';
 import type { PlayedMatch } from '../../../lib/api';
 
 export interface ProfilStats {
@@ -42,6 +43,7 @@ const EMPTY_STATS: ProfilStats = {
 
 export function useProfilLogic(): ProfilLogic {
   const { me, matches } = useLeagueData();
+  const { game, isSmash } = useGameMode();
   const myLogin = me?.login;
 
   const data = useMemo(() => {
@@ -49,7 +51,11 @@ export function useProfilLogic(): ProfilLogic {
       return { stats: EMPTY_STATS, recentMatches: [] as PlayedMatch[] };
     }
     const mine = matches
-      .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
+      .filter(
+        (m) =>
+          (m.game ?? 'babyfoot') === game &&
+          (m.playerALogin === myLogin || m.playerBLogin === myLogin),
+      )
       .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
 
     let wins = 0;
@@ -118,8 +124,8 @@ export function useProfilLogic(): ProfilLogic {
 
     return {
       stats: {
-        elo: me.user.elo,
-        matchesPlayed: me.user.matchesPlayed,
+        elo: (isSmash ? me.user.eloSmash : me.user.elo) ?? 1000,
+        matchesPlayed: (isSmash ? me.user.matchesPlayedSmash : me.user.matchesPlayed) ?? 0,
         wins,
         losses,
         total,
@@ -132,7 +138,7 @@ export function useProfilLogic(): ProfilLogic {
       },
       recentMatches: mine.slice(0, 10),
     };
-  }, [me, myLogin, matches]);
+  }, [me, myLogin, matches, game, isSmash]);
 
   return { myLogin, ...data };
 }

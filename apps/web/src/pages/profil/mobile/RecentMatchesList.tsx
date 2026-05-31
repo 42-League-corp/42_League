@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { PlayedMatch } from '../../../lib/api';
 import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
+import { SmashCharIcon } from '../../../components/SmashCharIcon';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDatePair } from '../../../lib/format';
@@ -56,6 +57,8 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const youWon = (youAreA && match.winner === 'A') || (!youAreA && match.winner === 'B');
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
+  const isSmash = match.game === 'smash';
+  const oppChar = youAreA ? match.charB : match.charA;
   const myScore = youAreA ? match.scoreA : match.scoreB;
   const oppScore = youAreA ? match.scoreB : match.scoreA;
   const delta = youAreA ? match.deltaA : match.deltaB;
@@ -89,6 +92,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
             <Avatar login={opp} imageUrl={oppImg} size="xs" />
             <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
           </PlayerLink>
+          {isSmash && oppChar && <SmashCharIcon id={oppChar} size={18} className="shrink-0" />}
         </div>
         <div className="text-[10px] text-muted font-medium">
           {date.short}

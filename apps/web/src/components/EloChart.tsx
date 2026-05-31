@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import type { PlayedMatch } from '../lib/api';
+import type { Game, PlayedMatch } from '../lib/api';
 import { useT } from '../lib/i18n';
 
 interface EloChartProps {
   matches: PlayedMatch[];
   myLogin: string;
   currentElo: number;
+  /** Jeu à tracer (babyfoot par défaut) — filtre les matchs par discipline. */
+  game?: Game;
   /** Cap the number of matches shown. Omit (default) to show the full history from the start. */
   maxPoints?: number;
   height?: number;
@@ -95,6 +97,7 @@ export function EloChart({
   matches,
   myLogin,
   currentElo,
+  game = 'babyfoot',
   maxPoints,
   height = 100,
 }: EloChartProps) {
@@ -118,8 +121,13 @@ export function EloChart({
   }, []);
 
   const history = useMemo(
-    () => computeEloHistory(matches, myLogin, currentElo),
-    [matches, myLogin, currentElo],
+    () =>
+      computeEloHistory(
+        matches.filter((m) => (m.game ?? 'babyfoot') === game),
+        myLogin,
+        currentElo,
+      ),
+    [matches, myLogin, currentElo, game],
   );
 
   const points = maxPoints ? history.slice(-maxPoints) : history;

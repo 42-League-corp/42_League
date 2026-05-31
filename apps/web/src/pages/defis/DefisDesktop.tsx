@@ -474,7 +474,10 @@ function PendingConfirmRow({
     setBusy(true);
     try {
       // Confirmation directe du score déclaré (point de vue « toi ») — pas de re-saisie.
-      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer);
+      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer, {
+        game: match.game,
+        bestOf: match.bestOf as 3 | 5 | undefined,
+      });
       flash.show('✓ Match confirmé — ELO mis à jour !');
       setResolved(true);
       await onDone();
@@ -674,7 +677,7 @@ function RecordResultForm({
     const scoreOpp = iWon ? loserScore : WINNING_SCORE;
     setBusy(true);
     try {
-      await api.recordChallengeResult(challengeId, scoreSelf, scoreOpp);
+      await api.recordChallengeResult(challengeId, { scoreSelf, scoreOpponent: scoreOpp });
       flash.show('Score envoyé — en attente de confirmation');
       await refresh();
       onDone();

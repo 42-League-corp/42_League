@@ -23,6 +23,7 @@ import {
 import { useAuth } from './useAuth';
 import { getApiBase } from '../lib/config';
 import { getToken } from '../lib/storage';
+import { getGame, subscribeGame } from '../lib/gameMode';
 
 export interface LeagueData {
   me: MeResponse | null;
@@ -80,7 +81,8 @@ const DOMAIN_FETCHERS: Record<Domain, () => Promise<Partial<LeagueData>>> = {
     return { matches, pending };
   },
   challenges: async () => ({ challenges: await api.challenges() }),
-  leaderboard: async () => ({ leaderboard: await api.leaderboard() }),
+  // Le classement est par jeu : on interroge celui du mode courant.
+  leaderboard: async () => ({ leaderboard: await api.leaderboard(getGame()) }),
   tournaments: async () => ({ tournaments: await api.tournaments() }),
   ops: async () => {
     const [opsMe, allOps] = await Promise.all([
@@ -132,7 +134,7 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           api.playedMatches(),
           api.pendingMatches(),
           api.challenges(),
-          api.leaderboard(),
+          api.leaderboard(getGame()),
           api.tournaments(),
           api.opsMe().catch(() => null),
           api.opsList().catch(() => [] as Ops[]),
@@ -180,6 +182,15 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     },
     [authenticated, signOut],
   );
+
+  // Changement de mode (babyfoot ↔ smash) : le classement dépend du jeu, on le
+  // re-fetch immédiatement pour refléter le bon ranking.
+  useEffect(() => {
+    if (!authenticated) return;
+    return subscribeGame(() => {
+      void refreshDomains(['leaderboard']);
+    });
+  }, [authenticated, refreshDomains]);
 
   // ─── Locations 42 (polling 5 min) ─────────────────────────────────────
   useEffect(() => {

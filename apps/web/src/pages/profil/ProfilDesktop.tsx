@@ -12,6 +12,7 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
 import { fmtCountdown } from '../../lib/format';
 
@@ -23,13 +24,16 @@ export function ProfilDesktop() {
   const t = useT();
   const { locale } = useI18n();
   const { me, matches, opsMe, leaderboard, tournaments } = useLeagueData();
+  const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
 
   const stats = useMemo(() => {
     const meUser = me?.user;
     const myLogin = me?.login;
     const my = matches.filter(
-      (m) => m.playerALogin === myLogin || m.playerBLogin === myLogin,
+      (m) =>
+        (m.game ?? 'babyfoot') === game &&
+        (m.playerALogin === myLogin || m.playerBLogin === myLogin),
     );
     const wins = my.filter((m) => {
       const youAreA = m.playerALogin === myLogin;
@@ -42,16 +46,19 @@ export function ProfilDesktop() {
       .map((m) => (m.playerALogin === myLogin ? m.deltaA : m.deltaB));
     const totalDelta = moves.reduce((s, d) => s + d, 0);
     // Tournois remportés, séparés amicaux / officiels (coupe rouge = officiel).
+    // Les tournois sont babyfoot pour l'instant → 0 en mode smash.
     let officialTitles = 0;
     let friendlyTitles = 0;
-    for (const tour of tournaments) {
-      if (tour.status !== 'finished' || tour.winnerLogin !== myLogin) continue;
-      if (tour.kind === 'official') officialTitles++;
-      else friendlyTitles++;
+    if (!isSmash) {
+      for (const tour of tournaments) {
+        if (tour.status !== 'finished' || tour.winnerLogin !== myLogin) continue;
+        if (tour.kind === 'official') officialTitles++;
+        else friendlyTitles++;
+      }
     }
     return {
-      elo: meUser?.elo ?? 1000,
-      matchesPlayed: meUser?.matchesPlayed ?? 0,
+      elo: (isSmash ? meUser?.eloSmash : meUser?.elo) ?? 1000,
+      matchesPlayed: (isSmash ? meUser?.matchesPlayedSmash : meUser?.matchesPlayed) ?? 0,
       total,
       wins,
       losses: total - wins,
@@ -60,7 +67,7 @@ export function ProfilDesktop() {
       officialTitles,
       friendlyTitles,
     };
-  }, [me, matches, tournaments]);
+  }, [me, matches, tournaments, game, isSmash]);
 
   if (!me?.user) {
     return (
@@ -230,6 +237,7 @@ export function ProfilDesktop() {
           matches={matches}
           myLogin={u.login}
           currentElo={stats.elo}
+          game={game}
           height={140}
         />
       </div>

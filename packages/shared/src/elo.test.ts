@@ -1,12 +1,46 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateBabyfootElo,
+  calculateSmashElo,
+  smashTarget,
   K,
   DEFAULT_ELO,
   UPSET_GAP_COEFF,
   WINNER_BONUS_CAP,
   MAX_DELTA_PER_MATCH,
 } from './elo.js';
+
+describe('calculateSmashElo', () => {
+  it('le gagnant gagne des points, le perdant en perd', () => {
+    const r = calculateSmashElo(1000, 1000, 'A', 2, 0, 3, 3);
+    expect(r.deltaA).toBeGreaterThan(0);
+    expect(r.deltaB).toBeLessThan(0);
+  });
+
+  it('un sweep 2-0 rapporte plus qu’un 2-1 serré (à ratings égaux)', () => {
+    const sweep = calculateSmashElo(1000, 1000, 'A', 2, 0, 3, 3);
+    const close = calculateSmashElo(1000, 1000, 'A', 2, 1, 3, 1);
+    expect(sweep.deltaA).toBeGreaterThan(close.deltaA);
+  });
+
+  it('plus de vies restantes = plus de points (set identique)', () => {
+    const dom = calculateSmashElo(1000, 1000, 'A', 2, 1, 3, 3);
+    const tight = calculateSmashElo(1000, 1000, 'A', 2, 1, 3, 1);
+    expect(dom.deltaA).toBeGreaterThan(tight.deltaA);
+  });
+
+  it('symétrie A/B', () => {
+    const left = calculateSmashElo(1100, 1000, 'A', 3, 1, 5, 2);
+    const right = calculateSmashElo(1000, 1100, 'B', 1, 3, 5, 2);
+    expect(left.deltaA).toBe(right.deltaB);
+    expect(left.deltaB).toBe(right.deltaA);
+  });
+
+  it('smashTarget : Bo3 → 2, Bo5 → 3', () => {
+    expect(smashTarget(3)).toBe(2);
+    expect(smashTarget(5)).toBe(3);
+  });
+});
 
 describe('calculateBabyfootElo', () => {
   it('le gagnant gagne des points, le perdant en perd', () => {

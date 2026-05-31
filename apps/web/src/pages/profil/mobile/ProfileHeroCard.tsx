@@ -5,6 +5,7 @@ import { RankedBadge } from '../../../components/RankedBadge';
 import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useGameMode } from '../../../hooks/useGameMode';
 import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
@@ -18,10 +19,12 @@ interface ProfileHeroCardProps {
  */
 export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const { me, leaderboard } = useLeagueData();
+  const { isSmash } = useGameMode();
   const t = useT();
   const reducedMotion = useReducedMotion();
   const user = me?.user;
   if (!user) return null;
+  const titlesWon = isSmash ? user.tournamentsWonSmash ?? 0 : user.tournamentsWon;
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
@@ -193,7 +196,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
 
         {/* Footer stats */}
         <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-3 gap-3 text-center">
-          <FooterStat label="Tournois remportés" value={user.tournamentsWon} tone="gold" />
+          <FooterStat label="Tournois remportés" value={titlesWon} tone="gold" />
           <FooterStat
             label="Best Streak"
             value={stats.longestWinStreak}

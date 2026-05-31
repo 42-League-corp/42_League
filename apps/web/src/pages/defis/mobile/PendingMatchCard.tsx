@@ -36,7 +36,10 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
     try {
       // On confirme exactement le score déclaré (du point de vue « toi ») —
       // aucune re-saisie : c'est l'accord sur la version du déclarant.
-      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer);
+      await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer, {
+        game: match.game,
+        bestOf: match.bestOf as 3 | 5 | undefined,
+      });
       flash.show('Match confirmé — ELO mis à jour !');
       haptic('success');
       setResolved(true);
