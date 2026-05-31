@@ -3,7 +3,7 @@ import { TrophiesSection } from '../components/TrophiesSection';
 
 export function TropheesPage() {
   return (
-    <Panel title="Trophées" sub="récompenses légendaires">
+    <Panel title="Trophées" sub="récompenses légendaires" accent="medal">
       <TrophiesSection title="" />
     </Panel>
   );

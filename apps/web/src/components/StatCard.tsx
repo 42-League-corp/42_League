@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
+
 type Tone = 'teal' | 'win' | 'loss' | 'neutral' | 'gold';
 
 interface StatCardProps {
   value: string;
-  label: string;
+  label: ReactNode;
   tone?: Tone;
 }
 
@@ -34,7 +36,7 @@ export function StatCard({ value, label, tone = 'neutral' }: StatCardProps) {
       >
         {value}
       </div>
-      <div className="relative z-10 text-[10px] uppercase tracking-[0.18em] text-muted-2 mt-1.5 font-extrabold">
+      <div className="relative z-10 text-[10px] uppercase tracking-[0.18em] text-muted-2 mt-1.5 font-extrabold flex items-center justify-center gap-1">
         {label}
       </div>
     </div>

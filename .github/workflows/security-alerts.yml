@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Post to Discord
         env:
-          WEBHOOK: https://discordapp.com/api/webhooks/1509777036753895424/WDB-OmiRv2r6GIecX0PS8_zEKJGj65hfppEM3hZDmOwdusufDam0RGp87SAAyD1soksN
+          WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}

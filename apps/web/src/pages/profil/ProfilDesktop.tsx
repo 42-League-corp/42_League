@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
+import { RankedBadge } from '../../components/RankedBadge';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -15,7 +18,8 @@ import { fmtCountdown } from '../../lib/format';
 export function ProfilDesktop() {
   const t = useT();
   const { locale } = useI18n();
-  const { me, matches, opsMe } = useLeagueData();
+  const { me, matches, opsMe, leaderboard } = useLeagueData();
+  const reducedMotion = useReducedMotion();
 
   const stats = useMemo(() => {
     const meUser = me?.user;
@@ -53,27 +57,98 @@ export function ProfilDesktop() {
   }
 
   const u = me.user;
+  const myRank = leaderboard.find((x) => x.login === u.login)?.rank ?? 0;
+  const isTop1 = myRank === 1;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-      <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')}>
-      <div className="flex items-center gap-5 mb-6">
-        <Avatar login={u.login} imageUrl={u.imageUrl} size="xl" />
-        <div className="min-w-0">
-          <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
-            {u.login}
+      <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')} accent="user">
+      {/* Hero : avatar · identité · bloc ELO — fond doré + halo holographique animé. */}
+      <div
+        className="relative overflow-hidden rounded-2xl mb-6 border border-gold/35"
+        style={{
+          background: 'linear-gradient(180deg, #2a241c 0%, #15120e 55%, #1d1914 100%)',
+          boxShadow:
+            'inset 0 1px 0 rgba(255,215,120,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 32px -12px rgba(255,201,74,0.25)',
+        }}
+      >
+        {/* Halo conique animé très discret (coupé si prefers-reduced-motion). */}
+        {!reducedMotion && (
+          <motion.div
+            aria-hidden
+            className="absolute inset-0 opacity-20 pointer-events-none"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 32, ease: 'linear', repeat: Infinity }}
+            style={{
+              background:
+                'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,201,74,0.35) 60deg, transparent 120deg, rgba(192,138,74,0.22) 200deg, transparent 260deg, rgba(255,201,74,0.22) 340deg, transparent 360deg)',
+              filter: 'blur(48px)',
+            }}
+          />
+        )}
+        {/* Filet laiton haut */}
+        <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-gold/55 to-transparent pointer-events-none" />
+
+        <div className="relative z-10 p-5 flex items-center gap-5">
+          {/* Avatar + glow */}
+          <div className="relative flex-shrink-0">
+            <div
+              className="absolute -inset-1.5 rounded-full pointer-events-none"
+              style={{ background: 'radial-gradient(circle, rgba(255,201,74,0.4) 0%, transparent 70%)', filter: 'blur(12px)' }}
+            />
+            <Avatar
+              login={u.login}
+              imageUrl={u.imageUrl}
+              size="xl"
+              className="relative ring-2 ring-gold/45 ring-offset-2 ring-offset-bg-2"
+            />
           </div>
-          <div className="text-xs text-muted-2 mt-1 flex flex-wrap items-center gap-2">
-            <span className="font-bold uppercase tracking-wider text-[10px]">
-              {t('profil.campus')} · {u.campus ?? '—'}
-            </span>
-            <span className="bg-gold/10 border border-gold/30 text-gold px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
-              {stats.elo} ELO
-            </span>
+
+          {/* Identité */}
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
+              {u.login}
+            </div>
+            {u.title && (
+              <div className="mt-1.5 inline-flex items-center gap-1.5 max-w-full">
+                <span className="text-gold/70 text-base leading-none">❝</span>
+                <span className="text-gold italic text-sm font-semibold truncate">{u.title}</span>
+                <span className="text-gold/70 text-base leading-none">❞</span>
+              </div>
+            )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
+                <MapPin className="w-3 h-3 text-gold/70" strokeWidth={2.5} />
+                {u.campus ?? '—'}
+              </span>
+              {myRank > 0 && (
+                <motion.span
+                  initial={{ scale: 0, rotate: -15 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 16, delay: 0.25 }}
+                  className={`inline-flex items-center gap-1 font-mono text-[11px] font-extrabold tabular-nums rounded-full px-2.5 py-1 ${
+                    isTop1 ? 'metal-plate-gold shadow-gold-glow' : 'bg-bg-1/60 text-gold border border-gold/40'
+                  }`}
+                >
+                  {isTop1 && <Crown className="w-3 h-3" strokeWidth={2.5} />}#{myRank}
+                </motion.span>
+              )}
+            </div>
           </div>
-          {u.title && (
-            <div className="text-gold italic text-sm mt-1.5">« {u.title} »</div>
-          )}
+
+          {/* Bloc ELO mis en valeur */}
+          <div className="text-right flex-shrink-0 pl-2">
+            <div
+              className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
+              style={{ textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 18px rgba(255,201,74,0.35)' }}
+            >
+              {stats.elo}
+            </div>
+            <div className="mt-1.5 flex items-center justify-end gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
+              ELO
+              <RankedBadge size="xs" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -110,22 +185,7 @@ export function ProfilDesktop() {
           matches={matches}
           myLogin={u.login}
           currentElo={stats.elo}
-          height={104}
-        />
-      </div>
-
-      {/* ELO progression chart */}
-      <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
-        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
-          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-          Évolution ELO
-          <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
-        </div>
-        <EloChart
-          matches={matches}
-          myLogin={u.login}
-          currentElo={stats.elo}
-          height={104}
+          height={140}
         />
       </div>
 

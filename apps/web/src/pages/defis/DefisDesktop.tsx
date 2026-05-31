@@ -4,6 +4,7 @@ import { Plus, Swords, X } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
+import { RankedBadge } from '../../components/RankedBadge';
 import { Button } from '../../components/Button';
 import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
@@ -65,7 +66,7 @@ export function DefisDesktop() {
     outgoing.length > 0;
 
   return (
-    <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')}>
+    <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')} accent="swords">
       <div ref={topRef} />
       <DefisStatsBar />
       <ActionBento
@@ -253,7 +254,11 @@ function DefisStatsBar() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
       <StatCard value={stats.rank ? `#${stats.rank}` : '—'} label="Rang" tone="gold" />
-      <StatCard value={String(stats.elo)} label="ELO" tone="teal" />
+      <StatCard
+        value={String(stats.elo)}
+        label={<>ELO <RankedBadge size="xs" /></>}
+        tone="teal"
+      />
       <StatCard value={`${stats.wins}-${stats.losses}`} label="Bilan V-D" tone="neutral" />
       <StatCard
         value={`${stats.winRate}%`}

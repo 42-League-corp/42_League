@@ -102,7 +102,7 @@ function RulesSection() {
   return (
     <div className="flex flex-col gap-4">
       {/* En tête, pleine largeur : les règles de jeu sur le terrain. */}
-      <Panel title="Règles sur le terrain">
+      <Panel title="Règles sur le terrain" accent="book">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
             Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés

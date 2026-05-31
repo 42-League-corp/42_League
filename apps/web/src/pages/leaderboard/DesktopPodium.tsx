@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Crown } from 'lucide-react';
 import type { LeaderboardEntry } from '../../lib/api';
 import { Avatar } from '../../components/Avatar';
+import { RankedBadge } from '../../components/RankedBadge';
 import { useT } from '../../lib/i18n';
 
 interface DesktopPodiumProps {
@@ -194,6 +195,7 @@ function PodiumColumn({
         >
           {entry.elo}
           <span className="text-[9px] text-muted ml-1 font-bold uppercase tracking-wider">ELO</span>
+          {isFirst && <RankedBadge size="xs" className="ml-1 align-middle" />}
         </div>
         {stats && stats.games > 0 && (
           <div className="text-[10px] text-muted-2 font-mono tabular-nums mt-0.5">
