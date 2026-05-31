@@ -56,9 +56,9 @@ function readViewport(): Viewport {
   return {
     width: w,
     height: h,
-    isMobile: w < BREAKPOINTS.lg,
+    isMobile: w < BREAKPOINTS.md,
     isTablet: w >= BREAKPOINTS.md && w < BREAKPOINTS.lg,
-    isDesktop: w >= BREAKPOINTS.lg,
+    isDesktop: w >= BREAKPOINTS.md,
     isTouch,
     isStandalone,
     orientation: w > h ? 'landscape' : 'portrait',
