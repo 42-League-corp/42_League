@@ -84,7 +84,9 @@ API externe :
 
 - Importé sous le nom `@42-league/shared` par le front et le back.
 - Consommé **en source** : `main`/`types` pointent vers `./src/index.ts` (pas de build dédié).
-- Contenu : schémas Zod (validation des payloads) + logique ELO (`calculateBabyfootElo`, `shouldCountForElo`).
+- Contenu : schémas Zod (validation des payloads) + logique ELO (`calculateBabyfootElo`, `shouldCountForElo`,
+  `estimatedEloLoss`) + constantes OPS partagées (`OPS_DURATION_MS` = 24 h, `OPS_FORCED_MATCHES` = 3,
+  `OPS_REFUSE_MULTIPLIER` = 3).
 
 ---
 
@@ -101,6 +103,7 @@ Modèles (tables) :
 - `User`, `Challenge`, `PendingMatch`, `PlayedMatch`, `RejectedMatch`.
 - `Tournament`, `TournamentEntry`, `TournamentMatch`.
 - `Ops`, `FeatureRequest`, `AdminAuditLog`.
+- `Notification`, `UserBadge`, `Follow`, `Season`, `SeasonStanding` (centre de notifs, badges, suivi, saisons).
 - Enums : `Role`, `AdminAction`.
 
 Identifiants Postgres (dev et conteneur) : user `league`, mot de passe `league`, base `league`.
@@ -182,11 +185,17 @@ Jobs :
 
 Secrets GitHub utilisés : `GITHUB_TOKEN` (push GHCR), `SSH_PRIVATE_KEY` (accès serveur), `VITE_API_BASE_URL` (build front).
 
+> Les actions GitHub utilisées sont sur le **runtime Node 24** (checkout v5, setup-node v5, codeql v4,
+> paths-filter v4, docker login v4 / build-push v7).
+
 ### Autres workflows
+- `ci.yml` : lint / typecheck / tests (unitaires) sur PR.
 - `build.yml` : build/push manuel des images (`workflow_dispatch`, choix backend/frontend/both).
+- `force-build-deploy.yml` : déploiement forcé manuel.
 - `codeql.yml` : analyse statique CodeQL.
 - `dependency-audit.yml` : audit des dépendances.
-- `security-alerts.yml` : alertes de sécurité.
+- `security-alerts.yml` : alertes de sécurité ponctuelles + résumé.
+- `daily-security-audit.yml` : rapport sécurité quotidien consolidé → Discord (tests + npm audit + sondes live + CodeQL).
 
 ---
 

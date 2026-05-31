@@ -28,7 +28,9 @@ Niveau de permission d'un utilisateur.
 ### `AdminAction`
 Type d'action tracée dans l'audit log.
 `SET_ROLE`, `BAN_USER`, `UNBAN_USER`, `EDIT_STATS`, `EDIT_TITLE`, `DELETE_MATCH`, `EDIT_MATCH`,
-`REFRESH_IMAGES`, `RESET_DATABASE` (reset complet de la ligue par un SUPERADMIN).
+`REFRESH_IMAGES`, `RESET_DATABASE` (reset complet de la ligue par un SUPERADMIN), puis les actions
+de modération de l'historique : `DELETE_CHALLENGE`, `DELETE_PENDING_MATCH`, `DELETE_REJECTED_MATCH`,
+`DELETE_OPS`, `DELETE_TOURNAMENT` (suppressions ciblées depuis le GOD panel « All History »).
 
 ---
 
@@ -69,6 +71,9 @@ l'anonymisation) :
 - `opsAsOwner` / `opsAsTarget` → `Ops`
 - `featureRequests` → `FeatureRequest`
 - `rejectedAsDeclarer` / `rejectedAsOpponent` → `RejectedMatch`
+- `notifications` → `Notification` (centre de notifications in-app)
+- `badges` → `UserBadge` (badges gagnés)
+- `following` / `followers` → `Follow` (suivi de joueurs, avec préférences de notif)
 
 ---
 
@@ -103,9 +108,11 @@ Match **confirmé**, immuable (sauf édition/suppression admin). Source de véri
 | `playedAt` | DateTime | non | = `declaredAt` du pending. |
 | `countedForElo` | Boolean | non | `false` si bloqué par l'anti-farming. |
 | `deltaA` / `deltaB` | Int | non | Variation d'ELO appliquée (0 si non compté). |
+| `seasonId` | String | oui | Saison à laquelle appartient ce match (taggé à la confirmation). |
 
 Index : `(playerALogin, playerBLogin, playedAt)` — sert au calcul anti-farming (matchs antérieurs
-de la paire dans la fenêtre).
+de la paire dans la fenêtre) — et `(seasonId)` pour le bilan de fin de saison. La migration
+`add_seasons` rattache tout l'historique existant à la « Saison Bêta ».
 
 > **Pourquoi l'ordre canonique `A < B` ?** Pour qu'une paire {alice, bob} soit toujours stockée
 > de la même façon, quel que soit qui a déclaré. Cela simplifie le comptage anti-farming et évite
@@ -150,14 +157,17 @@ Index : `(opponentLogin, status)`, `(challengerLogin, status)`.
 ---
 
 ### `Tournament` → table `tournaments`
-Bracket à élimination directe.
+Bracket à élimination directe **ou** phase de poules suivie d'un bracket.
 
 | Champ | Type | Null | Défaut | Notes |
 |---|---|---|---|---|
 | `id` | String (uuid) | non | — | |
 | `name` | String | non | — | 2–60 car. |
 | `kind` | String | non | `friendly` | `friendly` \| `official` (officiel = réservé `isAdmin`). |
-| `capacity` | Int | non | — | Validé à **2 ou 4** à la création (`CreateTournamentSchema`). Puissance de 2. |
+| `isPrivate` | Boolean | non | `false` | Privé = visible/rejoignable **sur invitation uniquement** (pas d'inscription libre). |
+| `imageUrl` | String | oui | — | Image de couverture optionnelle (URL) ; sinon visuel par défaut généré côté front. |
+| `capacity` | Int | non | — | Nombre de joueurs. Validé **≥ 6** (et ≤ 64) à la création (`CreateTournamentSchema`) ; n'a plus besoin d'être une puissance de 2 (les **byes** sont gérés). |
+| `format` | String | non | `elimination` | `elimination` (bracket direct) \| `pools` (poules puis bracket des qualifiés ; exige **≥ 12** joueurs). |
 | `status` | String | non | — | `registration` \| `in_progress` \| `finished` \| `cancelled` |
 | `createdByLogin` | String | non | — | Organisateur. |
 | `winnerLogin` | String | oui | — | FK `onDelete: SetNull`. |
@@ -165,9 +175,10 @@ Bracket à élimination directe.
 | `startedAt` / `finishedAt` | DateTime | oui | — | |
 
 Index : `(status)`. Relations : `entries` (→ `TournamentEntry`), `matches` (→ `TournamentMatch`).
+Migrations : `add_tournament_private`, `add_tournament_image`, `add_tournament_format_pools`.
 
-> Note : la donnée de seed contient un ancien tournoi de capacité 8. Le champ DB est un `Int`
-> non contraint ; c'est la validation applicative actuelle qui restreint les **nouveaux** tournois à 2 ou 4.
+> Note : le champ `capacity` est un `Int` non contraint en DB ; c'est la validation applicative
+> (`CreateTournamentSchema`) qui impose le minimum de 6 (et 12 pour le format `pools`).
 
 ---
 
@@ -183,14 +194,16 @@ Inscription d'un joueur. **Clé primaire composite `(tournamentId, login)`** →
 ---
 
 ### `TournamentMatch` → table `tournament_matches`
-Une case du bracket.
+Une case du bracket, ou un match de poule.
 
 | Champ | Type | Null | Notes |
 |---|---|---|---|
 | `id` | String (uuid) | non | |
 | `tournamentId` | String | non | `onDelete: Cascade`. |
-| `round` | Int | non | 1 = premier tour. |
-| `slot` | Int | non | Position dans le tour (0-indexé). |
+| `stage` | String | non (`bracket`) | `pool` (round-robin de poule) \| `bracket` (élimination directe). |
+| `poolIndex` | Int | oui | Index de la poule quand `stage='pool'`. |
+| `round` | Int | non | Bracket : 1 = premier tour. Poule : `0`. |
+| `slot` | Int | non | Bracket : position dans le tour (0-indexé). Poule : index global du match. |
 | `playerALogin` / `playerBLogin` | String | oui | `onDelete: SetNull`. Null tant que non assigné. |
 | `scoreA` / `scoreB` | Int | oui | Null tant que non saisi. |
 | `winnerLogin` | String | oui | Renseigné à la confirmation. |
@@ -211,10 +224,14 @@ Mécanique de « droit de vantardise » : `owner` a déclaré un *ops* sur `targ
 | `ownerLogin` | String | non | — |
 | `targetLogin` | String | non | — |
 | `declaredAt` | DateTime | non | `now()` |
-| `expiresAt` | DateTime | non | `declaredAt + 7 jours` |
+| `expiresAt` | DateTime | non | `declaredAt + 24 h` |
+| `forcedUsed` | Int | non | `0` |
 
 Index : `(ownerLogin, expiresAt)`, `(targetLogin, expiresAt)`. Un ops est « actif » tant que
-`expiresAt > now`. Après expiration, un **cooldown de 7 jours** empêche l'owner de redéclarer.
+`expiresAt > now`. **Durée 24 h** (refonte mai 2026, `OPS_DURATION_MS`), puis **cooldown de 7 jours**
+qui empêche l'owner de redéclarer. `forcedUsed` compte les **matchs forcés** déjà consommés (joués
+ou refusés) sur cet ops : la cible ne peut pas refuser sans surcoût tant que `forcedUsed < 3`
+(`OPS_FORCED_MATCHES`). Migration `add_ops_forced_used`. Détails dans [DOMAIN.md §7](./DOMAIN.md).
 
 ---
 
@@ -228,6 +245,88 @@ Boîte à idées.
 | `status` | String | `pending` | `pending` \| `accepted` \| `rejected`. |
 | `authorId` | String | — | FK vers `User.login`. |
 | `createdAt` | DateTime | `now()` | |
+
+---
+
+### `Notification` → table `notifications`
+Centre de notifications in-app (cloche). Une notif ratée ne casse jamais l'action métier (best-effort).
+
+| Champ | Type | Null | Défaut | Notes |
+|---|---|---|---|---|
+| `id` | String (uuid) | non | — | |
+| `recipientLogin` | String | non | — | FK → `User.login`, `onDelete: Cascade`. |
+| `type` | String | non | — | `challenge_received`, `match_result`, `tournament`, `ops_targeted`, `new_player`, `badge`, `follow_top3`, `follow_ops`, `follow_tournament`… |
+| `title` | String | non | — | Texte affiché. |
+| `body` | String | oui | — | Sous-texte optionnel. |
+| `link` | String | oui | — | Route front contextuelle (ex. `/challenges`). |
+| `read` | Boolean | non | `false` | |
+| `createdAt` | DateTime | non | `now()` | |
+
+Index : `(recipientLogin, read)`, `(recipientLogin, createdAt)`. Migration `add_notifications`.
+À la création, le backend pousse un événement SSE `notification` (ciblé) pour rafraîchir la cloche.
+
+---
+
+### `UserBadge` → table `user_badges`
+Badges **gagnés** par un joueur (stockés). Les badges « par défaut » (`founder`, `superadmin`,
+`admin`) sont **dérivés du rôle** au runtime (`badgesFor`), pas stockés.
+
+| Champ | Type | Null | Défaut | Notes |
+|---|---|---|---|---|
+| `id` | String (uuid) | non | — | |
+| `userLogin` | String | non | — | FK → `User.login`, `onDelete: Cascade`. |
+| `code` | String | non | — | Code du badge (catalogue front), ex. `beta_tester`, `season_champion`. |
+| `seasonId` | String | oui | — | Saison associée (badges de palmarès). |
+| `awardedAt` | DateTime | non | `now()` | |
+
+Clé unique : `(userLogin, code)` — pas de doublon. Index : `(userLogin)`. Migration `add_user_badges`
+(qui octroie `beta_tester` à tous les inscrits non-SUPERADMIN). Catalogue : `apps/web/src/lib/badges.ts`.
+
+---
+
+### `Follow` → table `follows`
+Relation de suivi entre joueurs, avec **préférences de notification par personne suivie**.
+
+| Champ | Type | Null | Défaut | Notes |
+|---|---|---|---|---|
+| `id` | String (uuid) | non | — | |
+| `followerLogin` | String | non | — | Celui qui suit. FK `onDelete: Cascade`. |
+| `followeeLogin` | String | non | — | Celui qui est suivi. FK `onDelete: Cascade`. |
+| `notifyTournament` | Boolean | non | `true` | Notifier quand le suivi rejoint un tournoi. |
+| `notifyTop3` | Boolean | non | `true` | Notifier quand le suivi entre dans le top 3. |
+| `notifyTrophy` | Boolean | non | `true` | Notifier les trophées du suivi. |
+| `notifyOps` | Boolean | non | `true` | Notifier quand le suivi lance un OPS. |
+| `createdAt` | DateTime | non | `now()` | |
+
+Clé unique : `(followerLogin, followeeLogin)`. Index : `(followeeLogin)`. Migration `add_follows`.
+
+---
+
+### `Season` → table `seasons`
+Une **saison** de classement (ère ELO). Une seule active à la fois.
+
+| Champ | Type | Null | Défaut |
+|---|---|---|---|
+| `id` | String (uuid) | non | — |
+| `name` | String | non | — |
+| `isActive` | Boolean | non | `false` |
+| `startedAt` | DateTime | non | `now()` |
+| `endedAt` | DateTime | oui | — |
+
+### `SeasonStanding` → table `season_standings`
+**Snapshot figé** du classement final d'une saison (créé à sa clôture). Sert au palmarès des joueurs.
+
+| Champ | Type | Notes |
+|---|---|---|
+| `id` | String (uuid) | |
+| `seasonId` | String | Saison concernée. |
+| `login` | String | Joueur. |
+| `rank` / `elo` / `wins` / `losses` | Int | Position et bilan figés à la clôture. |
+
+Index : `(seasonId)`, `(login)`. Migration `add_seasons` : crée la « Saison Bêta » active et y
+rattache l'historique. La clôture (`POST /seasons/close`) snapshot le classement, octroie le badge
+`season_champion` au 1er, puis **remet tout le monde à 1000 ELO / 0 match** (l'historique des matchs
+est conservé, taggé par saison). Voir [DOMAIN.md §11](./DOMAIN.md) et [API.md](./API.md).
 
 ---
 
@@ -269,8 +368,18 @@ Dans `apps/backend/prisma/migrations/`, dans l'ordre chronologique (le préfixe 
 | 10 | `20260529013138_add_banned_at_and_rejected_matches` | `User.bannedAt`, RejectedMatch. |
 | 11 | `20260529030000_add_admin_audit_log` | AdminAuditLog + enum `AdminAction`. |
 | 12 | `20260529100000_add_anonymized_at` | `User.anonymizedAt`. |
-| 13 | `20260531000000_add_deletion_scheduled_at` | `User.deletionScheduledAt` (suppression RGPD différée). |
-| 14 | `20260531010000_add_reset_database_action` | Valeur `RESET_DATABASE` dans l'enum `AdminAction`. |
+| 13 | `20260531000000_add_ops_forced_used` | `Ops.forcedUsed` (matchs forcés consommés). |
+| 14 | `20260531003323_add_admin_action_delete_history` | Valeurs `DELETE_CHALLENGE/PENDING_MATCH/REJECTED_MATCH/OPS` dans `AdminAction`. |
+| 15 | `20260531010000_add_reset_database_action` | Valeur `RESET_DATABASE` dans `AdminAction`. |
+| 16 | `20260531020000_add_deletion_scheduled_at` | `User.deletionScheduledAt` (suppression RGPD différée). |
+| 17 | `20260601000000_add_tournament_private` | `Tournament.isPrivate`. |
+| 18 | `20260601010000_add_tournament_image` | `Tournament.imageUrl`. |
+| 19 | `20260602000000_add_notifications` | Modèle `Notification`. |
+| 20 | `20260603000000_add_user_badges` | Modèle `UserBadge` (+ octroi `beta_tester`). |
+| 21 | `20260604000000_add_follows` | Modèle `Follow`. |
+| 22 | `20260605000000_add_seasons` | `Season`, `SeasonStanding`, `PlayedMatch.seasonId` (+ « Saison Bêta »). |
+| 23 | `20260606000000_add_tournament_format_pools` | `Tournament.format`, `TournamentMatch.stage`/`poolIndex`. |
+| 24 | `20260606010000_add_delete_tournament_action` | Valeur `DELETE_TOURNAMENT` dans `AdminAction`. |
 
 En prod, les migrations sont appliquées par `prisma migrate deploy` au démarrage du conteneur backend.
 
@@ -294,7 +403,7 @@ Lancement : `npm run db:seed -w @42-league/backend`.
 | `seed.ts` | `npm run db:seed -w @42-league/backend` | Base de démo complète (ci-dessus). |
 | `add-test-players.ts` | `npm run db:add-players -w @42-league/backend` | Ajoute **8 faux joueurs** (`test1`…`test8`, campus « Le Havre », ELO 1000) en **upsert** (idempotent). `db:add-players:prod` = même script sans `dotenv`. |
 | `seed-test.ts` | `npm run db:seed-test -w @42-league/backend` | Jeu de données réduit pour essais. |
-| `add-test-notif.ts` | `npm run db:add-notif -w @42-league/backend` | Crée des situations déclenchant des notifications. |
+| `add-test-notif.ts` | `npm run db:add-notif -w @42-league/backend` | Crée des notifications de test pour la cloche in-app. |
 
 > Note : on peut aussi créer / supprimer des faux comptes en prod via l'API SUPERADMIN
 > (`POST`/`DELETE /admin/users` — voir [API.md](./API.md)), sans toucher à la DB directement.
@@ -350,6 +459,16 @@ POST /ops  (1 ops actif max par owner ; cooldown 7j ; cibles non déjà engagée
            emit ops:update → [owner, target]
 À l'expiration / fin de cooldown : timer setTimeout → emit ops:update (ré-armés au boot du serveur).
 ```
+
+### Clôture d'une saison (`POST /seasons/close`, transaction)
+```
+saison active → pour chaque joueur visible : SeasonStanding {rank, elo, wins, losses}  (snapshot figé)
+                1er du classement → UserBadge 'season_champion' (upsert)
+                User.updateMany { elo: 1000, matchesPlayed: 0 }   ← reset ELO de toute la ligue
+                Season { isActive: false, endedAt: now }
+                notify(champion) ; broadcast data:update + leaderboard:update
+```
+L'historique des `PlayedMatch` est **conservé** (taggé `seasonId`) ; seules les notes ELO repartent à zéro.
 
 ---
 

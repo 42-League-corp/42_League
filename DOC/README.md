@@ -10,15 +10,18 @@ comprendre n'importe quel aspect « de fond en comble ».
 
 ## Domaine & données
 - [**DOMAIN.md**](./DOMAIN.md) — Logique métier : ELO (formule babyfoot exacte), anti-farming,
-  cycle de vie d'un match, défis, tournois, ops, rôles, schémas Zod partagés, glossaire.
-- [**DATABASE.md**](./DATABASE.md) — Schéma Prisma exhaustif : tous les modèles/champs/relations/enums,
-  migrations, seed, flux critiques (match → ELO, défi, tournoi, ops).
+  cycle de vie d'un match, défis, tournois (élimination/poules, byes, privés), ops « chasse » (24 h,
+  matchs forcés), saisons & reset ELO, badges, suivi, schémas Zod partagés, glossaire.
+- [**DATABASE.md**](./DATABASE.md) — Schéma Prisma exhaustif : tous les modèles/champs/relations/enums
+  (notifications, badges, follows, saisons inclus), migrations, seed, flux critiques (match → ELO,
+  défi, tournoi, ops, clôture de saison).
 
 ## Surfaces applicatives
-- [**API.md**](./API.md) — Référence de **tous** les endpoints HTTP : auth, body/validation, réponses,
+- [**API.md**](./API.md) — Référence de **tous** les endpoints HTTP : auth (token de stream éphémère),
+  notifications, saisons, suivi, tournois, modération de l'historique, body/validation, réponses,
   codes d'erreur, événements SSE émis.
-- [**FRONTEND.md**](./FRONTEND.md) — App React (`apps/web`) : routage, split desktop/mobile, état
-  (`useLeagueData`), client API, OAuth, i18n, PWA, composants.
+- [**FRONTEND.md**](./FRONTEND.md) — App React (`apps/web`) : routage (H2H, GOAT…), split desktop/mobile,
+  état (`useLeagueData`), client API, OAuth, cloche de notifications, i18n, PWA, composants.
 - [**EXTENSION.md**](./EXTENSION.md) — Extension MV3 (`apps/extension`) : manifest, service worker,
   content scripts intra, OAuth via `chrome.identity`, popup, proxy API.
 - [**REALTIME.md**](./REALTIME.md) — Temps réel SSE : catalogue d'événements, ciblé vs broadcast,
