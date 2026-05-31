@@ -55,6 +55,7 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 | `match:pending` | ciblé (adversaire) | `POST /matches` | `{ id, declarerLogin, scoreDeclarer, scoreOpponent }` |
 | `match:confirmed` | ciblé (2 joueurs) | `POST /matches/:id/confirm` | `PlayedMatch` |
 | `match:rejected` | ciblé (déclarant) | `POST /matches/:id/reject` | `{ id, contestReason, rejectedBy }` |
+| `match:expired` | ciblé (2 joueurs) | `POST /admin/matches/:id/force-cancel` | `{ id }` |
 | `challenge:received` | ciblé (adversaire) | `POST /challenges` | `Challenge` |
 | `challenge:accepted` | ciblé (challenger) | `POST /challenges/:id/accept` | `Challenge` |
 | `challenge:declined` | ciblé (l'autre) | `POST /challenges/:id/decline` | `{ id, status, eloPenalty, declinedBy }` |

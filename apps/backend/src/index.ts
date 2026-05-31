@@ -83,6 +83,9 @@ async function getOrCreateUser(login: string, profile?: FtProfile) {
         : {}),
       // Always re-enforce SUPERADMIN role on login — no one can downgrade it
       ...(forceSuperAdmin ? { role: 'SUPERADMIN' } : {}),
+      // RGPD Art. 17 — période de grâce : se reconnecter annule une suppression
+      // programmée et restaure intégralement le compte (elo + historique).
+      deletionScheduledAt: null,
     },
     create: {
       login,
@@ -224,6 +227,19 @@ app.use('/tournaments/*', broadcastOnMutation({ type: 'tournament:update', paylo
 // Admin : peut toucher stats / matchs / bans (rare) → refresh complet par sécurité.
 app.use('/admin/*', broadcastOnMutation({ type: 'data:update', payload: {} }));
 
+// GOD panel : déclarations / confirmations / rejets de matchs, défis et idées
+// ne sont émis qu'EN CIBLÉ aux joueurs concernés → un admin qui regarde le panel
+// ne les verrait jamais. On diffuse donc un `panel:update` léger que SEUL le
+// front du panel écoute ; les autres clients n'ont pas de listener pour ce type
+// → l'event est ignoré côté navigateur, aucun re-fetch inutile.
+const panelUpdate = broadcastOnMutation({ type: 'panel:update', payload: {} });
+app.use('/matches', panelUpdate);
+app.use('/matches/*', panelUpdate);
+app.use('/challenges', panelUpdate);
+app.use('/challenges/*', panelUpdate);
+app.use('/feature-requests', panelUpdate);
+app.use('/feature-requests/*', panelUpdate);
+
 // Gestionnaire d'erreurs global (pour que le CORS soit là même sur une erreur 401 !)
 app.onError((err, c) => {
   const reqOrigin = c.req.header('origin') || c.req.header('Origin');
@@ -332,14 +348,19 @@ app.get('/me/export', async (c) => {
   });
 });
 
-// ── RGPD Art. 17 — Droit à l'effacement : anonymisation du compte ──
-app.delete('/me/account', async (c) => {
-  const login = await getCurrentLogin(c);
+// ── RGPD Art. 17 — Droit à l'effacement : suppression avec période de grâce ──
+// La suppression ne fait que PROGRAMMER l'effacement (deletionScheduledAt) :
+// le compte disparaît immédiatement des vues publiques mais ses données sont
+// conservées. L'anonymisation définitive et irréversible n'a lieu qu'après
+// ACCOUNT_GRACE_DAYS jours (job quotidien). Se reconnecter avant l'échéance
+// annule la suppression et restaure intégralement le compte — voir
+// getOrCreateUser (remise à null de deletionScheduledAt à la connexion).
+const ACCOUNT_GRACE_DAYS = Number(process.env.ACCOUNT_GRACE_DAYS ?? 30);
 
-  if (SUPERADMINS.has(login.toLowerCase())) {
-    throw new HTTPException(400, { message: 'superadmin accounts cannot be anonymized' });
-  }
-
+// Anonymisation définitive d'un compte : renomme le login (cascade vers toutes
+// les FK ON UPDATE CASCADE), purge les PII et marque anonymizedAt. Réutilisée
+// par le job de suppression différée.
+async function anonymizeAccount(login: string): Promise<void> {
   const anonLogin =
     'anon_' + createHash('sha256').update(login + Date.now().toString()).digest('hex').slice(0, 8);
 
@@ -354,6 +375,7 @@ app.delete('/me/account', async (c) => {
         imageUrl: null,
         title: null,
         anonymizedAt: new Date(),
+        deletionScheduledAt: null,
       },
     });
     // Tables sans FK déclarée : mise à jour manuelle
@@ -361,8 +383,21 @@ app.delete('/me/account', async (c) => {
     await tx.adminAuditLog.updateMany({ where: { targetLogin: login }, data: { targetLogin: anonLogin } });
     await tx.tournamentMatch.updateMany({ where: { recordedByLogin: login }, data: { recordedByLogin: anonLogin } });
   });
+}
 
-  return c.json({ ok: true });
+app.delete('/me/account', async (c) => {
+  const login = await getCurrentLogin(c);
+
+  if (SUPERADMINS.has(login.toLowerCase())) {
+    throw new HTTPException(400, { message: 'superadmin accounts cannot be anonymized' });
+  }
+
+  await prisma.user.update({
+    where: { login },
+    data: { deletionScheduledAt: new Date() },
+  });
+
+  return c.json({ ok: true, graceDays: ACCOUNT_GRACE_DAYS });
 });
 
 app.get('/events', async (c) => {
@@ -394,18 +429,23 @@ app.get('/events', async (c) => {
 
 app.get('/users', async (c) => {
   await getCurrentLogin(c);
-  return c.json(await prisma.user.findMany({ orderBy: { elo: 'desc' } }));
+  // Les comptes en cours de suppression (période de grâce) sont masqués des vues publiques.
+  return c.json(
+    await prisma.user.findMany({ where: { deletionScheduledAt: null }, orderBy: { elo: 'desc' } }),
+  );
 });
 
 app.get('/users/:login', async (c) => {
   await getCurrentLogin(c);
   const login = c.req.param('login');
   const user = await prisma.user.findUnique({ where: { login } });
-  if (!user) {
+  if (!user || user.deletionScheduledAt) {
+    // Compte inexistant ou en cours de suppression → traité comme absent.
     throw new HTTPException(404, { message: 'user not found' });
   }
   const [allUsers, played] = await Promise.all([
     prisma.user.findMany({
+      where: { deletionScheduledAt: null },
       select: { login: true, elo: true },
       orderBy: { elo: 'desc' },
     }),
@@ -428,7 +468,10 @@ app.get('/users/:login', async (c) => {
 
 app.get('/leaderboard', async (c) => {
   await getCurrentLogin(c);
-  const users = await prisma.user.findMany({ orderBy: { elo: 'desc' } });
+  const users = await prisma.user.findMany({
+    where: { deletionScheduledAt: null },
+    orderBy: { elo: 'desc' },
+  });
   return c.json(users.map((u, i) => ({ rank: i + 1, ...u })));
 });
 
@@ -790,6 +833,68 @@ app.delete('/admin/users/:login', async (c) => {
 
   broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json({ login, deleted: true });
+});
+
+// Phrase de confirmation exacte exigée pour le reset total de la base.
+// Doit être tapée à la main côté front (copier-coller bloqué) ET renvoyée ici.
+const RESET_CONFIRM_PHRASE = 'oui je suis sure de ce que je fais';
+
+// Reset COMPLET de la ligue (SUPERADMIN). Supprime tout l'historique de jeu
+// (matchs joués/en attente, défis, ops, rejets, tournois) et remet chaque joueur
+// conservé à zéro (ELO 1000, matchs/dodges/trophées 0, titre effacé). Les comptes
+// supprimés/anonymisés (joueurs partis) ne sont PAS conservés. Irréversible.
+app.post('/admin/reset-database', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+
+  const body = await c.req.json().catch(() => ({}));
+  if (typeof body.confirm !== 'string' || body.confirm.trim() !== RESET_CONFIRM_PHRASE) {
+    throw new HTTPException(400, {
+      message: 'Phrase de confirmation incorrecte — reset annulé.',
+    });
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Effacer tout l'historique de jeu.
+    await tx.pendingMatch.deleteMany({});
+    await tx.playedMatch.deleteMany({});
+    await tx.challenge.deleteMany({});
+    await tx.ops.deleteMany({});
+    await tx.rejectedMatch.deleteMany({});
+    await tx.tournament.deleteMany({}); // cascade → entries + tournament_matches
+
+    // 2. Retirer définitivement les comptes désactivés / supprimés (joueurs partis),
+    //    sauf les SUPERADMIN qui sont toujours préservés.
+    const gone = await tx.user.findMany({
+      where: { OR: [{ deletionScheduledAt: { not: null } }, { anonymizedAt: { not: null } }] },
+      select: { login: true },
+    });
+    const removeLogins = gone
+      .map((u) => u.login)
+      .filter((l) => !SUPERADMINS.has(l.toLowerCase()));
+    if (removeLogins.length > 0) {
+      await tx.featureRequest.deleteMany({ where: { authorId: { in: removeLogins } } });
+      await tx.user.deleteMany({ where: { login: { in: removeLogins } } });
+    }
+
+    // 3. Remettre tous les joueurs conservés à zéro.
+    const reset = await tx.user.updateMany({
+      data: { elo: 1000, matchesPlayed: 0, dodgeCount: 0, tournamentsWon: 0, title: null },
+    });
+
+    return { removedUsers: removeLogins.length, resetUsers: reset.count };
+  });
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'RESET_DATABASE',
+    target: null,
+    payload: result,
+  });
+
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ reset: true, ...result });
 });
 
 const AdminForceResultSchema = z
@@ -1155,7 +1260,9 @@ app.post('/tournaments/:id/add-player', async (c) => {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
     const target = await tx.user.findUnique({ where: { login } });
-    if (!target) throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
+    if (!target || target.deletionScheduledAt) {
+      throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
+    }
     if (t.entries.some((e) => e.login === login)) {
       throw new HTTPException(409, { message: 'joueur déjà inscrit' });
     }
@@ -2052,6 +2159,27 @@ async function purgeStalePendingMatches(): Promise<void> {
   );
 }
 
+// ── RGPD Art. 17 — Anonymisation différée des comptes supprimés ──
+// Les comptes dont la suppression a été demandée il y a plus de
+// ACCOUNT_GRACE_DAYS jours (et pas encore anonymisés) sont anonymisés
+// définitivement. Une reconnexion avant l'échéance a remis deletionScheduledAt
+// à null (getOrCreateUser), donc ils n'apparaissent jamais ici.
+async function purgeScheduledDeletions(): Promise<void> {
+  const cutoff = new Date(Date.now() - ACCOUNT_GRACE_DAYS * 24 * 60 * 60 * 1000);
+  const due = await prisma.user.findMany({
+    where: { deletionScheduledAt: { lt: cutoff }, anonymizedAt: null },
+    select: { login: true },
+  });
+  for (const u of due) {
+    await anonymizeAccount(u.login);
+  }
+  if (due.length > 0) {
+    console.log(
+      `[purge] ${due.length} account(s) anonymized after ${ACCOUNT_GRACE_DAYS}-day grace period`,
+    );
+  }
+}
+
 const port = Number(process.env.PORT ?? 3000);
 
 // En environnement de test (NODE_ENV=test), on importe `app` pour le tester via
@@ -2069,6 +2197,9 @@ if (process.env.NODE_ENV !== 'test') {
       });
       purgeStalePendingMatches().catch((err) => {
         console.error('failed to purge stale pending matches', err);
+      });
+      purgeScheduledDeletions().catch((err) => {
+        console.error('failed to purge scheduled account deletions', err);
       });
     };
     runDailyPurges();

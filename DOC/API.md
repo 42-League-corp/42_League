@@ -8,6 +8,23 @@ Référence exhaustive de tous les endpoints du backend Hono (`apps/backend/src/
   session signé, un `Authorization: Bearer <token>`, ou (dev uniquement) l'en-tête `x-dev-login`.
 - Toutes les erreurs renvoient `{ "message": "..." }` avec le code HTTP correspondant (handler global).
 - Les schémas Zod cités sont définis dans `packages/shared/src/schemas.ts` (voir [DOMAIN.md §3](./DOMAIN.md)).
+  Quelques schémas spécifiques aux routes admin/tournoi sont déclarés **inline** dans `index.ts`
+  (`AdminCreateUserSchema`, `AdminForceResultSchema`, `AddTournamentPlayerSchema`).
+
+---
+
+## Rate-limiting
+
+Middleware `rate-limit.ts` (par IP, fenêtre glissante en mémoire). **Désactivé sous `NODE_ENV=test`.**
+Une requête bloquée renvoie `429`.
+
+| Limiteur | Portée | Plafond |
+|---|---|---|
+| `global` | `*` (backstop anti-flood/scan) | 600 req / 60 s |
+| `auth` | `/auth/*` (anti brute-force OAuth) | 50 req / 15 min |
+| `write` | mutations (`POST/PATCH/PUT/DELETE`) sur `/matches*`, `/challenges*`, `/tournaments*`, `/ops`, `/feature-requests` | 120 req / 60 s |
+
+> Le preflight CORS (`OPTIONS`) est court-circuité avant les limiteurs et n'est pas compté.
 
 ---
 
@@ -56,9 +73,12 @@ Exporte toutes les données perso de l'appelant. Header `Content-Disposition: at
 → `200 { exportDate, profile, matchHistory, challenges, tournaments, featureRequests, ops }`.
 
 ### `DELETE /me/account` — auth — RGPD Art. 17 (effacement)
-Anonymise le compte (login → `anon_<hash>`, vide ftId/campus/imageUrl/title, pose `anonymizedAt` ;
-propage en cascade via `onUpdate: Cascade`). Refusé pour un SUPERADMIN.
-→ `200 { ok: true }` / `400` (superadmin).
+**Programme** la suppression : pose `deletionScheduledAt = now` (le compte n'est PAS effacé tout de suite).
+Le compte disparaît aussitôt des listings, mais **se reconnecter avant l'échéance annule la suppression**
+(`getOrCreateUser` remet `deletionScheduledAt` à null). Un job quotidien anonymise les comptes échus
+après `ACCOUNT_GRACE_DAYS` (défaut **30 j**) : login → `anon_<hash>`, ftId/campus/imageUrl/title vidés,
+`anonymizedAt` posé, propagé en cascade via `onUpdate: Cascade`. Refusé pour un SUPERADMIN.
+→ `200 { ok: true, graceDays }` / `400` (superadmin).
 
 ---
 
@@ -66,9 +86,9 @@ propage en cascade via `onUpdate: Cascade`). Refusé pour un SUPERADMIN.
 
 | Route | Auth | Description | Réponse |
 |---|---|---|---|
-| `GET /users` | auth | Tous les users triés par ELO desc. | `200 User[]` |
-| `GET /users/:login` | auth | Profil + rang + W/L + 50 derniers matchs. | `200 { user, rank, wins, losses, recent }` / `404` |
-| `GET /leaderboard` | auth | Classement complet avec rang. | `200 ({ rank, ...User })[]` |
+| `GET /users` | auth | Users (hors suppression programmée) triés par ELO desc. | `200 User[]` |
+| `GET /users/:login` | auth | Profil + rang + W/L + 50 derniers matchs. `404` aussi si le compte a une suppression programmée. | `200 { user, rank, wins, losses, recent }` / `404` |
+| `GET /leaderboard` | auth | Classement complet avec rang (hors suppression programmée). | `200 ({ rank, ...User })[]` |
 | `GET /locations` | auth | `login → host` des users actuellement loggés sur l'intra (cache 5 min). | `200 { login: host }` |
 
 ---
@@ -133,6 +153,7 @@ Participant d'un défi `accepted` (403/409 sinon). status → `recorded` ; crée
 | `GET /tournaments/:id` | — (public) | Détail + bracket (`matches`). `404` si absent. |
 | `POST /tournaments` | auth + `isAdmin` si `kind=official` | `CreateTournamentSchema` `{ name(2–60), capacity(2\|4), kind }`. Organisateur auto-inscrit. → `201`. |
 | `POST /tournaments/:id/join` | auth | `registration` only ; refus si plein/déjà inscrit (409). Auto-start si plein. |
+| `POST /tournaments/:id/add-player` | auth (organisateur **ou** `isAdmin`) | Invite un joueur existant. `AddTournamentPlayerSchema` `{ login }`. `registration` only (409) ; joueur introuvable / en suppression (404) ; déjà inscrit / tournoi complet (409). Remplir la dernière place → auto-start. **Emit** `leaderboard:update` → joueur ajouté. → `200 { id, added, status }`. |
 | `POST /tournaments/:id/leave` | auth | `registration` only. |
 | `POST /tournaments/:id/start` | auth (organisateur) | Doit être plein (409). Génère le bracket. |
 | `POST /tournaments/:id/cancel` | auth (organisateur) | Sauf déjà `finished`/`cancelled`. |
@@ -186,6 +207,20 @@ Toutes les mutations `/tournaments*` déclenchent un **broadcast** `tournament:u
 | `GET /admin/audit-log?actor&target&action&limit` | `requireAdmin` | — | Journal filtrable (max 500). |
 | `POST /admin/refresh-images` | ⚠️ **aucune garde** | — | Déclenche un backfill des avatars manquants. → `{ scheduled: n }`. *(à durcir : pas de check admin)* |
 
+#### Actions SUPERADMIN (gestion forte de la ligue)
+
+> Toutes gardées par `requireSuperAdmin`. Comme les autres `/admin/*`, elles déclenchent le broadcast
+> `data:update` (middleware) et sont tracées dans l'audit log.
+
+| Route | Action loggée | Description |
+|---|---|---|
+| `POST /admin/matches/:id/force-confirm` | `EDIT_MATCH` | Valide d'autorité un `PendingMatch` (l'adversaire ne confirme jamais) → `PlayedMatch` + ELO appliqué. `404` si absent. **Emit** `match:confirmed` → 2 joueurs ; **broadcast** `leaderboard:update`. → `200 PlayedMatch`. |
+| `POST /admin/matches/:id/force-cancel` | `DELETE_MATCH` | Supprime un `PendingMatch` sans toucher à l'ELO. `404` si absent. **Emit** `match:expired` → 2 joueurs. → `200 { id, status: 'cancelled' }`. |
+| `POST /admin/matches/force-result` | `EDIT_MATCH` | Injecte un résultat directement (faux **ou** vrais joueurs, sans confirmation). `AdminForceResultSchema` `{ playerA, playerB, scoreA, scoreB (0–50) }` (joueurs ≠, scores ≠). Ordre canonique appliqué, ELO calculé. `404` si un joueur manque. **Emit** `match:confirmed` ; **broadcast** `leaderboard:update`. → `200 PlayedMatch`. |
+| `POST /admin/users` | `EDIT_STATS` | Crée un **faux joueur** (sans `ftId`). `AdminCreateUserSchema` `{ login (2–20, `[A-Za-z0-9_-]`), campus?, elo? (0–5000, défaut 1000) }`. `409` si le login existe. **Broadcast** `leaderboard:update`. → `200 User`. |
+| `DELETE /admin/users/:login` | `EDIT_STATS` | Suppression **définitive** d'un **faux compte uniquement** (`ftId === null`). Refuse un SUPERADMIN (403) ou un compte réel passé par OAuth (403) ; `404` si absent. Nettoie en cascade matchs/défis/ops/rejets/feature-requests/tournois. **Broadcast** `leaderboard:update`. → `200 { login, deleted: true }`. |
+| `POST /admin/reset-database` | `RESET_DATABASE` | **Reset total** de la ligue (irréversible). Body `{ confirm }` = phrase exacte `oui je suis sure de ce que je fais` (400 sinon). Efface tout l'historique (matchs/défis/ops/rejets/tournois), supprime les comptes en suppression/anonymisés (sauf SUPERADMIN), remet les autres à zéro (elo 1000, compteurs 0, titre null). **Broadcast** `leaderboard:update`. → `200 { reset: true, removedUsers, resetUsers }`. |
+
 ### `GET /admin/suspicious` — flags anti-triche
 Renvoie une liste de drapeaux triés par sévérité. Types détectés :
 - **pair_domination** : un joueur gagne ≥75 % de ≥5 matchs contre un même adversaire.
@@ -210,13 +245,14 @@ Flux **Server-Sent Events** (`text/event-stream`). Voir [REALTIME.md](./REALTIME
 | Événement | Déclencheur | Cible |
 |---|---|---|
 | `match:pending` | `POST /matches` | adversaire |
-| `match:confirmed` | `POST /matches/:id/confirm` | 2 joueurs |
+| `match:confirmed` | `POST /matches/:id/confirm`, `/admin/matches/:id/force-confirm`, `/admin/matches/force-result` | 2 joueurs |
 | `match:rejected` | `POST /matches/:id/reject` | déclarant |
+| `match:expired` | `POST /admin/matches/:id/force-cancel` | 2 joueurs |
 | `challenge:received` | `POST /challenges` | adversaire |
 | `challenge:accepted` | `POST /challenges/:id/accept` | challenger |
 | `challenge:declined` | `POST /challenges/:id/decline` | l'autre partie |
 | `challenge:recorded` | `POST /challenges/:id/record` | 2 joueurs |
 | `ops:update` | `POST /ops` + timers expiry/cooldown | [owner, target] |
-| `leaderboard:update` | confirm match, dodge | broadcast |
+| `leaderboard:update` | confirm match, dodge, actions SUPERADMIN (force-confirm/result, create/delete user, reset-db) | broadcast |
 | `tournament:update` | toute mutation `/tournaments*` | broadcast |
 | `data:update` | toute mutation `/admin/*` | broadcast |

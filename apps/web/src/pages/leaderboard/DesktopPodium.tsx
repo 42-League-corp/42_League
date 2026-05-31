@@ -137,9 +137,11 @@ function PodiumColumn({
       initial={{ opacity: 0, y: 28 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -6 }}
       className="group relative flex flex-col items-center gap-3 focus:outline-none"
     >
+      {/* Figure (avatar + nom) : seule cette partie se soulève au hover, la marche
+          reste ancrée au sol — pas de décollage. */}
+      <div className="flex flex-col items-center gap-3 transition-transform duration-300 ease-out group-hover:-translate-y-1.5">
       {/* Avatar + couronne — flotte doucement (lévitation de la photo intra) */}
       <motion.div
         className="relative"
@@ -203,6 +205,7 @@ function PodiumColumn({
             {t('lb.podium.champion')}
           </div>
         )}
+      </div>
       </div>
 
       {/* Marche */}

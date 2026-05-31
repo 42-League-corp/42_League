@@ -7,6 +7,7 @@ import { OnlineBadge } from '../../components/OnlineBadge';
 import { Tooltip } from '../../components/Tooltip';
 import { WinRateBar } from '../../components/WinRateBar';
 import { DesktopPodium } from './DesktopPodium';
+import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 
@@ -101,6 +102,9 @@ export function LeaderboardDesktop() {
     return m;
   }, [top3, statsByLogin]);
 
+  // ─── Vue (liste / nuage) ─────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState<RankingView>('list');
+
   // ─── Tri ───────────────────────────────────────────────────────────────────
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'rank', dir: 'asc' });
 
@@ -163,8 +167,13 @@ export function LeaderboardDesktop() {
       {top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`}>
+        <div className="flex justify-end mb-3">
+          <RankingViewToggle view={viewMode} onChange={setViewMode} />
+        </div>
         {leaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
+        ) : viewMode === 'graph' ? (
+          <LeaderboardScatter entries={leaderboard} myLogin={myLogin} className="h-[560px]" />
         ) : (
           <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm border-separate border-spacing-0">

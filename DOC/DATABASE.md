@@ -27,7 +27,8 @@ Niveau de permission d'un utilisateur.
 
 ### `AdminAction`
 Type d'action tracée dans l'audit log.
-`SET_ROLE`, `BAN_USER`, `UNBAN_USER`, `EDIT_STATS`, `EDIT_TITLE`, `DELETE_MATCH`, `EDIT_MATCH`, `REFRESH_IMAGES`.
+`SET_ROLE`, `BAN_USER`, `UNBAN_USER`, `EDIT_STATS`, `EDIT_TITLE`, `DELETE_MATCH`, `EDIT_MATCH`,
+`REFRESH_IMAGES`, `RESET_DATABASE` (reset complet de la ligue par un SUPERADMIN).
 
 ---
 
@@ -49,8 +50,14 @@ Clé primaire : **`login`** (le login intra 42, pas un id numérique).
 | `dodgeCount` | Int | non | `0` | Nombre de désistements sur défi accepté. |
 | `tournamentsWon` | Int | non | `0` | Tournois gagnés. |
 | `bannedAt` | DateTime | oui | — | Si renseigné → compte suspendu. |
-| `anonymizedAt` | DateTime | oui | — | Si renseigné → compte anonymisé (RGPD Art. 17). |
+| `deletionScheduledAt` | DateTime | oui | — | Suppression programmée (RGPD Art. 17). Posée par `DELETE /me/account` ; **se reconnecter avant l'échéance la remet à null** (annule la suppression). Un job quotidien anonymise les comptes échus après `ACCOUNT_GRACE_DAYS` (défaut **30 j**). |
+| `anonymizedAt` | DateTime | oui | — | Si renseigné → compte déjà anonymisé (login → `anon_<hash>`, PII purgée). |
 | `createdAt` | DateTime | non | `now()` | `@updatedAt`. |
+
+> **Période de grâce.** Tant que `deletionScheduledAt` est posé mais l'échéance non atteinte, l'utilisateur
+> est **exclu** des listings (`GET /users`, `/leaderboard`, profils) mais son compte et son ELO existent
+> toujours. Le job quotidien `anonymizeAccount` ne le purge qu'après la fenêtre de grâce ; une
+> reconnexion entre-temps le restaure intégralement.
 
 **Relations** (toutes les FK joueur utilisent `onDelete: Restrict`, `onUpdate: Cascade` — on ne
 supprime jamais un user référencé ; renommer un login propage en cascade, ce qui sert à
@@ -262,6 +269,8 @@ Dans `apps/backend/prisma/migrations/`, dans l'ordre chronologique (le préfixe 
 | 10 | `20260529013138_add_banned_at_and_rejected_matches` | `User.bannedAt`, RejectedMatch. |
 | 11 | `20260529030000_add_admin_audit_log` | AdminAuditLog + enum `AdminAction`. |
 | 12 | `20260529100000_add_anonymized_at` | `User.anonymizedAt`. |
+| 13 | `20260531000000_add_deletion_scheduled_at` | `User.deletionScheduledAt` (suppression RGPD différée). |
+| 14 | `20260531010000_add_reset_database_action` | Valeur `RESET_DATABASE` dans l'enum `AdminAction`. |
 
 En prod, les migrations sont appliquées par `prisma migrate deploy` au démarrage du conteneur backend.
 
@@ -278,6 +287,17 @@ Initialise une base de démo réaliste :
 - **3 ops** actifs.
 
 Lancement : `npm run db:seed -w @42-league/backend`.
+
+### Scripts utilitaires complémentaires (`prisma/`)
+| Script | Commande | Effet |
+|---|---|---|
+| `seed.ts` | `npm run db:seed -w @42-league/backend` | Base de démo complète (ci-dessus). |
+| `add-test-players.ts` | `npm run db:add-players -w @42-league/backend` | Ajoute **8 faux joueurs** (`test1`…`test8`, campus « Le Havre », ELO 1000) en **upsert** (idempotent). `db:add-players:prod` = même script sans `dotenv`. |
+| `seed-test.ts` | `npm run db:seed-test -w @42-league/backend` | Jeu de données réduit pour essais. |
+| `add-test-notif.ts` | `npm run db:add-notif -w @42-league/backend` | Crée des situations déclenchant des notifications. |
+
+> Note : on peut aussi créer / supprimer des faux comptes en prod via l'API SUPERADMIN
+> (`POST`/`DELETE /admin/users` — voir [API.md](./API.md)), sans toucher à la DB directement.
 
 ---
 
@@ -340,7 +360,8 @@ POST /ops  (1 ops actif max par owner ; cooldown 7j ; cibles non déjà engagée
 3. **Cascade maîtrisée** : `Tournament` supprime ses entries/matches en cascade ; les FK joueur
    sont en `Restrict` (jamais supprimer un user référencé) + `onUpdate: Cascade` (renommer un login
    propage → sert à l'anonymisation RGPD).
-4. **Soft-flags temporels** : `bannedAt`, `anonymizedAt` plutôt que suppression dure.
+4. **Soft-flags temporels** : `bannedAt`, `deletionScheduledAt`, `anonymizedAt` plutôt que suppression
+   dure — la suppression RGPD est différée (période de grâce) puis matérialisée par anonymisation.
 5. **Audit append-only** : aucune route ne modifie/supprime `AdminAuditLog` (sauf purge RGPD 24 mois).
 6. **États en `String`** (pas d'enum DB) pour `status`/`kind`/`winner` : la validation se fait côté
    applicatif (Zod), ce qui évite une migration à chaque nouvel état.

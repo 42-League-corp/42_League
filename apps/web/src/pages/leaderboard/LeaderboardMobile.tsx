@@ -5,12 +5,14 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
+import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { useLeagueData } from '../../hooks/useLeagueData';
 
 export function LeaderboardMobile() {
   const { leaderboard, matches, me, allOps, locations, refresh } = useLeagueData();
   const myLogin = me?.login;
   const [query, setQuery] = useState('');
+  const [viewMode, setViewMode] = useState<RankingView>('list');
 
   const winsLossesByLogin = useMemo(() => {
     const map = new Map<string, { wins: number; losses: number }>();
@@ -76,6 +78,15 @@ export function LeaderboardMobile() {
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
+        {/* Bascule liste / nuage de points */}
+        <div className="flex justify-center pt-1">
+          <RankingViewToggle view={viewMode} onChange={setViewMode} />
+        </div>
+
+        {viewMode === 'graph' ? (
+          <LeaderboardScatter entries={sortedLeaderboard} myLogin={myLogin} className="h-[70vh]" />
+        ) : (
+        <>
         {/* Podium top 3 — toujours en haut (masqué seulement pendant une recherche). */}
         {top3.length > 0 && !normalizedQuery && (
           <Podium top3={top3} statsByLogin={podiumStats} />
@@ -147,6 +158,8 @@ export function LeaderboardMobile() {
               );
             })}
           </StaggerList>
+        )}
+        </>
         )}
       </div>
     </PullToRefresh>

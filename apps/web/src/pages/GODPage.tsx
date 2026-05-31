@@ -1,5 +1,7 @@
-import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
+import { useServerEvents } from '../hooks/useServerEvents';
 import {
   api,
   type AdminUser,
@@ -15,6 +17,13 @@ import {
 
 type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit';
 type Role = 'ADMIN' | 'SUPERADMIN';
+
+// Temps réel : événements SSE qui doivent rafraîchir le panel.
+//  - `data:update`  : émis sur toute mutation /admin/* (actions d'un autre admin).
+//  - `panel:update` : émis sur toute mutation matchs / défis / idées (actions des
+//                     joueurs, qui sinon ne sont notifiées qu'aux intéressés).
+// Chaque onglet s'y abonne et recharge ses données en silence (sans spinner).
+const PANEL_EVENTS = ['data:update', 'panel:update'];
 
 // ── Shared primitives ──────────────────────────────────────────────────────
 
@@ -184,6 +193,106 @@ function StatsEditModal({
   );
 }
 
+// ── Reset total de la ligue (SUPERADMIN) ───────────────────────────────────
+// Phrase à recopier À LA MAIN (copier-coller / glisser bloqués) pour déverrouiller
+// le bouton. Doit être identique côté backend (RESET_CONFIRM_PHRASE).
+const RESET_CONFIRM_PHRASE = 'oui je suis sure de ce que je fais';
+
+function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ removedUsers: number; resetUsers: number } | null>(null);
+
+  const blockPaste = (e: ClipboardEvent | DragEvent) => {
+    e.preventDefault();
+    setError('Copier-coller interdit — recopie la phrase à la main.');
+  };
+
+  const ok = typed === RESET_CONFIRM_PHRASE;
+
+  async function handleReset() {
+    if (!ok) return;
+    setResetting(true);
+    setError('');
+    try {
+      const r = await api.adminResetDatabase(typed);
+      setResult({ removedUsers: r.removedUsers, resetUsers: r.resetUsers });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-zinc-900 border border-red-500/40 rounded-lg p-6 w-[28rem] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {result ? (
+          <>
+            <div className="text-sm font-mono text-emerald-400 mb-3 font-bold">✓ Ligue réinitialisée</div>
+            <div className="text-xs font-mono text-zinc-400 space-y-1">
+              <div>{result.resetUsers} joueur{result.resetUsers !== 1 ? 's' : ''} remis à zéro (ELO 1000).</div>
+              <div>{result.removedUsers} compte{result.removedUsers !== 1 ? 's' : ''} supprimé{result.removedUsers !== 1 ? 's' : ''} (désactivés / supprimés).</div>
+              <div className="text-zinc-500">Tout l'historique de jeu a été effacé.</div>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <Btn onClick={onClose} variant="default">Fermer</Btn>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">💣</span>
+              <span className="text-sm font-mono text-red-400 font-bold uppercase tracking-widest">Reset total de la ligue</span>
+            </div>
+            <div className="text-xs font-mono text-zinc-400 leading-relaxed space-y-2 mb-4">
+              <p>Cette action est <span className="text-red-400 font-bold">irréversible</span>. Elle va :</p>
+              <ul className="list-disc list-inside text-zinc-500 space-y-0.5">
+                <li>supprimer <span className="text-zinc-300">tous les matchs</span>, défis, ops, rejets et tournois ;</li>
+                <li>remettre chaque joueur à <span className="text-zinc-300">ELO 1000</span>, stats et trophées à 0 ;</li>
+                <li>supprimer les comptes <span className="text-zinc-300">désactivés / supprimés</span>.</li>
+              </ul>
+              <p className="text-zinc-500">Les SUPERADMIN et les comptes actifs sont conservés (mais remis à zéro).</p>
+            </div>
+            <div className="text-xs font-mono text-zinc-400 mb-2">
+              Pour confirmer, recopie à la main (le copier-coller est bloqué) :
+            </div>
+            <div className="bg-zinc-800/60 border border-zinc-700 rounded px-3 py-2 mb-2 text-sm font-mono text-zinc-200 select-none">
+              {RESET_CONFIRM_PHRASE}
+            </div>
+            <input
+              type="text"
+              value={typed}
+              onChange={(e) => { setTyped(e.target.value); setError(''); }}
+              onPaste={blockPaste}
+              onDrop={blockPaste}
+              onDragOver={(e) => e.preventDefault()}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              placeholder="Recopie la phrase ici…"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-red-500/60"
+            />
+            {error && <div className="mt-3 text-xs text-red-400 font-mono">{error}</div>}
+            <div className="mt-5 flex gap-2 justify-end">
+              <Btn onClick={onClose} variant="ghost">Annuler</Btn>
+              <Btn onClick={handleReset} disabled={!ok || resetting} variant="danger">
+                {resetting ? 'Reset en cours…' : 'Tout réinitialiser'}
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: UTILISATEURS ──────────────────────────────────────────────────────
 
 function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
@@ -192,6 +301,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [filter, setFilter] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
+  const [showReset, setShowReset] = useState(false);
   const [error, setError] = useState('');
 
   // Création d'un faux joueur (SUPERADMIN).
@@ -200,8 +310,8 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [newElo, setNewElo] = useState('1000');
   const [creating, setCreating] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.adminUsers()
       .then(setUsers)
       .catch((e) => setError(e.message))
@@ -209,6 +319,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = users.filter((u) => u.login.toLowerCase().includes(filter.toLowerCase()));
 
@@ -248,6 +359,25 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     <div className="p-4">
       {editingStats && (
         <StatsEditModal user={editingStats} onClose={() => setEditingStats(null)} onSave={load} />
+      )}
+      {showReset && (
+        <ResetDatabaseModal onClose={() => setShowReset(false)} onDone={() => load()} />
+      )}
+
+      {myRole === 'SUPERADMIN' && (
+        <div className="mb-4 bg-red-500/5 border border-red-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-mono text-red-400 uppercase tracking-widest mb-0.5">
+              💣 Zone de danger
+            </div>
+            <div className="text-[11px] text-zinc-500 font-mono">
+              Reset complet : supprime matchs &amp; tournois, remet tous les joueurs à zéro (ELO 1000), retire les comptes désactivés/supprimés. Irréversible.
+            </div>
+          </div>
+          <Btn onClick={() => setShowReset(true)} variant="danger" className="border border-red-500/40 px-3 py-1.5">
+            Réinitialiser la ligue
+          </Btn>
+        </div>
       )}
 
       {myRole === 'SUPERADMIN' && (
@@ -389,6 +519,12 @@ function ModerationTab() {
       setStats(data);
     } finally { setPending(''); }
   }
+
+  // Temps réel : si un joueur est affiché, on rafraîchit ses stats en silence.
+  useServerEvents(() => {
+    if (!stats) return;
+    api.adminModerationStats(stats.user.login).then(setStats).catch(() => {});
+  }, PANEL_EVENTS);
 
   const u = stats?.user;
 
@@ -563,12 +699,16 @@ function RejetsTab() {
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.adminRejectedMatches()
       .then(setRows)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = rows.filter(
     (r) =>
@@ -609,8 +749,8 @@ function MatchesTab() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.playedMatches()
       .then(setMatches)
       .catch((e) => setError(e.message))
@@ -618,6 +758,7 @@ function MatchesTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = matches.filter(
     (m) => m.playerALogin.includes(filter) || m.playerBLogin.includes(filter),
@@ -741,8 +882,8 @@ function IdeasTab() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.featureRequests()
       .then(setIdeas)
       .catch((e) => setError(e.message))
@@ -750,6 +891,7 @@ function IdeasTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = filter === 'all' ? ideas : ideas.filter((i) => i.status === filter);
 
@@ -854,12 +996,16 @@ function AlertesTab() {
   const [filterType, setFilterType] = useState<SuspiciousFlag['type'] | 'all'>('all');
   const [inspectLogin, setInspectLogin] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.adminSuspicious()
       .then(setFlags)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = filterType === 'all' ? flags : flags.filter((f) => f.type === filterType);
 
@@ -1019,7 +1165,7 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
 // ── Tab: AUDIT ─────────────────────────────────────────────────────────────
 
 const AUDIT_ACTIONS: AdminAuditAction[] = [
-  'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES',
+  'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES', 'RESET_DATABASE',
 ];
 
 const ACTION_COLOR: Record<AdminAuditAction, string> = {
@@ -1031,6 +1177,7 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   DELETE_MATCH: 'text-red-400',
   EDIT_MATCH: 'text-blue-400',
   REFRESH_IMAGES: 'text-zinc-400',
+  RESET_DATABASE: 'text-red-500',
 };
 
 function AuditTab() {
@@ -1041,8 +1188,8 @@ function AuditTab() {
   const [targetFilter, setTargetFilter] = useState('');
   const [actionFilter, setActionFilter] = useState<AdminAuditAction | 'all'>('all');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const list = await api.adminAuditLog({
@@ -1060,6 +1207,7 @@ function AuditTab() {
   }, [actorFilter, targetFilter, actionFilter]);
 
   useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   return (
     <div className="p-4">
@@ -1140,8 +1288,8 @@ function PendingTab() {
   const [forcing, setForcing] = useState(false);
   const [forceMsg, setForceMsg] = useState('');
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.pendingMatches()
       .then(setRows)
       .catch((e) => setError(e.message))
@@ -1149,6 +1297,7 @@ function PendingTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
 
   async function act(id: string, fn: () => Promise<unknown>) {
     setPending(id);
@@ -1339,6 +1488,13 @@ export function GODPage() {
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/50">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/challenges')}
+              aria-label="Retour à l'application"
+              className="flex items-center justify-center w-8 h-8 -ml-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/70 transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
+            </button>
             <span className="text-zinc-300 font-bold tracking-widest text-sm">GOD PANEL</span>
             <span className="text-zinc-700">|</span>
             <span className="text-zinc-400 text-xs">{myLogin}</span>
@@ -1346,9 +1502,10 @@ export function GODPage() {
           </div>
           <button
             onClick={() => navigate('/challenges')}
-            className="text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
           >
-            ← Retour app
+            <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+            Retour app
           </button>
         </div>
       </div>
