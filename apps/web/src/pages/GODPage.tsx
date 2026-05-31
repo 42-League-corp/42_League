@@ -1168,6 +1168,7 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
 
 const AUDIT_ACTIONS: AdminAuditAction[] = [
   'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES', 'RESET_DATABASE',
+  'DELETE_CHALLENGE', 'DELETE_PENDING_MATCH', 'DELETE_REJECTED_MATCH', 'DELETE_OPS',
 ];
 
 const ACTION_COLOR: Record<AdminAuditAction, string> = {
@@ -1180,6 +1181,10 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   EDIT_MATCH: 'text-blue-400',
   REFRESH_IMAGES: 'text-zinc-400',
   RESET_DATABASE: 'text-red-500',
+  DELETE_CHALLENGE: 'text-red-400',
+  DELETE_PENDING_MATCH: 'text-red-400',
+  DELETE_REJECTED_MATCH: 'text-red-400',
+  DELETE_OPS: 'text-red-400',
 };
 
 function AuditTab() {
