@@ -128,9 +128,17 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [me, matches, pending, challenges, leaderboard, tournaments, opsMe, allOps] =
+      // On interroge `me` en premier : tant que le consentement RGPD n'est pas donné,
+      // la consent-gate du serveur refuse (403) tous les autres endpoints. On évite
+      // donc de les appeler — la <ConsentGate> est affichée à la place par AuthenticatedShell.
+      const me = await api.me();
+      if (me.consentRequired) {
+        setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
+        setLoading(false);
+        return;
+      }
+      const [matches, pending, challenges, leaderboard, tournaments, opsMe, allOps] =
         await Promise.all([
-          api.me(),
           api.playedMatches(),
           api.pendingMatches(),
           api.challenges(),
