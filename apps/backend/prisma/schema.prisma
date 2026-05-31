@@ -101,6 +101,7 @@ model Tournament {
   id            String   @id @default(uuid())
   name          String
   kind          String   @default("friendly")  // 'friendly' | 'official'
+  isPrivate     Boolean  @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
   capacity      Int      // 4 or 8
   status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String  @map("created_by_login")

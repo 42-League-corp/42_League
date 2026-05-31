@@ -93,7 +93,8 @@ export function TournoiDetailPage() {
     await runAction(() => api.addTournamentPlayer(tournament.id, login), `${login} ajouté au tournoi`);
   };
   const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
-  const sub = `${kindLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
+  const visLabel = tournament.isPrivate ? ' · 🔒 PRIVÉ' : '';
+  const sub = `${kindLabel}${visLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
 
   const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
@@ -135,8 +136,14 @@ export function TournoiDetailPage() {
 
       {tournament.status === 'registration' && (
         <>
+          {tournament.isPrivate && !iAmIn && !isOrganizer && !isAdmin && (
+            <div className="mb-4 text-[11px] text-teal flex items-center gap-1.5 uppercase tracking-wider font-semibold">
+              🔒 Tournoi privé — accès sur invitation de l'organisateur.
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 mb-4">
-            {!iAmIn && entriesCount < tournament.capacity && (
+            {!iAmIn && entriesCount < tournament.capacity &&
+              (!tournament.isPrivate || isOrganizer || isAdmin) && (
               <Button onClick={() => runAction(() => api.joinTournament(tournament.id), 'Inscrit au tournoi')}>
                 S'inscrire
               </Button>

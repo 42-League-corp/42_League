@@ -107,6 +107,32 @@ async function purgeUserFromTournaments(
   return created.count > 0 || freed.count > 0;
 }
 
+// Annule les défis « en cours » (en attente ou acceptés) impliquant un compte
+// qui sort du jeu (ban / désactivation / anonymisation) : il ne doit plus avoir
+// de duel actif. Renvoie true si au moins un défi a été annulé.
+async function cancelUserChallenges(
+  tx: Prisma.TransactionClient,
+  login: string,
+): Promise<boolean> {
+  const res = await tx.challenge.updateMany({
+    where: {
+      OR: [{ challengerLogin: login }, { opponentLogin: login }],
+      status: { in: ['pending', 'accepted'] },
+    },
+    data: { status: 'cancelled', decidedAt: new Date() },
+  });
+  return res.count > 0;
+}
+
+// Filtre Prisma des comptes VISIBLES (en jeu) : ni bannis, ni désactivés
+// (suppression RGPD programmée), ni anonymisés. Utilisé pour le classement et
+// les listes publiques de joueurs.
+const VISIBLE_USER_WHERE = {
+  bannedAt: null,
+  anonymizedAt: null,
+  deletionScheduledAt: null,
+} as const;
+
 async function getOrCreateUser(login: string, profile?: FtProfile) {
   const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
   const user = await prisma.user.upsert({
@@ -400,8 +426,10 @@ async function anonymizeAccount(login: string): Promise<void> {
 
   await prisma.$transaction(async (tx) => {
     // Un compte anonymisé est définitivement hors-jeu : on purge ses tournois
-    // avant de renommer le login (la désactivation l'a normalement déjà fait).
+    // et ses défis avant de renommer le login (la désactivation l'a
+    // normalement déjà fait).
     await purgeUserFromTournaments(tx, login);
+    await cancelUserChallenges(tx, login);
     // Mise à jour du login (cascade automatique vers toutes les FK ON UPDATE CASCADE)
     await tx.user.update({
       where: { login },
@@ -434,12 +462,16 @@ app.delete('/me/account', async (c) => {
       where: { login },
       data: { deletionScheduledAt: new Date() },
     });
-    // Un compte désactivé sort du jeu : ses tournois disparaissent et sa place
-    // est libérée dans ceux où il était simplement inscrit.
-    return purgeUserFromTournaments(tx, login);
+    // Un compte désactivé sort du jeu : ses tournois disparaissent, sa place est
+    // libérée là où il était inscrit, et ses défis en cours sont annulés.
+    const t = await purgeUserFromTournaments(tx, login);
+    await cancelUserChallenges(tx, login);
+    return t;
   });
 
   if (tournamentsChanged) broadcast({ type: 'tournament:update', payload: {} });
+  // Rafraîchit les listes (classement + défis des adversaires concernés).
+  broadcast({ type: 'data:update', payload: {} });
   return c.json({ ok: true, graceDays: ACCOUNT_GRACE_DAYS });
 });
 
@@ -472,9 +504,9 @@ app.get('/events', async (c) => {
 
 app.get('/users', async (c) => {
   await getCurrentLogin(c);
-  // Les comptes en cours de suppression (période de grâce) sont masqués des vues publiques.
+  // Comptes hors-jeu (bannis / désactivés / anonymisés) masqués des vues publiques.
   return c.json(
-    await prisma.user.findMany({ where: { deletionScheduledAt: null }, orderBy: { elo: 'desc' } }),
+    await prisma.user.findMany({ where: VISIBLE_USER_WHERE, orderBy: { elo: 'desc' } }),
   );
 });
 
@@ -488,7 +520,7 @@ app.get('/users/:login', async (c) => {
   }
   const [allUsers, played] = await Promise.all([
     prisma.user.findMany({
-      where: { deletionScheduledAt: null },
+      where: VISIBLE_USER_WHERE,
       select: { login: true, elo: true },
       orderBy: { elo: 'desc' },
     }),
@@ -511,8 +543,9 @@ app.get('/users/:login', async (c) => {
 
 app.get('/leaderboard', async (c) => {
   await getCurrentLogin(c);
+  // Bannis / désactivés / anonymisés ne figurent jamais au classement.
   const users = await prisma.user.findMany({
-    where: { deletionScheduledAt: null },
+    where: VISIBLE_USER_WHERE,
     orderBy: { elo: 'desc' },
   });
   return c.json(users.map((u, i) => ({ rank: i + 1, ...u })));
@@ -1270,6 +1303,7 @@ app.post('/challenges/:id/record', async (c) => {
 /* ============ TOURNAMENTS ============ */
 
 app.get('/tournaments', async (c) => {
+  const me = await getCurrentLogin(c);
   const list = await prisma.tournament.findMany({
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     include: {
@@ -1277,10 +1311,19 @@ app.get('/tournaments', async (c) => {
       winner: { select: { login: true, imageUrl: true } },
     },
   });
-  return c.json(list);
+  // Tournoi privé : visible uniquement par son créateur, ses invités (entries) ou un admin.
+  const visible = list.filter(
+    (t) =>
+      !t.isPrivate ||
+      t.createdByLogin === me ||
+      isAdmin(me) ||
+      t.entries.some((e) => e.login === me),
+  );
+  return c.json(visible);
 });
 
 app.get('/tournaments/:id', async (c) => {
+  const me = await getCurrentLogin(c);
   const id = c.req.param('id');
   const tournament = await prisma.tournament.findUnique({
     where: { id },
@@ -1297,6 +1340,15 @@ app.get('/tournaments/:id', async (c) => {
     },
   });
   if (!tournament) {
+    throw new HTTPException(404, { message: 'tournament not found' });
+  }
+  // Tournoi privé : accessible uniquement au créateur, aux invités ou à un admin.
+  if (
+    tournament.isPrivate &&
+    tournament.createdByLogin !== me &&
+    !isAdmin(me) &&
+    !tournament.entries.some((e) => e.login === me)
+  ) {
     throw new HTTPException(404, { message: 'tournament not found' });
   }
   return c.json(tournament);
@@ -1320,6 +1372,7 @@ app.post('/tournaments', async (c) => {
       id: randomUUID(),
       name: parsed.data.name,
       kind: parsed.data.kind,
+      isPrivate: parsed.data.private,
       capacity: parsed.data.capacity,
       status: 'registration',
       createdByLogin: me,
@@ -1342,6 +1395,10 @@ app.post('/tournaments/:id/join', async (c) => {
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
     if (t.status !== 'registration') {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    // Tournoi privé : pas d'inscription libre, l'organisateur invite (add-player).
+    if (t.isPrivate && t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: 'tournoi privé — sur invitation uniquement' });
     }
     if (t.entries.some((e) => e.login === me)) {
       throw new HTTPException(409, { message: 'already registered' });
@@ -1394,7 +1451,7 @@ app.post('/tournaments/:id/add-player', async (c) => {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
     const target = await tx.user.findUnique({ where: { login } });
-    if (!target || target.deletionScheduledAt) {
+    if (!target || target.bannedAt || target.anonymizedAt || target.deletionScheduledAt) {
       throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
     }
     if (t.entries.some((e) => e.login === login)) {
@@ -1932,6 +1989,8 @@ app.post('/admin/users/:login/ban', async (c) => {
     // Un banni quitte les tournois : ceux qu'il a créés disparaissent, et sa
     // place est libérée là où il n'était qu'inscrit (phase d'inscription).
     const changed = await purgeUserFromTournaments(tx, login);
+    // Ses défis/duels en cours sont annulés (plus de duel actif pour lui).
+    await cancelUserChallenges(tx, login);
     return { user: u, tournamentsChanged: changed };
   });
   await logAdminAction(c, {

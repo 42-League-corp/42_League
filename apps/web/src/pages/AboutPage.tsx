@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, BookOpen, Shield, Terminal, Users } from 'lucide-react';
+import { ChevronLeft, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
 import { Panel } from '../components/Panel';
+import { Avatar } from '../components/Avatar';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
+import { useLeagueData } from '../hooks/useLeagueData';
 
 type Tab = 'rules' | 'privacy' | 'tech' | 'team';
 
@@ -183,7 +185,7 @@ function RulesSection() {
       <Panel title="Tournois">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
-            Les tournois sont en format <span className="text-text font-semibold">élimination directe</span> (4 ou 8 joueurs).
+            Les tournois sont en format <span className="text-text font-semibold">élimination directe</span> (8 ou 16 joueurs).
             Les tournois <span className="text-gold font-semibold">officiels</span> sont créés par les admins et
             peuvent affecter le classement. Les tournois <span className="text-text font-semibold">amicaux</span>
             sont ouverts à tous et n'ont pas d'impact ELO.
@@ -529,6 +531,7 @@ type Member = {
   login: string;
   role: string;
   accent: 'gold' | 'red';
+  crown?: boolean;
   blurb: React.ReactNode;
 };
 
@@ -547,13 +550,16 @@ const TEAM: Member[] = [
   },
   {
     login: 'throbert',
-    role: 'Créateur · 0 → 1',
+    role: 'Founder',
     accent: 'gold',
+    crown: true,
     blurb: (
       <>
-        <span className="text-text font-semibold">Premier commit</span> et fondations du projet. A
-        transformé l'idée en un produit qui tourne réellement — le passage du{' '}
-        <span className="text-text font-semibold">0 au 1</span>.
+        À l'origine du concept concret : un{' '}
+        <span className="text-text font-semibold">classement ELO de babyfoot 1v1</span> du campus,
+        avec <span className="text-text font-semibold">défis programmés</span>, OPS,{' '}
+        <span className="text-text font-semibold">tournois</span> à élimination directe et{' '}
+        <span className="text-text font-semibold">trophées</span> — le tout réuni dans une seule app.
       </>
     ),
   },
@@ -595,48 +601,87 @@ const TEAM: Member[] = [
   },
 ];
 
+// La page « À propos » est accessible avant connexion (parcours RGPD) — là, le
+// contexte LeagueData n'existe pas. On ne lit les photos intra que connecté.
 function TeamSection() {
+  const { authenticated } = useAuth();
+  return authenticated ? <TeamSectionAuthed /> : <TeamCarousel photos={{}} />;
+}
+
+function TeamSectionAuthed() {
+  const { leaderboard } = useLeagueData();
+  const photos: Record<string, string | null> = {};
+  for (const u of leaderboard) photos[u.login] = u.imageUrl;
+  return <TeamCarousel photos={photos} />;
+}
+
+function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
+  // Founder en tête, le reste dans l'ordre déclaré.
+  const members = [...TEAM].sort((a, b) => (b.crown ? 1 : 0) - (a.crown ? 1 : 0));
   return (
     <div className="flex flex-col gap-4">
       <Panel title="Les développeurs" sub="de l'idée au déploiement">
         <p className="text-sm text-muted leading-relaxed">
           42 League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première
-          idée jusqu'à la mise en production.
+          idée jusqu'à la mise en production. <span className="text-muted-2">← glisse pour parcourir →</span>
         </p>
       </Panel>
 
-      <div className="flex flex-col gap-3">
-        {TEAM.map((m) => (
-          <MemberCard key={m.login} member={m} />
+      {/* Carrousel horizontal de cartes verticales (snap). */}
+      <div className="flex gap-4 overflow-x-auto pb-3 -mx-4 px-4 snap-x snap-mandatory scrollbar-none">
+        {members.map((m) => (
+          <MemberCard key={m.login} member={m} imageUrl={photos[m.login] ?? null} />
         ))}
       </div>
     </div>
   );
 }
 
-function MemberCard({ member }: { member: Member }) {
+function MemberCard({ member, imageUrl }: { member: Member; imageUrl: string | null }) {
   const isRed = member.accent === 'red';
   return (
     <div
-      className={`rounded-xl border bg-bg-2/50 p-4 sm:p-5 ${
-        isRed ? 'border-red/25' : 'border-gold/25'
+      className={`relative snap-start shrink-0 w-60 sm:w-64 rounded-2xl border bg-bg-2/50 p-5 flex flex-col items-center text-center overflow-hidden ${
+        isRed ? 'border-red/25' : member.crown ? 'border-gold/50' : 'border-gold/25'
       }`}
     >
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div className="font-gaming text-base font-extrabold text-text-strong tracking-wide">
-          {member.login}
-        </div>
+      {/* Halo doré derrière le founder */}
+      {member.crown && (
         <div
-          className={`shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
-            isRed
-              ? 'text-red border-red/30 bg-red/10'
-              : 'text-gold border-gold/30 bg-gold/10'
+          className="absolute inset-x-0 top-0 h-24 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgba(255,201,74,0.18), transparent 70%)' }}
+        />
+      )}
+
+      <div className="relative">
+        {member.crown && (
+          <Crown
+            className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.6)] z-10"
+            fill="currentColor"
+            strokeWidth={2}
+          />
+        )}
+        <Avatar
+          login={member.login}
+          imageUrl={imageUrl}
+          size="xl"
+          className={`ring-2 ring-offset-2 ring-offset-bg-2 ${
+            isRed ? 'ring-red/50' : 'ring-gold/60'
           }`}
-        >
-          {member.role}
-        </div>
+        />
       </div>
-      <p className="mt-2.5 text-sm text-muted leading-relaxed">{member.blurb}</p>
+
+      <div className="mt-3 font-gaming text-base font-extrabold text-text-strong tracking-wide">
+        {member.login}
+      </div>
+      <div
+        className={`mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
+          isRed ? 'text-red border-red/30 bg-red/10' : 'text-gold border-gold/30 bg-gold/10'
+        }`}
+      >
+        {member.role}
+      </div>
+      <p className="mt-3 text-sm text-muted leading-relaxed">{member.blurb}</p>
     </div>
   );
 }

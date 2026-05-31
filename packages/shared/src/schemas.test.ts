@@ -642,25 +642,25 @@ describe('RecordResultSchema', () => {
 
 describe('CreateTournamentSchema', () => {
   describe('cas valides', () => {
-    it('accepte un tournoi de capacité 2', () => {
+    it('accepte un tournoi de capacité 8', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 2 }).success,
+        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 8 }).success,
       ).toBe(true);
     });
-    it('accepte un tournoi de capacité 4', () => {
+    it('accepte un tournoi de capacité 16', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 4 }).success,
+        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 16 }).success,
       ).toBe(true);
     });
     it('applique kind=friendly par défaut', () => {
-      const r = CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 2 });
+      const r = CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 8 });
       expect(r.success).toBe(true);
       if (r.success) expect(r.data.kind).toBe('friendly');
     });
     it('accepte kind=official explicite', () => {
       const r = CreateTournamentSchema.safeParse({
         name: 'Cup',
-        capacity: 4,
+        capacity: 8,
         kind: 'official',
       });
       expect(r.success).toBe(true);
@@ -668,12 +668,12 @@ describe('CreateTournamentSchema', () => {
     });
     it('accepte un nom de 2 caractères (min)', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'ab', capacity: 2 }).success,
+        CreateTournamentSchema.safeParse({ name: 'ab', capacity: 8 }).success,
       ).toBe(true);
     });
     it('accepte un nom de 60 caractères (max)', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'a'.repeat(60), capacity: 2 })
+        CreateTournamentSchema.safeParse({ name: 'a'.repeat(60), capacity: 8 })
           .success,
       ).toBe(true);
     });
@@ -682,12 +682,12 @@ describe('CreateTournamentSchema', () => {
   describe('bornes et enums', () => {
     it('rejette un nom de 1 caractère', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'a', capacity: 2 }).success,
+        CreateTournamentSchema.safeParse({ name: 'a', capacity: 8 }).success,
       ).toBe(false);
     });
     it('rejette un nom de 61 caractères', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'a'.repeat(61), capacity: 2 })
+        CreateTournamentSchema.safeParse({ name: 'a'.repeat(61), capacity: 8 })
           .success,
       ).toBe(false);
     });
@@ -696,9 +696,9 @@ describe('CreateTournamentSchema', () => {
         CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 3 }).success,
       ).toBe(false);
     });
-    it('rejette une capacité de 8', () => {
+    it('rejette une capacité de 4 (sous le minimum de 8)', () => {
       expect(
-        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 8 }).success,
+        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 4 }).success,
       ).toBe(false);
     });
     it('rejette une capacité sous forme de chaîne', () => {
@@ -710,7 +710,7 @@ describe('CreateTournamentSchema', () => {
       expect(
         CreateTournamentSchema.safeParse({
           name: 'Cup',
-          capacity: 2,
+          capacity: 8,
           kind: 'ranked',
         }).success,
       ).toBe(false);
@@ -719,7 +719,7 @@ describe('CreateTournamentSchema', () => {
 
   describe('champs manquants / types', () => {
     it('rejette un nom manquant', () => {
-      expect(CreateTournamentSchema.safeParse({ capacity: 2 }).success).toBe(
+      expect(CreateTournamentSchema.safeParse({ capacity: 8 }).success).toBe(
         false,
       );
     });

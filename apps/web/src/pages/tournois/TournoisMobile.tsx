@@ -171,7 +171,7 @@ function HowItWorks() {
             🎲 Tournoi amical
           </h3>
           <p className="text-xs text-muted-2 leading-relaxed">
-            Tout le monde peut en lancer un : choisis un nom, 4 ou 8 joueurs, puis démarre le
+            Tout le monde peut en lancer un : choisis un nom, 8 ou 16 joueurs, puis démarre le
             bracket avec le bouton <span className="text-text-strong font-semibold">Nouveau</span>.
             Idéal pour s'amuser entre collègues — sans impact sur le classement.
           </p>

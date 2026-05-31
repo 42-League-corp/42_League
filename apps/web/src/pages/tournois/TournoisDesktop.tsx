@@ -3,12 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
-import { Trophy } from 'lucide-react';
+import { Trophy, Lock } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
 
-type Capacity = 4 | 8;
+type Capacity = 8 | 16;
 
 /**
  * Vue desktop des tournois — identique à l'ancienne TournoisPage, reposée ici
@@ -21,8 +21,9 @@ export function TournoisDesktop() {
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
-  const [capacity, setCapacity] = useState<Capacity>(4);
+  const [capacity, setCapacity] = useState<Capacity>(8);
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [busy, setBusy] = useState(false);
 
   // Regroupement par état : en cours (vivants) → en préparation (inscriptions) → historique (terminés/annulés).
@@ -55,6 +56,19 @@ export function TournoisDesktop() {
               Officiel : réservé aux admins
             </span>
           )}
+          <Pills<'public' | 'private'>
+            value={visibility}
+            onChange={setVisibility}
+            choices={[
+              { value: 'public', label: 'Public' },
+              { value: 'private', label: 'Privé' },
+            ]}
+          />
+          {visibility === 'private' && (
+            <span className="text-[10px] text-muted uppercase tracking-wider">
+              Sur invitation uniquement
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
           <input
@@ -68,8 +82,8 @@ export function TournoisDesktop() {
             onChange={(e) => setCapacity(Number(e.target.value) as Capacity)}
             className="px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           >
-            <option value={4}>4 joueurs</option>
             <option value={8}>8 joueurs</option>
+            <option value={16}>16 joueurs</option>
           </select>
           <Button
             loading={busy}
@@ -81,7 +95,12 @@ export function TournoisDesktop() {
               }
               setBusy(true);
               try {
-                const tNew = await api.createTournament({ name: n, capacity, kind });
+                const tNew = await api.createTournament({
+                  name: n,
+                  capacity,
+                  kind,
+                  private: visibility === 'private',
+                });
                 flash.show(`Tournoi "${tNew.name}" créé`);
                 await refresh();
                 navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
@@ -107,12 +126,12 @@ export function TournoisDesktop() {
             Aucun tournoi pour le moment
           </h3>
           <p className="text-sm text-muted-2 max-w-sm mb-5">
-            Lance le premier bracket de la ligue — crée un tournoi amical à 4 ou 8
+            Lance le premier bracket de la ligue — crée un tournoi amical à 8 ou 16
             joueurs avec le formulaire ci-dessus et désigne le champion sur le terrain.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-2">
             <span className="card-hud rounded-full px-3 py-1.5">Single-élimination</span>
-            <span className="card-hud rounded-full px-3 py-1.5">4 ou 8 joueurs</span>
+            <span className="card-hud rounded-full px-3 py-1.5">8 ou 16 joueurs</span>
             <span className="card-hud rounded-full px-3 py-1.5">Bracket automatique</span>
           </div>
         </div>
@@ -140,7 +159,7 @@ export function TournoisDesktop() {
               🎲 Tournoi amical
             </h3>
             <p className="text-xs text-muted-2 leading-relaxed">
-              Tout le monde peut en lancer un : choisis un nom, 4 ou 8 joueurs, puis
+              Tout le monde peut en lancer un : choisis un nom, 8 ou 16 joueurs, puis
               démarre le bracket avec le formulaire ci-dessus. Idéal pour s'amuser entre
               collègues — sans impact sur le classement.
             </p>
@@ -239,6 +258,12 @@ function TournoiCard({ t }: { t: Tournament }) {
           >
             {t.kind === 'official' ? '★ OFFICIEL' : 'AMICAL'}
           </span>
+          {t.isPrivate && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border text-teal border-teal/40 bg-teal/10">
+              <Lock className="w-2.5 h-2.5" strokeWidth={2.5} />
+              Privé
+            </span>
+          )}
         </div>
         <span
           className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border ${STATUS_TONE[t.status]}`}
