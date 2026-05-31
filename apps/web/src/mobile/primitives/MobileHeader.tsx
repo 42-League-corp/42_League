@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Bell, Shield, Crosshair } from 'lucide-react';
+import { Shield, Crosshair } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { NotificationBell } from '../../components/NotificationBell';
 import { useAuth } from '../../hooks/useAuth';
@@ -39,9 +39,8 @@ export function MobileHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { login } = useAuth();
-  const { me, pending } = useLeagueData();
+  const { me } = useLeagueData();
   const { amTarget, hunter } = useOpsStatus();
-  const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
   const title = titleFor(location.pathname);
 
   return (
@@ -107,26 +106,8 @@ export function MobileHeader() {
           </motion.button>
         )}
 
-        {/* Bell — uniquement si des pending */}
-        {pendingCount > 0 && (
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-            type="button"
-            onClick={() => {
-              haptic('selection');
-              navigate('/challenges');
-            }}
-            aria-label={`${pendingCount} game${pendingCount > 1 ? 's' : ''} à confirmer`}
-            className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-gold/25 to-gold/10 border border-gold/40 active:bg-gold/30 active:scale-90 transition-transform tap-transparent shadow-[inset_0_1px_0_rgba(255,247,228,0.18),0_2px_8px_rgba(255,201,74,0.15)]"
-          >
-            <Bell className="w-4 h-4 text-gold animate-ember" strokeWidth={2.5} />
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-bg-0 tabular-nums">
-              {pendingCount}
-            </span>
-          </motion.button>
-        )}
+        {/* Les games à confirmer ne s'affichent plus ici : elles vivent dans la
+            section Défis (badge sur l'onglet) + la bannière popup. */}
 
         {/* Centre de notifications */}
         <NotificationBell />

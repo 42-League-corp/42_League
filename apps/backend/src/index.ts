@@ -1111,12 +1111,9 @@ app.post('/matches', async (c) => {
     type: 'match:pending',
     payload: { id: pending.id, declarerLogin: me, scoreDeclarer: scoreSelf, scoreOpponent },
   });
-  void notify(opponentLogin, {
-    type: 'match_pending',
-    title: `@${me} a déclaré une game`,
-    body: 'Confirme ou conteste le score.',
-    link: '/challenges',
-  });
+  // Pas de notif cloche pour les matchs : les scores à valider vivent
+  // uniquement dans la section Défis (+ la bannière popup), via l'event SSE
+  // `match:pending` ci-dessus.
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
 
@@ -1280,18 +1277,9 @@ app.post('/matches/:id/confirm', async (c) => {
   }
   const match = result.match;
 
+  // Résultat poussé en temps réel (section Défis + bannière) via cet event.
+  // Pas de notif cloche pour les matchs.
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
-  // Notifie le déclarant (l'autre que `me`) que son match a été confirmé.
-  {
-    const declarer = match.playerALogin === me ? match.playerBLogin : match.playerALogin;
-    const declarerDelta = match.playerALogin === declarer ? match.deltaA : match.deltaB;
-    void notify(declarer, {
-      type: 'match_result',
-      title: `Match confirmé par @${me}`,
-      body: `Résultat validé · ${declarerDelta >= 0 ? '+' : ''}${declarerDelta} ELO`,
-      link: '/history',
-    });
-  }
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
   // Abonnés notifiés si un joueur entre dans le top 3.
@@ -1351,13 +1339,9 @@ app.post('/matches/:id/reject', async (c) => {
   });
 
   if (declarerLogin) {
+    // Contestation poussée en temps réel via l'event `match:rejected`
+    // (section Défis + bannière). Pas de notif cloche pour les matchs.
     emit([declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
-    void notify(declarerLogin, {
-      type: 'match_result',
-      title: `Match contesté par @${me}`,
-      body: 'Ton résultat déclaré a été refusé — à redéclarer.',
-      link: '/challenges',
-    });
   }
   return c.json({ id, status: 'rejected', contestReason });
 });
@@ -1751,7 +1735,13 @@ app.post('/challenges/:id/accept', async (c) => {
       data: { status: 'accepted', decidedAt: new Date() },
     });
   });
-  emit([challenge.challengerLogin], { type: 'challenge:accepted', payload: challenge });
+  // Les DEUX joueurs doivent rafraîchir leur liste de défis : le challenger
+  // (son défi passe en "accepté") et l'opponent qui vient d'accepter (sinon, sur
+  // mobile sans refresh manuel, l'accepteur ne voit pas le défi bouger).
+  emit([challenge.challengerLogin, challenge.opponentLogin], {
+    type: 'challenge:accepted',
+    payload: challenge,
+  });
   return c.json(challenge);
 });
 

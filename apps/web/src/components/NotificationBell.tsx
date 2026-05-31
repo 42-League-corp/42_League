@@ -6,6 +6,11 @@ import { useServerEvents } from '../hooks/useServerEvents';
 
 const POLL_MS = 30_000;
 
+// Les notifs de match (score à confirmer / résultat) ne vont PAS dans la cloche :
+// elles vivent uniquement dans la section Défis + la bannière popup. On les filtre
+// ici pour couvrir aussi d'éventuelles notifs déjà persistées en base.
+const HIDDEN_TYPES = new Set(['match_pending', 'match_result']);
+
 const ICON_BY_TYPE: Record<string, LucideIcon> = {
   challenge_received: Swords,
   match_pending: Swords,
@@ -50,8 +55,11 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   const load = useCallback(async () => {
     try {
       const res = await api.notifications();
-      setItems(res.notifications);
-      setUnread(res.unread);
+      const visible = res.notifications.filter((n) => !HIDDEN_TYPES.has(n.type));
+      setItems(visible);
+      // Recalcule le non-lu à partir des seules notifs visibles (sinon la pastille
+      // compterait des notifs de match qu'on n'affiche plus).
+      setUnread(visible.filter((n) => !n.read).length);
     } catch {
       /* silencieux : la cloche ne doit pas casser l'app */
     }

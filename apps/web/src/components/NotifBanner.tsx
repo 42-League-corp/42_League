@@ -39,7 +39,7 @@ const KEYFRAMES = `
 `;
 
 export function NotifBanner() {
-  const { me, pending, challenges } = useLeagueData();
+  const { me, pending, challenges, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
   const { hunter, forcedLeftAsTarget } = useOpsStatus();
@@ -106,6 +106,7 @@ export function NotifBanner() {
           }),
         ),
       ]);
+      await refresh();
       flash.show(`${ids.length} demande${ids.length > 1 ? 's' : ''} acceptée${ids.length > 1 ? 's' : ''} ✓`, 'info');
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -125,6 +126,7 @@ export function NotifBanner() {
       setBusyId(id, true);
       try {
         await api.acceptChallenge(id);
+        await refresh();
         flash.show('Duel accepté ⚔️', 'info');
       } catch (err) {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -132,7 +134,7 @@ export function NotifBanner() {
         setBusyId(id, false);
       }
     },
-    [flash, setBusyId],
+    [flash, refresh, setBusyId],
   );
 
   const declineDuel = useCallback(
@@ -153,6 +155,7 @@ export function NotifBanner() {
       setBusyId(c.id, true);
       try {
         const res = await api.declineChallenge(c.id);
+        await refresh();
         if (res.isOps && res.eloPenalty > 0) {
           flash.show(`Match forcé refusé · −${res.eloPenalty} ELO ☠`, 'error');
         } else {
@@ -164,7 +167,7 @@ export function NotifBanner() {
         setBusyId(c.id, false);
       }
     },
-    [flash, confirm, hunter, forcedLeftAsTarget, setBusyId],
+    [flash, confirm, hunter, forcedLeftAsTarget, refresh, setBusyId],
   );
 
   // ─── Actions score ───────────────────────────────────────────────────────────
@@ -177,6 +180,7 @@ export function NotifBanner() {
           game: p.game,
           bestOf: p.bestOf as 3 | 5 | undefined,
         });
+        await refresh();
         flash.show('Game confirmée ✓', 'info');
       } catch (err) {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -184,7 +188,7 @@ export function NotifBanner() {
         setBusyId(p.id, false);
       }
     },
-    [flash, setBusyId],
+    [flash, refresh, setBusyId],
   );
 
   const submitContest = useCallback(
@@ -193,6 +197,7 @@ export function NotifBanner() {
       setContestBusy(true);
       try {
         await api.rejectMatch(contesting.id, reason, message);
+        await refresh();
         flash.show('Contestation envoyée.');
         setContesting(null);
       } catch (err) {
@@ -201,7 +206,7 @@ export function NotifBanner() {
         setContestBusy(false);
       }
     },
-    [contesting, flash],
+    [contesting, flash, refresh],
   );
 
   if (!myLogin || total === 0) {
