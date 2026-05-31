@@ -8,10 +8,14 @@ import { FlashProvider } from './hooks/useFlash';
 import { ConfirmProvider } from './hooks/useConfirm';
 import { I18nProvider } from './lib/i18n';
 import { MotionProvider } from './mobile/motion/MotionProvider';
+import { getGame } from './lib/gameMode';
 import './index.css';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root element missing in index.html');
+
+// Pose le thème (babyfoot/smash) avant le premier rendu pour éviter un flash d'accent.
+document.documentElement.dataset.game = getGame();
 
 // Service Worker — auto-update silencieux. La nouvelle version prendra effet
 // au prochain rafraîchissement, sans prompt utilisateur (UX silencieuse iOS-like).

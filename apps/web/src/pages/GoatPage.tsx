@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
 import { TournamentCup } from '../components/TournamentCup';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
 import {
   computeGoat,
   GOAT_WEIGHTS,
@@ -24,9 +25,10 @@ function displayName(e: LeaderboardEntry): string {
 
 export function GoatPage() {
   const { leaderboard, matches, tournaments, me } = useLeagueData();
+  const { game } = useGameMode();
   const ranking = useMemo(
-    () => computeGoat(leaderboard, matches, tournaments),
-    [leaderboard, matches, tournaments],
+    () => computeGoat(leaderboard, matches.filter((m) => (m.game ?? 'babyfoot') === game), tournaments),
+    [leaderboard, matches, tournaments, game],
   );
 
   const goat = ranking[0];

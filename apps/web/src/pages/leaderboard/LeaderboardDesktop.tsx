@@ -9,6 +9,7 @@ import { OnlineBadge } from '../../components/OnlineBadge';
 import { Tooltip } from '../../components/Tooltip';
 import { WinRateBar } from '../../components/WinRateBar';
 import { DesktopPodium } from './DesktopPodium';
+import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -257,6 +258,7 @@ export function LeaderboardDesktop() {
       {!viewingPast && top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
+        {!viewingPast && <LeaderboardBanner />}
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
           <div className="flex items-center gap-2">

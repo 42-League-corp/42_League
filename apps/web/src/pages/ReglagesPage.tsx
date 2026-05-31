@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Panel } from '../components/Panel';
+import { GameModesSettings } from '../components/GameModesSettings';
 import { Pills } from '../components/Pills';
 import { Button } from '../components/Button';
 import { FeatureRequestBox } from '../components/FeatureRequestBox';
@@ -66,6 +67,9 @@ export function ReglagesPage() {
       <FeatureRequestBox />
       <Panel title={t('panel.settings.title')}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+        {/* Modes de jeu (adhésion) */}
+        <GameModesSettings />
 
         {/* Langue */}
         <div>

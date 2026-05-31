@@ -96,6 +96,8 @@ export interface MeResponse {
     eloSmash?: number;
     matchesPlayedSmash?: number;
     tournamentsWonSmash?: number;
+    games?: Game[];
+    onboardedAt?: string | null;
   } | null;
 }
 
@@ -311,6 +313,7 @@ export interface Tournament {
   imageUrl?: string | null;
   capacity: number;
   format?: 'elimination' | 'pools';
+  game?: Game;
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
   createdByLogin: string;
   winnerLogin: string | null;
@@ -385,6 +388,11 @@ export interface AppNotification {
 
 export const api = {
   me: () => request<MeResponse>('/me'),
+  setGames: (games: Game[]) =>
+    request<{ games: Game[]; onboardedAt: string | null }>('/me/games', {
+      method: 'PATCH',
+      body: JSON.stringify({ games }),
+    }),
   leaderboard: (game?: Game) =>
     request<LeaderboardEntry[]>(`/leaderboard${game === 'smash' ? '?game=smash' : ''}`),
   // Token éphémère (scope SSE) à passer en ?token= pour ouvrir le flux /events,
@@ -498,7 +506,8 @@ export const api = {
         body: JSON.stringify({ title }),
       },
     ),
-  tournaments: () => request<Tournament[]>('/tournaments'),
+  tournaments: (game?: Game) =>
+    request<Tournament[]>(`/tournaments${game === 'smash' ? '?game=smash' : ''}`),
   tournament: (id: string) =>
     request<Tournament>(`/tournaments/${encodeURIComponent(id)}`),
   createTournament: (input: {
@@ -506,6 +515,7 @@ export const api = {
     capacity: number;
     kind: 'friendly' | 'official';
     format?: 'elimination' | 'pools';
+    game?: Game;
     private?: boolean;
     imageUrl?: string;
   }) =>

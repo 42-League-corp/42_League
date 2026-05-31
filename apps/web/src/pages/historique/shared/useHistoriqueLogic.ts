@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useGameMode } from '../../../hooks/useGameMode';
 import type { PlayedMatch } from '../../../lib/api';
 
 /** Une de mes games, enrichie de son impact ELO et win-rate. */
@@ -34,8 +35,14 @@ export interface HistoriqueData {
  * rejouant mes games dans l'ordre chronologique).
  */
 export function useHistoriqueLogic(): HistoriqueData {
-  const { matches, me, refresh } = useLeagueData();
+  const { matches: allMatches, me, refresh } = useLeagueData();
+  const { game } = useGameMode();
   const myLogin = me?.login;
+  // Historique filtré par discipline (mode courant).
+  const matches = useMemo(
+    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
+    [allMatches, game],
+  );
 
   const global = useMemo(
     () => [...matches].sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt)),

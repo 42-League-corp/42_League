@@ -7,7 +7,9 @@ import { Trophy, Lock, X } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { tournamentArt } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
+import { SmashTrophy } from '../../components/SmashTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
 
 type CapacityChoice = '6' | '8' | 'custom';
@@ -255,10 +257,17 @@ function TournoiCard({ t }: { t: Tournament }) {
       ) : (
         <>
           <div className="absolute inset-0" style={{ background: art.background }} />
-          <TournamentCup
-            accent={art.accent}
-            className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
-          />
+          {t.game === 'smash' ? (
+            <SmashTrophy
+              accent={art.accent}
+              className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <TournamentCup
+              accent={art.accent}
+              className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
+            />
+          )}
         </>
       )}
       {/* Voile pour la lisibilité du texte */}
@@ -327,6 +336,7 @@ function CreateTournamentModal({
 }) {
   const flash = useFlash();
   const navigate = useNavigate();
+  const { game } = useGameMode();
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
@@ -345,6 +355,7 @@ function CreateTournamentModal({
         capacity,
         kind,
         format: effectiveFormat,
+        game,
         private: visibility === 'private',
         ...(img ? { imageUrl: img } : {}),
       });
@@ -366,9 +377,13 @@ function CreateTournamentModal({
         className="relative w-full max-w-lg rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* En-tête avec aperçu coupe */}
+        {/* En-tête avec aperçu trophée (coupe babyfoot / Smash Ball smash) */}
         <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40">
-          <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />
+          {game === 'smash' ? (
+            <SmashTrophy accent="#ff4d5c" className="w-10 h-10 shrink-0" />
+          ) : (
+            <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />
+          )}
           <div className="min-w-0">
             <div className="font-gaming text-sm font-extrabold uppercase tracking-[0.12em] text-text-strong truncate">
               {name}
