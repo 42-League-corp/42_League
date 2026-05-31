@@ -3,7 +3,6 @@ import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
 import { HTTPException } from 'hono/http-exception';
 import { randomBytes } from 'node:crypto';
 import { issueToken, verifyToken } from './tokens.js';
-import { isWhitelisted } from './whitelist.js';
 
 const FT_AUTH_URL = 'https://api.intra.42.fr/oauth/authorize';
 const FT_TOKEN_URL = 'https://api.intra.42.fr/oauth/token';
@@ -213,32 +212,6 @@ export function createAuthRouter(
         me.image?.link ??
         null,
     };
-
-    if (!isWhitelisted(profile.login)) {
-      deleteCookie(c, STATE_COOKIE, { path: '/' });
-      const externalReturn = stored.ext ?? stored.web;
-      if (externalReturn) {
-        const redirect = new URL(externalReturn);
-        redirect.searchParams.set('error', 'not_whitelisted');
-        redirect.searchParams.set('login', profile.login);
-        return c.redirect(redirect.toString());
-      }
-      return c.html(
-        `<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>42 League — accès refusé</title>
-<style>
-body{font-family:system-ui;background:#0b0f17;color:#e6ecf5;max-width:520px;margin:4rem auto;padding:2rem;text-align:center}
-h2{color:#ff3b5c;letter-spacing:.08em;text-transform:uppercase;font-size:14px}
-code{background:#1a2233;padding:2px 6px;border-radius:3px;color:#00d9dc}
-p{line-height:1.5;color:#95a3b8;font-size:13px}
-</style></head><body>
-<h2>⛔ Accès refusé</h2>
-<p>Le compte <code>${escapeHtml(profile.login)}</code> n'est pas autorisé sur cette instance 42 League.</p>
-<p>Demande à l'admin de t'ajouter à la whitelist.</p>
-</body></html>`,
-        403,
-      );
-    }
 
     await onLogin(profile);
 
