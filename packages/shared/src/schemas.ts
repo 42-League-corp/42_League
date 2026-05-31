@@ -23,8 +23,10 @@ const matchScoreShape = {
   scoreSelf: MatchScoreSchema,
   scoreOpponent: MatchScoreSchema,
   game: GameSchema.default('babyfoot'),
-  // Smash uniquement :
-  bestOf: SmashBestOfSchema.optional(),
+  // Smash uniquement. `.nullish()` + transform : les jeux non-smash (babyfoot,
+  // échecs) envoient `bestOf: null` → on l'accepte et on le ramène à `undefined`
+  // (sinon Zod rejette `null` contre le union de littéraux → 400 à la confirmation).
+  bestOf: SmashBestOfSchema.nullish().transform((v) => v ?? undefined),
   charSelf: SmashCharSchema.optional(),
   charOpponent: SmashCharSchema.optional(),
   // Vies (stocks) restantes du gagnant au game décisif.
