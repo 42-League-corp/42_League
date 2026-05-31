@@ -200,7 +200,13 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
   // ─── Temps réel (SSE) ──────────────────────────────────────────────────
   // On s'abonne au flux /events. Chaque event indique quel(s) domaine(s) ont
   // changé ; on accumule les domaines "sales" et on les re-fetch après un léger
-  // debounce (absorbe les rafales). EventSource reconnecte automatiquement.
+  // debounce (absorbe les rafales).
+  //
+  // Sécurité : on n'expose jamais le Bearer 30 jours dans l'URL (fuite via logs
+  // / historique / Referer). On échange d'abord le Bearer contre un token
+  // éphémère de scope SSE (api.streamToken, TTL ~60 s) qu'on passe en ?token=.
+  // Ce token étant court, on gère la reconnexion nous-mêmes (l'auto-reconnexion
+  // native rejouerait la même URL avec un token expiré).
   // `refreshDomainsRef` évite de relancer la connexion à chaque rendu.
   const refreshDomainsRef = useRef(refreshDomains);
   useEffect(() => {
@@ -209,14 +215,15 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!authenticated) return;
-    const token = getToken();
-    if (!token) return;
+    if (!getToken()) return;
 
-    const url = `${getApiBase()}/events?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
+    let closed = false;
+    let es: EventSource | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+    let backoffMs = 1000;
 
     const dirty = new Set<Domain>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
       const domains = [...dirty];
       dirty.clear();
@@ -228,17 +235,50 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
       timer = setTimeout(flush, 250);
     };
 
-    const listeners = Object.entries(EVENT_DOMAINS).map(([type, domains]) => {
-      const handler = () => markDirty(domains);
-      es.addEventListener(type, handler);
-      return [type, handler] as const;
-    });
-    // `connected` et `ping` (keep-alive) sont ignorés volontairement.
+    const scheduleReconnect = () => {
+      if (closed || reconnect) return;
+      reconnect = setTimeout(() => {
+        reconnect = undefined;
+        void connect();
+      }, backoffMs);
+      backoffMs = Math.min(backoffMs * 2, 30_000);
+    };
+
+    const connect = async () => {
+      if (closed) return;
+      let streamToken: string;
+      try {
+        ({ token: streamToken } = await api.streamToken());
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      if (closed) return;
+
+      const url = `${getApiBase()}/events?token=${encodeURIComponent(streamToken)}`;
+      es = new EventSource(url);
+
+      es.addEventListener('open', () => {
+        backoffMs = 1000;
+      });
+      // `connected` et `ping` (keep-alive) sont ignorés volontairement.
+      for (const [type, domains] of Object.entries(EVENT_DOMAINS)) {
+        es.addEventListener(type, () => markDirty(domains));
+      }
+      es.onerror = () => {
+        es?.close();
+        es = undefined;
+        scheduleReconnect();
+      };
+    };
+
+    void connect();
 
     return () => {
+      closed = true;
       if (timer) clearTimeout(timer);
-      for (const [type, handler] of listeners) es.removeEventListener(type, handler);
-      es.close();
+      if (reconnect) clearTimeout(reconnect);
+      es?.close();
     };
   }, [authenticated]);
 
