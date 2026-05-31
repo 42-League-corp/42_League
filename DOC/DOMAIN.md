@@ -139,25 +139,48 @@ Le **dodge** matérialise le coût social de se désister après avoir dit oui.
 
 ## 6. Tournois
 
-Bracket à élimination directe, capacité **2 ou 4** (puissance de 2). `kind` `friendly` ou `official`
-(officiel réservé à `isAdmin`). États : `registration → in_progress → finished` (ou `cancelled`).
+Capacité **6 à 64 joueurs** (refonte mai 2026 ; plus besoin d'une puissance de 2 — les **byes**
+sont gérés). `kind` `friendly` ou `official` (officiel réservé à `isAdmin`). Un tournoi peut être
+**privé** (`isPrivate` : visible/rejoignable sur invitation uniquement) et porter une **image de
+couverture** (`imageUrl`). États : `registration → in_progress → finished` (ou suppression directe).
 
-- Inscription via `join` ; auto-démarrage quand le bracket est plein, ou `start` manuel par l'organisateur.
-- L'**organisateur** (ou un `isAdmin`) peut aussi **inviter** un joueur existant via `add-player` ;
+**Deux formats** (`format`) :
+- **`elimination`** — bracket à élimination directe. `generateBracket` ordonne les joueurs par
+  seeding canonique (1 vs dernier…) et place les **byes** face aux têtes de série (qualifiées d'office
+  au tour 2). Le nombre de rounds est calculé sur les matchs réels, pas la capacité.
+- **`pools`** — phase de **poules de 4** (round-robin, répartition en serpent), réservée aux tournois
+  de **≥ 12 joueurs**. Quand toutes les poules sont terminées, les **2 premiers de chaque poule**
+  (tri victoires → diff. de buts → buts marqués) sont qualifiés et seedés en croisé pour le bracket
+  final (deux qualifiés d'une même poule ne se recroisent pas avant la fin).
+
+- Inscription via `join` ; auto-démarrage quand le tournoi est plein (génère bracket **ou** poules
+  selon le format), ou `start` manuel par l'organisateur. Tournoi **privé** → pas d'inscription libre.
+- L'**organisateur** (ou un `isAdmin`) peut **inviter** un joueur existant via `add-player` ;
   remplir la dernière place déclenche l'auto-démarrage.
-- Chaque `TournamentMatch` se joue en **record → confirm** (confirmé par l'**autre** joueur, jamais
-  celui qui a saisi). À la confirmation, le vainqueur avance ; la finale clôt le tournoi
-  (`winnerLogin`, `tournamentsWon++`). Génération/avancement dans `apps/backend/src/tournament.ts`.
+- Chaque `TournamentMatch` se joue en **record → confirm** (confirmé par l'**autre** joueur). À la
+  confirmation : un match de poule ne propage rien (déclenche le bracket une fois les poules finies) ;
+  un match de bracket avance le vainqueur, et la finale clôt le tournoi (`winnerLogin`,
+  `tournamentsWon++`). Génération/avancement/poules dans `apps/backend/src/tournament.ts` (testé,
+  voir [TESTING.md](./TESTING.md)).
 
 ---
 
-## 7. Ops (« droit de vantardise »)
+## 7. Ops (« la chasse »)
 
-Mécanique sociale : un joueur déclare un **ops** sur un autre (« je te tiens »). Durée **7 jours**,
-puis **cooldown 7 jours** avant de pouvoir redéclarer. Règles à la déclaration (`POST /ops`) :
-1 seul ops actif par owner ; pas pendant le cooldown ; la cible ne doit pas déjà être engagée
-(en tant que cible ou owner). Les transitions (expiration, fin de cooldown) sont pilotées par des
-`setTimeout` serveur, ré-armés au démarrage (`scheduleOpsTimers`).
+Mécanique sociale : un joueur (le **traqueur**) déclare un **ops** sur un autre (« je te tiens »).
+Durée **24 h** (`OPS_DURATION_MS`, refonte mai 2026), puis **cooldown 7 jours** avant de pouvoir
+redéclarer. Règles à la déclaration (`POST /ops`) : 1 seul ops actif par owner ; pas pendant le
+cooldown ; cible non hors-jeu ; la cible ne doit pas déjà être engagée (en tant que cible ou owner).
+Les transitions (expiration, fin de cooldown) sont pilotées par des `setTimeout` serveur, ré-armés
+au démarrage (`scheduleOpsTimers`).
+
+**Matchs forcés.** Pendant les 24 h, la cible doit affronter le traqueur : ses **3 premiers défis**
+face à lui (`forcedUsed < OPS_FORCED_MATCHES = 3`) sont *forcés*. **Refuser** un match forcé coûte
+**3× la perte d'ELO** d'une défaite estimée (`OPS_REFUSE_MULTIPLIER × estimatedEloLoss(cible, traqueur)`)
+au lieu du dodge standard (−10), et incrémente `forcedUsed`. Jouer un match forcé l'incrémente aussi.
+Une fois le quota épuisé, l'OPS n'impose plus rien jusqu'à expiration. Les constantes vivent dans
+`@42-league/shared` (`elo.ts`), partagées front/back. Côté front, un **OpsRevealOverlay** met en scène
+la révélation cinématique de la cible.
 
 ---
 
@@ -185,7 +208,7 @@ Source de vérité de la validation, utilisée par le back (rejet 400) et le fro
 | `RejectMatchSchema` | `{ contestReason, contestMessage }` | reason ∈ `never_played\|wrong_score` ; message 10–500. |
 | `CreateChallengeSchema` | `{ opponentLogin, scheduledAt }` | ISO + offset ; futur (tolérance 60 s passé). |
 | `RecordResultSchema` | `{ scoreSelf, scoreOpponent }` | un camp = 10, pas les deux. |
-| `CreateTournamentSchema` | `{ name, capacity, kind }` | name 2–60 ; capacity ∈ `{2,4}` ; kind défaut `friendly`. |
+| `CreateTournamentSchema` | `{ name, capacity, kind, format, private, imageUrl? }` | name 2–60 ; capacity 6–64 ; kind défaut `friendly` ; format `elimination`\|`pools` (pools ⇒ capacity ≥ 12) ; imageUrl URL ≤500. |
 | `TournamentRecordSchema` | `{ scoreA, scoreB }` | un camp = 10, pas les deux. |
 | `SetTitleSchema` | `{ title }` | string trim ≤40, nullable. |
 | `DeclareOpsSchema` | `{ targetLogin }` | login valide. |
@@ -194,10 +217,42 @@ Source de vérité de la validation, utilisée par le back (rejet 400) et le fro
 | `SetFeatureRequestStatusSchema` | `{ status }` | `pending\|accepted\|rejected`. |
 
 Le package réexporte tout via `src/index.ts` (`export * from './elo.js' | './anti-farming.js' | './schemas.js'`).
+`elo.ts` exporte aussi les constantes OPS (`OPS_DURATION_MS`, `OPS_FORCED_MATCHES`, `OPS_REFUSE_MULTIPLIER`)
+et `estimatedEloLoss`. Schémas inline côté backend : `CreateSeasonSchema` (`{ name 2–40 }`),
+`FollowPrefsSchema` (`{ notifyTournament?, notifyTop3?, notifyTrophy?, notifyOps? }`).
 
 ---
 
-## 10. Glossaire métier
+## 10. Badges & suivi (followers)
+
+**Badges** (catalogue front `apps/web/src/lib/badges.ts`). Le backend renvoie une liste de **codes**
+(`badgesFor`) ; le front résout libellé/couleur/icône. Deux origines :
+- **Dérivés du runtime** (non stockés) : `founder` (login `throbert`), `superadmin`, `admin` (selon le rôle).
+- **Gagnés** (table `UserBadge`) : `beta_tester` (inscrits de la saison bêta), `season_champion`
+  (vainqueur d'une saison), etc. Un badge inconnu retombe sur un rendu générique.
+
+**Suivi (followers/following).** Un joueur peut en suivre d'autres (`Follow`) et régler, **par
+personne suivie**, quatre préférences de notification : `notifyTournament`, `notifyTop3`,
+`notifyTrophy`, `notifyOps`. Les helpers `notifyFollowers` n'alertent que les abonnés ayant la
+préférence active. L'entrée top 3 ne notifie qu'à la **transition** (un joueur qui *entre* dans le top 3).
+
+## 11. Saisons, reset ELO & palmarès
+
+Le classement est découpé en **saisons** (`Season` ; une seule active). Tout `PlayedMatch` est taggé
+de sa `seasonId`. Le cycle est administré (`requireAdmin`) :
+- **Créer** une saison (`POST /seasons`) — refusé s'il y en a déjà une active.
+- **Clôturer** la saison active (`POST /seasons/close`) : on **fige** le classement final dans
+  `SeasonStanding` (rang, ELO, W/L de chaque joueur visible), on octroie le badge `season_champion`
+  au 1er, puis on **remet toute la ligue à 1000 ELO / 0 match joué**. L'historique des matchs est
+  **conservé** (taggé par saison) — seules les notes repartent à zéro. Action **irréversible**.
+
+Le **palmarès** d'un joueur (`palmaresFor`, exposé sur `/me` et `/users/:login`) agrège ses
+`SeasonStanding` (classements finaux par saison, récents d'abord). La première saison est la
+« Saison Bêta », créée par migration et rattachée à tout l'historique pré-existant.
+
+---
+
+## 12. Glossaire métier
 
 - **ELO** — note de classement. Départ 1000. Évolue selon le résultat et la marge ; symétrique sur un
   résultat attendu, **asymétrique sur un upset** (le rating surcoté fond, bonus plafonné pour le gagnant).
@@ -209,7 +264,15 @@ Le package réexporte tout via `src/index.ts` (`export * from './elo.js' | './an
 - **Anti-farming** — plafond de 2 matchs comptés par paire et par 7 jours.
 - **Défi (challenge)** — rencontre planifiée ; peut mener à un match.
 - **Dodge** — se désister d'un défi déjà accepté ; pénalité −10 ELO + `dodgeCount++`.
-- **Ops** — droit de vantardise temporaire (7 j) d'un joueur sur un autre, avec cooldown.
+- **Ops (la chasse)** — droit de traque temporaire (**24 h**) d'un joueur sur un autre, avec cooldown 7 j ;
+  impose **3 matchs forcés** (refus = 3× la perte d'ELO estimée).
 - **Tournoi officiel** — créable seulement par un membre de la liste `isAdmin`.
+- **Tournoi privé** — visible et rejoignable uniquement sur invitation.
+- **Format poules** — phase de poules de 4 (≥12 joueurs) → bracket des top 2 de chaque poule.
+- **Bye** — place vide d'un bracket non-puissance-de-2 : la tête de série passe le 1er tour d'office.
+- **Saison** — ère de classement ; sa clôture fige le palmarès et remet tous les ELO à 1000.
+- **Palmarès** — classements finaux d'un joueur, saison par saison (`SeasonStanding`).
+- **Badge** — distinction affichée sur le profil (rôle, fondateur, beta-tester, champion de saison…).
+- **Suivi (follow)** — abonnement à un joueur, avec préférences de notification par personne suivie.
 - **SUPERADMIN** — rôle hardcodé immuable, non attribuable par l'API.
 - **Titre** — libellé cosmétique posé par un admin (≤40 car.).

@@ -56,6 +56,12 @@ enum AdminAction {
   DELETE_MATCH     // suppression d'un match joué
   EDIT_MATCH       // modif du score d'un match
   REFRESH_IMAGES   // backfill des avatars (réservé pour usage futur)
+  RESET_DATABASE   // reset total de la ligue (SUPERADMIN)
+  DELETE_CHALLENGE // suppression d'un défi (All History)
+  DELETE_PENDING_MATCH   // suppression d'un match en attente
+  DELETE_REJECTED_MATCH  // suppression d'un litige
+  DELETE_OPS       // suppression d'un OPS
+  DELETE_TOURNAMENT      // suppression d'un tournoi
 }
 
 model AdminAuditLog {
@@ -110,6 +116,12 @@ Fichier : `apps/backend/src/index.ts`
 | `POST /admin/users/:login/title` | `EDIT_TITLE` |
 | `DELETE /admin/matches/:id` | `DELETE_MATCH` |
 | `PATCH /admin/matches/:id` | `EDIT_MATCH` |
+| `DELETE /admin/challenges/:id` | `DELETE_CHALLENGE` |
+| `DELETE /admin/pending-matches/:id` | `DELETE_PENDING_MATCH` |
+| `DELETE /admin/rejected-matches/:id` | `DELETE_REJECTED_MATCH` |
+| `DELETE /admin/ops/:id` | `DELETE_OPS` |
+| `DELETE /admin/tournaments/:id` | `DELETE_TOURNAMENT` |
+| `POST /admin/reset-database` | `RESET_DATABASE` |
 
 ### Consultation
 
@@ -278,6 +290,13 @@ https://github.com/42-League-corp/42_League/security/code-scanning
 
 Bouton "Run workflow" dans l'onglet Actions, pour tester ou forcer un résumé.
 
+### Audit sécurité quotidien consolidé (`daily-security-audit.yml`)
+
+En complément des alertes ponctuelles, un **rapport quotidien consolidé** est poussé sur Discord :
+il agrège en un seul message le résultat des **tests**, du **npm audit**, des **sondes live** (santé
+de l'app déployée) et un récap des **alertes CodeQL** ouvertes. C'est l'évolution « tout-en-un » du
+heartbeat : un silence prolongé signale toujours un job cassé, mais on a en plus l'état réel chaque jour.
+
 ---
 
 ## 6. Validation des inputs (Zod)
@@ -293,9 +312,9 @@ Exemples de schémas :
 
 Aucun endpoint admin mutant n'accepte de payload non validé.
 
-Quelques schémas spécifiques aux routes SUPERADMIN sont déclarés **inline** dans `index.ts` plutôt que
+Quelques schémas spécifiques aux routes admin/saison/suivi sont déclarés **inline** dans `index.ts` plutôt que
 dans le package partagé : `AdminCreateUserSchema` (login 2–20 + campus/elo bornés), `AdminForceResultSchema`
-(joueurs ≠, scores 0–50 ≠), `AddTournamentPlayerSchema`. Le **reset de la base** exige en plus une
+(joueurs ≠, scores 0–50 ≠), `AddTournamentPlayerSchema`, `CreateSeasonSchema`, `FollowPrefsSchema`. Le **reset de la base** exige en plus une
 **phrase de confirmation exacte** (`oui je suis sure de ce que je fais`) renvoyée dans le body.
 
 ---
@@ -340,11 +359,13 @@ Fichier : `apps/backend/src/auth.ts`
 1. L'intra 42 renvoie un `code` + un `state`.
 2. Le `state` est vérifié via un cookie signé (anti-CSRF du flux OAuth).
 3. Le backend échange le `code` contre un access token 42, puis lit le profil (`login`, `campus`, image).
-4. **Whitelist check** (`whitelist.ts`) : seuls les logins listés peuvent passer — sauf si
-   `WHITELIST_DISABLED = true`. **Actuellement à `true` (open beta)** : tout login 42 valide est admis.
+4. **Plus de whitelist.** Le filtre `whitelist.ts` a été **supprimé** (commit *remove whitelist*) :
+   tout login 42 valide est admis (open access). L'identité reste garantie par l'OAuth 42 ; le contrôle
+   de privilèges repose désormais entièrement sur les rôles/`isAdmin` (§8), pas sur une liste d'accès.
 5. L'utilisateur est créé ou mis à jour en DB (`getOrCreateUser`). Au passage, une éventuelle
    **suppression programmée** (`deletionScheduledAt`) est annulée — se reconnecter pendant la période
    de grâce restaure intégralement le compte (RGPD Art. 17, voir [API.md](./API.md) `DELETE /me/account`).
+   Un tout **nouveau compte** déclenche une notif `new_player` à la ligue.
 
 ### Les deux preuves de session acceptées
 
@@ -361,11 +382,22 @@ Le backend accepte **deux** moyens de prouver son identité (`getSessionLogin`) 
 
 `getCurrentLogin` applique l'ordre : token/cookie d'abord, puis en dernier recours l'en-tête `x-dev-login` (réservé au développement local), sinon renvoie **401**.
 
-### Cas du temps réel (SSE)
+### Cas du temps réel (SSE) — token éphémère de scope `sse`
 
-`EventSource` ne peut pas envoyer d'en-tête `Authorization`. Pour `GET /events`, le token
-est donc passé en query (`/events?token=<token>`) et vérifié par `getStreamLogin` (même
-logique : token signé, sinon cookie, sinon `x-dev-login`).
+`EventSource` ne peut pas envoyer d'en-tête `Authorization` : le token passe en **query string**
+(`/events?token=…`), où il peut fuiter (logs d'accès, header `Referer`). On n'y met donc **jamais**
+le Bearer 30 jours. À la place :
+
+1. Le front appelle `GET /auth/stream-token` (avec son Bearer/cookie) → token **scope `sse`, TTL 60 s**
+   (`issueStreamToken`, `tokens.ts`), redemandé à chaque (re)connexion.
+2. `GET /events` accepte ce token via `getStreamLogin` → `verifyStreamToken` (n'accepte **que** le
+   scope `sse`).
+3. **Cloisonnement de scope** : `verifyToken` (toutes les routes mutantes) **refuse** un token `sse`.
+   Un token de stream qui fuiterait ne peut donc qu'ouvrir le flux en lecture — jamais muter le compte.
+4. `GET /auth/stream-token` est **exempté du rate-limit `auth`** (sinon une longue session SSE, qui en
+   redemande souvent, se ferait throttler).
+
+(En dev, `x-dev-login` reste accepté sur `/events` quand `ALLOW_DEV_LOGIN=true`.)
 
 ### Secret
 
@@ -473,27 +505,30 @@ GitHub → Actions → choisir le workflow → **Run workflow** → main → Run
 ├── codeql.yml                    # SAST (CodeQL)
 ├── dependency-audit.yml          # npm audit
 ├── deploy.yml                    # build + deploy + Trivy steps
-├── security-alerts.yml           # → Discord pings
-└── build.yml                     # build manuel (non-sécu)
+├── security-alerts.yml           # → Discord pings (alertes ponctuelles + résumé)
+├── daily-security-audit.yml      # rapport quotidien consolidé → Discord
+├── ci.yml                        # lint / typecheck / tests sur PR
+├── build.yml                     # build manuel (non-sécu)
+└── force-build-deploy.yml        # déploiement forcé manuel
 
 apps/backend/
 ├── prisma/
-│   ├── schema.prisma             # enum AdminAction + model AdminAuditLog
-│   └── migrations/20260529030000_add_admin_audit_log/
-│       └── migration.sql
+│   ├── schema.prisma             # enum AdminAction (+ DELETE_*/RESET_DATABASE) + model AdminAuditLog
+│   └── migrations/               # ... add_admin_audit_log, add_*_delete_history, etc.
 └── src/
-    ├── audit.ts                  # helper logAdminAction + notifyDiscord
+    ├── audit.ts                  # helper logAdminAction + notifyDiscord (emojis DELETE_*)
+    ├── tokens.ts                 # tokens Bearer (scope 'auth') + tokens de stream (scope 'sse')
     ├── rate-limit.ts             # middleware rate-limiting (global/auth/write) + rate-limit.test.ts
-    ├── whitelist.ts              # whitelist d'accès OAuth (WHITELIST_DISABLED → open beta)
-    └── index.ts                  # endpoints admin wrappés + GET /admin/audit-log + actions SUPERADMIN
+    │                             #   (whitelist.ts SUPPRIMÉ — plus de filtre d'accès OAuth)
+    └── index.ts                  # endpoints admin wrappés + audit-log + all-history + actions SUPERADMIN
 
 apps/web/src/
 ├── shell/DesktopShell.tsx        # bouton GOD desktop (gated)
 ├── mobile/primitives/MobileHeader.tsx  # bouton GOD mobile (gated)
 ├── lib/
-│   ├── api.ts                    # types AdminAuditEntry + méthode adminAuditLog()
+│   ├── api.ts                    # types AdminAuditEntry + adminAuditLog() + streamToken()
 │   └── i18n.tsx                  # traduction nav.god
-└── pages/GODPage.tsx             # onglet AUDIT + composant AuditTab
+└── pages/GODPage.tsx             # onglets AUDIT / All History (delete inline + sudo) + AuditTab
 ```
 
 ---

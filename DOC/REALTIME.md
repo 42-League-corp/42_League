@@ -27,18 +27,25 @@ Registre en mémoire : `Map<login, Set<flux SSE>>` (un même user peut avoir plu
 
 Format d'un événement SSE : `{ event: <type>, data: JSON.stringify(payload) }`.
 
-L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=` / dev) :
+L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=` éphémère / dev) :
 1. enregistre la connexion ;
 2. envoie un événement initial `connected` `{ login }` ;
 3. envoie un `ping` keep-alive **toutes les 25 s** (data = timestamp) ;
 4. nettoie le registre à l'abort/fermeture.
+
+> **Token de stream éphémère (sécu).** `EventSource` ne peut pas envoyer d'en-tête `Authorization`,
+> donc le token passe en query (`?token=`) — où il peut fuiter (logs d'accès, header `Referer`).
+> Plutôt que d'y mettre le Bearer 30 j, le front appelle d'abord `GET /auth/stream-token` (auth
+> complète) qui renvoie un **token de scope `sse`, TTL 60 s**, redemandé à chaque (re)connexion.
+> `verifyStreamToken` n'accepte que ce scope ; `verifyToken` (routes mutantes) le **refuse**
+> explicitement — un token de stream qui fuite ne peut donc qu'ouvrir le flux en lecture.
 
 ---
 
 ## 3. Deux stratégies d'émission
 
 - **Ciblé** (`emit`) — dans les handlers, pour ce qui ne concerne que certains joueurs :
-  `match:*`, `challenge:*`, `ops:update`.
+  `match:*`, `challenge:*`, `ops:update`, `notification`.
 - **Global** (`broadcast`) — pour ce qui est visible de tous. Deux mécanismes :
   - explicite dans un handler (ex. `leaderboard:update` après un match confirmé) ;
   - **middleware** `broadcastOnMutation` (`index.ts`) : après toute mutation 2xx sur un préfixe,
@@ -61,13 +68,15 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 | `match:pending` | ciblé (adversaire) | `POST /matches` | `{ id, declarerLogin, scoreDeclarer, scoreOpponent }` |
 | `match:confirmed` | ciblé (2 joueurs) | `POST /matches/:id/confirm` | `PlayedMatch` |
 | `match:rejected` | ciblé (déclarant) | `POST /matches/:id/reject` | `{ id, contestReason, rejectedBy }` |
+| `match:cancelled` | ciblé (adversaire / 2 joueurs) | `POST /matches/:id/cancel`, `DELETE /admin/pending-matches/:id` | `{ id, cancelledBy }` |
 | `match:expired` | ciblé (2 joueurs) | `POST /admin/matches/:id/force-cancel` | `{ id }` |
 | `challenge:received` | ciblé (adversaire) | `POST /challenges` | `Challenge` |
 | `challenge:accepted` | ciblé (challenger) | `POST /challenges/:id/accept` | `Challenge` |
 | `challenge:declined` | ciblé (l'autre) | `POST /challenges/:id/decline` | `{ id, status, eloPenalty, declinedBy }` |
 | `challenge:recorded` | ciblé (2 joueurs) | `POST /challenges/:id/record` | `{ pendingId }` |
-| `ops:update` | ciblé (owner, target) | `POST /ops` + timers expiry/cooldown | `Ops` ou `{ reason }` |
-| `leaderboard:update` | global | confirm match, dodge | `{}` |
+| `ops:update` | ciblé (owner, target) | `POST /ops`, `DELETE /admin/ops/:id` + timers expiry/cooldown | `Ops` ou `{ reason }` |
+| `notification` | ciblé (destinataire(s)) | toute création de notif (`notify`/`notifyMany`) | `{}` (signal → re-fetch `/notifications`) |
+| `leaderboard:update` | global | confirm match, dodge/OPS, clôture saison | `{}` |
 | `tournament:update` | global | mutations `/tournaments*` | `{}` |
 | `data:update` | global | mutations `/admin/*` | `{}` |
 | `panel:update` | global (écouté par le GOD panel seul) | mutations `/matches*`, `/challenges*`, `/feature-requests*` | `{}` |
@@ -85,7 +94,7 @@ quels « domaines » de données sont impactés, les marque sales, et re-fetch *
 Mapping (domaines = tranches de `LeagueData`) :
 | Événement | Domaines re-fetchés |
 |---|---|
-| `match:pending` / `match:rejected` | `matches` |
+| `match:pending` / `match:rejected` / `match:cancelled` / `match:expired` | `matches` |
 | `match:confirmed` | `matches`, `me` |
 | `challenge:received/accepted/declined` | `challenges` |
 | `challenge:recorded` | `matches`, `challenges` |
@@ -93,6 +102,9 @@ Mapping (domaines = tranches de `LeagueData`) :
 | `tournament:update` | `tournaments` |
 | `ops:update` | `ops` |
 | `data:update` | **tous** les domaines |
+
+> `notification` n'est pas dans `EVENT_DOMAINS` : il est consommé à part par la **cloche**
+> (`NotificationBell` via `useServerEvents`), qui re-fetch `/notifications` sans toucher `LeagueData`.
 
 ### Debounce
 Les domaines sales s'accumulent dans un `Set`. Un timer de **250 ms** se réarme à chaque événement ;
@@ -122,6 +134,7 @@ useServerEvents(onEvent, types, { enabled?, debounceMs = 300 })
 ## 7. Cas particulier — timers ops
 
 Un ops n'a pas d'« événement déclencheur » à son expiration : c'est le **temps** qui passe. Le backend
-arme donc des `setTimeout` (`scheduleOpsTimers`) qui émettent `ops:update` à l'expiration et à la fin
-du cooldown. Ces timers sont **ré-armés au démarrage** du serveur (sinon un reboot les perdrait).
+arme donc des `setTimeout` (`scheduleOpsTimers`) qui émettent `ops:update` à l'expiration (après **24 h**,
+`OPS_DURATION_MS`) et à la fin du cooldown (7 j). Ces timers sont **ré-armés au démarrage** du serveur
+(sinon un reboot les perdrait).
 La lecture filtre toujours `expiresAt > now`, donc même si un timer était manqué, l'état affiché reste correct.

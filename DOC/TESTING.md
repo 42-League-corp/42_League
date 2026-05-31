@@ -19,14 +19,16 @@ appellent les vraies routes Hono contre une vraie base Postgres jetable.
   - `anti-farming.test.ts` — bornes de la fenêtre glissante, quota par paire.
   - `schemas.test.ts` — validation Zod exhaustive (formats login, scores, refines).
 - **`apps/backend`** : helpers purs, sans DB.
-  - `tokens.test.ts` — émission/vérification HMAC, expiration, `timingSafeEqual`.
-  - `whitelist.test.ts`, `admins.test.ts` — gating.
+  - `tokens.test.ts` — émission/vérification HMAC, expiration, `timingSafeEqual`, **cloisonnement de scope** (`auth` vs `sse`).
+  - `admins.test.ts` — gating `isAdmin`. *(`whitelist.test.ts` supprimé avec la whitelist.)*
   - `cors-origins.test.ts` — origines autorisées.
   - `sse.test.ts` — registre, emit/broadcast.
   - `rate-limit.test.ts` — middleware de rate-limiting (fenêtre, plafond, comptage par IP).
+  - `tournament.test.ts` — fonctions pures de `tournament.ts` : `nextPow2`/`seedOrder`, génération de
+    bracket avec **byes**, round-robin de **poules**, classement de poule et qualifiés (top 2, seeding croisé).
 
 Lancer : `npm test` à la racine (délègue à chaque workspace via `--workspaces --if-present`).
-À ce jour : **239 tests shared + 113 tests backend** au vert.
+Les compteurs exacts évoluent ; l'ensemble des tests unitaires (shared + backend) reste au vert en CI.
 
 ---
 

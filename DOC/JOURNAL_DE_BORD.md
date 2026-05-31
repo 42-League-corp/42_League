@@ -2,8 +2,8 @@
 
 > Carnet chronologique de **tout** l'avancement du projet : à chaque étape, le problème
 > rencontré, ce qu'on a **tenté**, ce qui **n'a pas marché** et **pourquoi**, puis **comment
-> on a fixé**. Reconstruit à partir de l'historique git (78 commits sur `main`, du
-> 25 mai au 31 mai 2026).
+> on a fixé**. Reconstruit à partir de l'historique git sur `main`, du **25 mai au 6 juin 2026**
+> (du premier commit aux features communautaires : notifications, badges, suivi, saisons).
 >
 > Cible : un dev qui reprend le repo et veut comprendre non seulement *ce que fait* le code
 > (voir [STACK](./STACK.md), [DOMAIN](./DOMAIN.md), [API](./API.md)…) mais *par quels
@@ -22,6 +22,7 @@
 | **3. Le métier** | 29 mai | ELO babyfoot, anti-farming, rôles, SSE temps réel | Seuils anti-farming, popups SSE |
 | **4. Durcissement** | 29 mai | Sécurité, backdoor dev, cookies, tests, RGPD | Backdoor `x-dev-login`, build qui casse |
 | **5. Polish & scale** | 30–31 mai | i18n, mobile, OPS, GOD panel, classement graphique, reset ligue | Sheets mobiles inatteignables, numéro de build |
+| **6. Communauté & ères** | 1–6 juin | Tournois privés/poules, OPS « chasse », H2H, notifs, badges, suivi, saisons | Brackets non-pow2, fuite du Bearer en SSE, open access |
 
 ---
 
@@ -409,6 +410,84 @@ points ELO × matchs joués) à l'échelle.
 
 ---
 
+## Phase 6 — Communauté & ères (1–6 juin)
+
+Une fois le produit stable et déployé, la suite vise l'**engagement** : faire vivre la ligue dans la
+durée et lui donner une dimension sociale. Plusieurs gros chantiers s'enchaînent.
+
+### 6.1 Tournois plus riches : privés, image de couverture, **byes** et **poules**
+
+**Contexte.** Le format « 2 ou 4 joueurs, puissance de 2 » était trop rigide. On l'ouvre :
+- **Capacité 6 à 64**, **privés** (sur invitation), **image de couverture** (`0cf8bb7`, `4ab8624`).
+- Les UIs de tournoi passent en **cases carrées** avec visuel (`TournamentCup`).
+
+**Le vrai morceau technique.** Accepter une capacité **non puissance de 2** oblige à gérer les
+**byes** : `generateBracket` calcule la taille de bracket comme la puissance de 2 supérieure, ordonne
+les joueurs par **seeding canonique** (1 vs dernier…) pour que les byes tombent face aux têtes de
+série, qui passent le 1er tour d'office. Puis le format **poules** (`add_tournament_format_pools`,
+`0cf8bb7`) : poules de 4 en round-robin, qualification du top 2 par poule avec seeding croisé pour le
+bracket final. Le nombre de rounds est recalculé **sur les matchs réels** (byes + poules font diverger
+taille de bracket et capacité). Ces fonctions pures sont **testées** (`tournament.test.ts`).
+
+**Leçon.** Dès qu'on quitte la puissance de 2, le bracket cesse d'être « évident » — d'où l'extraction
+de la logique dans `tournament.ts` et sa couverture par des tests unitaires.
+
+### 6.2 Comptes hors-jeu non ciblables
+
+**Symptôme.** Un compte banni / en suppression / anonymisé restait ciblable (OPS, tournoi, suivi) et
+apparaissait par endroits. **Fix** (`20d6ad3`, `0cf8bb7`) : un prédicat unique `VISIBLE_USER_WHERE` +
+`assertTargetable` ferme partout les vues publiques et les actions à ces comptes ; supprimer son compte
+purge aussi ses tournois et annule ses défis.
+
+### 6.3 Refonte OPS — « la chasse » 24 h + matchs forcés
+
+**Contexte** (`4677426`, `add_ops_forced_used`). L'OPS devient une **traque** : 24 h (au lieu de 7 j),
+pendant lesquelles la cible doit affronter le traqueur. Ses **3 premiers refus** coûtent **3× la perte
+d'ELO** d'une défaite estimée (au lieu du dodge −10) ; le quota est suivi par `forcedUsed`. Révélation
+**cinématique** côté front (`OpsRevealOverlay`). Constantes partagées dans `@42-league/shared`.
+
+### 6.4 Head-to-Head (`/h2h`)
+
+`4ab8624` : une page de **confrontation directe** entre deux joueurs (bilan des duels, historique).
+
+### 6.5 La trilogie communautaire C1 / C2 / C3
+
+- **C1 — Notifications in-app** (`d787bd2`). Modèle `Notification`, cloche `NotificationBell`, signal
+  SSE `notification` (best-effort : une notif ratée ne casse jamais l'action métier).
+- **C2 — Badges** (`88b2124`). Catalogue front (`lib/badges.ts`), badges **dérivés du rôle**
+  (founder/admin/superadmin) + **gagnés** (`UserBadge` : `beta_tester`, `season_champion`), rendu animé.
+- **C3 — Suivi** (`0876ae5`). `Follow` + **préférences de notif par personne suivie**
+  (tournoi / top 3 / trophée / OPS) ; `notifyFollowers` n'alerte que selon ces préférences, et le top 3
+  ne notifie qu'à la **transition** (entrée dans le top 3).
+
+### 6.6 Phase D — Saisons & reset ELO
+
+**Contexte** (`08dd246`, `add_seasons`). Le classement devient cyclique : `Season` (une active),
+chaque `PlayedMatch` taggé `seasonId`. **Clôturer** une saison fige le classement (`SeasonStanding`),
+donne le badge **champion** au 1er, puis **remet toute la ligue à 1000 ELO** — l'historique est
+conservé. Le **palmarès** (`/me`, `/users/:login`) agrège ces classements ; sélecteur de saison côté
+front (desktop **et** mobile, `de301b0`). Migration : « Saison Bêta » rétro-rattachée à l'historique.
+
+### 6.7 GOD panel : sudo, confirmations, sélection multi-lignes, All History
+
+`3ffb3dc`, `c290295`, `1519b6e`, `de301b0` : l'onglet **All History** unifie défis / matchs / rejets /
+OPS (filtrable), avec **édition/suppression inline** (nouvelles actions d'audit `DELETE_*`) et
+**sélection multi-lignes** pour agir en masse. Les actions destructrices passent par un **mode sudo** +
+des **confirmations soignées**. C'est, encore, la leçon de 4.1/5.5 : rendre le destructeur difficile à
+déclencher par accident.
+
+### 6.8 Sécu — token SSE éphémère & open access
+
+- **Token de stream éphémère** (`4fa4c1b`). On cessait d'exposer le **Bearer 30 j en query string**
+  pour ouvrir le flux SSE (il fuit dans les logs / le `Referer`). Désormais : `GET /auth/stream-token`
+  → token **scope `sse`, TTL 60 s**, redemandé à chaque (re)connexion ; refusé sur toute route mutante.
+- **Suppression de la whitelist** (`7e0b5dd`). Passage en **open access** : tout login 42 valide est
+  admis (`whitelist.ts` supprimé), le contrôle de privilèges reposant entièrement sur les rôles.
+- **Audit sécurité quotidien consolidé** (`c3454c7`) : un rapport unique sur Discord (tests + npm audit
+  + sondes live + alertes CodeQL), et CI sur runtime **Node 24** (`ef23e90`).
+
+---
+
 ## Fils rouges du projet (ce qui revient sans cesse)
 
 1. **« L'environnement de dev ≠ l'environnement cible. »** WSL (0.1), conteneurs Docker (2.5),
@@ -422,7 +501,9 @@ points ELO × matchs joués) à l'échelle.
    confirmation manuelle du reset ligue (5.5) sont les deux faces de la même règle.
 
 4. **Un incident → un test.** Anti-farming (3.2), privacy SSE (3.4), anti-escalation (4.1) sont
-   tous devenus des tests de la suite DB-free (4.3). On corrige une fois, on régresse jamais.
+   tous devenus des tests de la suite DB-free (4.3) ; toute logique non triviale (brackets/byes/poules
+   en 6.1) est extraite en fonctions pures et testée (`tournament.test.ts`). On corrige une fois, on
+   régresse jamais.
 
 5. **Honnêteté sur l'inachevé.** Le harness d'intégration (4.4) est explicitement marqué
    « Phase 2 — incomplet » dans le commit et la doc, plutôt que maquillé en terminé.

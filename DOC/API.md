@@ -8,8 +8,8 @@ Référence exhaustive de tous les endpoints du backend Hono (`apps/backend/src/
   session signé, un `Authorization: Bearer <token>`, ou (dev uniquement) l'en-tête `x-dev-login`.
 - Toutes les erreurs renvoient `{ "message": "..." }` avec le code HTTP correspondant (handler global).
 - Les schémas Zod cités sont définis dans `packages/shared/src/schemas.ts` (voir [DOMAIN.md §3](./DOMAIN.md)).
-  Quelques schémas spécifiques aux routes admin/tournoi sont déclarés **inline** dans `index.ts`
-  (`AdminCreateUserSchema`, `AdminForceResultSchema`, `AddTournamentPlayerSchema`).
+  Quelques schémas spécifiques aux routes admin/tournoi/saison/suivi sont déclarés **inline** dans `index.ts`
+  (`AdminCreateUserSchema`, `AdminForceResultSchema`, `AddTournamentPlayerSchema`, `CreateSeasonSchema`, `FollowPrefsSchema`).
 
 ---
 
@@ -33,7 +33,7 @@ Une requête bloquée renvoie `429`.
 | Garde | Vérifie | Échec |
 |---|---|---|
 | `getCurrentLogin(c)` | cookie session / Bearer / `x-dev-login` | 401 |
-| `getStreamLogin(c)` | idem + `?token=` en query (pour SSE) | 401 |
+| `getStreamLogin(c)` | idem + token **éphémère de scope `sse`** en `?token=` (pour SSE — voir `GET /auth/stream-token`) | 401 |
 | `requireAdmin(login)` | rôle `ADMIN` ou `SUPERADMIN` | 403 |
 | `requireSuperAdmin(login)` | login dans la liste SUPERADMINS hardcodée | 403 |
 | `isAdmin(login)` | login dans `admins.ts` (gère tournois officiels + titres) | 403 |
@@ -55,18 +55,22 @@ Public. → `200 { ok: true }`. Aucun effet.
 | `GET /auth/login` | — | Démarre l'OAuth 42. Pose un cookie `state` signé (10 min). | 302 vers l'intra |
 | `GET /auth/web/login?return_to=` | — | Variante site web. `return_to` doit matcher `WEB_APP_URLS`. | 302 |
 | `GET /auth/extension/login?ext_redirect=` | — | Variante extension. `ext_redirect` doit être `https://*.chromiumapp.org`. | 302 |
-| `GET /auth/callback?code&state` | — | Retour OAuth : vérifie `state` (anti-CSRF), échange le code, lit `/v2/me`, **whitelist check**, crée/maj user. | 302 (ext/web, token dans le fragment `#`) / HTML (cookie posé) / 403 HTML (non whitelisté) / 400 (CSRF) / 502 (API 42 KO) |
+| `GET /auth/callback?code&state` | — | Retour OAuth : vérifie `state` (anti-CSRF), échange le code, lit `/v2/me`, crée/maj user. **Plus de whitelist** (open access — `whitelist.ts` supprimé, cf. [SECURITY.md §7](./SECURITY.md)). Un tout nouveau compte déclenche une notif `new_player` à la ligue. | 302 (ext/web, token dans le fragment `#`) / HTML (cookie posé) / 400 (CSRF) / 502 (API 42 KO) |
+| `GET /auth/stream-token` | session/Bearer | Échange le credential complet contre un **token éphémère de scope `sse`** (TTL **60 s**) à passer en `?token=` pour ouvrir `/events`. Évite de mettre le Bearer 30 j en query string (logs/Referer). **Exempté du rate-limit `auth`** (le front en redemande à chaque reconnexion). | `200 { token }` / 500 si `SESSION_SECRET` absent |
 | `POST /auth/logout` | session | Supprime le cookie de session. | `200 { ok: true }` |
 
 Cookies posés (`league_session`, `league_oauth_state`) : `httpOnly`, `sameSite=Lax`, **`secure` en prod**
-(`NODE_ENV=production`). Token Bearer : HMAC-SHA256, TTL 30 jours.
+(`NODE_ENV=production`). Token Bearer : HMAC-SHA256, scope `auth`, TTL 30 jours. Token de stream :
+HMAC-SHA256, scope `sse`, TTL 60 s — **refusé** sur toute route mutante (ne peut qu'ouvrir `/events`).
 
 ---
 
 ## Profil & RGPD
 
 ### `GET /me` — auth
-→ `200 { login, user, role, isAdmin }`.
+→ `200 { login, user, role, isAdmin, badges, palmares }`.
+- `badges` : codes de badges (par défaut dérivés du rôle/fondateur + gagnés) — catalogue front `lib/badges.ts`.
+- `palmares` : classements finaux par saison (`{ seasonId, seasonName, rank, elo, wins, losses }[]`, récents d'abord).
 
 ### `GET /me/export` — auth — RGPD Art. 20 (portabilité)
 Exporte toutes les données perso de l'appelant. Header `Content-Disposition: attachment`.
@@ -87,9 +91,53 @@ après `ACCOUNT_GRACE_DAYS` (défaut **30 j**) : login → `anon_<hash>`, ftId/c
 | Route | Auth | Description | Réponse |
 |---|---|---|---|
 | `GET /users` | auth | Users (hors suppression programmée) triés par ELO desc. | `200 User[]` |
-| `GET /users/:login` | auth | Profil + rang + W/L + 50 derniers matchs. `404` aussi si le compte a une suppression programmée. | `200 { user, rank, wins, losses, recent }` / `404` |
-| `GET /leaderboard` | auth | Classement complet avec rang (hors suppression programmée). | `200 ({ rank, ...User })[]` |
+| `GET /users/:login` | auth | Profil + rang + W/L + 50 derniers matchs + badges + palmarès + statut de suivi. `404` aussi si suppression programmée. | `200 { user, rank, wins, losses, recent, badges, palmares, following, followPrefs }` / `404` |
+| `GET /leaderboard` | auth | Classement complet avec rang (hors comptes hors-jeu). | `200 ({ rank, ...User })[]` |
 | `GET /locations` | auth | `login → host` des users actuellement loggés sur l'intra (cache 5 min). | `200 { login: host }` |
+
+> **Comptes hors-jeu masqués (`VISIBLE_USER_WHERE`).** `GET /users`, `/leaderboard` et les profils
+> excluent les comptes **bannis** (`bannedAt`), **en suppression programmée** (`deletionScheduledAt`)
+> ou **anonymisés** (`anonymizedAt`). Ces comptes ne sont pas non plus ciblables (OPS, suivi, ajout en tournoi).
+> `following`/`followPrefs` ne sont renseignés que si le visiteur suit ce joueur (et `null` sur son propre profil).
+
+---
+
+## Notifications (centre in-app)
+
+| Route | Auth | Description |
+|---|---|---|
+| `GET /notifications` | auth | 40 dernières notifs + compteur non lues. → `200 { notifications, unread }`. |
+| `POST /notifications/read` | auth | Marque comme lues : **toutes** par défaut, ou seulement `{ ids: string[] }`. → `200 { ok: true }`. |
+
+> Les notifs sont créées en best-effort par les handlers (`notify`/`notifyMany`) et poussent l'événement
+> SSE `notification` (ciblé) pour rafraîchir la cloche. Le front poll aussi `/notifications` en secours.
+
+---
+
+## Saisons
+
+| Route | Auth | Description |
+|---|---|---|
+| `GET /seasons` | auth | Toutes les saisons (récentes d'abord). → `200 Season[]`. |
+| `GET /seasons/current` | auth | Saison active (ou `null`). → `200 Season \| null`. |
+| `GET /seasons/:id/standings` | auth | Classement figé d'une saison. → `200 SeasonStanding[]`. |
+| `POST /seasons` | `requireAdmin` — `{ name (2–40) }` | Crée une saison active. `409` si une saison est déjà en cours. → `201 Season`. **Broadcast** `data:update`. |
+| `POST /seasons/close` | `requireAdmin` | **Clôture** la saison active : snapshot du classement (`SeasonStanding`), badge `season_champion` au 1er, **reset ELO/compteurs à 1000/0** de toute la ligue (historique conservé, taggé par saison). `409` si aucune saison active. → `200 { closed, seasonId, seasonName, champion, players }`. **Broadcast** `data:update` + `leaderboard:update`. |
+
+---
+
+## Suivi (followers / following)
+
+| Route | Auth | Description |
+|---|---|---|
+| `GET /follows` | auth | Joueurs que je suis (+ infos + mes préférences). → `200 Follow[]`. |
+| `POST /follows` | auth — `{ login }` | Suivre un joueur. Refuse auto-suivi (400) et cible hors-jeu (403). Idempotent (upsert). → `201`. |
+| `DELETE /follows/:login` | auth | Ne plus suivre. → `200 { ok: true }`. |
+| `PATCH /follows/:login` | auth — `FollowPrefsSchema` | Met à jour les préférences de notif (`notifyTournament`/`notifyTop3`/`notifyTrophy`/`notifyOps`). `404` si non suivi. → `200 Follow`. |
+
+> Les préférences pilotent `notifyFollowers` : un abonné n'est notifié (`follow_top3`, `follow_ops`,
+> `follow_tournament`…) que si la préférence correspondante est `true`. L'entrée top 3 ne notifie qu'à
+> la **transition** (un joueur qui *entre* dans le top 3).
 
 ---
 
@@ -118,6 +166,11 @@ L'adversaire ressaisit son score. Validation bilatérale stricte :
 Body : `{ contestReason: 'never_played'|'wrong_score', contestMessage (10–500) }`.
 Seul l'adversaire (403 sinon, 404 si absent). Crée un `RejectedMatch`, supprime le pending.
 → `200 { id, status: 'rejected', contestReason }`. **Emit** `match:rejected` → déclarant.
+
+### `POST /matches/:id/cancel` — auth
+Le **déclarant** annule sa propre déclaration tant qu'elle est `pending`. Introuvable → `404` ;
+pas le déclarant → `403`. Supprime le `PendingMatch`.
+→ `200 { id, status: 'cancelled' }`. **Emit** `match:cancelled` → adversaire.
 
 ---
 
@@ -149,19 +202,20 @@ Participant d'un défi `accepted` (403/409 sinon). status → `recorded` ; crée
 
 | Route | Auth | Notes |
 |---|---|---|
-| `GET /tournaments` | — (public) | Liste avec entries + winner. |
-| `GET /tournaments/:id` | — (public) | Détail + bracket (`matches`). `404` si absent. |
-| `POST /tournaments` | auth + `isAdmin` si `kind=official` | `CreateTournamentSchema` `{ name(2–60), capacity(2\|4), kind }`. Organisateur auto-inscrit. → `201`. |
-| `POST /tournaments/:id/join` | auth | `registration` only ; refus si plein/déjà inscrit (409). Auto-start si plein. |
-| `POST /tournaments/:id/add-player` | auth (organisateur **ou** `isAdmin`) | Invite un joueur existant. `AddTournamentPlayerSchema` `{ login }`. `registration` only (409) ; joueur introuvable / en suppression (404) ; déjà inscrit / tournoi complet (409). Remplir la dernière place → auto-start. **Emit** `leaderboard:update` → joueur ajouté. → `200 { id, added, status }`. |
+| `GET /tournaments` | auth | Liste filtrée : un **tournoi privé** n'apparaît qu'à son créateur/invités/admin ; un **amical terminé/annulé** n'apparaît qu'à ses participants/admin (les officiels et tout ce qui est vivant restent visibles). |
+| `GET /tournaments/:id` | auth | Détail + entries + bracket/poules (`matches`). `404` si absent **ou** privé non autorisé. |
+| `POST /tournaments` | auth + `isAdmin` si `kind=official` | `CreateTournamentSchema` `{ name(2–60), capacity(6–64), kind, format('elimination'\|'pools'), private, imageUrl? }`. `pools` exige `capacity ≥ 12`. Organisateur auto-inscrit. → `201 Tournament`. |
+| `POST /tournaments/:id/join` | auth | `registration` only ; **tournoi privé → 403** (sur invitation) ; refus si plein/déjà inscrit (409). Auto-start si plein (génère bracket **ou** poules selon `format`). Notifie les abonnés (`follow_tournament`). |
+| `POST /tournaments/:id/add-player` | auth (organisateur **ou** `isAdmin`) | Invite un joueur existant. `AddTournamentPlayerSchema` `{ login }`. `registration` only (409) ; joueur introuvable / hors-jeu (404) ; déjà inscrit / complet (409). Dernière place → auto-start. → `200 { id, added, status }`. |
 | `POST /tournaments/:id/leave` | auth | `registration` only. |
-| `POST /tournaments/:id/start` | auth (organisateur) | Doit être plein (409). Génère le bracket. |
-| `POST /tournaments/:id/cancel` | auth (organisateur) | Sauf déjà `finished`/`cancelled`. |
+| `POST /tournaments/:id/start` | auth (organisateur) | Doit être plein (409). Génère le bracket ou les poules. |
+| `POST /tournaments/:id/cancel` | auth (organisateur **ou** `isAdmin`) | **Supprime** le tournoi (cascade entries+matchs) — pas de statut « annulé », il disparaît des listes. |
 | `POST /tournaments/:id/matches/:matchId/record` | auth (participant) | `TournamentRecordSchema` `{ scoreA, scoreB }`. |
-| `POST /tournaments/:id/matches/:matchId/confirm` | auth (participant, ≠ recorder) | Scores ≠ → reset + 409. Sinon avance le vainqueur ; finale → `finished` + `tournamentsWon++`. |
+| `POST /tournaments/:id/matches/:matchId/confirm` | auth (participant, ≠ recorder) | Scores ≠ → reset + 409. Match de **poule** : pas de propagation ; quand toutes les poules sont finies → génère le bracket des qualifiés (top 2/poule). Match de **bracket** : avance le vainqueur ; finale → `finished` + `tournamentsWon++`. |
 | `POST /tournaments/:id/matches/:matchId/reject` | auth (participant) | Reset des scores saisis. |
 
 Toutes les mutations `/tournaments*` déclenchent un **broadcast** `tournament:update` (middleware).
+Génération des brackets (avec **byes** si pas une puissance de 2) et des poules : `apps/backend/src/tournament.ts`.
 
 ---
 
@@ -172,7 +226,13 @@ Toutes les mutations `/tournaments*` déclenchent un **broadcast** `tournament:u
 | `GET /ops` | — (public) | Tous les ops actifs (`expiresAt > now`). |
 | `GET /ops/me` | auth | `{ current, targetedBy, canDeclareAt }`. |
 | `GET /ops/user/:login` | — (public) | `{ owns, targetedBy }` d'un user. |
-| `POST /ops` | auth — `DeclareOpsSchema` | `{ targetLogin }`. Refuse : auto-cible (400), 1 ops actif/owner, cooldown actif, cible déjà engagée (409). Crée un ops 7 j. **Emit** `ops:update` → [owner, target]. → `201`. |
+| `POST /ops` | auth — `DeclareOpsSchema` | `{ targetLogin }`. Refuse : auto-cible (400), cible hors-jeu (403), 1 ops actif/owner, cooldown 7 j actif, cible déjà engagée (409). Crée un ops **24 h**. **Emit** `ops:update` → [owner, target] ; notif `ops_targeted` à la cible + `follow_ops` aux abonnés. → `201 Ops`. |
+
+> **OPS « chasse » (refonte mai 2026).** Pendant les 24 h, la cible doit affronter le traqueur :
+> ses **3 premiers défis forcés** (`forcedUsed < OPS_FORCED_MATCHES`) ne peuvent être refusés sans
+> surcoût. Refuser un de ces défis coûte **3× la perte d'ELO** d'une défaite estimée
+> (`OPS_REFUSE_MULTIPLIER × estimatedEloLoss`) au lieu du dodge classique (−10), et incrémente
+> `forcedUsed`. Constantes partagées dans `@42-league/shared` (`elo.ts`). Voir [DOMAIN.md §7](./DOMAIN.md).
 
 ---
 
@@ -203,6 +263,12 @@ Toutes les mutations `/tournaments*` déclenchent un **broadcast** `tournament:u
 | `DELETE /admin/matches/:id` | `requireAdmin` | `DELETE_MATCH` | Supprime un match (réverse l'ELO si compté). |
 | `PATCH /admin/matches/:id` | `requireAdmin` | `EDIT_MATCH` | `{ scoreA, scoreB }` ; recalcule le vainqueur. |
 | `GET /admin/rejected-matches` | `requireAdmin` | — | 200 derniers litiges. |
+| `DELETE /admin/rejected-matches/:id` | `requireAdmin` | `DELETE_REJECTED_MATCH` | Supprime un litige. → `{ id, deleted }`. |
+| `DELETE /admin/pending-matches/:id` | `requireAdmin` | `DELETE_PENDING_MATCH` | Supprime un match en attente. **Emit** `match:cancelled` → 2 joueurs. |
+| `DELETE /admin/challenges/:id` | `requireAdmin` | `DELETE_CHALLENGE` | Supprime un défi. |
+| `DELETE /admin/ops/:id` | `requireAdmin` | `DELETE_OPS` | Supprime un ops. **Emit** `ops:update` → [owner, target]. |
+| `DELETE /admin/tournaments/:id` | `requireAdmin` | `DELETE_TOURNAMENT` | Supprime un tournoi (n'importe quel statut) ; si terminé, **décrémente** `tournamentsWon` du vainqueur. **Broadcast** `tournament:update`. |
+| `GET /admin/all-history?login&type&limit` | `requireAdmin` | — | Historique unifié (défis, pending, joués, rejets, ops) en événements typés. Filtres `login` / `type` (`challenge`\|`pending_match`\|`played_match`\|`rejected_match`\|`ops`) ; `limit` max 1000. |
 | `GET /admin/suspicious` | `requireAdmin` | — | Détection anti-triche (voir ci-dessous). |
 | `GET /admin/audit-log?actor&target&action&limit` | `requireAdmin` | — | Journal filtrable (max 500). |
 | `POST /admin/refresh-images` | ⚠️ **aucune garde** | — | Déclenche un backfill des avatars manquants. → `{ scheduled: n }`. *(à durcir : pas de check admin)* |
@@ -232,11 +298,12 @@ Renvoie une liste de drapeaux triés par sévérité. Types détectés :
 
 ## Temps réel
 
-### `GET /events` — `getStreamLogin` (accepte `?token=`)
-Flux **Server-Sent Events** (`text/event-stream`). Voir [REALTIME.md](./REALTIME.md) pour le détail.
+### `GET /events` — `getStreamLogin` (accepte `?token=` éphémère scope `sse`)
+Flux **Server-Sent Events** (`text/event-stream`). Le `?token=` doit être un token de stream obtenu
+via `GET /auth/stream-token` (TTL 60 s) — pas le Bearer. Voir [REALTIME.md](./REALTIME.md) pour le détail.
 - Événement initial `connected` ; ping keep-alive toutes les 25 s.
-- Événements ciblés : `match:*`, `challenge:*`, `ops:update`.
-- Événements globaux (broadcast) : `leaderboard:update`, `tournament:update`, `data:update`.
+- Événements ciblés : `match:*` (dont `match:cancelled`), `challenge:*`, `ops:update`, `notification`.
+- Événements globaux (broadcast) : `leaderboard:update`, `tournament:update`, `data:update`, `panel:update`.
 
 ---
 
@@ -247,12 +314,15 @@ Flux **Server-Sent Events** (`text/event-stream`). Voir [REALTIME.md](./REALTIME
 | `match:pending` | `POST /matches` | adversaire |
 | `match:confirmed` | `POST /matches/:id/confirm`, `/admin/matches/:id/force-confirm`, `/admin/matches/force-result` | 2 joueurs |
 | `match:rejected` | `POST /matches/:id/reject` | déclarant |
+| `match:cancelled` | `POST /matches/:id/cancel`, `DELETE /admin/pending-matches/:id` | adversaire (ou 2 joueurs) |
 | `match:expired` | `POST /admin/matches/:id/force-cancel` | 2 joueurs |
 | `challenge:received` | `POST /challenges` | adversaire |
 | `challenge:accepted` | `POST /challenges/:id/accept` | challenger |
 | `challenge:declined` | `POST /challenges/:id/decline` | l'autre partie |
 | `challenge:recorded` | `POST /challenges/:id/record` | 2 joueurs |
-| `ops:update` | `POST /ops` + timers expiry/cooldown | [owner, target] |
-| `leaderboard:update` | confirm match, dodge, actions SUPERADMIN (force-confirm/result, create/delete user, reset-db) | broadcast |
-| `tournament:update` | toute mutation `/tournaments*` | broadcast |
-| `data:update` | toute mutation `/admin/*` | broadcast |
+| `ops:update` | `POST /ops`, `DELETE /admin/ops/:id` + timers expiry/cooldown | [owner, target] |
+| `notification` | toute création de notif (`notify`/`notifyMany`) | destinataire(s) |
+| `leaderboard:update` | confirm match, dodge/OPS, clôture saison, actions SUPERADMIN | broadcast |
+| `tournament:update` | toute mutation `/tournaments*` + `DELETE /admin/tournaments/:id` | broadcast |
+| `data:update` | mutations `/admin/*`, `/seasons` | broadcast |
+| `panel:update` | mutations `/matches*`, `/challenges*`, `/feature-requests*` (écouté par le GOD panel) | broadcast |
