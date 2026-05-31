@@ -12,7 +12,7 @@ export const LoginSchema = z
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
 // ─── Multi-jeu (babyfoot | smash) ──────────────────────────────────────────
-export const GameSchema = z.enum(['babyfoot', 'smash']);
+export const GameSchema = z.enum(['babyfoot', 'smash', 'chess']);
 export type Game = z.infer<typeof GameSchema>;
 export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
@@ -48,6 +48,15 @@ interface MatchScores {
  */
 function makeRefiner(requireChars: boolean) {
   return (m: MatchScores, ctx: z.RefinementCtx): void => {
+    if (m.game === 'chess') {
+      // Échecs : résultat binaire (1 = vainqueur, 0 = perdant), un seul vainqueur.
+      const hi = Math.max(m.scoreSelf, m.scoreOpponent);
+      const lo = Math.min(m.scoreSelf, m.scoreOpponent);
+      if (hi !== 1 || lo !== 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'chess score must be 1 (win) – 0 (loss)' });
+      }
+      return;
+    }
     if (m.game === 'smash') {
       if (!m.bestOf) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for smash (3 or 5)' });

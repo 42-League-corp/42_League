@@ -19,6 +19,7 @@ import {
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
   calculateSmashElo,
+  calculateChessElo,
   shouldCountForElo,
   estimatedEloLoss,
   OPS_DURATION_MS,
@@ -553,7 +554,9 @@ app.patch('/me/games', async (c) => {
   const login = await getCurrentLogin(c);
   const body = await c.req.json().catch(() => ({}));
   const raw = Array.isArray(body.games) ? body.games : [];
-  const games = [...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash'))] as string[];
+  const games = [
+    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess')),
+  ] as string[];
   if (games.length === 0) {
     throw new HTTPException(400, { message: 'choisis au moins un mode de jeu' });
   }
@@ -777,29 +780,36 @@ app.get('/users/:login', async (c) => {
   });
 });
 
+// Normalise le paramètre de jeu (babyfoot par défaut).
+function parseGame(q: string | undefined): 'babyfoot' | 'smash' | 'chess' {
+  return q === 'smash' || q === 'chess' ? q : 'babyfoot';
+}
+
 app.get('/leaderboard', async (c) => {
   await getCurrentLogin(c);
-  // Classement par jeu : ?game=smash trie sur l'Elo Smash et expose ses compteurs
+  // Classement par jeu : trie sur l'Elo de la discipline et expose ses compteurs
   // sous les mêmes clés (elo / matchesPlayed / tournamentsWon) pour un front unifié.
-  const game = c.req.query('game') === 'smash' ? 'smash' : 'babyfoot';
+  const game = parseGame(c.req.query('game'));
   // N'apparaissent au classement d'un mode que les joueurs qui y adhèrent (games).
   const users = await prisma.user.findMany({
     where: { ...VISIBLE_USER_WHERE, games: { has: game } },
-    orderBy: game === 'smash' ? { eloSmash: 'desc' } : { elo: 'desc' },
+    orderBy:
+      game === 'smash'
+        ? { eloSmash: 'desc' }
+        : game === 'chess'
+          ? { eloChess: 'desc' }
+          : { elo: 'desc' },
   });
   return c.json(
     users.map((u, i) => {
+      const base = { rank: i + 1, ...u };
       if (game === 'smash') {
-        const { eloSmash, matchesPlayedSmash, tournamentsWonSmash, ...rest } = u;
-        return {
-          rank: i + 1,
-          ...rest,
-          elo: eloSmash,
-          matchesPlayed: matchesPlayedSmash,
-          tournamentsWon: tournamentsWonSmash,
-        };
+        return { ...base, elo: u.eloSmash, matchesPlayed: u.matchesPlayedSmash, tournamentsWon: u.tournamentsWonSmash };
       }
-      return { rank: i + 1, ...u };
+      if (game === 'chess') {
+        return { ...base, elo: u.eloChess, matchesPlayed: u.matchesPlayedChess, tournamentsWon: u.tournamentsWonChess };
+      }
+      return base;
     }),
   );
 });
@@ -1077,8 +1087,9 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const scoreA = declarerIsA ? p.scoreDeclarer : p.scoreOpponent;
   const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
   const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
-  const game = p.game === 'smash' ? 'smash' : 'babyfoot';
+  const game = p.game === 'smash' ? 'smash' : p.game === 'chess' ? 'chess' : 'babyfoot';
   const isSmash = game === 'smash';
+  const isChess = game === 'chess';
 
   // Champs Smash mappés sur les côtés A/B.
   const charA = declarerIsA ? p.charDeclarer ?? null : p.charOpponent ?? null;
@@ -1087,7 +1098,7 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const stocksA = isSmash ? (winner === 'A' ? winnerStocks : 0) : null;
   const stocksB = isSmash ? (winner === 'B' ? winnerStocks : 0) : null;
 
-  // Anti-farming par paire ET par jeu (cooldown indépendant babyfoot / smash).
+  // Anti-farming par paire ET par jeu (cooldown indépendant par discipline).
   const priors = await tx.playedMatch.findMany({
     where: { playerALogin: a, playerBLogin: b, game },
     select: { playedAt: true, countedForElo: true },
@@ -1099,34 +1110,28 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
     tx.user.findUniqueOrThrow({ where: { login: b } }),
   ]);
 
+  // Rating courant + colonnes à incrémenter selon la discipline.
+  const ratingA = isSmash ? userA.eloSmash : isChess ? userA.eloChess : userA.elo;
+  const ratingB = isSmash ? userB.eloSmash : isChess ? userB.eloChess : userB.elo;
+
   let deltaA = 0;
   let deltaB = 0;
   if (countsForElo) {
     const update = isSmash
-      ? calculateSmashElo(
-          userA.eloSmash,
-          userB.eloSmash,
-          winner,
-          scoreA,
-          scoreB,
-          p.bestOf ?? 3,
-          winnerStocks,
-        )
-      : calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
+      ? calculateSmashElo(ratingA, ratingB, winner, scoreA, scoreB, p.bestOf ?? 3, winnerStocks)
+      : isChess
+        ? calculateChessElo(ratingA, ratingB, winner)
+        : calculateBabyfootElo(ratingA, ratingB, winner, scoreA, scoreB);
     deltaA = update.deltaA;
     deltaB = update.deltaB;
-    await tx.user.update({
-      where: { login: a },
-      data: isSmash
-        ? { eloSmash: update.newA, matchesPlayedSmash: { increment: 1 } }
-        : { elo: update.newA, matchesPlayed: { increment: 1 } },
-    });
-    await tx.user.update({
-      where: { login: b },
-      data: isSmash
-        ? { eloSmash: update.newB, matchesPlayedSmash: { increment: 1 } }
-        : { elo: update.newB, matchesPlayed: { increment: 1 } },
-    });
+    const dataFor = (newElo: number) =>
+      isSmash
+        ? { eloSmash: newElo, matchesPlayedSmash: { increment: 1 } }
+        : isChess
+          ? { eloChess: newElo, matchesPlayedChess: { increment: 1 } }
+          : { elo: newElo, matchesPlayed: { increment: 1 } };
+    await tx.user.update({ where: { login: a }, data: dataFor(update.newA) });
+    await tx.user.update({ where: { login: b }, data: dataFor(update.newB) });
   }
 
   await tx.pendingMatch.delete({ where: { id: p.id } });
@@ -1855,9 +1860,8 @@ async function launchTournamentMatches(
 
 app.get('/tournaments', async (c) => {
   const me = await getCurrentLogin(c);
-  // Tournois filtrés par discipline (mode courant) : babyfoot invisibles en smash
-  // et inversement.
-  const game = c.req.query('game') === 'smash' ? 'smash' : 'babyfoot';
+  // Tournois filtrés par discipline (mode courant) : pas de partage entre modes.
+  const game = parseGame(c.req.query('game'));
   const list = await prisma.tournament.findMany({
     where: { game },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
@@ -2286,7 +2290,9 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
         data:
           tour.game === 'smash'
             ? { tournamentsWonSmash: { increment: 1 } }
-            : { tournamentsWon: { increment: 1 } },
+            : tour.game === 'chess'
+              ? { tournamentsWonChess: { increment: 1 } }
+              : { tournamentsWon: { increment: 1 } },
       });
       finished = true;
     }
@@ -2872,7 +2878,9 @@ app.delete('/admin/tournaments/:id', async (c) => {
         data:
           row.game === 'smash'
             ? { tournamentsWonSmash: { decrement: 1 } }
-            : { tournamentsWon: { decrement: 1 } },
+            : row.game === 'chess'
+              ? { tournamentsWonChess: { decrement: 1 } }
+              : { tournamentsWon: { decrement: 1 } },
       });
     }
     await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs

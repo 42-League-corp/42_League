@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateBabyfootElo,
   calculateSmashElo,
+  calculateChessElo,
   smashTarget,
   K,
   DEFAULT_ELO,
@@ -9,6 +10,26 @@ import {
   WINNER_BONUS_CAP,
   MAX_DELTA_PER_MATCH,
 } from './elo.js';
+
+describe('calculateChessElo', () => {
+  it('gagnant +, perdant − ; ~16 à ratings égaux (M=1)', () => {
+    const r = calculateChessElo(1000, 1000, 'A');
+    expect(r.deltaA).toBeGreaterThan(0);
+    expect(r.deltaB).toBeLessThan(0);
+    expect(r.deltaA).toBe(16); // K/2 à 50/50
+  });
+  it('un upset rapporte plus que battre un favori', () => {
+    const upset = calculateChessElo(900, 1300, 'A'); // l'outsider gagne
+    const expected = calculateChessElo(1300, 900, 'A'); // le favori gagne
+    expect(upset.deltaA).toBeGreaterThan(expected.deltaA);
+  });
+  it('symétrie A/B', () => {
+    const left = calculateChessElo(1100, 1000, 'A');
+    const right = calculateChessElo(1000, 1100, 'B');
+    expect(left.deltaA).toBe(right.deltaB);
+    expect(left.deltaB).toBe(right.deltaA);
+  });
+});
 
 describe('calculateSmashElo', () => {
   it('le gagnant gagne des points, le perdant en perd', () => {

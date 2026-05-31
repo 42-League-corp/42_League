@@ -146,3 +146,36 @@ export function calculateSmashElo(
 
   return { newA: ratingA + deltaA, newB: ratingB + deltaB, deltaA, deltaB };
 }
+
+// ─── ÉCHECS ─────────────────────────────────────────────────────────────────
+
+/**
+ * Variation d'Elo pour une partie d'échecs : résultat binaire (pas de marge),
+ * donc multiplicateur M = 1. On conserve le bonus d'upset non saturant pour
+ * récompenser les exploits, comme aux autres jeux.
+ */
+export function calculateChessElo(
+  ratingA: number,
+  ratingB: number,
+  winner: Winner,
+): EloUpdate {
+  const winnerRating = winner === 'A' ? ratingA : ratingB;
+  const loserRating = winner === 'A' ? ratingB : ratingA;
+
+  const E = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
+  const baseP = K * (1 - E); // M = 1 : pas de marge aux échecs
+
+  const gap = Math.max(0, loserRating - winnerRating);
+  const gapBonus = gap * UPSET_GAP_COEFF;
+
+  const winnerGain = Math.min(baseP + Math.min(gapBonus, WINNER_BONUS_CAP), MAX_DELTA_PER_MATCH);
+  const loserLoss = Math.min(baseP + gapBonus, MAX_DELTA_PER_MATCH);
+
+  const gain = Math.round(winnerGain);
+  const loss = Math.round(loserLoss);
+
+  const deltaA = winner === 'A' ? gain : -loss;
+  const deltaB = winner === 'A' ? -loss : gain;
+
+  return { newA: ratingA + deltaA, newB: ratingB + deltaB, deltaA, deltaB };
+}

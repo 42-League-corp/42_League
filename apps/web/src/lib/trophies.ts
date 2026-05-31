@@ -1,4 +1,4 @@
-import type { LeaderboardEntry, PlayedMatch } from './api';
+import type { Game, LeaderboardEntry, PlayedMatch } from './api';
 
 export type TrophyColor =
   | 'gold'
@@ -39,6 +39,8 @@ interface Acc {
   comebacks: number; // gagné alors que l'adversaire avait ≥ 7
   zeroLosses: number; // perdu en marquant 0
   negativeFinishes: number; // perdu en finissant dans le négatif
+  sweeps: number; // smash : set gagné sans concéder de game (2-0 / 3-0)
+  stockPerfect: number; // smash : game décisif gagné avec toutes ses vies (3 stocks)
   nightGames: number; // matchs joués entre 0h et 6h
   curWinStreak: number;
   maxWinStreak: number;
@@ -51,7 +53,10 @@ interface Acc {
 export function computeTrophies(
   leaderboard: LeaderboardEntry[],
   matches: PlayedMatch[],
+  game: Game = 'babyfoot',
 ): TrophyResult[] {
+  // Pas de partage de trophées entre modes : on ne calcule que sur la discipline.
+  matches = matches.filter((m) => (m.game ?? 'babyfoot') === game);
   const userMap = new Map(leaderboard.map((u) => [u.login, u]));
   const acc = new Map<string, Acc>();
 
@@ -74,6 +79,8 @@ export function computeTrophies(
         comebacks: 0,
         zeroLosses: 0,
         negativeFinishes: 0,
+        sweeps: 0,
+        stockPerfect: 0,
         nightGames: 0,
         curWinStreak: 0,
         maxWinStreak: 0,
@@ -115,6 +122,13 @@ export function computeTrophies(
 
     const winnerScore = m.winner === 'A' ? m.scoreA : m.scoreB;
     const loserScore = m.winner === 'A' ? m.scoreB : m.scoreA;
+
+    // Smash : sweep (set gagné sans concéder de game) + game décisif à 3 vies.
+    if (game === 'smash') {
+      if (loserScore === 0) winner.sweeps++;
+      const winnerStocks = m.winner === 'A' ? m.stocksA : m.stocksB;
+      if ((winnerStocks ?? 0) >= 3) winner.stockPerfect++;
+    }
 
     const gap = Math.abs(m.scoreA - m.scoreB);
     const d = new Date(m.playedAt);
@@ -222,6 +236,20 @@ export function computeTrophies(
 
   const out: TrophyResult[] = [];
 
+  // Titres « phares » déclinés par discipline (même métrique, habillage différent).
+  const winsFlavor =
+    game === 'smash'
+      ? { emoji: '🎮', title: 'Smash God' }
+      : game === 'chess'
+        ? { emoji: '♛', title: 'Maître du jeu' }
+        : { emoji: '🏆', title: 'G.O.A.T' };
+  const streakFlavor =
+    game === 'smash'
+      ? { emoji: '🔥', title: 'Combo King' }
+      : game === 'chess'
+        ? { emoji: '♟️', title: 'Série gagnante' }
+        : { emoji: '🔥', title: 'En feu' };
+
   // ─── Classement / ELO ──────────────────────────────────────────────
   const champion = leaderboard[0];
   out.push({
@@ -237,18 +265,19 @@ export function computeTrophies(
   // ─── Performances positives ────────────────────────────────────────
   out.push(
     metricTrophy({
-      emoji: '🏆',
-      title: 'G.O.A.T',
+      emoji: winsFlavor.emoji,
+      title: winsFlavor.title,
       subtitle: 'Le plus de victoires',
       color: 'gold',
       pick: (a) => a.wins,
       format: (v) => `${v} W`,
     }),
   );
+  // Win rate : « Sniper » au babyfoot/smash, « Le Stratège » aux échecs.
   out.push(
     metricTrophy({
-      emoji: '🎯',
-      title: 'Sniper',
+      emoji: game === 'chess' ? '🧠' : '🎯',
+      title: game === 'chess' ? 'Le Stratège' : 'Sniper',
       subtitle: 'Meilleur win rate (min 3 matchs)',
       color: 'cyan',
       minPlayed: 3,
@@ -258,64 +287,93 @@ export function computeTrophies(
   );
   out.push(
     metricTrophy({
-      emoji: '🔥',
-      title: 'En feu',
+      emoji: streakFlavor.emoji,
+      title: streakFlavor.title,
       subtitle: 'Plus longue série de victoires',
       color: 'gold',
       pick: (a) => a.maxWinStreak,
       format: (v) => `${v} d'affilée`,
     }),
   );
-  out.push(
-    metricTrophy({
-      emoji: '💥',
-      title: 'Destroyer',
-      subtitle: 'Le plus de victoires 10-0',
-      color: 'magenta',
-      pick: (a) => a.perfectWins,
-      format: (v) => `${v}× 10-0`,
-    }),
-  );
-  out.push(
-    metricTrophy({
-      emoji: '⚖️',
-      title: 'Le Serré',
-      subtitle: 'Le plus de victoires 10-9',
-      color: 'green',
-      pick: (a) => a.closeWins,
-      format: (v) => `${v}× 10-9`,
-    }),
-  );
-  out.push(
-    metricTrophy({
-      emoji: '📉',
-      title: 'Negativer',
-      subtitle: 'Le plus de victoires 10 contre un score négatif',
-      color: 'violet',
-      pick: (a) => a.negativeWins,
-      format: (v) => `${v}× 10-(−)`,
-    }),
-  );
-  out.push(
-    metricTrophy({
-      emoji: '☠️',
-      title: 'Annihilateur',
-      subtitle: 'Le plus de victoires 10 à -10 (ou pire)',
-      color: 'crimson',
-      pick: (a) => a.annihilations,
-      format: (v) => `${v}× 10 à -10`,
-    }),
-  );
-  out.push(
-    metricTrophy({
-      emoji: '🎪',
-      title: 'Spectacle',
-      subtitle: 'Plus grosse marge en victoire',
-      color: 'bronze',
-      pick: (a) => a.maxGap,
-      format: (v) => `+${v}`,
-    }),
-  );
+
+  // ─── Trophées spécifiques BABYFOOT (exploits au score) ──────────────
+  if (game === 'babyfoot') {
+    out.push(
+      metricTrophy({
+        emoji: '💥',
+        title: 'Destroyer',
+        subtitle: 'Le plus de victoires 10-0',
+        color: 'magenta',
+        pick: (a) => a.perfectWins,
+        format: (v) => `${v}× 10-0`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '⚖️',
+        title: 'Le Serré',
+        subtitle: 'Le plus de victoires 10-9',
+        color: 'green',
+        pick: (a) => a.closeWins,
+        format: (v) => `${v}× 10-9`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '📉',
+        title: 'Negativer',
+        subtitle: 'Le plus de victoires 10 contre un score négatif',
+        color: 'violet',
+        pick: (a) => a.negativeWins,
+        format: (v) => `${v}× 10-(−)`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '☠️',
+        title: 'Annihilateur',
+        subtitle: 'Le plus de victoires 10 à -10 (ou pire)',
+        color: 'crimson',
+        pick: (a) => a.annihilations,
+        format: (v) => `${v}× 10 à -10`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '🎪',
+        title: 'Spectacle',
+        subtitle: 'Plus grosse marge en victoire',
+        color: 'bronze',
+        pick: (a) => a.maxGap,
+        format: (v) => `+${v}`,
+      }),
+    );
+  }
+
+  // ─── Trophées spécifiques SMASH (sets / vies) ───────────────────────
+  if (game === 'smash') {
+    out.push(
+      metricTrophy({
+        emoji: '🧹',
+        title: 'Sweep Master',
+        subtitle: 'Le plus de sets gagnés sans concéder de game',
+        color: 'magenta',
+        pick: (a) => a.sweeps,
+        format: (v) => `${v} sweeps`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '💢',
+        title: 'Sans Pitié',
+        subtitle: 'Le plus de games décisifs gagnés avec 3 vies',
+        color: 'crimson',
+        pick: (a) => a.stockPerfect,
+        format: (v) => `${v}× 3 vies`,
+      }),
+    );
+  }
+
   out.push(
     metricTrophy({
       emoji: '🗡️',
@@ -374,26 +432,28 @@ export function computeTrophies(
       format: (v) => `${v} d'affilée`,
     }),
   );
-  out.push(
-    metricTrophy({
-      emoji: '🧊',
-      title: 'Zéro Absolu',
-      subtitle: 'Le plus de défaites en marquant 0',
-      color: 'cyan',
-      pick: (a) => a.zeroLosses,
-      format: (v) => `${v}× 0 pt`,
-    }),
-  );
-  out.push(
-    metricTrophy({
-      emoji: '🪨',
-      title: 'Le Boulet',
-      subtitle: 'Le plus de matchs finis dans le négatif',
-      color: 'red',
-      pick: (a) => a.negativeFinishes,
-      format: (v) => `${v}× négatif`,
-    }),
-  );
+  if (game === 'babyfoot') {
+    out.push(
+      metricTrophy({
+        emoji: '🧊',
+        title: 'Zéro Absolu',
+        subtitle: 'Le plus de défaites en marquant 0',
+        color: 'cyan',
+        pick: (a) => a.zeroLosses,
+        format: (v) => `${v}× 0 pt`,
+      }),
+    );
+    out.push(
+      metricTrophy({
+        emoji: '🪨',
+        title: 'Le Boulet',
+        subtitle: 'Le plus de matchs finis dans le négatif',
+        color: 'red',
+        pick: (a) => a.negativeFinishes,
+        format: (v) => `${v}× négatif`,
+      }),
+    );
+  }
 
   // ─── Activité / divers ─────────────────────────────────────────────
   out.push(

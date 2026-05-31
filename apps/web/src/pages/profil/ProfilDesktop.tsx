@@ -12,10 +12,12 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
+import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
 import { fmtCountdown } from '../../lib/format';
+import { pickRating } from '../../lib/gameStats';
 
 /**
  * Vue desktop du profil — version dense en infos avec stat cards.
@@ -55,9 +57,10 @@ export function ProfilDesktop() {
       if (tour.kind === 'official') officialTitles++;
       else friendlyTitles++;
     }
+    const rating = meUser ? pickRating(meUser, game) : { elo: 1000, matchesPlayed: 0 };
     return {
-      elo: (isSmash ? meUser?.eloSmash : meUser?.elo) ?? 1000,
-      matchesPlayed: (isSmash ? meUser?.matchesPlayedSmash : meUser?.matchesPlayed) ?? 0,
+      elo: rating.elo,
+      matchesPlayed: rating.matchesPlayed,
       total,
       wins,
       losses: total - wins,
@@ -210,13 +213,13 @@ export function ProfilDesktop() {
           label="Tournois officiels remportés"
           value={stats.officialTitles}
           accent="#ff6b6b"
-          smash={isSmash}
+          game={game}
         />
         <TitlesCard
           label="Tournois amicaux remportés"
           value={stats.friendlyTitles}
-          accent={isSmash ? '#ff4d5c' : '#ffc94a'}
-          smash={isSmash}
+          accent={isSmash ? '#ff4d5c' : game === 'chess' ? '#56c46e' : '#ffc94a'}
+          game={game}
         />
       </div>
 
@@ -239,7 +242,7 @@ export function ProfilDesktop() {
           myLogin={u.login}
           currentElo={stats.elo}
           game={game}
-          height={140}
+          height={240}
         />
       </div>
 
@@ -259,17 +262,19 @@ function TitlesCard({
   label,
   value,
   accent,
-  smash,
+  game,
 }: {
   label: string;
   value: number;
   accent: string;
-  smash?: boolean;
+  game: 'babyfoot' | 'smash' | 'chess';
 }) {
   return (
     <div className="card-hud rounded-xl px-3 py-2.5 flex items-center gap-2.5">
-      {smash ? (
+      {game === 'smash' ? (
         <SmashTrophy accent={accent} className="w-9 h-9 shrink-0" />
+      ) : game === 'chess' ? (
+        <ChessTrophy accent={accent} className="w-9 h-9 shrink-0" />
       ) : (
         <TournamentCup accent={accent} className="w-9 h-9 shrink-0" />
       )}

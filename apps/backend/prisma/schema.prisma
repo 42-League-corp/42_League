@@ -28,6 +28,10 @@ model User {
   eloSmash            Int   @default(1000) @map("elo_smash")
   matchesPlayedSmash  Int   @default(0)    @map("matches_played_smash")
   tournamentsWonSmash Int   @default(0)    @map("tournaments_won_smash")
+  // Classement Échecs (3e discipline).
+  eloChess            Int   @default(1000) @map("elo_chess")
+  matchesPlayedChess  Int   @default(0)    @map("matches_played_chess")
+  tournamentsWonChess Int   @default(0)    @map("tournaments_won_chess")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[] @default(["babyfoot"])
   onboardedAt         DateTime? @map("onboarded_at") // a choisi ses modes (1er login)

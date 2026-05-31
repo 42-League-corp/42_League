@@ -6,6 +6,7 @@ import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
+import { pickRating } from '../../../lib/gameStats';
 import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
@@ -19,12 +20,12 @@ interface ProfileHeroCardProps {
  */
 export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const { me, leaderboard } = useLeagueData();
-  const { isSmash } = useGameMode();
+  const { game } = useGameMode();
   const t = useT();
   const reducedMotion = useReducedMotion();
   const user = me?.user;
   if (!user) return null;
-  const titlesWon = isSmash ? user.tournamentsWonSmash ?? 0 : user.tournamentsWon;
+  const titlesWon = pickRating(user, game).tournamentsWon;
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;

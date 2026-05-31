@@ -3,6 +3,7 @@ import { Crown, ChevronDown } from 'lucide-react';
 import { PlayerLink } from './PlayerLink';
 import { Avatar, UserBadge } from './Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
 import { computeTrophies, type TrophyColor, type TrophyResult } from '../lib/trophies';
 import type { LeaderboardEntry } from '../lib/api';
 
@@ -147,10 +148,11 @@ interface TrophiesSectionProps {
 
 export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const { leaderboard, matches } = useLeagueData();
+  const { game } = useGameMode();
   const [sortMode, setSortMode] = useState<SortMode>('category');
   const trophies = useMemo(
-    () => computeTrophies(leaderboard, matches),
-    [leaderboard, matches],
+    () => computeTrophies(leaderboard, matches, game),
+    [leaderboard, matches, game],
   );
 
   // Trophées regroupés par détenteur, joueurs classés par nombre de trophées décroissant.

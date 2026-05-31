@@ -82,7 +82,8 @@ export function DeclareGameFlow({
   variant = 'desktop',
 }: DeclareGameFlowProps) {
   const flash = useFlash();
-  const { isSmash } = useGameMode();
+  const { game, isSmash } = useGameMode();
+  const isChess = game === 'chess';
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(null);
   const [iWon, setIWon] = useState<boolean | null>(null);
   const [loserScore, setLoserScore] = useState(0);
@@ -129,6 +130,14 @@ export function DeclareGameFlow({
           charOpponent: charOpp,
           stocks: winnerStocks,
         });
+      } else if (isChess) {
+        // Échecs : résultat binaire 1-0.
+        await api.declareMatch({
+          opponentLogin: opponent.login,
+          scoreSelf: iWon ? 1 : 0,
+          scoreOpponent: iWon ? 0 : 1,
+          game: 'chess',
+        });
       } else {
         const scoreSelf = iWon ? WINNING_SCORE : loserScore;
         const scoreOpponent = iWon ? loserScore : WINNING_SCORE;
@@ -144,7 +153,7 @@ export function DeclareGameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, iWon, loserScore, isSmash, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted]);
+  }, [opponent, iWon, loserScore, isSmash, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted]);
 
   const triggerSend = () => {
     setSending(true);
@@ -240,7 +249,7 @@ export function DeclareGameFlow({
         </div>
       )}
 
-      {opponent && iWon !== null && !isSmash && (
+      {opponent && iWon !== null && game === 'babyfoot' && (
         <div className="relative mt-8 animate-slide-down">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-4 text-center">
             Score de {iWon ? opponent.login : (myLogin ?? 'moi')}
@@ -374,6 +383,29 @@ export function DeclareGameFlow({
           </Button>
           <p className="text-[10px] text-muted/70 leading-relaxed text-center font-medium">
             {opponent.login} devra confirmer ce score pour valider la game.
+          </p>
+        </div>
+      )}
+
+      {/* ─── Variante ÉCHECS : résultat binaire (victoire / défaite) ──────── */}
+      {opponent && iWon !== null && isChess && (
+        <div className="relative mt-6 animate-slide-down space-y-4">
+          <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
+            <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
+            {' a maté '}
+            <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
+            <div className="text-[11px] text-muted-2 mt-1">Aux échecs, seul le résultat compte.</div>
+          </div>
+          <Button
+            size="md"
+            loading={busy}
+            onClick={triggerSend}
+            className="w-full py-3.5 text-sm font-bold shadow-lg"
+          >
+            Envoyer la déclaration
+          </Button>
+          <p className="text-[10px] text-muted/70 leading-relaxed text-center font-medium">
+            {opponent.login} devra confirmer le résultat pour valider la partie.
           </p>
         </div>
       )}
