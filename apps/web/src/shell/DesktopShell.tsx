@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Swords,
@@ -9,7 +9,6 @@ import {
   User,
   History,
   Settings,
-  Zap,
   Cog,
   Shield,
   Info,
@@ -58,7 +57,6 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const { login } = useAuth();
   const { me, pending } = useLeagueData();
   const { game } = useGameMode();
-  const navigate = useNavigate();
 
   const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
 
@@ -123,33 +121,8 @@ export function DesktopShell({ children }: DesktopShellProps) {
           )}
         </nav>
 
-        {/* Bannière "à confirmer" */}
-        {pendingCount > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-            onClick={() => navigate('/challenges')}
-            className="relative mx-3 mb-3 p-3 rounded-xl text-left group hover-glow"
-            style={{
-              background:
-                'linear-gradient(135deg, rgba(255, 201, 74, 0.12), rgba(255, 201, 74, 0.04))',
-              border: '1px solid rgba(255, 201, 74, 0.35)',
-              boxShadow:
-                'inset 0 1px 0 rgba(255, 215, 120, 0.18), 0 4px 14px rgba(255, 201, 74, 0.12)',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-3.5 h-3.5 text-gold animate-ember" strokeWidth={2.5} />
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-gold font-gaming">
-                {pendingCount} game{pendingCount > 1 ? 's' : ''} à confirmer
-              </span>
-            </div>
-            <div className="text-[10px] text-muted-2 group-hover:text-gold/80 transition-colors">
-              Un adversaire attend ta réponse →
-            </div>
-          </motion.button>
-        )}
+        {/* Les games à confirmer ne s'affichent plus dans la barre : elles vivent
+            dans la section Défis (badge sur l'onglet) + la bannière popup. */}
 
         {/* Profil bas */}
         <div className="relative mt-auto p-3 border-t border-gold/20">
