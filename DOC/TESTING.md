@@ -23,9 +23,10 @@ appellent les vraies routes Hono contre une vraie base Postgres jetable.
   - `whitelist.test.ts`, `admins.test.ts` — gating.
   - `cors-origins.test.ts` — origines autorisées.
   - `sse.test.ts` — registre, emit/broadcast.
+  - `rate-limit.test.ts` — middleware de rate-limiting (fenêtre, plafond, comptage par IP).
 
 Lancer : `npm test` à la racine (délègue à chaque workspace via `--workspaces --if-present`).
-À ce jour : **261 tests shared + 104 tests backend** au vert.
+À ce jour : **239 tests shared + 113 tests backend** au vert.
 
 ---
 
@@ -86,6 +87,7 @@ sont rejouées automatiquement au prochain run.
 ## 4. État & pistes (voir `pending.md`)
 
 - [x] Tests d'intégration HTTP (déclaration, confirmation, anti-farming, défis).
-- [ ] Couvrir les **tournois** et les routes **admin** en intégration.
-- [ ] **Rate-limiting** + tests associés.
+- [x] **Rate-limiting** + tests associés (`rate-limit.test.ts`).
+- [ ] Couvrir les **tournois** et les routes **admin** (dont les actions SUPERADMIN : force-result,
+      reset-database, gestion des faux comptes) en intégration.
 - [ ] CI : lint + typecheck + tests (unitaires) sur PR ; brancher un service Postgres pour l'intégration.

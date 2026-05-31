@@ -56,6 +56,7 @@ Scripts (`apps/backend/package.json`) :
 - `dev` : `tsx watch --env-file=../../.env src/index.ts`.
 - `start` : `tsx --env-file=../../.env src/index.ts`.
 - `db:migrate`, `db:reset`, `db:seed`, `db:studio`, `db:generate` : commandes Prisma (lisent `.env` racine via `dotenv-cli`).
+- `db:add-players` : ajoute 8 faux joueurs de test (idempotent ; `db:add-players:prod` sans `dotenv`). Voir [DATABASE.md §4](./DATABASE.md).
 
 Authentification (42 OAuth) — routes sous `/auth` (`apps/backend/src/auth.ts`) :
 - `GET /auth/login` — démarre le flux OAuth intra 42.
@@ -202,6 +203,7 @@ Modèle : `.env.example`. Copier en `.env`.
 | `WEB_APP_URLS` | Origines autorisées (CORS + `redirect_to`), séparées par des virgules. |
 | `SESSION_SECRET` | Secret de signature des tokens et cookies de session. |
 | `DATABASE_URL` | URL de connexion PostgreSQL. |
+| `ACCOUNT_GRACE_DAYS` | Période de grâce avant anonymisation d'un compte supprimé (RGPD Art. 17). Optionnel, **défaut 30**. |
 
 ---
 

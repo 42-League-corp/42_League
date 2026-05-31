@@ -293,6 +293,28 @@ Exemples de schémas :
 
 Aucun endpoint admin mutant n'accepte de payload non validé.
 
+Quelques schémas spécifiques aux routes SUPERADMIN sont déclarés **inline** dans `index.ts` plutôt que
+dans le package partagé : `AdminCreateUserSchema` (login 2–20 + campus/elo bornés), `AdminForceResultSchema`
+(joueurs ≠, scores 0–50 ≠), `AddTournamentPlayerSchema`. Le **reset de la base** exige en plus une
+**phrase de confirmation exacte** (`oui je suis sure de ce que je fais`) renvoyée dans le body.
+
+---
+
+## 6 bis. Rate-limiting (`rate-limit.ts`)
+
+Garde-fou anti-abus pour la bêta, par IP, fenêtre glissante en mémoire. **Désactivé sous `NODE_ENV=test`**
+(les tests d'intégration partagent l'IP `unknown` et trébucheraient sur le plafond ; le middleware
+lui-même est couvert par `rate-limit.test.ts`). Une requête bloquée renvoie `429`.
+
+| Limiteur | Portée | Plafond | But |
+|---|---|---|---|
+| `global` | `*` | 600 req / 60 s | backstop flood / scan |
+| `auth` | `/auth/*` | 50 req / 15 min | anti brute-force OAuth / spam de `state` |
+| `write` | mutations sur `/matches*`, `/challenges*`, `/tournaments*`, `/ops`, `/feature-requests` | 120 req / 60 s | bloquer les floods de mutations |
+
+Le preflight CORS (`OPTIONS`) est court-circuité en amont et n'est pas décompté. Détails dans
+[API.md](./API.md#rate-limiting).
+
 ---
 
 ## 7. Authentification (42 OAuth + sessions)
@@ -318,7 +340,11 @@ Fichier : `apps/backend/src/auth.ts`
 1. L'intra 42 renvoie un `code` + un `state`.
 2. Le `state` est vérifié via un cookie signé (anti-CSRF du flux OAuth).
 3. Le backend échange le `code` contre un access token 42, puis lit le profil (`login`, `campus`, image).
-4. L'utilisateur est créé ou mis à jour en DB (`getOrCreateUser`).
+4. **Whitelist check** (`whitelist.ts`) : seuls les logins listés peuvent passer — sauf si
+   `WHITELIST_DISABLED = true`. **Actuellement à `true` (open beta)** : tout login 42 valide est admis.
+5. L'utilisateur est créé ou mis à jour en DB (`getOrCreateUser`). Au passage, une éventuelle
+   **suppression programmée** (`deletionScheduledAt`) est annulée — se reconnecter pendant la période
+   de grâce restaure intégralement le compte (RGPD Art. 17, voir [API.md](./API.md) `DELETE /me/account`).
 
 ### Les deux preuves de session acceptées
 
@@ -457,7 +483,9 @@ apps/backend/
 │       └── migration.sql
 └── src/
     ├── audit.ts                  # helper logAdminAction + notifyDiscord
-    └── index.ts                  # 7 endpoints wrappés + GET /admin/audit-log
+    ├── rate-limit.ts             # middleware rate-limiting (global/auth/write) + rate-limit.test.ts
+    ├── whitelist.ts              # whitelist d'accès OAuth (WHITELIST_DISABLED → open beta)
+    └── index.ts                  # endpoints admin wrappés + GET /admin/audit-log + actions SUPERADMIN
 
 apps/web/src/
 ├── shell/DesktopShell.tsx        # bouton GOD desktop (gated)
@@ -475,8 +503,7 @@ apps/web/src/
 Liste des features sécu envisagées mais pas implémentées :
 
 - **2FA TOTP pour SUPERADMIN** — actuellement le compte 42 seul suffit
-- **Sudo mode** — re-auth avant les actions destructives (ban, role change)
-- **Rate limiting** — pas de protection contre brute-force/spam
+- **Sudo mode** — re-auth avant les actions destructives (ban, role change, reset DB)
 - **CSP / HSTS headers** — `helmet` middleware non installé
 - **Cloudflare WAF** — pas de proxy en amont du serveur
 - **Branch protection** — push direct sur `main` toujours autorisé
