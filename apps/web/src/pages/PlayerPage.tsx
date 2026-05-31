@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Swords } from 'lucide-react';
+import { Swords, UserPlus, UserCheck } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { UserBadge } from '../components/Avatar';
 import { OnlineBadge } from '../components/OnlineBadge';
@@ -13,6 +13,7 @@ import {
   api,
   type OpsUserResponse,
   type UserProfile,
+  type FollowPrefs,
 } from '../lib/api';
 import { fmtCountdown, fmtDatePair } from '../lib/format';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -34,6 +35,8 @@ export function PlayerPage() {
   const [opsForPlayer, setOpsForPlayer] = useState<OpsUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [titleDraft, setTitleDraft] = useState('');
+  const [following, setFollowing] = useState(false);
+  const [followPrefs, setFollowPrefs] = useState<FollowPrefs | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,12 +48,38 @@ export function PlayerPage() {
       setProfile(p);
       setOpsForPlayer(ops);
       setTitleDraft(p.user.title ?? '');
+      setFollowing(!!p.following);
+      setFollowPrefs(p.followPrefs ?? null);
     } catch {
       setProfile(null);
     } finally {
       setLoading(false);
     }
   }, [login]);
+
+  const DEFAULT_PREFS: FollowPrefs = {
+    notifyTournament: true,
+    notifyTop3: true,
+    notifyTrophy: true,
+    notifyOps: true,
+  };
+
+  const toggleFollow = async () => {
+    if (following) {
+      setFollowing(false);
+      setFollowPrefs(null);
+      await api.unfollow(login).catch(() => load());
+    } else {
+      setFollowing(true);
+      setFollowPrefs(DEFAULT_PREFS);
+      await api.follow(login).catch(() => load());
+    }
+  };
+
+  const setPref = async (key: keyof FollowPrefs, val: boolean) => {
+    setFollowPrefs((prev) => (prev ? { ...prev, [key]: val } : prev));
+    await api.updateFollowPrefs(login, { [key]: val }).catch(() => {});
+  };
 
   useEffect(() => {
     void load();
@@ -112,20 +141,50 @@ export function PlayerPage() {
             </div>
           )}
           {!isMe && myLogin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              onClick={() =>
-                navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
-              }
-            >
-              <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-              Voir le Head-to-Head
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant={following ? 'ghost' : 'primary'} size="sm" onClick={toggleFollow}>
+                {following ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+                    Suivi
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+                    Suivre
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
+                }
+              >
+                <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+                Head-to-Head
+              </Button>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Préférences de suivi — quand on suit ce joueur */}
+      {!isMe && myLogin && following && followPrefs && (
+        <div className="mb-6 card-hud rounded-xl p-4 border-gold/20">
+          <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
+            <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
+            Me notifier quand {p.user.login}…
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <FollowToggle label="Rejoint un tournoi" on={followPrefs.notifyTournament} onChange={(v) => setPref('notifyTournament', v)} />
+            <FollowToggle label="Entre dans le top 3" on={followPrefs.notifyTop3} onChange={(v) => setPref('notifyTop3', v)} />
+            <FollowToggle label="Gagne un trophée" on={followPrefs.notifyTrophy} onChange={(v) => setPref('notifyTrophy', v)} hint="bientôt" />
+            <FollowToggle label="Déclare / perd un OPS" on={followPrefs.notifyOps} onChange={(v) => setPref('notifyOps', v)} />
+          </div>
+        </div>
+      )}
 
       {me?.isAdmin && (
         <div className="mb-4 p-3 bg-bg-2 border border-border rounded flex flex-wrap items-center gap-2">
@@ -291,6 +350,40 @@ export function PlayerPage() {
         </>
       )}
     </Panel>
+  );
+}
+
+function FollowToggle({
+  label,
+  on,
+  onChange,
+  hint,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+  hint?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-left transition-colors ${
+        on ? 'border-gold/40 bg-gold/[0.06]' : 'border-border bg-bg-2/40'
+      }`}
+    >
+      <span className="text-xs text-text flex items-center gap-1.5">
+        {label}
+        {hint && <span className="text-[9px] text-muted-2 uppercase tracking-wider">({hint})</span>}
+      </span>
+      <span
+        className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${on ? 'bg-gold/70' : 'bg-bg-3'}`}
+      >
+        <span
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200 ${on ? 'left-[18px]' : 'left-0.5'}`}
+        />
+      </span>
+    </button>
   );
 }
 

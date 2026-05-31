@@ -185,6 +185,44 @@ async function announceNewPlayer(login: string): Promise<void> {
   }
 }
 
+// ── Followers : notifie les abonnés d'un joueur selon leurs préférences ──────
+type FollowPref = 'notifyTournament' | 'notifyTop3' | 'notifyTrophy' | 'notifyOps';
+
+async function notifyFollowers(followee: string, pref: FollowPref, n: NotifInput): Promise<void> {
+  try {
+    const follows = await prisma.follow.findMany({
+      where: { followeeLogin: followee, [pref]: true },
+      select: { followerLogin: true },
+    });
+    await notifyMany(follows.map((f) => f.followerLogin), n);
+  } catch {
+    /* noop */
+  }
+}
+
+// Notifie les abonnés quand un joueur ENTRE dans le top 3 (transition only).
+async function maybeNotifyTop3(login: string, delta: number): Promise<void> {
+  if (delta <= 0) return; // pas de montée → rien
+  try {
+    const users = await prisma.user.findMany({ where: VISIBLE_USER_WHERE, select: { login: true, elo: true } });
+    const self = users.find((u) => u.login === login);
+    if (!self) return;
+    const others = users.filter((u) => u.login !== login);
+    const newRank = others.filter((u) => u.elo > self.elo).length + 1;
+    const oldRank = others.filter((u) => u.elo > self.elo - delta).length + 1;
+    if (oldRank > 3 && newRank <= 3) {
+      await notifyFollowers(login, 'notifyTop3', {
+        type: 'follow_top3',
+        title: `@${login} entre dans le top 3`,
+        body: `#${newRank} au classement`,
+        link: '/leaderboard',
+      });
+    }
+  } catch {
+    /* noop */
+  }
+}
+
 // Badges d'un joueur : badges par défaut dérivés du rôle (admin/superadmin) et
 // du fondateur (throbert), suivis des badges gagnés (stockés en base).
 async function badgesFor(login: string, role: string): Promise<string[]> {
@@ -603,7 +641,7 @@ app.get('/users', async (c) => {
 });
 
 app.get('/users/:login', async (c) => {
-  await getCurrentLogin(c);
+  const me = await getCurrentLogin(c);
   const login = c.req.param('login');
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user || user.deletionScheduledAt) {
@@ -631,7 +669,30 @@ app.get('/users/:login', async (c) => {
   }).length;
   const losses = played.length - wins;
   const badges = await badgesFor(login, user.role);
-  return c.json({ user, rank: rank || null, wins, losses, recent: played, badges });
+  // Statut de suivi du visiteur vis-à-vis de ce profil.
+  const follow =
+    me === login
+      ? null
+      : await prisma.follow.findUnique({
+          where: { followerLogin_followeeLogin: { followerLogin: me, followeeLogin: login } },
+        });
+  return c.json({
+    user,
+    rank: rank || null,
+    wins,
+    losses,
+    recent: played,
+    badges,
+    following: !!follow,
+    followPrefs: follow
+      ? {
+          notifyTournament: follow.notifyTournament,
+          notifyTop3: follow.notifyTop3,
+          notifyTrophy: follow.notifyTrophy,
+          notifyOps: follow.notifyOps,
+        }
+      : null,
+  });
 });
 
 app.get('/leaderboard', async (c) => {
@@ -670,6 +731,65 @@ app.post('/notifications/read', async (c) => {
     data: { read: true },
   });
   return c.json({ ok: true });
+});
+
+// ── Followers / Following ─────────────────────────────────────────────────
+const FollowPrefsSchema = z.object({
+  notifyTournament: z.boolean().optional(),
+  notifyTop3: z.boolean().optional(),
+  notifyTrophy: z.boolean().optional(),
+  notifyOps: z.boolean().optional(),
+});
+
+// Liste des joueurs que je suis (avec leurs infos + mes préférences).
+app.get('/follows', async (c) => {
+  const me = await getCurrentLogin(c);
+  const rows = await prisma.follow.findMany({
+    where: { followerLogin: me },
+    include: { followee: { select: { login: true, imageUrl: true, elo: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  return c.json(rows);
+});
+
+app.post('/follows', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => ({}));
+  const login = typeof body.login === 'string' ? body.login.trim() : '';
+  if (!login) throw new HTTPException(400, { message: 'login requis' });
+  if (login === me) throw new HTTPException(400, { message: 'tu ne peux pas te suivre toi-même' });
+  // Pas de suivi d'un compte hors-jeu (banni / désactivé / anonymisé).
+  await assertTargetable(login);
+  const row = await prisma.follow.upsert({
+    where: { followerLogin_followeeLogin: { followerLogin: me, followeeLogin: login } },
+    update: {},
+    create: { id: randomUUID(), followerLogin: me, followeeLogin: login },
+  });
+  return c.json(row, 201);
+});
+
+app.delete('/follows/:login', async (c) => {
+  const me = await getCurrentLogin(c);
+  const login = c.req.param('login');
+  await prisma.follow.deleteMany({ where: { followerLogin: me, followeeLogin: login } });
+  return c.json({ ok: true });
+});
+
+app.patch('/follows/:login', async (c) => {
+  const me = await getCurrentLogin(c);
+  const login = c.req.param('login');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = FollowPrefsSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const row = await prisma.follow
+    .update({
+      where: { followerLogin_followeeLogin: { followerLogin: me, followeeLogin: login } },
+      data: parsed.data,
+    })
+    .catch(() => {
+      throw new HTTPException(404, { message: 'tu ne suis pas ce joueur' });
+    });
+  return c.json(row);
 });
 
 app.get('/matches', async (c) => {
@@ -860,10 +980,20 @@ app.post('/matches/:id/confirm', async (c) => {
   }
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
+  // Abonnés notifiés si un joueur entre dans le top 3.
+  void maybeNotifyTop3(match.playerALogin, match.deltaA);
+  void maybeNotifyTop3(match.playerBLogin, match.deltaB);
   if (result.opsTouched) {
     emit([match.playerALogin, match.playerBLogin], {
       type: 'ops:update',
       payload: { reason: 'forced_played' },
+    });
+    // Le perdant d'un match OPS forcé → ses abonnés sont prévenus.
+    const loser = match.winner === 'A' ? match.playerBLogin : match.playerALogin;
+    void notifyFollowers(loser, 'notifyOps', {
+      type: 'follow_ops',
+      title: `@${loser} a perdu un match OPS`,
+      link: `/player/${encodeURIComponent(loser)}`,
     });
   }
   return c.json(match);
@@ -1579,6 +1709,12 @@ app.post('/tournaments/:id/join', async (c) => {
     }
     return { autoStarted: false };
   });
+  // Abonnés notifiés que ce joueur a rejoint un tournoi.
+  void notifyFollowers(me, 'notifyTournament', {
+    type: 'follow_tournament',
+    title: `@${me} a rejoint un tournoi`,
+    link: `/tournaments/${id}`,
+  });
   return c.json({ id, status: result.autoStarted ? 'in_progress' : 'registration' });
 });
 
@@ -1638,6 +1774,11 @@ app.post('/tournaments/:id/add-player', async (c) => {
   });
 
   emit([login], { type: 'leaderboard:update', payload: {} });
+  void notifyFollowers(login, 'notifyTournament', {
+    type: 'follow_tournament',
+    title: `@${login} a rejoint un tournoi`,
+    link: `/tournaments/${id}`,
+  });
   return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
 });
 
@@ -2090,6 +2231,13 @@ app.post('/ops', async (c) => {
     title: `@${me} t'a pris pour cible`,
     body: 'Un OPS te vise — tes 3 prochains défis face à lui sont forcés.',
     link: '/profile',
+  });
+  // Abonnés du traqueur notifiés qu'il a lancé un OPS.
+  void notifyFollowers(me, 'notifyOps', {
+    type: 'follow_ops',
+    title: `@${me} a lancé un OPS`,
+    body: `Cible : @${target}`,
+    link: `/player/${encodeURIComponent(me)}`,
   });
   // Programme l'émission de `ops:update` à l'expiration + fin de cooldown.
   scheduleOpsTimers(me, target, ops.expiresAt);

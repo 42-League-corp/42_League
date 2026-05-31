@@ -194,6 +194,17 @@ export interface UserProfile {
   recent: PlayedMatch[];
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Le visiteur suit-il ce joueur ? (null/false si soi-même ou non suivi) */
+  following?: boolean;
+  /** Préférences de notif pour ce suivi (null si non suivi). */
+  followPrefs?: FollowPrefs | null;
+}
+
+export interface FollowPrefs {
+  notifyTournament: boolean;
+  notifyTop3: boolean;
+  notifyTrophy: boolean;
+  notifyOps: boolean;
 }
 
 export interface TournamentMatch {
@@ -305,6 +316,15 @@ export const api = {
     request<{ ok: true }>('/notifications/read', {
       method: 'POST',
       body: JSON.stringify(ids ? { ids } : {}),
+    }),
+  follow: (login: string) =>
+    request<unknown>('/follows', { method: 'POST', body: JSON.stringify({ login }) }),
+  unfollow: (login: string) =>
+    request<{ ok: true }>(`/follows/${encodeURIComponent(login)}`, { method: 'DELETE' }),
+  updateFollowPrefs: (login: string, prefs: Partial<FollowPrefs>) =>
+    request<unknown>(`/follows/${encodeURIComponent(login)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(prefs),
     }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),

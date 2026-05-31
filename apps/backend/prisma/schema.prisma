@@ -47,8 +47,29 @@ model User {
   rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
   notifications       Notification[]     @relation("notif")
   badges              UserBadge[]        @relation("userBadges")
+  following           Follow[]           @relation("following")
+  followers           Follow[]           @relation("followers")
 
   @@map("users")
+}
+
+model Follow {
+  id               String   @id @default(uuid())
+  followerLogin    String   @map("follower_login")
+  followeeLogin    String   @map("followee_login")
+  // Préférences de notification par personne suivie.
+  notifyTournament Boolean  @default(true) @map("notify_tournament")
+  notifyTop3       Boolean  @default(true) @map("notify_top3")
+  notifyTrophy     Boolean  @default(true) @map("notify_trophy")
+  notifyOps        Boolean  @default(true) @map("notify_ops")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  follower User @relation("following", fields: [followerLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+  followee User @relation("followers", fields: [followeeLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([followerLogin, followeeLogin])
+  @@index([followeeLogin])
+  @@map("follows")
 }
 
 model UserBadge {
