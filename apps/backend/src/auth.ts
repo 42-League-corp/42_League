@@ -26,6 +26,18 @@ function requireEnv(name: string): string {
   return v;
 }
 
+// Échappe toute valeur interpolée dans le HTML des pages de callback. Le login
+// et le campus viennent du profil 42 (a priori sains), mais on ne fait jamais
+// confiance à une donnée externe rendue en HTML — défense en profondeur (XSS).
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface FtProfile {
   login: string;
   ftId: number;
@@ -221,7 +233,7 @@ code{background:#1a2233;padding:2px 6px;border-radius:3px;color:#00d9dc}
 p{line-height:1.5;color:#95a3b8;font-size:13px}
 </style></head><body>
 <h2>⛔ Accès refusé</h2>
-<p>Le compte <code>${profile.login}</code> n'est pas autorisé sur cette instance 42 League.</p>
+<p>Le compte <code>${escapeHtml(profile.login)}</code> n'est pas autorisé sur cette instance 42 League.</p>
 <p>Demande à l'admin de t'ajouter à la whitelist.</p>
 </body></html>`,
         403,
@@ -255,8 +267,8 @@ p{line-height:1.5;color:#95a3b8;font-size:13px}
 <style>body{font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center}</style>
 </head>
 <body>
-<h2>Connecté en tant que <code>${profile.login}</code></h2>
-<p>Campus : ${profile.campus ?? '—'}</p>
+<h2>Connecté en tant que <code>${escapeHtml(profile.login)}</code></h2>
+<p>Campus : ${profile.campus ? escapeHtml(profile.campus) : '—'}</p>
 <p>Tu peux fermer cette fenêtre.</p>
 </body></html>`);
   });

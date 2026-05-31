@@ -33,12 +33,14 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState<Capacity>(8);
   const [kind, setKind] = useState<Kind>('friendly');
+  const [imageUrl, setImageUrl] = useState('');
   const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setName('');
     setCapacity(8);
     setKind('friendly');
+    setImageUrl('');
   };
 
   const submit = async () => {
@@ -50,7 +52,8 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
     }
     setBusy(true);
     try {
-      const tNew = await api.createTournament({ name: n, capacity, kind });
+      const img = imageUrl.trim();
+      const tNew = await api.createTournament({ name: n, capacity, kind, ...(img ? { imageUrl: img } : {}) });
       flash.show(`Tournoi "${tNew.name}" créé`);
       haptic('success');
       await onDone();
@@ -127,6 +130,20 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
             autoFocus
             maxLength={60}
             className="w-full px-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-base font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-md tap-transparent allow-select"
+          />
+        </div>
+
+        {/* Image de couverture (optionnel) */}
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
+            Image de couverture <span className="text-muted-2 normal-case">(URL, optionnel)</span>
+          </label>
+          <input
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://…"
+            inputMode="url"
+            className="w-full px-4 py-3 bg-bg-1 border-2 border-border rounded-xl text-sm font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted transition-all tap-transparent allow-select"
           />
         </div>
 
