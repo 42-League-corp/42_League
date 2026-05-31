@@ -1764,6 +1764,9 @@ function AllHistoryTab() {
   const [error, setError] = useState('');
   const [loginFilter, setLoginFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<AllHistoryEventType | 'all'>('all');
+  const [sudo, setSudo] = useState(false);
+  const { requestConfirm, confirmNode } = useConfirmDialog();
+  const { selected, toggle, toggleAll, clear } = useSelection();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1784,6 +1787,41 @@ function AllHistoryTab() {
 
   function removeEvent(id: string, type: AllHistoryEventType) {
     setEvents((prev) => prev.filter((e) => !(e.id === id && e.type === type)));
+  }
+
+  const keyOf = (ev: AllHistoryEvent) => `${ev.type}-${ev.id}`;
+  function deleteEvent(ev: AllHistoryEvent): Promise<unknown> {
+    switch (ev.type) {
+      case 'played_match': return api.adminDeleteMatch(ev.id);
+      case 'pending_match': return api.adminDeletePendingMatch(ev.id);
+      case 'rejected_match': return api.adminDeleteRejectedMatch(ev.id);
+      case 'challenge': return api.adminDeleteChallenge(ev.id);
+      case 'ops': return api.adminDeleteOps(ev.id);
+    }
+  }
+  async function toggleSudo() {
+    if (sudo) { setSudo(false); return; }
+    const ok = await requestConfirm(
+      'Activer le mode SUDO ?\nLes suppressions ne demanderont plus de confirmation.',
+      { danger: true, confirmLabel: 'Activer sudo' },
+    );
+    if (ok) setSudo(true);
+  }
+  async function bulkDelete() {
+    const picked = events.filter((e) => selected.has(keyOf(e)));
+    if (picked.length === 0) return;
+    if (!sudo) {
+      const ok = await requestConfirm(`Supprimer ${picked.length} événement(s) ? Irréversible.`, {
+        danger: true,
+        confirmLabel: 'Supprimer',
+      });
+      if (!ok) return;
+    }
+    for (const ev of picked) {
+      await deleteEvent(ev).catch(() => {});
+      removeEvent(ev.id, ev.type);
+    }
+    clear();
   }
 
   return (
@@ -1824,6 +1862,15 @@ function AllHistoryTab() {
         })}
       </div>
 
+      {confirmNode}
+      <SudoBar
+        sudo={sudo}
+        onToggle={toggleSudo}
+        selectedCount={selected.size}
+        onBulkDelete={bulkDelete}
+        bulkLabel="Supprimer les événements"
+      />
+
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
 
       {loading ? (
@@ -1835,6 +1882,14 @@ function AllHistoryTab() {
           <table className="w-full text-xs font-mono border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                <th className="py-1.5 px-2 w-8">
+                  {events.length > 0 && (
+                    <Check
+                      checked={events.every((e) => selected.has(keyOf(e)))}
+                      onChange={() => toggleAll(events.map(keyOf))}
+                    />
+                  )}
+                </th>
                 <th className="text-left py-1.5 px-2">Date</th>
                 <th className="text-left py-1.5 px-2">Type</th>
                 <th className="text-left py-1.5 px-2">Joueur A</th>
@@ -1845,7 +1900,10 @@ function AllHistoryTab() {
             </thead>
             <tbody>
               {events.map((ev) => (
-                <tr key={`${ev.type}-${ev.id}`} className="border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors">
+                <tr key={`${ev.type}-${ev.id}`} className={`border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors ${selected.has(keyOf(ev)) ? 'bg-red-500/5' : ''}`}>
+                  <td className="py-2 px-2 align-top">
+                    <Check checked={selected.has(keyOf(ev))} onChange={() => toggle(keyOf(ev))} />
+                  </td>
                   <td className="py-2 px-2 text-zinc-500 whitespace-nowrap align-top">{fmtDate(ev.at)}</td>
                   <td className="py-2 px-2 align-top">
                     <span className={`px-1.5 py-0.5 rounded text-xs ${EVENT_TYPE_COLOR[ev.type]}`}>
