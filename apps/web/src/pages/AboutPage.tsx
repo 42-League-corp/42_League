@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
 import { Panel } from '../components/Panel';
+import { api } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -599,12 +600,12 @@ const TEAM: Member[] = [
   },
   {
     login: 'sbonneau',
-    role: 'Conseiller',
+    role: 'Conseiller · Infra',
     accent: 'red',
     blurb: (
       <>
-        Passé <span className="text-text font-semibold">donner quelques conseils</span> en chemin,
-        l'œil sur le déploiement. Rien de plus, mais c'est toujours bon d'avoir un avis extérieur.
+        Un <span className="text-text font-semibold">coup de main sur l'infrastructure et l'hébergement</span> :
+        ses conseils ont aidé à poser un déploiement propre et solide.
       </>
     ),
   },
@@ -617,10 +618,41 @@ function TeamSection() {
   return authenticated ? <TeamSectionAuthed /> : <TeamCarousel photos={{}} />;
 }
 
+// La photo intra d'un membre est la même quel que soit le jeu, mais le
+// `leaderboard` du contexte est *par mode* : un membre absent du classement du
+// mode courant (ex. il n'a pas joué aux échecs) n'y figure pas, et sa photo
+// disparaîtrait en changeant de mode. On récupère donc les photos directement
+// par login (indépendant du mode), avec le leaderboard courant comme amorce.
 function TeamSectionAuthed() {
   const { leaderboard } = useLeagueData();
+  const [fetched, setFetched] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      TEAM.map(async (m) => {
+        try {
+          const { user } = await api.user(m.login);
+          return [m.login, user.imageUrl] as const;
+        } catch {
+          return [m.login, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!cancelled) setFetched(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Amorce immédiate depuis le leaderboard courant (évite un flash), puis
+  // complétée/écrasée par les photos récupérées par login.
   const photos: Record<string, string | null> = {};
   for (const u of leaderboard) photos[u.login] = u.imageUrl;
+  for (const [login, url] of Object.entries(fetched)) {
+    if (url) photos[login] = url;
+  }
   return <TeamCarousel photos={photos} />;
 }
 
