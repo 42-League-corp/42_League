@@ -6,6 +6,8 @@ import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { PlayerLink } from '../../components/PlayerLink';
+import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 
 export function LeaderboardMobile() {
@@ -13,6 +15,27 @@ export function LeaderboardMobile() {
   const myLogin = me?.login;
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<RankingView>('list');
+
+  // Saison affichée : '' = en cours (live), sinon snapshot d'une saison passée.
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonId, setSeasonId] = useState<string>('');
+  const [standings, setStandings] = useState<SeasonStanding[] | null>(null);
+  useEffect(() => {
+    api.seasons().then(setSeasons).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!seasonId) {
+      setStandings(null);
+      return;
+    }
+    let alive = true;
+    api.seasonStandings(seasonId).then((s) => alive && setStandings(s)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [seasonId]);
+  const pastSeasons = seasons.filter((s) => !s.isActive);
+  const viewingPast = standings !== null;
 
   const winsLossesByLogin = useMemo(() => {
     const map = new Map<string, { wins: number; losses: number }>();
@@ -78,6 +101,50 @@ export function LeaderboardMobile() {
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
+        {/* Sélecteur de saison (si des saisons passées existent) */}
+        {pastSeasons.length > 0 && (
+          <div className="flex justify-center pt-1">
+            <select
+              value={seasonId}
+              onChange={(e) => setSeasonId(e.target.value)}
+              className="px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-bold uppercase tracking-wider text-text focus:border-gold outline-none"
+            >
+              <option value="">Saison en cours</option>
+              {pastSeasons.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {viewingPast ? (
+          <div className="space-y-1.5">
+            {(standings ?? []).length === 0 ? (
+              <div className="text-center text-muted-2 py-10 text-sm">Aucun classement archivé.</div>
+            ) : (
+              (standings ?? []).map((s) => (
+                <div
+                  key={s.login}
+                  className="flex items-center gap-3 card-hud rounded-xl px-3 py-2.5"
+                >
+                  <span className="w-8 text-center font-display font-black tabular-nums text-sm">
+                    {s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : `#${s.rank}`}
+                  </span>
+                  <PlayerLink login={s.login} className="flex-1 min-w-0">
+                    <span className="font-semibold text-text-strong truncate">{s.login}</span>
+                  </PlayerLink>
+                  <span className="font-display font-extrabold text-gold tabular-nums text-sm">{s.elo}</span>
+                  <span className="text-[11px] text-muted-2 font-mono tabular-nums w-12 text-right">
+                    {s.wins}-{s.losses}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+        <>
         {/* Bascule liste / nuage de points */}
         <div className="flex justify-center pt-1">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />
@@ -158,6 +225,8 @@ export function LeaderboardMobile() {
               );
             })}
           </StaggerList>
+        )}
+        </>
         )}
         </>
         )}

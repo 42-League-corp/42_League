@@ -8,7 +8,6 @@ export function AuthReturnPage() {
   const navigate = useNavigate();
   const { refreshSession } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [errorLogin, setErrorLogin] = useState<string | null>(null);
 
   useEffect(() => {
     const result = consumeAuthReturn();
@@ -18,7 +17,6 @@ export function AuthReturnPage() {
       return;
     }
     setError(result.error);
-    setErrorLogin(result.login);
   }, [navigate, refreshSession]);
 
   if (!error) {
@@ -39,19 +37,7 @@ export function AuthReturnPage() {
           <span className="inline-block w-1 h-3 bg-red rounded-sm" />
           ⛔ Connexion refusée
         </div>
-        {error === 'not_whitelisted' ? (
-          <p className="text-sm text-text leading-relaxed">
-            Le compte{' '}
-            <code className="bg-bg-2 px-1.5 py-0.5 rounded text-gold text-xs font-mono">
-              {errorLogin}
-            </code>{' '}
-            n'est pas autorisé sur cette instance 42 League.
-            <br />
-            Demande à l'admin de t'ajouter à la whitelist.
-          </p>
-        ) : (
-          <p className="text-sm text-text">{error}</p>
-        )}
+        <p className="text-sm text-text">{error}</p>
         <div className="mt-6">
           <Link to="/login">
             <Button variant="ghost">Retour</Button>
