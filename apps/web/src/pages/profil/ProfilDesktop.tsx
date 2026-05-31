@@ -16,7 +16,7 @@ import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
-import { fmtCountdown } from '../../lib/format';
+import { fmtCountdown, fmtDatePair } from '../../lib/format';
 import { pickRating } from '../../lib/gameStats';
 
 /**
@@ -25,7 +25,7 @@ import { pickRating } from '../../lib/gameStats';
  */
 export function ProfilDesktop() {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, lang } = useI18n();
   const { me, matches, opsMe, leaderboard, tournaments } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
@@ -88,6 +88,15 @@ export function ProfilDesktop() {
     [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
     [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
     u.login;
+
+  // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.
+  const myRecent = matches
+    .filter(
+      (m) =>
+        (m.game ?? 'babyfoot') === game &&
+        (m.playerALogin === u.login || m.playerBLogin === u.login),
+    )
+    .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
@@ -253,6 +262,56 @@ export function ProfilDesktop() {
       )}
 
       <OpsWidget opsMe={opsMe} locale={locale} />
+
+      {/* Historique récent — même présentation que la fiche des autres joueurs. */}
+      {myRecent.length > 0 && (
+        <>
+          <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
+            {t('profil.recent')}
+          </div>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-muted">
+                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.date')}</th>
+                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.opp')}</th>
+                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.score')}</th>
+                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.result')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myRecent.slice(0, 20).map((m) => {
+                  const isA = m.playerALogin === u.login;
+                  const opp = isA ? m.playerBLogin : m.playerALogin;
+                  const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+                  const sYou = isA ? m.scoreA : m.scoreB;
+                  const sOpp = isA ? m.scoreB : m.scoreA;
+                  return (
+                    <tr key={m.id} className="border-t border-border/40">
+                      <td className="px-2 sm:px-3 py-2 text-muted-2 text-xs whitespace-nowrap">
+                        {fmtDatePair(m.playedAt, lang).short}
+                        <span className="mx-1 opacity-40">·</span>
+                        <span className="text-muted">{fmtDatePair(m.playedAt, lang).long}</span>
+                      </td>
+                      <td className="px-2 sm:px-3 py-2">
+                        <PlayerLink login={opp}>{opp}</PlayerLink>
+                      </td>
+                      <td className="px-2 sm:px-3 py-2 text-right tabular-nums">
+                        {sYou}–{sOpp}
+                      </td>
+                      <td
+                        className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${won ? 'text-gold' : 'text-red'}`}
+                      >
+                        {won ? t('history.win') : t('history.loss')}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
       </Panel>
     </div>
   );

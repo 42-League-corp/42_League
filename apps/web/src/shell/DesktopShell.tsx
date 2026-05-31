@@ -18,6 +18,8 @@ import { Avatar } from '../components/Avatar';
 import { NotificationBell } from '../components/NotificationBell';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
+import { pickRating } from '../lib/gameStats';
 import { useT } from '../lib/i18n';
 
 interface NavDef {
@@ -55,6 +57,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const t = useT();
   const { login } = useAuth();
   const { me, pending } = useLeagueData();
+  const { game } = useGameMode();
   const navigate = useNavigate();
 
   const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
@@ -162,7 +165,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
                     {login}
                   </div>
                   <div className="text-[10px] text-gold uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
-                    {me.user.elo} ELO
+                    {pickRating(me.user, game).elo} ELO
                   </div>
                 </div>
               </NavLink>

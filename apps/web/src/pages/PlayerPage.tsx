@@ -303,6 +303,7 @@ export function PlayerPage() {
             matches={p.recent}
             myLogin={p.user.login}
             currentElo={p.user.elo}
+            hideStartLabel
             height={104}
           />
         </div>
