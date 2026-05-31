@@ -155,6 +155,15 @@ export interface FeatureRequestWithAuthor {
   author: { login: string; imageUrl: string | null };
 }
 
+export interface BugReportWithAuthor {
+  id: string;
+  text: string;
+  status: string;
+  authorId: string;
+  createdAt: string;
+  author: { login: string; imageUrl: string | null };
+}
+
 export interface SuspiciousFlag {
   type: 'pair_domination' | 'recent_farming' | 'elo_spike' | 'victim_pattern';
   severity: 'low' | 'medium' | 'high';
@@ -710,6 +719,17 @@ export const api = {
   featureRequests: () => request<FeatureRequestWithAuthor[]>('/feature-requests'),
   setFeatureRequestStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
     request<FeatureRequestWithAuthor>(`/feature-requests/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  createBugReport: (text: string) =>
+    request<{ id: string; text: string; status: string; createdAt: string }>(
+      '/bug-reports',
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
+  bugReports: () => request<BugReportWithAuthor[]>('/bug-reports'),
+  setBugReportStatus: (id: string, status: 'open' | 'resolved' | 'closed') =>
+    request<BugReportWithAuthor>(`/bug-reports/${encodeURIComponent(id)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),

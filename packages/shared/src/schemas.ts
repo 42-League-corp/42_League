@@ -178,6 +178,18 @@ export const FeatureRequestSchema = z.object({
 
 export type FeatureRequestInput = z.infer<typeof FeatureRequestSchema>;
 
+export const BugReportSchema = z.object({
+  text: z.string().min(10, 'description must be at least 10 characters').max(500),
+});
+
+export type BugReportInput = z.infer<typeof BugReportSchema>;
+
+export const SetBugReportStatusSchema = z.object({
+  status: z.enum(['open', 'resolved', 'closed']),
+});
+
+export type SetBugReportStatusInput = z.infer<typeof SetBugReportStatusSchema>;
+
 // SUPERADMIN only — 'SUPERADMIN' role cannot be granted via API
 export const SetRoleSchema = z.object({
   role: z.enum(['USER', 'ADMIN']),

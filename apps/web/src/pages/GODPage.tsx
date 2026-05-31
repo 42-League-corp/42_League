@@ -8,6 +8,7 @@ import {
   type RejectedMatch,
   type ModerationStats,
   type FeatureRequestWithAuthor,
+  type BugReportWithAuthor,
   type PlayedMatch,
   type PendingMatch,
   type SuspiciousFlag,
@@ -19,7 +20,7 @@ import {
   type Tournament,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -79,6 +80,14 @@ function FRStatusBadge({ status }: { status: string }) {
   if (status === 'rejected')
     return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">REJETÉE</span>;
   return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">EN ATTENTE</span>;
+}
+
+function BugStatusBadge({ status }: { status: string }) {
+  if (status === 'resolved')
+    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">RÉSOLU</span>;
+  if (status === 'closed')
+    return <span className="px-1.5 py-0.5 text-xs bg-zinc-400/15 text-zinc-400 rounded font-mono">FERMÉ</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">OUVERT</span>;
 }
 
 function Btn({
@@ -1319,6 +1328,98 @@ function IdeasTab() {
                   )}
                   {idea.status !== 'pending' && (
                     <Btn onClick={() => setStatus(idea.id, 'pending')} disabled={pending === idea.id} variant="ghost">En attente</Btn>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: BUGS ──────────────────────────────────────────────────────────────
+
+function BugsTab() {
+  const [bugs, setBugs] = useState<BugReportWithAuthor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'open' | 'resolved' | 'closed'>('all');
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    api.bugReports()
+      .then(setBugs)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
+
+  const filtered = filter === 'all' ? bugs : bugs.filter((b) => b.status === filter);
+
+  async function setStatus(id: string, status: 'open' | 'resolved' | 'closed') {
+    setPending(id);
+    setError('');
+    try {
+      await api.setBugReportStatus(id, status);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally { setPending(null); }
+  }
+
+  const counts = {
+    open: bugs.filter((b) => b.status === 'open').length,
+    resolved: bugs.filter((b) => b.status === 'resolved').length,
+    closed: bugs.filter((b) => b.status === 'closed').length,
+  };
+
+  return (
+    <div className="p-4">
+      {/* Summary bar */}
+      <div className="mb-4 flex items-center gap-4">
+        {(['all', 'open', 'resolved', 'closed'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filter === f ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            {f === 'all' ? `TOUT (${bugs.length})` : f === 'open' ? `OUVERTS (${counts.open})` : f === 'resolved' ? `RÉSOLUS (${counts.resolved})` : `FERMÉS (${counts.closed})`}
+          </button>
+        ))}
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucun bug dans cette catégorie.</div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((bug) => (
+            <div key={bug.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-mono text-zinc-400">{bug.author.login}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-xs font-mono text-zinc-500">{fmtDate(bug.createdAt)}</span>
+                    <BugStatusBadge status={bug.status} />
+                  </div>
+                  <p className="text-sm text-zinc-200 leading-relaxed">{bug.text}</p>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  {bug.status !== 'resolved' && (
+                    <Btn onClick={() => setStatus(bug.id, 'resolved')} disabled={pending === bug.id} variant="success">Résolu</Btn>
+                  )}
+                  {bug.status !== 'closed' && (
+                    <Btn onClick={() => setStatus(bug.id, 'closed')} disabled={pending === bug.id} variant="ghost">Fermer</Btn>
+                  )}
+                  {bug.status !== 'open' && (
+                    <Btn onClick={() => setStatus(bug.id, 'open')} disabled={pending === bug.id} variant="warn">Rouvrir</Btn>
                   )}
                 </div>
               </div>
@@ -2627,6 +2728,7 @@ const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'matches', label: 'MATCHES' },
   { id: 'pending', label: 'EN ATTENTE', superAdminOnly: true },
   { id: 'ideas', label: 'IDÉES' },
+  { id: 'bugs', label: 'BUGS' },
   { id: 'alertes', label: 'ALERTES' },
   { id: 'audit', label: 'AUDIT' },
   { id: 'history', label: 'ALL HISTORY' },
@@ -2732,6 +2834,7 @@ export function GODPage() {
           {activeTab === 'matches' && <MatchesTab />}
           {activeTab === 'pending' && myRole === 'SUPERADMIN' && <PendingTab />}
           {activeTab === 'ideas' && <IdeasTab />}
+          {activeTab === 'bugs' && <BugsTab />}
           {activeTab === 'alertes' && <AlertesTab />}
           {activeTab === 'audit' && <AuditTab />}
           {activeTab === 'history' && <AllHistoryTab />}

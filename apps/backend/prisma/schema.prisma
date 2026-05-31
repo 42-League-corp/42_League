@@ -54,6 +54,7 @@ model User {
   opsAsOwner          Ops[]              @relation("opsOwner")
   opsAsTarget         Ops[]              @relation("opsTarget")
   featureRequests     FeatureRequest[]
+  bugReports          BugReport[]
   rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
   rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
   notifications       Notification[]     @relation("notif")
@@ -124,6 +125,18 @@ model FeatureRequest {
   author User @relation(fields: [authorId], references: [login])
 
   @@map("feature_requests")
+}
+
+model BugReport {
+  id        String   @id @default(uuid())
+  text      String
+  status    String   @default("open") // 'open' | 'resolved' | 'closed'
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  author User @relation(fields: [authorId], references: [login])
+
+  @@map("bug_reports")
 }
 
 model RejectedMatch {
