@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { RankedBadge } from '../../../components/RankedBadge';
+import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useT } from '../../../lib/i18n';
@@ -106,6 +107,11 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
                 <MapPin className="w-3 h-3" strokeWidth={2.5} />
                 <span>{user.campus}</span>
+              </div>
+            )}
+            {me?.badges && me.badges.length > 0 && (
+              <div className="mt-1.5">
+                <BadgesRow codes={me.badges} size="xs" />
               </div>
             )}
           </div>

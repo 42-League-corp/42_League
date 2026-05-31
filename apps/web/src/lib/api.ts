@@ -51,6 +51,8 @@ export interface MeResponse {
   login: string;
   isAdmin?: boolean;
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  /** Codes de badges (cf. catalogue front lib/badges.ts). */
+  badges?: string[];
   user: {
     login: string;
     firstName?: string | null;
@@ -190,6 +192,8 @@ export interface UserProfile {
   wins: number;
   losses: number;
   recent: PlayedMatch[];
+  /** Codes de badges (cf. catalogue front lib/badges.ts). */
+  badges?: string[];
 }
 
 export interface TournamentMatch {

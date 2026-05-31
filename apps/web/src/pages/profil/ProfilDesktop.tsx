@@ -5,6 +5,7 @@ import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
 import { RankedBadge } from '../../components/RankedBadge';
+import { BadgesRow } from '../../components/Badges';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -134,6 +135,11 @@ export function ProfilDesktop() {
                 </motion.span>
               )}
             </div>
+            {me.badges && me.badges.length > 0 && (
+              <div className="mt-2">
+                <BadgesRow codes={me.badges} />
+              </div>
+            )}
           </div>
 
           {/* Bloc ELO mis en valeur */}
