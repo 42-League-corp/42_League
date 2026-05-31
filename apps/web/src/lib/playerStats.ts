@@ -17,6 +17,10 @@ export interface PlayerStats {
   winRate: number;
   /** Série en cours : positif = victoires consécutives, négatif = défaites. */
   streak: number;
+  /** Plus longue série de victoires consécutives (>= 0). */
+  maxWinStreak: number;
+  /** Plus longue série de défaites consécutives (>= 0). */
+  maxLossStreak: number;
   /** Derniers matchs (plus récent d'abord). */
   recent: RecentMatch[];
 }
@@ -39,12 +43,26 @@ export function computePlayerStats(
 
   let wins = 0;
   let losses = 0;
+  // Plus longues séries (V et D) sur tout l'historique.
+  let maxWinStreak = 0;
+  let maxLossStreak = 0;
+  let runWins = 0;
+  let runLosses = 0;
   const recent: RecentMatch[] = [];
   for (const m of mine) {
     const isA = m.playerALogin === login;
     const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-    if (won) wins++;
-    else losses++;
+    if (won) {
+      wins++;
+      runWins++;
+      runLosses = 0;
+      if (runWins > maxWinStreak) maxWinStreak = runWins;
+    } else {
+      losses++;
+      runLosses++;
+      runWins = 0;
+      if (runLosses > maxLossStreak) maxLossStreak = runLosses;
+    }
     if (recent.length < recentCount) {
       recent.push({
         won,
@@ -74,5 +92,5 @@ export function computePlayerStats(
     if (!firstWon) streak = -streak;
   }
 
-  return { wins, losses, games, winRate, streak, recent };
+  return { wins, losses, games, winRate, streak, maxWinStreak, maxLossStreak, recent };
 }

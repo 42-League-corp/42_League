@@ -13,13 +13,18 @@ export function BadgeChip({
   onClick,
 }: {
   code: string;
-  size?: 'xs' | 'sm';
+  size?: 'xs' | 'sm' | 'md';
   onClick?: () => void;
 }) {
   const b = badgeDef(code);
   const Icon = b.icon;
-  const sizeCls = size === 'xs' ? 'text-[8px] px-1.5 py-0.5 gap-0.5' : 'text-[10px] px-2 py-0.5 gap-1';
-  const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : 'w-3 h-3';
+  const sizeCls =
+    size === 'xs'
+      ? 'text-[8px] px-1.5 py-0.5 gap-0.5'
+      : size === 'md'
+        ? 'text-xs px-3 py-1.5 gap-1.5'
+        : 'text-[10px] px-2 py-0.5 gap-1';
+  const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-4 h-4' : 'w-3 h-3';
   return (
     <motion.button
       type="button"
@@ -46,7 +51,7 @@ export function BadgeChip({
  * Rangée de badges d'un joueur. Cliquer ouvre une modale listant tous ses badges
  * avec leur description (« clique sur le badge pour voir ceux qu'on a »).
  */
-export function BadgesRow({ codes, size = 'sm' }: { codes: string[]; size?: 'xs' | 'sm' }) {
+export function BadgesRow({ codes, size = 'sm' }: { codes: string[]; size?: 'xs' | 'sm' | 'md' }) {
   const [open, setOpen] = useState(false);
   if (!codes || codes.length === 0) return null;
   return (

@@ -5,12 +5,12 @@ import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
 
-/** Marges réservées à l'axe ELO (gauche) et au padding (px). */
-const M = { l: 46, r: 16, t: 16, b: 16 };
-/** Marge intérieure (haut/bas) pour ne pas coller les têtes aux bords (px). */
+/** Marges réservées aux axes (ELO à gauche, Win % en bas) et padding (px). */
+const M = { l: 46, r: 16, t: 16, b: 34 };
+/** Marge intérieure pour ne pas coller les têtes aux bords (px). */
 const PAD = 30;
 /** Rayon « d'occupation » d'une tête (px, base) — espace mini entre deux têtes. */
-const NODE_R = 26;
+const NODE_R = 24;
 const SCALE_MIN = 0.5;
 const SCALE_MAX = 8;
 
@@ -22,7 +22,7 @@ interface View {
 
 interface Node {
   entry: LeaderboardEntry;
-  bx: number; // position horizontale de base (px)
+  bx: number; // position horizontale de base (px) — dérivée du win rate
   by: number; // position verticale de base (px) — dérivée de l'ELO
 }
 
@@ -36,21 +36,25 @@ function ticks(min: number, max: number, count = 5): number[] {
 }
 
 /**
- * Vue « nuage de points » du classement — réparti par ELO (beeswarm).
+ * Vue « nuage de points » du classement — vrai nuage 2D.
  *
- * La position VERTICALE encode l'ELO : deux joueurs de niveau proche sont à la
- * même hauteur, donc proches l'un de l'autre. L'axe horizontal n'a pas de sens
- * métier : on ne s'en sert que pour écarter les têtes de même ELO afin qu'elles
- * ne se chevauchent pas (essaim centré). Molette / pincement pour zoomer,
- * glisser pour se déplacer.
+ *  • Axe VERTICAL = ELO (haut = fort).
+ *  • Axe HORIZONTAL = win rate (droite = meilleur ratio).
+ *
+ * Les joueurs les plus forts (ELO élevé + bon ratio) se retrouvent donc en haut à
+ * droite. Si deux têtes se superposent, on les écarte légèrement à l'horizontale.
+ * Molette / pincement pour zoomer, glisser pour se déplacer.
  */
 export function LeaderboardScatter({
   entries,
   myLogin,
+  winRates,
   className = '',
 }: {
   entries: LeaderboardEntry[];
   myLogin?: string;
+  /** Win rate (0–100) par login — abscisse du nuage. Défaut 50 si absent. */
+  winRates?: Map<string, number>;
   className?: string;
 }) {
   const navigate = useNavigate();
@@ -96,23 +100,27 @@ export function LeaderboardScatter({
     return PAD + (1 - ny) * (plotH - 2 * PAD);
   };
 
-  // Placement « beeswarm » : pour chaque joueur (ELO décroissant), on cherche le
-  // décalage horizontal le plus proche du centre qui n'entre en collision avec
-  // aucune tête déjà posée. Résultat : un essaim centré, hauteur = ELO.
+  // Win rate (0–100) → abscisse de base (px). Droite = meilleur ratio.
+  const rateOf = (login: string) => clamp(winRates?.get(login) ?? 50, 0, 100);
+  const xOfRate = (rate: number) => PAD + (rate / 100) * (plotW - 2 * PAD);
+
+  // Placement 2D : (win rate, ELO). Pour chaque joueur (ELO décroissant) on part de
+  // sa position réelle puis on l'écarte horizontalement par petits pas si une tête
+  // déjà posée la chevauche — la position reste fidèle aux deux axes.
   const nodes = useMemo<Node[]>(() => {
-    const cx = plotW / 2;
     const D = NODE_R * 2; // distance mini entre deux centres
-    const step = D * 0.95;
+    const step = D * 0.6;
     const sorted = [...entries].sort((a, b) => b.elo - a.elo || a.login.localeCompare(b.login));
     const placed: Node[] = [];
     for (const e of sorted) {
       const by = yOfElo(e.elo);
-      let bx = cx;
-      for (let k = 0; k < 400; k++) {
-        // 0, +1, -1, +2, -2 … × step
+      const tx = xOfRate(rateOf(e.login));
+      let bx = tx;
+      for (let k = 0; k < 200; k++) {
+        // 0, +1, -1, +2, -2 … × step, autour de la position réelle.
         const rank = Math.ceil(k / 2);
         const dir = k % 2 === 1 ? 1 : -1;
-        const candX = cx + rank * step * dir;
+        const candX = clamp(tx + rank * step * dir, PAD, plotW - PAD);
         const collides = placed.some((n) => {
           const dy = n.by - by;
           if (Math.abs(dy) >= D) return false; // assez loin verticalement
@@ -127,9 +135,9 @@ export function LeaderboardScatter({
       placed.push({ entry: e, bx, by });
     }
     return placed;
-    // yOfElo dépend de plotH/domain → déps explicites
+    // yOfElo / xOfRate dépendent de plotW/plotH/domain/winRates → déps explicites
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, plotW, plotH, domain.eMin, domain.eMax]);
+  }, [entries, plotW, plotH, domain.eMin, domain.eMax, winRates]);
 
   // base → coordonnées écran locales (dans la zone de tracé).
   const toLocal = (bx: number, by: number) => ({
@@ -175,6 +183,7 @@ export function LeaderboardScatter({
 
   const reset = () => setView({ scale: 1, tx: 0, ty: 0 });
   const eloTicks = ticks(domain.eMin, domain.eMax, 5);
+  const rateTicks = [0, 25, 50, 75, 100];
   const hoveredNode = hovered ? nodes.find((n) => n.entry.login === hovered) : null;
 
   return (
@@ -194,7 +203,7 @@ export function LeaderboardScatter({
 
       {/* Légende */}
       <div className="absolute top-2 left-2 z-20 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2 pointer-events-none">
-        ELO ↑ · réparti par niveau
+        ELO ↑ · Win % → · les meilleurs en haut à droite
       </div>
 
       <div
@@ -231,6 +240,15 @@ export function LeaderboardScatter({
             />
           ))}
 
+          {/* Lignes Win % verticales */}
+          {rateTicks.map((r, i) => (
+            <div
+              key={`v${i}`}
+              className="absolute top-0 bottom-0 w-px bg-gold/[0.05]"
+              style={{ left: view.tx + xOfRate(r) * view.scale }}
+            />
+          ))}
+
           {/* Têtes des joueurs */}
           {nodes.map(({ entry: e, bx, by }) => {
             const { lx, ly } = toLocal(bx, by);
@@ -262,6 +280,22 @@ export function LeaderboardScatter({
               </button>
             );
           })}
+        </div>
+
+        {/* Graduations Win % (axe X, en bas) */}
+        <div
+          className="absolute overflow-hidden pointer-events-none"
+          style={{ left: M.l, width: plotW, top: M.t + plotH, height: M.b }}
+        >
+          {rateTicks.map((r, i) => (
+            <span
+              key={i}
+              className="absolute top-1 -translate-x-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
+              style={{ left: view.tx + xOfRate(r) * view.scale }}
+            >
+              {r}%
+            </span>
+          ))}
         </div>
 
         {/* Infobulle (hors zone clippée pour ne pas être coupée) */}

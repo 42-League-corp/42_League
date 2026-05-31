@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, Crown } from 'lucide-react';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
@@ -20,9 +21,34 @@ interface PlayerStats {
   winRate: number; // 0–100
   /** Série en cours : positif = victoires consécutives, négatif = défaites. */
   streak: number;
+  /** Plus longue série de victoires consécutives. */
+  maxWinStreak: number;
+  /** Plus longue série de défaites consécutives. */
+  maxLossStreak: number;
 }
 
-type SortKey = 'rank' | 'player' | 'elo' | 'games' | 'winRate' | 'wins' | 'losses' | 'streak' | 'titles';
+const EMPTY_STATS: PlayerStats = {
+  wins: 0,
+  losses: 0,
+  games: 0,
+  winRate: 0,
+  streak: 0,
+  maxWinStreak: 0,
+  maxLossStreak: 0,
+};
+
+type SortKey =
+  | 'rank'
+  | 'player'
+  | 'elo'
+  | 'games'
+  | 'winRate'
+  | 'wins'
+  | 'losses'
+  | 'streak'
+  | 'maxWin'
+  | 'maxLoss'
+  | 'titles';
 type SortDir = 'asc' | 'desc';
 
 /**
@@ -39,7 +65,7 @@ export function LeaderboardDesktop() {
   const statsByLogin = useMemo(() => {
     const map = new Map<string, PlayerStats>();
     for (const u of leaderboard) {
-      map.set(u.login, { wins: 0, losses: 0, games: 0, winRate: 0, streak: 0 });
+      map.set(u.login, { ...EMPTY_STATS });
     }
 
     // W/L cumulés
@@ -77,8 +103,27 @@ export function LeaderboardDesktop() {
         }
         if (!first.won) streak = -streak;
       }
+      // Plus longues séries (V / D) sur tout l'historique (longueur des runs
+      // invariante par renversement de l'ordre).
+      let maxWin = 0;
+      let maxLoss = 0;
+      let runWin = 0;
+      let runLoss = 0;
+      for (const r of results) {
+        if (r.won) {
+          runWin++;
+          runLoss = 0;
+          if (runWin > maxWin) maxWin = runWin;
+        } else {
+          runLoss++;
+          runWin = 0;
+          if (runLoss > maxLoss) maxLoss = runLoss;
+        }
+      }
       const s = map.get(login)!;
       s.streak = streak;
+      s.maxWinStreak = maxWin;
+      s.maxLossStreak = maxLoss;
     }
 
     for (const s of map.values()) {
@@ -87,6 +132,13 @@ export function LeaderboardDesktop() {
     }
     return map;
   }, [leaderboard, matches]);
+
+  // Win rate par login — abscisse du nuage de points.
+  const winRates = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [login, s] of statsByLogin) m.set(login, s.winRate);
+    return m;
+  }, [statsByLogin]);
 
   // Top 3 par rang officiel (ELO) — pour le podium.
   const top3 = useMemo(
@@ -145,7 +197,7 @@ export function LeaderboardDesktop() {
   const sortedRows = useMemo(() => {
     const rows = leaderboard.map((u) => ({
       entry: u,
-      stats: statsByLogin.get(u.login) ?? { wins: 0, losses: 0, games: 0, winRate: 0, streak: 0 },
+      stats: statsByLogin.get(u.login) ?? EMPTY_STATS,
     }));
     const dir = sort.dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
@@ -175,6 +227,12 @@ export function LeaderboardDesktop() {
         case 'streak':
           cmp = a.stats.streak - b.stats.streak;
           break;
+        case 'maxWin':
+          cmp = a.stats.maxWinStreak - b.stats.maxWinStreak;
+          break;
+        case 'maxLoss':
+          cmp = a.stats.maxLossStreak - b.stats.maxLossStreak;
+          break;
         case 'titles':
           cmp = (a.entry.tournamentsWon ?? 0) - (b.entry.tournamentsWon ?? 0);
           break;
@@ -193,14 +251,28 @@ export function LeaderboardDesktop() {
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
-          {!viewingPast && <RankingViewToggle view={viewMode} onChange={setViewMode} />}
+          <div className="flex items-center gap-2">
+            <Link
+              to="/goat"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold/40 bg-gold/10 text-gold text-[10px] font-extrabold uppercase tracking-[0.12em] hover:bg-gold/20 hover:border-gold/60 transition-all"
+            >
+              <Crown className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
+              G.O.A.T
+            </Link>
+            {!viewingPast && <RankingViewToggle view={viewMode} onChange={setViewMode} />}
+          </div>
         </div>
         {viewingPast ? (
           <SnapshotTable standings={standings ?? []} />
         ) : leaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
         ) : viewMode === 'graph' ? (
-          <LeaderboardScatter entries={leaderboard} myLogin={myLogin} className="h-[640px]" />
+          <LeaderboardScatter
+            entries={leaderboard}
+            myLogin={myLogin}
+            winRates={winRates}
+            className="h-[640px]"
+          />
         ) : (
           <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm border-separate border-spacing-0">
@@ -212,6 +284,8 @@ export function LeaderboardDesktop() {
                   <SortTh label={t('lb.col.games')} k="games" sort={sort} onSort={toggleSort} align="right" />
                   <SortTh label={t('lb.col.winrate')} k="winRate" sort={sort} onSort={toggleSort} align="center" />
                   <SortTh label={t('lb.col.streak')} k="streak" sort={sort} onSort={toggleSort} align="right" />
+                  <SortTh label={t('lb.col.streak.win')} k="maxWin" sort={sort} onSort={toggleSort} align="right" tone="gold" />
+                  <SortTh label={t('lb.col.streak.loss')} k="maxLoss" sort={sort} onSort={toggleSort} align="right" tone="red" />
                 </tr>
               </thead>
               <tbody>
@@ -290,6 +364,12 @@ export function LeaderboardDesktop() {
                       </td>
                       <td className="px-1 sm:px-3 py-2.5 text-right">
                         <StreakCell streak={stats.streak} />
+                      </td>
+                      <td className="px-1 sm:px-3 py-2.5 text-right">
+                        <MaxStreakCell value={stats.maxWinStreak} kind="win" />
+                      </td>
+                      <td className="px-1 sm:px-3 py-2.5 text-right">
+                        <MaxStreakCell value={stats.maxLossStreak} kind="loss" />
                       </td>
                     </tr>
                   );
@@ -446,10 +526,14 @@ function WinRateCell({
   );
 }
 
-// ─── Cellule série (streak) ──────────────────────────────────────────────────
+// ─── Cellule série en cours ──────────────────────────────────────────────────
+// On n'affiche une série qu'à partir de 2 (une seule V ou D n'est pas une série) :
+// en dessous, c'est « none ».
 function StreakCell({ streak }: { streak: number }) {
   const t = useT();
-  if (streak === 0) return <span className="text-muted/40">—</span>;
+  if (Math.abs(streak) < 2) {
+    return <span className="text-muted/40 text-xs uppercase tracking-wide">none</span>;
+  }
   if (streak > 0) {
     return (
       <Tooltip label={`${streak} ${t('lb.streak.wins')} 🔥`}>
@@ -465,6 +549,33 @@ function StreakCell({ streak }: { streak: number }) {
       <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
         <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
         {Math.abs(streak)}
+      </span>
+    </Tooltip>
+  );
+}
+
+// ─── Cellule plus longue série (V ou D) ──────────────────────────────────────
+// Même règle : une série commence à 2, sinon « none ».
+function MaxStreakCell({ value, kind }: { value: number; kind: 'win' | 'loss' }) {
+  const t = useT();
+  if (value < 2) {
+    return <span className="text-muted/40 text-xs uppercase tracking-wide">none</span>;
+  }
+  if (kind === 'win') {
+    return (
+      <Tooltip label={`${value} ${t('lb.streak.wins')} 🔥`}>
+        <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a]">
+          <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
+          {value}
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip label={`${value} ${t('lb.streak.losses')} ❄️`}>
+      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
+        <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
+        {value}
       </span>
     </Tooltip>
   );

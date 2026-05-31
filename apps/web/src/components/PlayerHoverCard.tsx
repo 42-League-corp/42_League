@@ -52,8 +52,11 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
         left: pos?.left ?? -9999,
         width: CARD_W,
         opacity: pos ? 1 : 0,
+        // Fond opaque (pas de transparence) pour une lecture nette par-dessus
+        // n'importe quel contenu.
+        background: 'linear-gradient(180deg, #1b1d26 0%, #14151c 100%)',
       }}
-      className="z-[120] card-hud rounded-xl p-3.5 shadow-2xl pointer-events-none animate-pop"
+      className="z-[120] rounded-xl p-3.5 border border-gold/25 shadow-2xl pointer-events-none animate-pop"
     >
       {/* En-tête : avatar + identité */}
       <div className="flex items-center gap-2.5">

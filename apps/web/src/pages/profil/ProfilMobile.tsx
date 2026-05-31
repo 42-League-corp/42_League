@@ -5,6 +5,7 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
 import { RecentMatchesList } from './mobile/RecentMatchesList';
 import { OpsCard } from './mobile/OpsCard';
+import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -51,6 +52,12 @@ export function ProfilMobile() {
 
         {/* Ops card (urgent rouge) */}
         <OpsCard />
+
+        {/* Following / Followers (style GitHub) */}
+        <section>
+          <SectionHeader title="Réseau" />
+          <FollowLists />
+        </section>
 
         {/* Recent matches */}
         <section>

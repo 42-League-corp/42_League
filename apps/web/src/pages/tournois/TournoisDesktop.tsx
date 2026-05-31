@@ -3,13 +3,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
-import { Trophy, Lock } from 'lucide-react';
+import { Trophy, Lock, X } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { tournamentArt } from '../../lib/tournamentArt';
+import { TournamentCup } from '../../components/TournamentCup';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
 
-type Capacity = 8 | 16;
+type CapacityChoice = '6' | '8' | 'custom';
+const POOLS_MIN = 12;
+
+function resolveCapacity(choice: CapacityChoice, custom: string): number {
+  if (choice !== 'custom') return Number(choice);
+  const n = Math.floor(Number(custom));
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(6, Math.min(64, n));
+}
 
 /**
  * Vue desktop des tournois — identique à l'ancienne TournoisPage, reposée ici
@@ -18,114 +27,92 @@ type Capacity = 8 | 16;
 export function TournoisDesktop() {
   const { tournaments, me, refresh } = useLeagueData();
   const flash = useFlash();
-  const navigate = useNavigate();
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
-  const [capacity, setCapacity] = useState<Capacity>(8);
-  const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [imageUrl, setImageUrl] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [capacityChoice, setCapacityChoice] = useState<CapacityChoice>('8');
+  const [customCapacity, setCustomCapacity] = useState('12');
+  const [paramsOpen, setParamsOpen] = useState(false);
 
-  // Regroupement par état : en cours (vivants) → en préparation (inscriptions) → historique (terminés/annulés).
+  const capacity = resolveCapacity(capacityChoice, customCapacity);
+
+  // Regroupement par état : en cours (vivants) → en préparation (inscriptions) → historique (terminés).
   const active = tournaments.filter((t) => t.status === 'in_progress');
   const inPrep = tournaments.filter((t) => t.status === 'registration');
   const past = tournaments.filter((t) => t.status === 'finished' || t.status === 'cancelled');
 
+  const openParams = () => {
+    if (name.trim().length < 2) {
+      flash.show('Nom requis (2 caractères min)', 'error');
+      return;
+    }
+    if (capacity < 6) {
+      flash.show('Capacité : 6 joueurs minimum', 'error');
+      return;
+    }
+    setParamsOpen(true);
+  };
+
+  const CAPACITY_OPTIONS: { value: CapacityChoice; label: string }[] = [
+    { value: '6', label: '6 joueurs' },
+    { value: '8', label: '8 joueurs' },
+    { value: 'custom', label: 'Custom' },
+  ];
+
   return (
-    <Panel title="Tournois" sub="Brackets · single-élim" accent="trophy">
+    <Panel title="Tournois" sub="Brackets · poules & élim" accent="trophy">
       <div className="mb-6 border-b border-gold/15 pb-6">
-        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-2 flex items-center gap-2">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold font-extrabold mb-3 flex items-center gap-2">
           <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
           Créer un tournoi
-        </div>
-        <div className="flex flex-wrap gap-3 mb-3 items-center">
-          <Pills<'friendly' | 'official'>
-            value={kind}
-            onChange={setKind}
-            choices={
-              isAdmin
-                ? [
-                    { value: 'friendly', label: 'Amical' },
-                    { value: 'official', label: 'Officiel' },
-                  ]
-                : [{ value: 'friendly', label: 'Amical' }]
-            }
-          />
-          {!isAdmin && (
-            <span className="text-[10px] text-muted uppercase tracking-wider">
-              Officiel : réservé aux admins
-            </span>
-          )}
-          <Pills<'public' | 'private'>
-            value={visibility}
-            onChange={setVisibility}
-            choices={[
-              { value: 'public', label: 'Public' },
-              { value: 'private', label: 'Privé' },
-            ]}
-          />
-          {visibility === 'private' && (
-            <span className="text-[10px] text-muted uppercase tracking-wider">
-              Sur invitation uniquement
-            </span>
-          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && openParams()}
             placeholder="Nom du tournoi (ex. Coupe du Havre)"
+            maxLength={60}
             className="px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           />
-          <select
-            value={capacity}
-            onChange={(e) => setCapacity(Number(e.target.value) as Capacity)}
-            className="px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
-          >
-            <option value={8}>8 joueurs</option>
-            <option value={16}>16 joueurs</option>
-          </select>
-          <Button
-            loading={busy}
-            onClick={async () => {
-              const n = name.trim();
-              if (!n) {
-                flash.show('Nom requis', 'error');
-                return;
-              }
-              setBusy(true);
-              try {
-                const img = imageUrl.trim();
-                const tNew = await api.createTournament({
-                  name: n,
-                  capacity,
-                  kind,
-                  private: visibility === 'private',
-                  ...(img ? { imageUrl: img } : {}),
-                });
-                flash.show(`Tournoi "${tNew.name}" créé`);
-                await refresh();
-                navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
-              } catch (err) {
-                flash.show(err instanceof Error ? err.message : String(err), 'error');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Créer
-          </Button>
+          <div className="flex gap-2">
+            <Pills<CapacityChoice>
+              value={capacityChoice}
+              onChange={setCapacityChoice}
+              choices={CAPACITY_OPTIONS}
+            />
+            {capacityChoice === 'custom' && (
+              <input
+                type="number"
+                min={6}
+                max={64}
+                value={customCapacity}
+                onChange={(e) => setCustomCapacity(e.target.value)}
+                className="w-20 px-2 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors tabular-nums"
+              />
+            )}
+          </div>
+          <Button onClick={openParams}>Créer</Button>
         </div>
-        {/* Image de couverture optionnelle (URL) — sinon visuel par défaut généré. */}
-        <input
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          placeholder="Image de couverture (URL, optionnel)"
-          className="mt-2 w-full px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
-        />
+        <p className="mt-2 text-[11px] text-muted-2">
+          Tu choisiras la photo, la visibilité et le format (poules ou élimination directe) à
+          l'étape suivante. Les poules s'activent à partir de {POOLS_MIN} joueurs.
+        </p>
       </div>
+
+      {paramsOpen && (
+        <CreateTournamentModal
+          name={name.trim()}
+          capacity={capacity}
+          isAdmin={isAdmin}
+          onClose={() => setParamsOpen(false)}
+          onCreated={async () => {
+            setParamsOpen(false);
+            setName('');
+            await refresh();
+          }}
+        />
+      )}
 
       {tournaments.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center py-16 px-4">
@@ -137,12 +124,12 @@ export function TournoisDesktop() {
             Aucun tournoi pour le moment
           </h3>
           <p className="text-sm text-muted-2 max-w-sm mb-5">
-            Lance le premier bracket de la ligue — crée un tournoi amical à 8 ou 16
-            joueurs avec le formulaire ci-dessus et désigne le champion sur le terrain.
+            Lance le premier bracket de la ligue — crée un tournoi amical (6, 8 ou plus
+            de joueurs) avec le formulaire ci-dessus et désigne le champion sur le terrain.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-2">
-            <span className="card-hud rounded-full px-3 py-1.5">Single-élimination</span>
-            <span className="card-hud rounded-full px-3 py-1.5">8 ou 16 joueurs</span>
+            <span className="card-hud rounded-full px-3 py-1.5">Élimination ou poules</span>
+            <span className="card-hud rounded-full px-3 py-1.5">6 joueurs et +</span>
             <span className="card-hud rounded-full px-3 py-1.5">Bracket automatique</span>
           </div>
         </div>
@@ -170,9 +157,9 @@ export function TournoisDesktop() {
               🎲 Tournoi amical
             </h3>
             <p className="text-xs text-muted-2 leading-relaxed">
-              Tout le monde peut en lancer un : choisis un nom, 8 ou 16 joueurs, puis
-              démarre le bracket avec le formulaire ci-dessus. Idéal pour s'amuser entre
-              collègues — sans impact sur le classement.
+              Tout le monde peut en lancer un : choisis un nom, le nombre de joueurs et le
+              format (élimination ou poules), puis démarre le bracket. Idéal pour s'amuser
+              entre collègues — sans impact sur le classement.
             </p>
           </div>
           <div className="card-hud rounded-xl p-4 border-gold/40">
@@ -258,7 +245,7 @@ function TournoiCard({ t }: { t: Tournament }) {
       to={`/tournaments/${encodeURIComponent(t.id)}`}
       className="group relative block aspect-square rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
     >
-      {/* Fond : image fournie, sinon visuel par défaut généré */}
+      {/* Fond : image fournie, sinon visuel par défaut généré (coupe dessinée) */}
       {t.imageUrl ? (
         <img
           src={t.imageUrl}
@@ -266,15 +253,13 @@ function TournoiCard({ t }: { t: Tournament }) {
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
       ) : (
-        <div className="absolute inset-0" style={{ background: art.background }} />
-      )}
-      {/* Motif trophée discret sur les visuels par défaut */}
-      {!t.imageUrl && (
-        <Trophy
-          className="absolute -right-2 -bottom-2 w-24 h-24 opacity-10"
-          style={{ color: art.accent }}
-          strokeWidth={1.5}
-        />
+        <>
+          <div className="absolute inset-0" style={{ background: art.background }} />
+          <TournamentCup
+            accent={art.accent}
+            className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 opacity-90 transition-transform duration-300 group-hover:scale-105"
+          />
+        </>
       )}
       {/* Voile pour la lisibilité du texte */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/10" />
@@ -319,5 +304,188 @@ function TournoiCard({ t }: { t: Tournament }) {
         )}
       </div>
     </Link>
+  );
+}
+
+/**
+ * Étape « paramètres » de la création : photo, visibilité (privé = sur invitation),
+ * format (élimination directe ou poules), et type (officiel réservé aux admins).
+ * S'ouvre après avoir saisi le nom et la capacité.
+ */
+function CreateTournamentModal({
+  name,
+  capacity,
+  isAdmin,
+  onClose,
+  onCreated,
+}: {
+  name: string;
+  capacity: number;
+  isAdmin: boolean;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const flash = useFlash();
+  const navigate = useNavigate();
+  const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
+  const [imageUrl, setImageUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const poolsAllowed = capacity >= POOLS_MIN;
+  const effectiveFormat = poolsAllowed ? format : 'elimination';
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const img = imageUrl.trim();
+      const tNew = await api.createTournament({
+        name,
+        capacity,
+        kind,
+        format: effectiveFormat,
+        private: visibility === 'private',
+        ...(img ? { imageUrl: img } : {}),
+      });
+      flash.show(`Tournoi "${tNew.name}" créé`);
+      await onCreated();
+      navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* En-tête avec aperçu coupe */}
+        <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40">
+          <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-gaming text-sm font-extrabold uppercase tracking-[0.12em] text-text-strong truncate">
+              {name}
+            </div>
+            <div className="text-[11px] text-muted-2">{capacity} joueurs · derniers réglages</div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="ml-auto grid place-items-center w-8 h-8 rounded-lg text-muted-2 hover:text-text hover:bg-bg-2 transition-colors"
+          >
+            <X className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Type */}
+          <Field label="Type">
+            <Pills<'friendly' | 'official'>
+              value={kind}
+              onChange={(v) => {
+                if (v === 'official' && !isAdmin) {
+                  flash.show('Officiel : réservé aux admins', 'error');
+                  return;
+                }
+                setKind(v);
+              }}
+              choices={[
+                { value: 'friendly', label: 'Amical' },
+                { value: 'official', label: isAdmin ? 'Officiel' : '🔒 Officiel' },
+              ]}
+            />
+          </Field>
+
+          {/* Visibilité */}
+          <Field
+            label="Visibilité"
+            hint={visibility === 'private' ? 'Sur invitation uniquement' : 'Inscription ouverte à tous'}
+          >
+            <Pills<'public' | 'private'>
+              value={visibility}
+              onChange={setVisibility}
+              choices={[
+                { value: 'public', label: 'Public' },
+                { value: 'private', label: 'Privé' },
+              ]}
+            />
+          </Field>
+
+          {/* Format */}
+          <Field
+            label="Format"
+            hint={
+              poolsAllowed
+                ? effectiveFormat === 'pools'
+                  ? 'Poules de 4 · 2 qualifiés par poule, puis bracket'
+                  : 'Bracket à élimination directe'
+                : `Poules disponibles à partir de ${POOLS_MIN} joueurs`
+            }
+          >
+            <Pills<'elimination' | 'pools'>
+              value={effectiveFormat}
+              onChange={(v) => {
+                if (v === 'pools' && !poolsAllowed) {
+                  flash.show(`Poules : ${POOLS_MIN} joueurs minimum`, 'error');
+                  return;
+                }
+                setFormat(v);
+              }}
+              choices={[
+                { value: 'elimination', label: 'Élimination' },
+                { value: 'pools', label: poolsAllowed ? 'Poules' : '🔒 Poules' },
+              ]}
+            />
+          </Field>
+
+          {/* Photo */}
+          <Field label="Photo de couverture" hint="URL · sinon une coupe est générée">
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://…"
+              inputMode="url"
+              className="w-full px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
+            />
+          </Field>
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" onClick={onClose} className="flex-1">
+              Annuler
+            </Button>
+            <Button loading={busy} onClick={submit} className="flex-[2]">
+              Créer le tournoi
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
+        {label}
+      </label>
+      {children}
+      {hint && <p className="mt-1.5 text-[11px] text-muted-2">{hint}</p>}
+    </div>
   );
 }

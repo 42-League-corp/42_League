@@ -243,16 +243,36 @@ export function EloChart({
               strokeWidth="1"
               strokeDasharray="4 4"
             />
-            <text
-              x={padL}
-              y={startLineY - 3}
-              fontSize={8}
-              fontWeight={700}
-              className="font-mono uppercase"
-              fill="rgba(228,231,237,0.45)"
-            >
-              départ
-            </text>
+            {/* Étiquette « départ » sur un fond opaque, basculée sous la ligne si
+                celle-ci est trop haute — évite tout chevauchement avec les
+                valeurs ELO ou le bord supérieur. */}
+            {(() => {
+              const below = startLineY < 14;
+              const ty = below ? startLineY + 10 : startLineY - 4;
+              return (
+                <>
+                  <rect
+                    x={padL}
+                    y={ty - 8}
+                    width={30}
+                    height={11}
+                    rx={2}
+                    fill="#14151c"
+                    opacity={0.9}
+                  />
+                  <text
+                    x={padL + 3}
+                    y={ty}
+                    fontSize={8}
+                    fontWeight={700}
+                    className="font-mono uppercase"
+                    fill="rgba(228,231,237,0.6)"
+                  >
+                    départ
+                  </text>
+                </>
+              );
+            })()}
           </>
         )}
 

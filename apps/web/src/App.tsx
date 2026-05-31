@@ -43,6 +43,9 @@ const TournoiDetailPage = lazy(() =>
 const LeaderboardPage = lazy(() =>
   import('./pages/leaderboard').then((m) => ({ default: m.LeaderboardPage })),
 );
+const GoatPage = lazy(() =>
+  import('./pages/GoatPage').then((m) => ({ default: m.GoatPage })),
+);
 const ProfilPage = lazy(() =>
   import('./pages/profil').then((m) => ({ default: m.ProfilPage })),
 );
@@ -119,6 +122,7 @@ function AuthenticatedShell() {
               <Route path="/tournaments" element={<TournoisPage />} />
               <Route path="/tournaments/:id" element={<TournoiDetailPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/goat" element={<GoatPage />} />
               <Route path="/trophies" element={<TropheesPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/profile" element={<ProfilPage />} />
