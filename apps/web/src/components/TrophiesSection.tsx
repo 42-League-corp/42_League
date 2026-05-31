@@ -1,11 +1,17 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Crown, ChevronDown } from 'lucide-react';
 import { PlayerLink } from './PlayerLink';
 import { Avatar, UserBadge } from './Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
-import { computeTrophies, type TrophyColor, type TrophyResult } from '../lib/trophies';
-import type { LeaderboardEntry } from '../lib/api';
+import {
+  computeTrophies,
+  computeMixTrophies,
+  type GameBoards,
+  type TrophyColor,
+  type TrophyResult,
+} from '../lib/trophies';
+import { api, type LeaderboardEntry } from '../lib/api';
 
 interface TrophyHolder {
   login: string;
@@ -150,10 +156,37 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const { leaderboard, matches } = useLeagueData();
   const { game } = useGameMode();
   const [sortMode, setSortMode] = useState<SortMode>('category');
+  const [view, setView] = useState<'mode' | 'mix'>('mode');
   const trophies = useMemo(
     () => computeTrophies(leaderboard, matches, game),
     [leaderboard, matches, game],
   );
+
+  // Onglet « Mix » : trophées inter-jeux → nécessite les 3 classements.
+  const [boards, setBoards] = useState<GameBoards | null>(null);
+  useEffect(() => {
+    if (view !== 'mix' || boards) return;
+    Promise.all([
+      api.leaderboard('babyfoot'),
+      api.leaderboard('smash'),
+      api.leaderboard('chess'),
+    ])
+      .then(([babyfoot, smash, chess]) => setBoards({ babyfoot, smash, chess }))
+      .catch(() => setBoards({ babyfoot: leaderboard }));
+  }, [view, boards, leaderboard]);
+
+  const mixTrophies = useMemo(
+    () => (boards ? computeMixTrophies(boards, matches) : []),
+    [boards, matches],
+  );
+  // Annuaire fusionné (avatars) pour les gagnants inter-jeux.
+  const mergedBoard = useMemo<LeaderboardEntry[]>(() => {
+    if (!boards) return leaderboard;
+    const seen = new Map<string, LeaderboardEntry>();
+    for (const g of ['babyfoot', 'smash', 'chess'] as const)
+      for (const e of boards[g] ?? []) if (!seen.has(e.login)) seen.set(e.login, e);
+    return [...seen.values()];
+  }, [boards, leaderboard]);
 
   // Trophées regroupés par détenteur, joueurs classés par nombre de trophées décroissant.
   const holders = useMemo<TrophyHolder[]>(() => {
@@ -200,6 +233,35 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
         <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/10 to-transparent ml-2" />
       </div>
 
+      {/* Bascule mode actuel / mix inter-jeux */}
+      <div className="flex gap-1 p-1 rounded-lg bg-bg-2/60 border border-border/40 mb-4 w-fit">
+        {(['mode', 'mix'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.12em] transition-all ${
+              view === v ? 'bg-gold/10 border border-gold/30 text-gold' : 'border border-transparent text-muted-2 hover:text-text'
+            }`}
+          >
+            {v === 'mode' ? 'Ce mode' : '🌐 Mix inter-jeux'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'mix' ? (
+        boards === null ? (
+          <div className="text-center text-muted-2 py-8 text-sm">Chargement des classements…</div>
+        ) : (
+          <>
+            <p className="text-[11px] text-muted-2 mb-3 leading-relaxed">
+              Trophées qui combinent les performances sur plusieurs disciplines (babyfoot, smash, échecs).
+            </p>
+            <TrophyGrid trophies={mixTrophies} leaderboard={mergedBoard} />
+          </>
+        )
+      ) : (
+        <>
       {/* Classement des joueurs les plus titrés */}
       {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
 
@@ -230,6 +292,8 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </section>
   );

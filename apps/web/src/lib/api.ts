@@ -341,6 +341,7 @@ export interface AllHistoryEvent {
   id: string;
   type: AllHistoryEventType;
   at: string;
+  game?: Game;
   playerA: string;
   playerB: string;
   status?: string;
@@ -431,8 +432,10 @@ export const api = {
     }),
   seasons: () => request<Season[]>('/seasons'),
   currentSeason: () => request<Season | null>('/seasons/current'),
-  seasonStandings: (id: string) =>
-    request<SeasonStanding[]>(`/seasons/${encodeURIComponent(id)}/standings`),
+  seasonStandings: (id: string, game?: Game) =>
+    request<SeasonStanding[]>(
+      `/seasons/${encodeURIComponent(id)}/standings${game && game !== 'babyfoot' ? `?game=${game}` : ''}`,
+    ),
   createSeason: (name: string) =>
     request<Season>('/seasons', { method: 'POST', body: JSON.stringify({ name }) }),
   closeSeason: () =>
@@ -690,10 +693,11 @@ export const api = {
     request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminDeleteTournament: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/tournaments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; limit?: number }) => {
+  adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; game?: Game; limit?: number }) => {
     const params = new URLSearchParams();
     if (filters?.login) params.set('login', filters.login);
     if (filters?.type) params.set('type', filters.type);
+    if (filters?.game) params.set('game', filters.game);
     if (filters?.limit) params.set('limit', String(filters.limit));
     const qs = params.toString();
     return request<AllHistoryEvent[]>(`/admin/all-history${qs ? `?${qs}` : ''}`);

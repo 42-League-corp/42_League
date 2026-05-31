@@ -182,11 +182,11 @@ export function LeaderboardDesktop() {
       return;
     }
     let alive = true;
-    api.seasonStandings(seasonId).then((s) => alive && setStandings(s)).catch(() => {});
+    api.seasonStandings(seasonId, game).then((s) => alive && setStandings(s)).catch(() => {});
     return () => {
       alive = false;
     };
-  }, [seasonId]);
+  }, [seasonId, game]);
 
   const viewingPast = standings !== null;
 

@@ -305,6 +305,7 @@ model Season {
 model SeasonStanding {
   id       String @id @default(uuid())
   seasonId String @map("season_id")
+  game     String @default("babyfoot") // discipline du classement figé
   login    String
   rank     Int
   elo      Int

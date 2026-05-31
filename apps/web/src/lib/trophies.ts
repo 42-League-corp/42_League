@@ -547,3 +547,137 @@ export function computeTrophies(
 
   return out;
 }
+
+// ─── Trophées INTER-JEUX (mix) ──────────────────────────────────────────────
+// Récompensent les joueurs qui combinent des performances/trophées sur plusieurs
+// disciplines à la fois.
+
+export type GameBoards = Partial<Record<Game, LeaderboardEntry[]>>;
+
+const MIX_GAMES: Game[] = ['babyfoot', 'smash', 'chess'];
+
+export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): TrophyResult[] {
+  // Avatars + ELO cumulé depuis les 3 classements.
+  const avatar = new Map<string, string | null>();
+  const sumElo = new Map<string, number>();
+  for (const g of MIX_GAMES) {
+    for (const e of boards[g] ?? []) {
+      if (!avatar.has(e.login)) avatar.set(e.login, e.imageUrl);
+      sumElo.set(e.login, (sumElo.get(e.login) ?? 0) + e.elo);
+    }
+  }
+
+  // Victoires totales + disciplines jouées (depuis l'historique tous jeux).
+  const wins = new Map<string, number>();
+  const gamesPlayed = new Map<string, Set<string>>();
+  for (const m of matches) {
+    const g = m.game ?? 'babyfoot';
+    const winner = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
+    wins.set(winner, (wins.get(winner) ?? 0) + 1);
+    for (const login of [m.playerALogin, m.playerBLogin]) {
+      const s = gamesPlayed.get(login) ?? new Set<string>();
+      s.add(g);
+      gamesPlayed.set(login, s);
+      if (!avatar.has(login)) avatar.set(login, null);
+    }
+  }
+
+  // Disciplines où le joueur détient ≥1 trophée (calculés par jeu).
+  const trophyGames = new Map<string, Set<string>>();
+  const trophyCount = new Map<string, number>();
+  for (const g of MIX_GAMES) {
+    const board = boards[g];
+    if (!board || board.length === 0) continue;
+    for (const t of computeTrophies(board, matches, g)) {
+      if (!t.earned || !t.winner) continue;
+      const login = t.winner.login;
+      const set = trophyGames.get(login) ?? new Set<string>();
+      set.add(g);
+      trophyGames.set(login, set);
+      trophyCount.set(login, (trophyCount.get(login) ?? 0) + 1);
+    }
+  }
+
+  const av = (login: string) => ({ login, imageUrl: avatar.get(login) ?? null });
+
+  /** Trophée "leader d'une métrique" sur l'ensemble des joueurs croisés. */
+  function leader(
+    opts: {
+      emoji: string;
+      title: string;
+      subtitle: string;
+      color: TrophyColor;
+      value: (login: string) => number;
+      format: (v: number) => string;
+      min: number;
+    },
+  ): TrophyResult {
+    let bestLogin: string | null = null;
+    let bestVal = 0;
+    for (const login of avatar.keys()) {
+      const v = opts.value(login);
+      if (v > bestVal) {
+        bestVal = v;
+        bestLogin = login;
+      }
+    }
+    const earned = !!bestLogin && bestVal >= opts.min;
+    return {
+      emoji: opts.emoji,
+      title: opts.title,
+      subtitle: opts.subtitle,
+      color: opts.color,
+      winner: earned ? av(bestLogin!) : null,
+      value: earned ? opts.format(bestVal) : '—',
+      earned,
+    };
+  }
+
+  return [
+    leader({
+      emoji: '🌐',
+      title: 'Touche-à-tout',
+      subtitle: 'Détient des trophées dans le plus de disciplines',
+      color: 'sapphire',
+      value: (l) => trophyGames.get(l)?.size ?? 0,
+      format: (v) => `${v} jeux`,
+      min: 2,
+    }),
+    leader({
+      emoji: '🌟',
+      title: 'Légende universelle',
+      subtitle: 'Le plus de trophées cumulés, tous jeux confondus',
+      color: 'gold',
+      value: (l) => trophyCount.get(l) ?? 0,
+      format: (v) => `${v} trophées`,
+      min: 2,
+    }),
+    leader({
+      emoji: '💎',
+      title: 'Roi multi-jeux',
+      subtitle: 'Plus haut ELO cumulé (babyfoot + smash + échecs)',
+      color: 'violet',
+      value: (l) => sumElo.get(l) ?? 0,
+      format: (v) => `${v} ELO`,
+      min: 1,
+    }),
+    leader({
+      emoji: '⚔️',
+      title: 'Machine de guerre',
+      subtitle: 'Le plus de victoires toutes disciplines confondues',
+      color: 'crimson',
+      value: (l) => wins.get(l) ?? 0,
+      format: (v) => `${v} W`,
+      min: 1,
+    }),
+    leader({
+      emoji: '🎮',
+      title: 'Le Polyvalent',
+      subtitle: 'Actif sur le plus de disciplines différentes',
+      color: 'green',
+      value: (l) => gamesPlayed.get(l)?.size ?? 0,
+      format: (v) => `${v} jeux joués`,
+      min: 2,
+    }),
+  ];
+}
