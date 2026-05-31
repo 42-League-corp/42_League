@@ -283,9 +283,25 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
 export const api = {
   me: () => request<MeResponse>('/me'),
   leaderboard: () => request<LeaderboardEntry[]>('/leaderboard'),
+  notifications: () => request<{ notifications: AppNotification[]; unread: number }>('/notifications'),
+  markNotificationsRead: (ids?: string[]) =>
+    request<{ ok: true }>('/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify(ids ? { ids } : {}),
+    }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: {

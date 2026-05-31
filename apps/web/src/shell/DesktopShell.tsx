@@ -15,6 +15,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { NotificationBell } from '../components/NotificationBell';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useT } from '../lib/i18n';
@@ -150,20 +151,23 @@ export function DesktopShell({ children }: DesktopShellProps) {
         {/* Profil bas */}
         <div className="relative mt-auto p-3 border-t border-gold/20">
           {me?.user ? (
-            <NavLink
-              to="/profile"
-              className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gold/5 transition-colors group"
-            >
-              <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
-                  {login}
+            <div className="flex items-center gap-1">
+              <NavLink
+                to="/profile"
+                className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gold/5 transition-colors group flex-1 min-w-0"
+              >
+                <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
+                    {login}
+                  </div>
+                  <div className="text-[10px] text-gold uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
+                    {me.user.elo} ELO
+                  </div>
                 </div>
-                <div className="text-[10px] text-gold uppercase tracking-wider font-extrabold tabular-nums">
-                  {me.user.elo} ELO
-                </div>
-              </div>
-            </NavLink>
+              </NavLink>
+              <NotificationBell placement="up" />
+            </div>
           ) : (
             <div className="text-xs text-muted-2">{t('auth.notConnected')}</div>
           )}

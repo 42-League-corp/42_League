@@ -133,8 +133,62 @@ const VISIBLE_USER_WHERE = {
   deletionScheduledAt: null,
 } as const;
 
+// ── Notifications in-app ──────────────────────────────────────────────────
+// Crée une notification et pousse un signal SSE 'notification' pour rafraîchir
+// la cloche instantanément (le front poll aussi toutes les 30s en secours).
+// Tolérant aux erreurs : une notif ratée ne doit jamais casser l'action métier.
+interface NotifInput {
+  type: string;
+  title: string;
+  body?: string;
+  link?: string;
+}
+
+async function notify(to: string, n: NotifInput): Promise<void> {
+  try {
+    await prisma.notification.create({
+      data: { id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null },
+    });
+    emit([to], { type: 'notification', payload: {} });
+  } catch {
+    /* noop — best effort */
+  }
+}
+
+async function notifyMany(tos: string[], n: NotifInput): Promise<void> {
+  if (tos.length === 0) return;
+  try {
+    await prisma.notification.createMany({
+      data: tos.map((to) => ({ id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null })),
+    });
+    emit(tos, { type: 'notification', payload: {} });
+  } catch {
+    /* noop */
+  }
+}
+
+// Annonce un nouveau joueur à tous les membres visibles de la league.
+async function announceNewPlayer(login: string): Promise<void> {
+  try {
+    const others = await prisma.user.findMany({
+      where: { ...VISIBLE_USER_WHERE, login: { not: login } },
+      select: { login: true },
+    });
+    await notifyMany(others.map((u) => u.login), {
+      type: 'new_player',
+      title: `Nouveau joueur : @${login}`,
+      body: `${login} a rejoint la league`,
+      link: `/player/${encodeURIComponent(login)}`,
+    });
+  } catch {
+    /* noop */
+  }
+}
+
 async function getOrCreateUser(login: string, profile?: FtProfile) {
   const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
+  // Sert à détecter un tout nouveau compte (pour notifier la league).
+  const existed = await prisma.user.findUnique({ where: { login }, select: { login: true } });
   const user = await prisma.user.upsert({
     where: { login },
     update: {
@@ -158,6 +212,10 @@ async function getOrCreateUser(login: string, profile?: FtProfile) {
   if (!user.imageUrl) {
     // background fetch — fire and forget, in-flight dedup inside ft-api
     fetchAndSavePublicUser(login).catch(() => {});
+  }
+  // Nouveau membre → on prévient le reste de la league (fire-and-forget).
+  if (!existed) {
+    void announceNewPlayer(login);
   }
   return user;
 }
@@ -568,6 +626,34 @@ app.get('/leaderboard', async (c) => {
   return c.json(users.map((u, i) => ({ rank: i + 1, ...u })));
 });
 
+// ── Notifications in-app ──────────────────────────────────────────────────
+app.get('/notifications', async (c) => {
+  const me = await getCurrentLogin(c);
+  const [notifications, unread] = await Promise.all([
+    prisma.notification.findMany({
+      where: { recipientLogin: me },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    }),
+    prisma.notification.count({ where: { recipientLogin: me, read: false } }),
+  ]);
+  return c.json({ notifications, unread });
+});
+
+// Marque comme lues : tout par défaut, ou seulement les `ids` fournis.
+app.post('/notifications/read', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body.ids)
+    ? (body.ids as unknown[]).filter((x): x is string => typeof x === 'string')
+    : null;
+  await prisma.notification.updateMany({
+    where: { recipientLogin: me, read: false, ...(ids ? { id: { in: ids } } : {}) },
+    data: { read: true },
+  });
+  return c.json({ ok: true });
+});
+
 app.get('/matches', async (c) => {
   await getCurrentLogin(c);
   return c.json(await prisma.playedMatch.findMany({ orderBy: { playedAt: 'desc' } }));
@@ -606,6 +692,12 @@ app.post('/matches', async (c) => {
   emit([opponentLogin], {
     type: 'match:pending',
     payload: { id: pending.id, declarerLogin: me, scoreDeclarer: scoreSelf, scoreOpponent },
+  });
+  void notify(opponentLogin, {
+    type: 'match_pending',
+    title: `@${me} a déclaré une game`,
+    body: 'Confirme ou conteste le score.',
+    link: '/challenges',
   });
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
@@ -737,6 +829,17 @@ app.post('/matches/:id/confirm', async (c) => {
   const match = result.match;
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  // Notifie le déclarant (l'autre que `me`) que son match a été confirmé.
+  {
+    const declarer = match.playerALogin === me ? match.playerBLogin : match.playerALogin;
+    const declarerDelta = match.playerALogin === declarer ? match.deltaA : match.deltaB;
+    void notify(declarer, {
+      type: 'match_result',
+      title: `Match confirmé par @${me}`,
+      body: `Résultat validé · ${declarerDelta >= 0 ? '+' : ''}${declarerDelta} ELO`,
+      link: '/history',
+    });
+  }
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
   if (result.opsTouched) {
@@ -787,6 +890,12 @@ app.post('/matches/:id/reject', async (c) => {
 
   if (declarerLogin) {
     emit([declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
+    void notify(declarerLogin, {
+      type: 'match_result',
+      title: `Match contesté par @${me}`,
+      body: 'Ton résultat déclaré a été refusé — à redéclarer.',
+      link: '/challenges',
+    });
   }
   return c.json({ id, status: 'rejected', contestReason });
 });
@@ -1151,6 +1260,12 @@ app.post('/challenges', async (c) => {
     },
   });
   emit([opponentLogin], { type: 'challenge:received', payload: challenge });
+  void notify(opponentLogin, {
+    type: 'challenge_received',
+    title: `@${me} t'a défié`,
+    body: 'Un nouveau défi t\'attend',
+    link: '/challenges',
+  });
   return c.json(challenge, 201);
 });
 
@@ -1436,6 +1551,12 @@ app.post('/tournaments/:id/join', async (c) => {
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
       });
+      void notifyMany(logins, {
+        type: 'tournament',
+        title: `Tournoi "${t.name}" lancé`,
+        body: 'Le bracket est généré — à toi de jouer !',
+        link: `/tournaments/${id}`,
+      });
       return { autoStarted: true };
     }
     return { autoStarted: false };
@@ -1486,6 +1607,12 @@ app.post('/tournaments/:id/add-player', async (c) => {
       await tx.tournament.update({
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
+      });
+      void notifyMany(logins, {
+        type: 'tournament',
+        title: `Tournoi "${t.name}" lancé`,
+        body: 'Le bracket est généré — à toi de jouer !',
+        link: `/tournaments/${id}`,
       });
       return { autoStarted: true };
     }
@@ -1538,6 +1665,12 @@ app.post('/tournaments/:id/start', async (c) => {
     await tx.tournament.update({
       where: { id },
       data: { status: 'in_progress', startedAt: new Date() },
+    });
+    void notifyMany(t.entries.map((e) => e.login), {
+      type: 'tournament',
+      title: `Tournoi "${t.name}" lancé`,
+      body: 'Le bracket est généré — à toi de jouer !',
+      link: `/tournaments/${id}`,
     });
     return true;
   });
@@ -1934,6 +2067,12 @@ app.post('/ops', async (c) => {
     });
   });
   emit([me, target], { type: 'ops:update', payload: ops });
+  void notify(target, {
+    type: 'ops_targeted',
+    title: `@${me} t'a pris pour cible`,
+    body: 'Un OPS te vise — tes 3 prochains défis face à lui sont forcés.',
+    link: '/profile',
+  });
   // Programme l'émission de `ops:update` à l'expiration + fin de cooldown.
   scheduleOpsTimers(me, target, ops.expiresAt);
   return c.json(ops, 201);

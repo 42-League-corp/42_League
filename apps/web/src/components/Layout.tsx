@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { RankedBadge } from './RankedBadge';
+import { NotificationBell } from './NotificationBell';
 import { NotifBanner } from './NotifBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -49,8 +50,8 @@ export function Layout({ children }: LayoutProps) {
           </h1>
         </NavLink>
         <div className="flex-1" />
-        {/* Notification bell mobile */}
-        <NotifBell count={pendingCount} onClick={() => navigate('/challenges')} />
+        {/* Centre de notifications */}
+        <NotificationBell />
         {me?.user && (
           <NavLink to="/profile" className="flex items-center gap-2">
             <span className="text-xs text-muted-2 hidden sm:inline">{login}</span>
@@ -61,14 +62,17 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Sidebar desktop */}
       <aside className="hidden lg:flex lg:flex-col w-60 border-r border-gold/20 bg-bg-1/80 sticky top-0 h-screen hud-grid">
-        <NavLink to="/" className="block px-5 py-5 border-b border-gold/20" aria-label="42 League">
-          <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
-            42 League
-          </div>
-          <div className="text-[10px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
-            Babyfoot · Ranked
-          </div>
-        </NavLink>
+        <div className="flex items-center justify-between gap-2 px-5 py-5 border-b border-gold/20">
+          <NavLink to="/" className="block min-w-0" aria-label="42 League">
+            <div className="text-base font-extrabold tracking-[0.22em] uppercase gradient-text-brand font-display">
+              42 League
+            </div>
+            <div className="text-[10px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
+              Babyfoot · Ranked
+            </div>
+          </NavLink>
+          <NotificationBell />
+        </div>
         <nav className="flex flex-col p-3 gap-1">
           {NAV.concat(NAV_SECONDARY).map((n) => (
             <NavLink
@@ -169,21 +173,5 @@ export function Layout({ children }: LayoutProps) {
         })}
       </nav>
     </div>
-  );
-}
-
-function NotifBell({ count, onClick }: { count: number; onClick: () => void }) {
-  if (count === 0) return null;
-  return (
-    <button
-      onClick={onClick}
-      className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gold/10 transition-colors animate-pop"
-      title={`${count} game${count > 1 ? 's' : ''} à confirmer`}
-    >
-      <span className="text-gold text-lg">🔔</span>
-      <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 rounded-full bg-red text-white text-[9px] font-bold flex items-center justify-center">
-        {count}
-      </span>
-    </button>
   );
 }
