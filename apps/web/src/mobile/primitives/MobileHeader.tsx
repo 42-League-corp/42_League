@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bell, Shield, Crosshair } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
+import { NotificationBell } from '../../components/NotificationBell';
 import { useAuth } from '../../hooks/useAuth';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useOpsStatus } from '../../hooks/useOpsStatus';
@@ -126,6 +127,9 @@ export function MobileHeader() {
             </span>
           </motion.button>
         )}
+
+        {/* Centre de notifications */}
+        <NotificationBell />
 
         {/* GOD shortcut — admins uniquement */}
         {(me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') && (

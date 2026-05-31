@@ -541,9 +541,8 @@ const TEAM: Member[] = [
     accent: 'gold',
     blurb: (
       <>
-        À l'origine de tout : c'est lui qui a soufflé{' '}
-        <span className="text-text font-semibold">l'idée initiale</span>. Sans cette première étincelle,
-        42 League n'existerait pas.
+        Tout est parti d'une <span className="text-text font-semibold">idée qu'il a lâchée</span> un
+        jour, comme ça. Sans cette première étincelle, 42 League serait jamais sorti de terre.
       </>
     ),
   },
@@ -554,11 +553,9 @@ const TEAM: Member[] = [
     crown: true,
     blurb: (
       <>
-        À l'origine du concept concret : un{' '}
+        Celui qui a transformé l'idée en vrai projet : un{' '}
         <span className="text-text font-semibold">classement ELO de babyfoot 1v1</span> du campus,
-        avec <span className="text-text font-semibold">défis programmés</span>, OPS,{' '}
-        <span className="text-text font-semibold">tournois</span> à élimination directe et{' '}
-        <span className="text-text font-semibold">trophées</span> — le tout réuni dans une seule app.
+        avec défis programmés, OPS, tournois et trophées — le tout dans une seule app.
       </>
     ),
   },
@@ -568,9 +565,8 @@ const TEAM: Member[] = [
     accent: 'gold',
     blurb: (
       <>
-        A <span className="text-text font-semibold">boosté le projet</span> et lui a donné une tout
-        autre dimension : bien <span className="text-text font-semibold">plus d'ambition</span>, une
-        vision qui voit plus grand et plus loin.
+        Il a mis un <span className="text-text font-semibold">gros coup de boost</span> au projet et
+        l'a fait voir bien plus grand. C'est lui qui pousse pour viser toujours plus haut.
       </>
     ),
   },
@@ -580,9 +576,8 @@ const TEAM: Member[] = [
     accent: 'red',
     blurb: (
       <>
-        <span className="text-text font-semibold">Conseiller</span> et{' '}
-        <span className="text-text font-semibold">bêta-testeur</span> : retours du terrain et chasse
-        aux aspérités pendant toute la phase de bêta.
+        Le mec qui <span className="text-text font-semibold">casse tout avant les autres</span> pour
+        qu'on répare à temps. Retours sans filtre et chasse aux bugs pendant toute la bêta.
       </>
     ),
   },
@@ -592,9 +587,8 @@ const TEAM: Member[] = [
     accent: 'red',
     blurb: (
       <>
-        <span className="text-text font-semibold">Conseiller</span> sur tout le volet{' '}
-        <span className="text-text font-semibold">déploiement et hébergement</span> : infrastructure,
-        mise en ligne et bonnes pratiques de prod.
+        Le <span className="text-text font-semibold">boss de la mise en prod</span> : serveurs,
+        déploiement, hébergement. C'est grâce à lui que le site tourne sans qu'on y pense.
       </>
     ),
   },
@@ -617,70 +611,182 @@ function TeamSectionAuthed() {
 function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
   // Founder en tête, le reste dans l'ordre déclaré.
   const members = [...TEAM].sort((a, b) => (b.crown ? 1 : 0) - (a.crown ? 1 : 0));
+  const [active, setActive] = useState(0);
+  const touchX = useRef<number | null>(null);
+  const wheelLock = useRef(false);
+
+  const clamp = (i: number) => Math.max(0, Math.min(members.length - 1, i));
+  const go = (dir: number) => setActive((i) => clamp(i + dir));
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current === null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX.current;
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+    touchX.current = null;
+  };
+  // Molette / trackpad : un cran = une carte, avec un petit verrou anti-rafale.
+  const onWheel = (e: React.WheelEvent) => {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(d) < 8 || wheelLock.current) return;
+    wheelLock.current = true;
+    go(d > 0 ? 1 : -1);
+    window.setTimeout(() => {
+      wheelLock.current = false;
+    }, 350);
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Panel title="Les développeurs" sub="de l'idée au déploiement">
         <p className="text-sm text-muted leading-relaxed">
           42 League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première
-          idée jusqu'à la mise en production. <span className="text-muted-2">← glisse pour parcourir →</span>
+          idée jusqu'à la mise en production.{' '}
+          <span className="text-muted-2">← glisse, scrolle ou clique pour parcourir →</span>
         </p>
       </Panel>
 
-      {/* Carrousel horizontal de cartes verticales (snap). */}
-      <div className="flex gap-4 overflow-x-auto pb-3 -mx-4 px-4 snap-x snap-mandatory scrollbar-none">
-        {members.map((m) => (
-          <MemberCard key={m.login} member={m} imageUrl={photos[m.login] ?? null} />
+      {/* Carrousel « coverflow » : carte centrale nette, voisines en retrait et floutées. */}
+      <div
+        className="relative h-[400px] sm:h-[420px] select-none touch-pan-y overflow-hidden"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onWheel={onWheel}
+      >
+        {members.map((m, i) => {
+          const offset = i - active;
+          const abs = Math.abs(offset);
+          const hidden = abs > 2;
+          return (
+            <div
+              key={m.login}
+              className="absolute top-1/2 left-1/2 transition-all duration-300 ease-out will-change-transform"
+              style={{
+                transform: `translate(-50%, -50%) translateX(${offset * 58}%) scale(${
+                  offset === 0 ? 1 : 0.82
+                })`,
+                filter: offset === 0 ? 'none' : 'blur(2px)',
+                opacity: hidden ? 0 : offset === 0 ? 1 : abs === 1 ? 0.55 : 0.25,
+                zIndex: 10 - abs,
+                pointerEvents: hidden ? 'none' : 'auto',
+              }}
+              onClick={() => offset !== 0 && setActive(i)}
+              aria-hidden={offset !== 0}
+            >
+              <MemberCard member={m} imageUrl={photos[m.login] ?? null} active={offset === 0} />
+            </div>
+          );
+        })}
+
+        {/* Flèches de navigation */}
+        <button
+          type="button"
+          onClick={() => go(-1)}
+          disabled={active === 0}
+          aria-label="Précédent"
+          className="absolute left-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 disabled:opacity-0 transition-all"
+        >
+          <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={() => go(1)}
+          disabled={active === members.length - 1}
+          aria-label="Suivant"
+          className="absolute right-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 disabled:opacity-0 transition-all"
+        >
+          <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
+        </button>
+      </div>
+
+      {/* Pagination par points */}
+      <div className="flex justify-center gap-2">
+        {members.map((m, i) => (
+          <button
+            key={m.login}
+            type="button"
+            onClick={() => setActive(i)}
+            aria-label={`Aller à ${m.login}`}
+            className={`h-1.5 rounded-full transition-all ${
+              i === active ? 'w-6 bg-gold' : 'w-1.5 bg-border hover:bg-muted-2'
+            }`}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function MemberCard({ member, imageUrl }: { member: Member; imageUrl: string | null }) {
+function MemberCard({
+  member,
+  imageUrl,
+  active,
+}: {
+  member: Member;
+  imageUrl: string | null;
+  active: boolean;
+}) {
   const isRed = member.accent === 'red';
+  const [broken, setBroken] = useState(false);
+  const showImg = imageUrl && !broken;
   return (
     <div
-      className={`relative snap-start shrink-0 w-60 sm:w-64 rounded-2xl border bg-bg-2/50 p-5 flex flex-col items-center text-center overflow-hidden ${
-        isRed ? 'border-red/25' : member.crown ? 'border-gold/50' : 'border-gold/25'
-      }`}
+      className={`relative w-[230px] sm:w-[260px] h-[360px] sm:h-[380px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
+        isRed ? 'border-red/40' : member.crown ? 'border-gold/70' : 'border-gold/40'
+      } ${active ? 'shadow-[0_24px_60px_-18px_rgba(0,0,0,0.75)]' : 'shadow-lg'}`}
     >
-      {/* Halo doré derrière le founder */}
-      {member.crown && (
+      {/* Image intra plein cadre (ou initiale en repli) */}
+      {showImg ? (
+        <img
+          src={imageUrl}
+          alt={member.login}
+          draggable={false}
+          onError={() => setBroken(true)}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
         <div
-          className="absolute inset-x-0 top-0 h-24 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgba(255,201,74,0.18), transparent 70%)' }}
+          className="absolute inset-0 flex items-center justify-center font-display text-7xl font-bold text-white/90"
+          style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}
+        >
+          {(member.login[0] ?? '?').toUpperCase()}
+        </div>
+      )}
+
+      {/* Dégradé bas pour lisibilité du texte */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(8,11,18,0.97) 0%, rgba(8,11,18,0.82) 30%, rgba(8,11,18,0.25) 52%, transparent 68%)',
+        }}
+      />
+
+      {/* Couronne du founder */}
+      {member.crown && (
+        <Crown
+          className="absolute top-3 right-3 w-6 h-6 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.7)] z-10"
+          fill="currentColor"
+          strokeWidth={2}
         />
       )}
 
-      <div className="relative">
-        {member.crown && (
-          <Crown
-            className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.6)] z-10"
-            fill="currentColor"
-            strokeWidth={2}
-          />
-        )}
-        <Avatar
-          login={member.login}
-          imageUrl={imageUrl}
-          size="xl"
-          className={`ring-2 ring-offset-2 ring-offset-bg-2 ${
-            isRed ? 'ring-red/50' : 'ring-gold/60'
+      {/* Contenu texte en bas */}
+      <div className="absolute inset-x-0 bottom-0 p-4">
+        <div className="font-gaming text-lg font-extrabold text-white tracking-wide">
+          {member.login}
+        </div>
+        <div
+          className={`inline-block mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
+            isRed ? 'text-red border-red/40 bg-red/15' : 'text-gold border-gold/40 bg-gold/15'
           }`}
-        />
+        >
+          {member.role}
+        </div>
+        <p className="mt-2.5 text-[13px] text-white/85 leading-relaxed">{member.blurb}</p>
       </div>
-
-      <div className="mt-3 font-gaming text-base font-extrabold text-text-strong tracking-wide">
-        {member.login}
-      </div>
-      <div
-        className={`mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
-          isRed ? 'text-red border-red/30 bg-red/10' : 'text-gold border-gold/30 bg-gold/10'
-        }`}
-      >
-        {member.role}
-      </div>
-      <p className="mt-3 text-sm text-muted leading-relaxed">{member.blurb}</p>
     </div>
   );
 }

@@ -45,8 +45,26 @@ model User {
   featureRequests     FeatureRequest[]
   rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
   rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
+  notifications       Notification[]     @relation("notif")
 
   @@map("users")
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  recipientLogin String   @map("recipient_login")
+  type           String   // 'challenge_received' | 'match_result' | 'tournament' | 'ops_targeted' | 'new_player' | …
+  title          String
+  body           String?
+  link           String?  // route front contextuelle (ex. '/challenges')
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  recipient User @relation("notif", fields: [recipientLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([recipientLogin, read])
+  @@index([recipientLogin, createdAt])
+  @@map("notifications")
 }
 
 model FeatureRequest {
