@@ -9,6 +9,8 @@ interface EloChartProps {
   currentElo: number;
   /** Jeu à tracer (babyfoot par défaut) — filtre les matchs par discipline. */
   game?: Game;
+  /** Masque l'étiquette « départ » (sur la ligne 1000) — ex. fiches des autres joueurs. */
+  hideStartLabel?: boolean;
   /** Cap the number of matches shown. Omit (default) to show the full history from the start. */
   maxPoints?: number;
   height?: number;
@@ -98,6 +100,7 @@ export function EloChart({
   myLogin,
   currentElo,
   game = 'babyfoot',
+  hideStartLabel = false,
   maxPoints,
   height = 100,
 }: EloChartProps) {
@@ -253,8 +256,9 @@ export function EloChart({
             />
             {/* Étiquette « départ » sur un fond opaque, basculée sous la ligne si
                 celle-ci est trop haute — évite tout chevauchement avec les
-                valeurs ELO ou le bord supérieur. */}
-            {(() => {
+                valeurs ELO ou le bord supérieur. Masquée sur les fiches d'autres
+                joueurs (hideStartLabel). */}
+            {!hideStartLabel && (() => {
               const below = startLineY < 14;
               const ty = below ? startLineY + 10 : startLineY - 4;
               return (
