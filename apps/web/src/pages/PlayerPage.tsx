@@ -336,9 +336,15 @@ function DeclareOpsBox({
       <div className="text-red font-extrabold text-[10px] uppercase tracking-wider mb-2">
         ☠ OPS
       </div>
-      <div className="text-sm text-text mb-3 leading-relaxed">
-        Déclarer {playerLogin} comme ton ops le verrouille pour 1 semaine. Il ne pourra
-        pas avoir d'ops pendant ce temps. Cooldown de 1 semaine après.
+      <div className="text-sm text-text mb-3 leading-relaxed space-y-1.5">
+        <p>
+          Déclarer {playerLogin} comme ton ops ouvre une <span className="font-semibold">traque de 24h</span>.
+        </p>
+        <ul className="space-y-1 pl-3 border-l border-red/30 text-muted-2 text-[13px]">
+          <li>Il ne pourra pas refuser tes <span className="text-text font-semibold">3 prochains défis</span>.</li>
+          <li>S'il en refuse un, il perd <span className="text-red font-semibold">3× l'ELO d'une défaite</span>.</li>
+          <li>Un seul ops à la fois · cooldown d'1 semaine après.</li>
+        </ul>
       </div>
       <Button
         variant="danger"
@@ -346,7 +352,7 @@ function DeclareOpsBox({
         onClick={async () => {
           const ok = await confirm({
             title: `Déclarer ${playerLogin} comme ton ops ?`,
-            message: `${playerLogin} sera ton ops pendant 7 jours. Tu seras en cooldown 7 jours après. Action unilatérale, pas d'acceptation requise.`,
+            message: `Tu ouvres une traque de 24h sur ${playerLogin}. Il ne pourra pas refuser tes 3 prochains défis — sous peine de perdre 3× l'ELO d'une défaite. Action unilatérale, pas d'acceptation requise. Cooldown d'1 semaine ensuite.`,
           });
           if (!ok) return;
           try {

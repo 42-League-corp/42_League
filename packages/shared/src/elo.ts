@@ -1,23 +1,18 @@
 export const DEFAULT_ELO = 1000;
 export const K = 32;
 
-/**
- * Bonus de points par point d'écart de rating, appliqué uniquement quand
- * l'outsider l'emporte. Le facteur de surprise Elo classique `(1 − E)` sature
- * à ~800 pts d'écart : battre quelqu'un à +400 ou à +13900 donnerait sinon
- * quasiment le même gain. Ce terme, lui, ne sature pas → un rating gonflé fond
- * réellement vers la moyenne.
- */
+// ─── OPS (ennemi juré) ──────────────────────────────────────────────────────
+export const OPS_DURATION_MS = 24 * 60 * 60 * 1000;
+export const OPS_FORCED_MATCHES = 3;
+export const OPS_REFUSE_MULTIPLIER = 3;
+
+export function estimatedEloLoss(loserRating: number, winnerRating: number): number {
+  const E = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
+  return Math.max(1, Math.round(K * (1 - E)));
+}
+
 export const UPSET_GAP_COEFF = 0.04;
-
-/**
- * Plafond du bonus d'upset encaissé par le GAGNANT. Le perdant gonflé prend
- * tout le bonus (il fond), mais le gagnant ne grimpe que modérément : battre un
- * seul boss gonflé ne doit pas faire exploser son propre rating.
- */
 export const WINNER_BONUS_CAP = 50;
-
-/** Variation maximale d'un joueur sur un seul match (garde-fou). */
 export const MAX_DELTA_PER_MATCH = 400;
 
 export type Winner = 'A' | 'B';

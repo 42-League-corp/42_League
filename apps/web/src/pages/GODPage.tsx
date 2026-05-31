@@ -13,9 +13,11 @@ import {
   type SuspiciousFlag,
   type AdminAuditEntry,
   type AdminAuditAction,
+  type AllHistoryEvent,
+  type AllHistoryEventType,
 } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'alertes' | 'audit' | 'history';
 type Role = 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -1269,10 +1271,360 @@ function AuditTab() {
   );
 }
 
+// ── Tab: ALL HISTORY ──────────────────────────────────────────────────────
+
+const EVENT_TYPE_LABEL: Record<AllHistoryEventType, string> = {
+  challenge: 'Défi',
+  pending_match: 'Décl. partie',
+  played_match: 'Match joué',
+  rejected_match: 'Décl. refusée',
+  ops: 'OPS',
+};
+
+const EVENT_TYPE_COLOR: Record<AllHistoryEventType, string> = {
+  challenge: 'text-blue-400 bg-blue-400/10',
+  pending_match: 'text-yellow-400 bg-yellow-400/10',
+  played_match: 'text-emerald-400 bg-emerald-400/10',
+  rejected_match: 'text-red-400 bg-red-400/10',
+  ops: 'text-orange-400 bg-orange-400/10',
+};
+
+const EVENT_TYPE_ICON: Record<AllHistoryEventType, string> = {
+  challenge: '⚔️',
+  pending_match: '⏳',
+  played_match: '✅',
+  rejected_match: '✗',
+  ops: '🎯',
+};
+
+const CHALLENGE_STATUS_LABEL: Record<string, string> = {
+  pending: 'En attente',
+  accepted: 'Accepté',
+  declined: 'Refusé',
+  recorded: 'Enregistré',
+  cancelled: 'Annulé',
+};
+
+const CHALLENGE_STATUS_COLOR: Record<string, string> = {
+  pending: 'text-yellow-400',
+  accepted: 'text-emerald-400',
+  declined: 'text-red-400',
+  recorded: 'text-blue-400',
+  cancelled: 'text-zinc-500',
+};
+
+function EventDetail({ ev }: { ev: AllHistoryEvent }) {
+  if (ev.type === 'challenge') {
+    return (
+      <span className="flex items-center gap-2 flex-wrap">
+        <span className={`font-mono text-xs ${CHALLENGE_STATUS_COLOR[ev.status ?? ''] ?? 'text-zinc-400'}`}>
+          {CHALLENGE_STATUS_LABEL[ev.status ?? ''] ?? ev.status}
+        </span>
+        {ev.scheduledAt && (
+          <span className="text-zinc-600 text-xs">
+            prévu {new Date(ev.scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+          </span>
+        )}
+      </span>
+    );
+  }
+  if (ev.type === 'pending_match') {
+    return (
+      <span className="text-zinc-400 text-xs tabular-nums">
+        score déclaré : {ev.scoreA}–{ev.scoreB}
+      </span>
+    );
+  }
+  if (ev.type === 'played_match') {
+    return (
+      <span className="flex items-center gap-2">
+        <span className="tabular-nums text-zinc-100 font-mono text-xs">{ev.scoreA}–{ev.scoreB}</span>
+        {ev.winner && (
+          <span className="text-emerald-400 text-xs">
+            → {ev.winner === 'A' ? ev.playerA : ev.playerB} gagne
+          </span>
+        )}
+        {typeof ev.deltaA === 'number' && (
+          <span className="text-zinc-500 text-xs tabular-nums">
+            ({ev.deltaA > 0 ? '+' : ''}{ev.deltaA} / {ev.deltaB! > 0 ? '+' : ''}{ev.deltaB})
+          </span>
+        )}
+        {!ev.countedForElo && <span className="text-zinc-600 text-xs">hors ELO</span>}
+      </span>
+    );
+  }
+  if (ev.type === 'rejected_match') {
+    return (
+      <span className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs tabular-nums text-zinc-400">{ev.scoreA}–{ev.scoreB}</span>
+        <span className={`text-xs px-1 py-0.5 rounded ${ev.contestReason === 'never_played' ? 'bg-red-400/15 text-red-400' : 'bg-orange-400/15 text-orange-400'}`}>
+          {ev.contestReason === 'never_played' ? 'Jamais joué' : 'Score incorrect'}
+        </span>
+        {ev.contestMessage && <span className="text-zinc-500 text-xs truncate max-w-xs" title={ev.contestMessage}>{ev.contestMessage}</span>}
+      </span>
+    );
+  }
+  if (ev.type === 'ops') {
+    return (
+      <span className="flex items-center gap-2 text-xs">
+        <span className="text-zinc-400">{ev.forcedUsed}/3 matchs forcés</span>
+        {ev.expiresAt && (
+          <span className="text-zinc-600">expire {new Date(ev.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+        )}
+      </span>
+    );
+  }
+  return null;
+}
+
+// Modération inline rapide (ban/unban) depuis l'historique
+function QuickBanButton({ login, onDone }: { login: string; onDone: () => void }) {
+  const [userData, setUserData] = useState<AdminUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    api.adminUsers().then((list) => {
+      setUserData(list.find((u) => u.login === login) ?? null);
+    }).finally(() => setLoading(false));
+  }, [login]);
+
+  if (loading) return <span className="text-zinc-600 text-xs font-mono">…</span>;
+  if (!userData) return null;
+
+  async function toggle() {
+    if (!userData) return;
+    setPending(true);
+    try {
+      if (userData.bannedAt) await api.adminUnbanUser(userData.login);
+      else await api.adminBanUser(userData.login);
+      onDone();
+    } finally { setPending(false); }
+  }
+
+  return (
+    <Btn onClick={toggle} disabled={pending} variant={userData.bannedAt ? 'success' : 'danger'}>
+      {userData.bannedAt ? 'Unban' : 'Ban'}
+    </Btn>
+  );
+}
+
+// Ligne expandée avec actions complètes
+function HistoryRowActions({
+  ev,
+  onDelete,
+  onEditSaved,
+}: {
+  ev: AllHistoryEvent;
+  onDelete: () => void;
+  onEditSaved: () => void;
+}) {
+  const [editMode, setEditMode] = useState(false);
+  const [editA, setEditA] = useState(String(ev.scoreA ?? ''));
+  const [editB, setEditB] = useState(String(ev.scoreB ?? ''));
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState('');
+  const [showModo, setShowModo] = useState(false);
+
+  async function handleDelete() {
+    const label = EVENT_TYPE_LABEL[ev.type];
+    if (!confirm(`Supprimer ce ${label} ? Cette action est irréversible.`)) return;
+    setPending(true);
+    setErr('');
+    try {
+      if (ev.type === 'played_match') await api.adminDeleteMatch(ev.id);
+      else if (ev.type === 'pending_match') await api.adminDeletePendingMatch(ev.id);
+      else if (ev.type === 'rejected_match') await api.adminDeleteRejectedMatch(ev.id);
+      else if (ev.type === 'challenge') await api.adminDeleteChallenge(ev.id);
+      else if (ev.type === 'ops') await api.adminDeleteOps(ev.id);
+      onDelete();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(false); }
+  }
+
+  async function handleEdit() {
+    setPending(true);
+    setErr('');
+    try {
+      await api.adminEditMatch(ev.id, Number(editA), Number(editB));
+      setEditMode(false);
+      onEditSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setPending(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+      {err && <span className="text-red-400 text-xs">{err}</span>}
+
+      {/* Edit score — uniquement pour played_match */}
+      {ev.type === 'played_match' && (
+        editMode ? (
+          <>
+            <input
+              type="number"
+              value={editA}
+              onChange={(e) => setEditA(e.target.value)}
+              className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+            />
+            <span className="text-zinc-500 text-xs">–</span>
+            <input
+              type="number"
+              value={editB}
+              onChange={(e) => setEditB(e.target.value)}
+              className="w-10 bg-zinc-700 border border-zinc-600 rounded px-1 py-0.5 text-center text-zinc-100 font-mono text-xs focus:outline-none"
+            />
+            <Btn onClick={handleEdit} disabled={pending} variant="success">✓</Btn>
+            <Btn onClick={() => setEditMode(false)} variant="ghost">✕</Btn>
+          </>
+        ) : (
+          <Btn onClick={() => { setEditMode(true); setEditA(String(ev.scoreA ?? 0)); setEditB(String(ev.scoreB ?? 0)); }} variant="ghost">✏️</Btn>
+        )
+      )}
+
+      {/* Modération joueurs */}
+      <Btn onClick={() => setShowModo((v) => !v)} variant="ghost" className={showModo ? 'text-blue-400' : ''}>
+        👤
+      </Btn>
+
+      {/* Supprimer */}
+      {!editMode && (
+        <Btn onClick={handleDelete} disabled={pending} variant="danger">🗑️</Btn>
+      )}
+
+      {/* Panel modo inline */}
+      {showModo && (
+        <div className="w-full mt-2 pt-2 border-t border-zinc-800 flex flex-wrap gap-3 items-center">
+          <span className="text-zinc-500 text-xs font-mono">Modération :</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-xs font-mono">{ev.playerA}</span>
+            <QuickBanButton login={ev.playerA} onDone={() => setShowModo(false)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-xs font-mono">{ev.playerB}</span>
+            <QuickBanButton login={ev.playerB} onDone={() => setShowModo(false)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AllHistoryTab() {
+  const [events, setEvents] = useState<AllHistoryEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [loginFilter, setLoginFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<AllHistoryEventType | 'all'>('all');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError('');
+    api.adminAllHistory({
+      login: loginFilter.trim() || undefined,
+      type: typeFilter === 'all' ? undefined : typeFilter,
+      limit: 500,
+    })
+      .then(setEvents)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Erreur'))
+      .finally(() => setLoading(false));
+  }, [loginFilter, typeFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const typeOrder: AllHistoryEventType[] = ['challenge', 'pending_match', 'played_match', 'rejected_match', 'ops'];
+
+  function removeEvent(id: string, type: AllHistoryEventType) {
+    setEvents((prev) => prev.filter((e) => !(e.id === id && e.type === type)));
+  }
+
+  return (
+    <div className="p-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input value={loginFilter} onChange={setLoginFilter} placeholder="Filtrer par login…" className="w-56" />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as AllHistoryEventType | 'all')}
+          className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono px-2 py-1.5 rounded cursor-pointer"
+        >
+          <option value="all">Tous les types</option>
+          {typeOrder.map((t) => (
+            <option key={t} value={t}>{EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]}</option>
+          ))}
+        </select>
+        <Btn onClick={load} variant="default">Actualiser</Btn>
+        <span className="text-zinc-500 text-xs font-mono ml-auto">{events.length} événements</span>
+      </div>
+
+      {/* Type pills */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {typeOrder.map((t) => {
+          const count = events.filter((e) => e.type === t).length;
+          return (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(typeFilter === t ? 'all' : t)}
+              className={`px-2.5 py-1 text-xs font-mono rounded transition-colors cursor-pointer border ${
+                typeFilter === t
+                  ? EVENT_TYPE_COLOR[t] + ' border-current/40'
+                  : 'text-zinc-500 border-zinc-800 hover:text-zinc-300'
+              }`}
+            >
+              {EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]} <span className="opacity-60">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
+
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+      ) : events.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucun événement trouvé.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                <th className="text-left py-1.5 px-2">Date</th>
+                <th className="text-left py-1.5 px-2">Type</th>
+                <th className="text-left py-1.5 px-2">Joueur A</th>
+                <th className="text-left py-1.5 px-2">Joueur B</th>
+                <th className="text-left py-1.5 px-2">Détail</th>
+                <th className="text-right py-1.5 px-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((ev) => (
+                <tr key={`${ev.type}-${ev.id}`} className="border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors">
+                  <td className="py-2 px-2 text-zinc-500 whitespace-nowrap align-top">{fmtDate(ev.at)}</td>
+                  <td className="py-2 px-2 align-top">
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${EVENT_TYPE_COLOR[ev.type]}`}>
+                      {EVENT_TYPE_ICON[ev.type]} {EVENT_TYPE_LABEL[ev.type]}
+                    </span>
+                  </td>
+                  <td className="py-2 px-2 text-zinc-200 align-top">{ev.playerA}</td>
+                  <td className="py-2 px-2 text-zinc-400 align-top">{ev.playerB}</td>
+                  <td className="py-2 px-2 align-top"><EventDetail ev={ev} /></td>
+                  <td className="py-2 px-2 align-top">
+                    <HistoryRowActions
+                      ev={ev}
+                      onDelete={() => removeEvent(ev.id, ev.type)}
+                      onEditSaved={load}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab: EN ATTENTE (SUPERADMIN) ───────────────────────────────────────────
-// Matchs déclarés mais pas encore confirmés par l'adversaire. Le SUPERADMIN
-// peut trancher : forcer la validation (le score déclaré s'applique, l'ELO bouge)
-// ou annuler le match en attente. Sert contre les joueurs qui esquivent.
 
 function PendingTab() {
   const [rows, setRows] = useState<PendingMatch[]>([]);
@@ -1280,7 +1632,6 @@ function PendingTab() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  // Forçage direct d'un résultat (sans passer par une déclaration).
   const [fA, setFA] = useState('');
   const [fB, setFB] = useState('');
   const [fScoreA, setFScoreA] = useState('10');
@@ -1438,6 +1789,7 @@ const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
   { id: 'ideas', label: 'IDÉES' },
   { id: 'alertes', label: 'ALERTES' },
   { id: 'audit', label: 'AUDIT' },
+  { id: 'history', label: 'ALL HISTORY' },
 ];
 
 export function GODPage() {
@@ -1540,6 +1892,7 @@ export function GODPage() {
           {activeTab === 'ideas' && <IdeasTab />}
           {activeTab === 'alertes' && <AlertesTab />}
           {activeTab === 'audit' && <AuditTab />}
+          {activeTab === 'history' && <AllHistoryTab />}
         </div>
       </div>
     </div>

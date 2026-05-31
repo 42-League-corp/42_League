@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ops" ADD COLUMN "forced_used" INTEGER NOT NULL DEFAULT 0;

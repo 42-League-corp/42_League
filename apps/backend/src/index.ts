@@ -19,6 +19,10 @@ import {
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
   shouldCountForElo,
+  estimatedEloLoss,
+  OPS_DURATION_MS,
+  OPS_FORCED_MATCHES,
+  OPS_REFUSE_MULTIPLIER,
 } from '@42-league/shared';
 import { prisma } from './db.js';
 import type { Prisma } from '@prisma/client';
@@ -617,7 +621,24 @@ app.post('/matches/:id/confirm', async (c) => {
     }
 
     const created = await settlePendingAsPlayed(tx, p);
-    return { mismatch: false as const, match: created };
+
+    const opsBetween = await tx.ops.findFirst({
+      where: {
+        expiresAt: { gt: new Date() },
+        forcedUsed: { lt: OPS_FORCED_MATCHES },
+        OR: [
+          { ownerLogin: created.playerALogin, targetLogin: created.playerBLogin },
+          { ownerLogin: created.playerBLogin, targetLogin: created.playerALogin },
+        ],
+      },
+    });
+    if (opsBetween) {
+      await tx.ops.update({
+        where: { id: opsBetween.id },
+        data: { forcedUsed: { increment: 1 } },
+      });
+    }
+    return { mismatch: false as const, match: created, opsTouched: !!opsBetween };
   });
 
   // Le 409 est levé hors transaction : le delete du pending est ainsi committé.
@@ -629,6 +650,12 @@ app.post('/matches/:id/confirm', async (c) => {
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
+  if (result.opsTouched) {
+    emit([match.playerALogin, match.playerBLogin], {
+      type: 'ops:update',
+      payload: { reason: 'forced_played' },
+    });
+  }
   return c.json(match);
 });
 
@@ -675,10 +702,33 @@ app.post('/matches/:id/reject', async (c) => {
   return c.json({ id, status: 'rejected', contestReason });
 });
 
+// Annulation par le déclarant lui-même.
+app.post('/matches/:id/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+
+  let opponentLogin: string | undefined;
+  await prisma.$transaction(async (tx) => {
+    const p = await tx.pendingMatch.findUnique({ where: { id } });
+    if (!p) {
+      throw new HTTPException(404, { message: 'pending match not found' });
+    }
+    if (p.declarerLogin !== me) {
+      throw new HTTPException(403, {
+        message: 'only the declarer can cancel this match',
+      });
+    }
+    opponentLogin = p.opponentLogin;
+    await tx.pendingMatch.delete({ where: { id } });
+  });
+
+  if (opponentLogin) {
+    emit([opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
 // ── SUPERADMIN : forcer la résolution d'un match en attente ──────────────────
-// Réservé au SUPERADMIN. Permet de trancher un match qu'un joueur refuse de
-// confirmer/contester (esquive). Soit on valide le score déclaré tel quel
-// (force-confirm → l'ELO s'applique), soit on annule le pending (force-cancel).
 
 app.post('/admin/matches/:id/force-confirm', async (c) => {
   const me = await getCurrentLogin(c);
@@ -746,8 +796,6 @@ const AdminCreateUserSchema = z.object({
   elo: z.number().int().min(0).max(5000).optional(),
 });
 
-// Crée un faux joueur (sans ftId → pas de compte 42 réel). Seuls ces comptes
-// pourront ensuite être supprimés (cf. DELETE ci-dessous).
 app.post('/admin/users', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
@@ -779,8 +827,6 @@ app.post('/admin/users', async (c) => {
   return c.json(user);
 });
 
-// Suppression DÉFINITIVE — uniquement les faux comptes (ftId null, jamais passés
-// par OAuth 42). Refuse tout compte réel ou SUPERADMIN. Nettoie les dépendances.
 app.delete('/admin/users/:login', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
@@ -907,8 +953,6 @@ const AdminForceResultSchema = z
   .refine((d) => d.playerA !== d.playerB, { message: 'Les deux joueurs doivent être différents.' })
   .refine((d) => d.scoreA !== d.scoreB, { message: 'Match nul impossible — il faut un vainqueur.' });
 
-// Injecte directement un résultat de match (admin) → applique l'ELO. Fonctionne
-// pour faux comme vrais joueurs, sans confirmation de leur part.
 app.post('/admin/matches/force-result', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
@@ -927,7 +971,6 @@ app.post('/admin/matches/force-result', async (c) => {
     if (!uA) throw new HTTPException(404, { message: `Joueur introuvable : ${pA}` });
     if (!uB) throw new HTTPException(404, { message: `Joueur introuvable : ${pB}` });
 
-    // Ordonnancement canonique (login a < b) comme pour les matchs normaux.
     const [a, b] = pairKey(pA, pB);
     const scoreA = a === pA ? sIn : sInB;
     const scoreB = a === pA ? sInB : sIn;
@@ -980,6 +1023,7 @@ app.post('/admin/matches/force-result', async (c) => {
   broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json(match);
 });
+
 
 app.get('/challenges', async (c) => {
   const me = await getCurrentLogin(c);
@@ -1057,13 +1101,51 @@ app.post('/challenges/:id/decline', async (c) => {
       throw new HTTPException(409, { message: `challenge is ${ch.status}` });
     }
     const wasAccepted = ch.status === 'accepted';
+    const isOpponentDeclining = ch.opponentLogin === me;
     const newStatus = ch.challengerLogin === me ? 'cancelled' : 'declined';
     await tx.challenge.update({
       where: { id },
       data: { status: newStatus, decidedAt: new Date() },
     });
+
+    // ─── OPS : refus d'un match forcé ─────────────────────────────────────
+    // Si la cible (me) refuse un défi de SON traqueur (le challenger) pendant
+    // l'OPS actif, et que le quota de 3 matchs forcés n'est pas épuisé, la
+    // pénalité est de 3× l'ELO qu'une défaite « normale » aurait coûté — bien
+    // plus salée qu'un simple dodge. Vaut même pour un défi seulement "pending".
+    let opsPenalty = 0;
+    if (isOpponentDeclining) {
+      const activeOps = await tx.ops.findFirst({
+        where: {
+          ownerLogin: ch.challengerLogin,
+          targetLogin: me,
+          expiresAt: { gt: new Date() },
+        },
+      });
+      if (activeOps && activeOps.forcedUsed < OPS_FORCED_MATCHES) {
+        const [target, hunter] = await Promise.all([
+          tx.user.findUniqueOrThrow({ where: { login: me } }),
+          tx.user.findUniqueOrThrow({ where: { login: ch.challengerLogin } }),
+        ]);
+        opsPenalty = OPS_REFUSE_MULTIPLIER * estimatedEloLoss(target.elo, hunter.elo);
+        await tx.ops.update({
+          where: { id: activeOps.id },
+          data: { forcedUsed: { increment: 1 } },
+        });
+      }
+    }
+
     let penalty = 0;
-    if (wasAccepted) {
+    if (opsPenalty > 0) {
+      penalty = opsPenalty;
+      await tx.user.update({
+        where: { login: me },
+        data: {
+          elo: { decrement: penalty },
+          dodgeCount: { increment: 1 },
+        },
+      });
+    } else if (wasAccepted) {
       penalty = DODGE_ELO_PENALTY;
       await tx.user.update({
         where: { login: me },
@@ -1073,7 +1155,13 @@ app.post('/challenges/:id/decline', async (c) => {
         },
       });
     }
-    return { status: newStatus, penalty, challengerLogin: ch.challengerLogin, opponentLogin: ch.opponentLogin };
+    return {
+      status: newStatus,
+      penalty,
+      isOps: opsPenalty > 0,
+      challengerLogin: ch.challengerLogin,
+      opponentLogin: ch.opponentLogin,
+    };
   });
   const otherParty = result.challengerLogin === me ? result.opponentLogin : result.challengerLogin;
   emit([otherParty], {
@@ -1084,7 +1172,12 @@ app.post('/challenges/:id/decline', async (c) => {
   if (result.penalty > 0) {
     broadcast({ type: 'leaderboard:update', payload: {} });
   }
-  return c.json({ id, status: result.status, eloPenalty: result.penalty });
+  // Refus d'un match forcé en OPS : le compteur forcedUsed a bougé → les deux
+  // joueurs concernés doivent rafraîchir leur état OPS.
+  if (result.isOps) {
+    emit([me, otherParty], { type: 'ops:update', payload: { reason: 'forced_refused' } });
+  }
+  return c.json({ id, status: result.status, eloPenalty: result.penalty, isOps: result.isOps });
 });
 
 app.post('/challenges/:id/record', async (c) => {
@@ -1581,14 +1674,15 @@ app.patch('/feature-requests/:id/status', async (c) => {
 });
 
 /* ============ OPS ============ */
-const OPS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+// Durée d'un OPS : 24h (partagée avec le front via @42-league/shared).
+// Le cooldown reste plus long : un seul OPS par semaine pour rester un acte fort.
 const OPS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ─── Expiration des ops en temps réel ──────────────────────────────────────
 // Un ops expire — puis son cooldown se termine — uniquement par le temps, sans
 // aucune mutation HTTP → aucun event SSE n'est émis naturellement. On programme
 // donc des timers serveur qui poussent `ops:update` aux joueurs concernés au
-// moment exact de ces transitions. (OPS_DURATION = 7j < limite setTimeout ~24,8j.)
+// moment exact de ces transitions. (OPS_DURATION = 24h < limite setTimeout ~24,8j.)
 // La marge de +1s garantit que la requête de relecture voie bien l'ops comme
 // expiré (filtre expiresAt > now côté lecture).
 function scheduleOpsTimers(ownerLogin: string, targetLogin: string, expiresAt: Date): void {
@@ -1928,6 +2022,72 @@ app.get('/admin/rejected-matches', async (c) => {
   return c.json(list);
 });
 
+app.delete('/admin/rejected-matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.rejectedMatch.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'rejected match not found' });
+  await prisma.rejectedMatch.delete({ where: { id } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_REJECTED_MATCH',
+    target: row.declarerLogin,
+    payload: { id, declarerLogin: row.declarerLogin, opponentLogin: row.opponentLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/pending-matches/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.pendingMatch.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'pending match not found' });
+  await prisma.pendingMatch.delete({ where: { id } });
+  emit([row.declarerLogin, row.opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_PENDING_MATCH',
+    target: row.declarerLogin,
+    payload: { id, declarerLogin: row.declarerLogin, opponentLogin: row.opponentLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/challenges/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.challenge.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'challenge not found' });
+  await prisma.challenge.delete({ where: { id } });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_CHALLENGE',
+    target: row.challengerLogin,
+    payload: { id, challengerLogin: row.challengerLogin, opponentLogin: row.opponentLogin, status: row.status },
+  });
+  return c.json({ id, deleted: true });
+});
+
+app.delete('/admin/ops/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id } = c.req.param();
+  const row = await prisma.ops.findUnique({ where: { id } });
+  if (!row) throw new HTTPException(404, { message: 'ops not found' });
+  await prisma.ops.delete({ where: { id } });
+  emit([row.ownerLogin, row.targetLogin], { type: 'ops:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'DELETE_OPS',
+    target: row.ownerLogin,
+    payload: { id, ownerLogin: row.ownerLogin, targetLogin: row.targetLogin },
+  });
+  return c.json({ id, deleted: true });
+});
+
 app.get('/admin/suspicious', async (c) => {
   const me = await getCurrentLogin(c);
   await requireAdmin(me);
@@ -2124,6 +2284,126 @@ app.get('/admin/audit-log', async (c) => {
     take: limit,
   });
   return c.json(entries);
+});
+
+// ── Admin all-history : timeline unifiée ──────────────────────────────────
+app.get('/admin/all-history', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const url = new URL(c.req.url);
+  const loginFilter = url.searchParams.get('login') ?? undefined;
+  const typeFilter = url.searchParams.get('type') ?? undefined;
+  const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 1000);
+
+  const loginWhere = loginFilter
+    ? { OR: [{ challengerLogin: loginFilter }, { opponentLogin: loginFilter }] }
+    : {};
+  const loginWhereAB = loginFilter
+    ? { OR: [{ playerALogin: loginFilter }, { playerBLogin: loginFilter }] }
+    : {};
+  const loginWhereDO = loginFilter
+    ? { OR: [{ declarerLogin: loginFilter }, { opponentLogin: loginFilter }] }
+    : {};
+  const loginWhereOps = loginFilter
+    ? { OR: [{ ownerLogin: loginFilter }, { targetLogin: loginFilter }] }
+    : {};
+
+  const [challenges, pending, played, rejected, ops] = await Promise.all([
+    (!typeFilter || typeFilter === 'challenge')
+      ? prisma.challenge.findMany({ where: loginWhere, orderBy: { createdAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'pending_match')
+      ? prisma.pendingMatch.findMany({ where: loginWhereDO, orderBy: { declaredAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'played_match')
+      ? prisma.playedMatch.findMany({ where: loginWhereAB, orderBy: { playedAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'rejected_match')
+      ? prisma.rejectedMatch.findMany({ where: loginWhereDO, orderBy: { rejectedAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+    (!typeFilter || typeFilter === 'ops')
+      ? prisma.ops.findMany({ where: loginWhereOps, orderBy: { declaredAt: 'desc' }, take: limit })
+      : Promise.resolve([]),
+  ]);
+
+  type Event = {
+    id: string;
+    type: 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
+    at: string;
+    playerA: string;
+    playerB: string;
+    status?: string;
+    scoreA?: number;
+    scoreB?: number;
+    winner?: string;
+    deltaA?: number;
+    deltaB?: number;
+    countedForElo?: boolean;
+    contestReason?: string;
+    contestMessage?: string;
+    forcedUsed?: number;
+    scheduledAt?: string;
+    decidedAt?: string | null;
+    expiresAt?: string;
+  };
+
+  const events: Event[] = [
+    ...challenges.map((c) => ({
+      id: c.id,
+      type: 'challenge' as const,
+      at: c.createdAt.toISOString(),
+      playerA: c.challengerLogin,
+      playerB: c.opponentLogin,
+      status: c.status,
+      scheduledAt: c.scheduledAt.toISOString(),
+      decidedAt: c.decidedAt?.toISOString() ?? null,
+    })),
+    ...pending.map((p) => ({
+      id: p.id,
+      type: 'pending_match' as const,
+      at: p.declaredAt.toISOString(),
+      playerA: p.declarerLogin,
+      playerB: p.opponentLogin,
+      scoreA: p.scoreDeclarer,
+      scoreB: p.scoreOpponent,
+    })),
+    ...played.map((m) => ({
+      id: m.id,
+      type: 'played_match' as const,
+      at: m.playedAt.toISOString(),
+      playerA: m.playerALogin,
+      playerB: m.playerBLogin,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+      winner: m.winner,
+      deltaA: m.deltaA,
+      deltaB: m.deltaB,
+      countedForElo: m.countedForElo,
+    })),
+    ...rejected.map((r) => ({
+      id: r.id,
+      type: 'rejected_match' as const,
+      at: r.rejectedAt.toISOString(),
+      playerA: r.declarerLogin,
+      playerB: r.opponentLogin,
+      scoreA: r.scoreDeclarer,
+      scoreB: r.scoreOpponent,
+      contestReason: r.contestReason,
+      contestMessage: r.contestMessage,
+    })),
+    ...ops.map((o) => ({
+      id: o.id,
+      type: 'ops' as const,
+      at: o.declaredAt.toISOString(),
+      playerA: o.ownerLogin,
+      playerB: o.targetLogin,
+      forcedUsed: o.forcedUsed,
+      expiresAt: o.expiresAt.toISOString(),
+    })),
+  ];
+
+  events.sort((a, b) => b.at.localeCompare(a.at));
+  return c.json(events.slice(0, limit));
 });
 
 // ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──
