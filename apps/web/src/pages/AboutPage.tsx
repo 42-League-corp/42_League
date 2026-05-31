@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, BookOpen, Shield, Terminal } from 'lucide-react';
+import { ChevronLeft, BookOpen, Shield, Terminal, Users } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 
-type Tab = 'rules' | 'privacy' | 'tech';
+type Tab = 'rules' | 'privacy' | 'tech' | 'team';
 
 export function AboutPage() {
   const t = useT();
@@ -25,9 +25,20 @@ export function AboutPage() {
         <TabBtn active={tab === 'tech'} onClick={() => setTab('tech')} Icon={Terminal}>
           {t('about.tech.title')}
         </TabBtn>
+        <TabBtn active={tab === 'team'} onClick={() => setTab('team')} Icon={Users}>
+          Équipe
+        </TabBtn>
       </div>
 
-      {tab === 'rules' ? <RulesSection /> : tab === 'privacy' ? <PrivacySection /> : <TechSection />}
+      {tab === 'rules' ? (
+        <RulesSection />
+      ) : tab === 'privacy' ? (
+        <PrivacySection />
+      ) : tab === 'tech' ? (
+        <TechSection />
+      ) : (
+        <TeamSection />
+      )}
     </>
   );
 
@@ -503,6 +514,129 @@ function TechSection() {
           </p>
         </div>
       </Panel>
+    </div>
+  );
+}
+
+// ─── Équipe & développeurs ────────────────────────────────────────────────────
+
+/**
+ * Les personnes derrière 42 League — de l'idée au déploiement. Chaque membre a
+ * un rôle distinct dans l'histoire du projet ; l'ordre suit cette chronologie :
+ * l'idée, le passage 0 → 1, l'ambition, puis l'accompagnement (bêta & infra).
+ */
+type Member = {
+  login: string;
+  role: string;
+  accent: 'gold' | 'red';
+  blurb: React.ReactNode;
+};
+
+const TEAM: Member[] = [
+  {
+    login: 'nithomas',
+    role: 'Parrain',
+    accent: 'gold',
+    blurb: (
+      <>
+        À l'origine de tout : c'est lui qui a soufflé{' '}
+        <span className="text-text font-semibold">l'idée initiale</span>. Sans cette première étincelle,
+        42 League n'existerait pas.
+      </>
+    ),
+  },
+  {
+    login: 'throbert',
+    role: 'Créateur · 0 → 1',
+    accent: 'gold',
+    blurb: (
+      <>
+        <span className="text-text font-semibold">Premier commit</span> et fondations du projet. A
+        transformé l'idée en un produit qui tourne réellement — le passage du{' '}
+        <span className="text-text font-semibold">0 au 1</span>.
+      </>
+    ),
+  },
+  {
+    login: 'abidaux',
+    role: 'Cofondateur',
+    accent: 'gold',
+    blurb: (
+      <>
+        A <span className="text-text font-semibold">boosté le projet</span> et lui a donné une tout
+        autre dimension : bien <span className="text-text font-semibold">plus d'ambition</span>, une
+        vision qui voit plus grand et plus loin.
+      </>
+    ),
+  },
+  {
+    login: 'jagharra',
+    role: 'Conseiller · Bêta-test',
+    accent: 'red',
+    blurb: (
+      <>
+        <span className="text-text font-semibold">Conseiller</span> et{' '}
+        <span className="text-text font-semibold">bêta-testeur</span> : retours du terrain et chasse
+        aux aspérités pendant toute la phase de bêta.
+      </>
+    ),
+  },
+  {
+    login: 'sbonneaux',
+    role: 'Conseiller · Déploiement & hébergement',
+    accent: 'red',
+    blurb: (
+      <>
+        <span className="text-text font-semibold">Conseiller</span> sur tout le volet{' '}
+        <span className="text-text font-semibold">déploiement et hébergement</span> : infrastructure,
+        mise en ligne et bonnes pratiques de prod.
+      </>
+    ),
+  },
+];
+
+function TeamSection() {
+  return (
+    <div className="flex flex-col gap-4">
+      <Panel title="Les développeurs" sub="de l'idée au déploiement">
+        <p className="text-sm text-muted leading-relaxed">
+          42 League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première
+          idée jusqu'à la mise en production.
+        </p>
+      </Panel>
+
+      <div className="flex flex-col gap-3">
+        {TEAM.map((m) => (
+          <MemberCard key={m.login} member={m} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MemberCard({ member }: { member: Member }) {
+  const isRed = member.accent === 'red';
+  return (
+    <div
+      className={`rounded-xl border bg-bg-2/50 p-4 sm:p-5 ${
+        isRed ? 'border-red/25' : 'border-gold/25'
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="font-gaming text-base font-extrabold text-text-strong tracking-wide">
+          {member.login}
+        </div>
+        <div
+          className={`shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-md border ${
+            isRed
+              ? 'text-red border-red/30 bg-red/10'
+              : 'text-gold border-gold/30 bg-gold/10'
+          }`}
+        >
+          {member.role}
+        </div>
+      </div>
+      <p className="mt-2.5 text-sm text-muted leading-relaxed">{member.blurb}</p>
     </div>
   );
 }

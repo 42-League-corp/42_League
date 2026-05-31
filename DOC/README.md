@@ -29,7 +29,10 @@ comprendre n'importe quel aspect « de fond en comble ».
 - [**SECURITY.md**](./SECURITY.md) — Dispositif de sécurité applicative & CI/CD : Zod, OAuth 42,
   rôles, audit log, webhooks Discord, CodeQL, Trivy, npm audit, gating UI.
 
-## Post-mortems
+## Historique & post-mortems
+- [**JOURNAL_DE_BORD.md**](./JOURNAL_DE_BORD.md) — Avancement complet du projet de 0 au déploiement,
+  par phases : à chaque étape, le problème rencontré, ce qu'on a tenté, ce qui n'a pas marché et
+  pourquoi, comment on a fixé. Reconstruit depuis l'historique git (25–31 mai 2026).
 - [**POST_MORTEM_404_BUG.md**](./POST_MORTEM_404_BUG.md) — Analyse d'incident (bug 404).
 
 ---

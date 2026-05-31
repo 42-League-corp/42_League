@@ -42,7 +42,13 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 - **Global** (`broadcast`) — pour ce qui est visible de tous. Deux mécanismes :
   - explicite dans un handler (ex. `leaderboard:update` après un match confirmé) ;
   - **middleware** `broadcastOnMutation` (`index.ts`) : après toute mutation 2xx sur un préfixe,
-    diffuse un événement. Mappings : `/tournaments*` → `tournament:update` ; `/admin/*` → `data:update`.
+    diffuse un événement. Mappings : `/tournaments*` → `tournament:update` ; `/admin/*` → `data:update` ;
+    `/matches*`, `/challenges*`, `/feature-requests*` → `panel:update`.
+
+> **`panel:update`** est un signal **léger dédié au GOD panel**. Les mutations de matchs/défis/idées
+> n'émettent qu'en **ciblé** (aux joueurs concernés) → un admin qui regarde le panel ne les verrait
+> jamais. Ce broadcast comble le trou ; seul le front du panel l'écoute (les autres clients n'ont pas
+> de listener pour ce type → l'event est ignoré, aucun re-fetch inutile).
 
 ---
 
@@ -64,6 +70,7 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 | `leaderboard:update` | global | confirm match, dodge | `{}` |
 | `tournament:update` | global | mutations `/tournaments*` | `{}` |
 | `data:update` | global | mutations `/admin/*` | `{}` |
+| `panel:update` | global (écouté par le GOD panel seul) | mutations `/matches*`, `/challenges*`, `/feature-requests*` | `{}` |
 
 ---
 
@@ -95,7 +102,24 @@ sont ignorés.
 
 ---
 
-## 6. Cas particulier — timers ops
+## 6. Consommateur alternatif — `useServerEvents` (`hooks/useServerEvents.ts`)
+
+`useLeagueData` est le consommateur principal (état global de la ligue). Mais certaines vues ont leur
+**propre state local** et ne veulent rafraîchir que sur un sous-ensemble d'événements — typiquement le
+**GOD panel**, dont chaque onglet recharge ses données en silence.
+
+```ts
+useServerEvents(onEvent, types, { enabled?, debounceMs = 300 })
+```
+- Ouvre son propre `EventSource` sur `/events?token=...`, n'écoute que les `types` passés
+  (ex. `['data:update', 'panel:update']`) et appelle `onEvent` **débouncé** (300 ms par défaut).
+- Le callback est gardé dans une `ref` → changer son identité ne relance pas la connexion ; seuls
+  `types`/`enabled` le font (clé stable `types.join(',')`).
+- Reconnexion automatique d'`EventSource` ; cleanup complet au démontage.
+
+---
+
+## 7. Cas particulier — timers ops
 
 Un ops n'a pas d'« événement déclencheur » à son expiration : c'est le **temps** qui passe. Le backend
 arme donc des `setTimeout` (`scheduleOpsTimers`) qui émettent `ops:update` à l'expiration et à la fin

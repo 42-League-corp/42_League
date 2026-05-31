@@ -77,6 +77,36 @@ async function assertNotBanned(login: string): Promise<void> {
   }
 }
 
+// Un compte « hors-jeu » — banni, désactivé (suppression RGPD programmée) ou
+// anonymisé — ne peut plus être défié ni ciblé par un OPS. À appeler AVANT tout
+// getOrCreateUser sur la cible : l'upsert remettrait sinon deletionScheduledAt à
+// null et réactiverait par mégarde un compte désactivé.
+async function assertTargetable(login: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { login },
+    select: { bannedAt: true, anonymizedAt: true, deletionScheduledAt: true },
+  });
+  if (!user || user.bannedAt || user.anonymizedAt || user.deletionScheduledAt) {
+    throw new HTTPException(403, { message: 'ce joueur n’est plus disponible' });
+  }
+}
+
+// Quand un compte sort du jeu (ban, désactivation, anonymisation), ses tournois
+// disparaissent : ceux qu'il a CRÉÉS sont supprimés intégralement (cascade →
+// entries + matches) et sa place est libérée dans ceux où il n'était qu'inscrit
+// et encore en phase d'inscription (retirer une entrée d'un bracket en cours le
+// corromprait). Renvoie true si quelque chose a changé (→ broadcast utile).
+async function purgeUserFromTournaments(
+  tx: Prisma.TransactionClient,
+  login: string,
+): Promise<boolean> {
+  const created = await tx.tournament.deleteMany({ where: { createdByLogin: login } });
+  const freed = await tx.tournamentEntry.deleteMany({
+    where: { login, tournament: { status: 'registration' } },
+  });
+  return created.count > 0 || freed.count > 0;
+}
+
 async function getOrCreateUser(login: string, profile?: FtProfile) {
   const forceSuperAdmin = SUPERADMINS.has(login.toLowerCase());
   const user = await prisma.user.upsert({
@@ -369,6 +399,9 @@ async function anonymizeAccount(login: string): Promise<void> {
     'anon_' + createHash('sha256').update(login + Date.now().toString()).digest('hex').slice(0, 8);
 
   await prisma.$transaction(async (tx) => {
+    // Un compte anonymisé est définitivement hors-jeu : on purge ses tournois
+    // avant de renommer le login (la désactivation l'a normalement déjà fait).
+    await purgeUserFromTournaments(tx, login);
     // Mise à jour du login (cascade automatique vers toutes les FK ON UPDATE CASCADE)
     await tx.user.update({
       where: { login },
@@ -396,11 +429,17 @@ app.delete('/me/account', async (c) => {
     throw new HTTPException(400, { message: 'superadmin accounts cannot be anonymized' });
   }
 
-  await prisma.user.update({
-    where: { login },
-    data: { deletionScheduledAt: new Date() },
+  const tournamentsChanged = await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { login },
+      data: { deletionScheduledAt: new Date() },
+    });
+    // Un compte désactivé sort du jeu : ses tournois disparaissent et sa place
+    // est libérée dans ceux où il était simplement inscrit.
+    return purgeUserFromTournaments(tx, login);
   });
 
+  if (tournamentsChanged) broadcast({ type: 'tournament:update', payload: {} });
   return c.json({ ok: true, graceDays: ACCOUNT_GRACE_DAYS });
 });
 
@@ -1048,6 +1087,8 @@ app.post('/challenges', async (c) => {
   if (opponentLogin === me) {
     throw new HTTPException(400, { message: 'cannot challenge yourself' });
   }
+  // Un adversaire banni / désactivé / anonymisé est hors-jeu : pas de défi.
+  await assertTargetable(opponentLogin);
   await getOrCreateUser(me);
   await getOrCreateUser(opponentLogin);
   const challenge = await prisma.challenge.create({
@@ -1762,6 +1803,8 @@ app.post('/ops', async (c) => {
   if (target === me) {
     throw new HTTPException(400, { message: 'cannot target yourself' });
   }
+  // Une cible bannie / désactivée / anonymisée est hors-jeu : pas d'OPS.
+  await assertTargetable(target);
   await getOrCreateUser(me);
   await getOrCreateUser(target);
 
@@ -1883,14 +1926,21 @@ app.post('/admin/users/:login/ban', async (c) => {
   if (SUPERADMINS.has(login.toLowerCase())) {
     throw new HTTPException(400, { message: 'cannot ban a superadmin' });
   }
-  const user = await prisma.user.update({ where: { login }, data: { bannedAt: new Date() } })
-    .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+  const { user, tournamentsChanged } = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.update({ where: { login }, data: { bannedAt: new Date() } })
+      .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
+    // Un banni quitte les tournois : ceux qu'il a créés disparaissent, et sa
+    // place est libérée là où il n'était qu'inscrit (phase d'inscription).
+    const changed = await purgeUserFromTournaments(tx, login);
+    return { user: u, tournamentsChanged: changed };
+  });
   await logAdminAction(c, {
     actor: me,
     actorRole: await getUserRole(me),
     action: 'BAN_USER',
     target: login,
   });
+  if (tournamentsChanged) broadcast({ type: 'tournament:update', payload: {} });
   return c.json({ login: user.login, bannedAt: user.bannedAt });
 });
 
