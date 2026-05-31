@@ -283,12 +283,48 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
       };
     };
 
+    // ─── Réveil mobile ────────────────────────────────────────────────────
+    // Sur mobile, mettre l'app en arrière-plan gèle (ou tue) l'EventSource sans
+    // toujours déclencher `onerror`. Au retour au premier plan, la connexion est
+    // morte mais paraît vivante → plus aucune notif tant qu'on ne refresh pas à la
+    // main. On force donc une reconnexion (token frais) + un re-fetch complet dès
+    // que l'onglet redevient visible / le réseau revient / la fenêtre reprend le
+    // focus. `reopenTimer` coalesce les événements qui arrivent souvent groupés.
+    let reopenTimer: ReturnType<typeof setTimeout> | undefined;
+    const reopen = () => {
+      if (closed) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (reopenTimer) clearTimeout(reopenTimer);
+      reopenTimer = setTimeout(() => {
+        if (closed) return;
+        if (reconnect) {
+          clearTimeout(reconnect);
+          reconnect = undefined;
+        }
+        backoffMs = 1000;
+        es?.close();
+        es = undefined;
+        void connect();
+        markDirty(ALL_DOMAINS); // rattrape les events manqués pendant la veille
+      }, 150);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') reopen();
+    };
+    window.addEventListener('online', reopen);
+    window.addEventListener('focus', reopen);
+    document.addEventListener('visibilitychange', onVisibility);
+
     void connect();
 
     return () => {
       closed = true;
       if (timer) clearTimeout(timer);
       if (reconnect) clearTimeout(reconnect);
+      if (reopenTimer) clearTimeout(reopenTimer);
+      window.removeEventListener('online', reopen);
+      window.removeEventListener('focus', reopen);
+      document.removeEventListener('visibilitychange', onVisibility);
       es?.close();
     };
   }, [authenticated]);

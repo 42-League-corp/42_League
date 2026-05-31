@@ -93,12 +93,44 @@ export function useServerEvents(
       };
     };
 
+    // Réveil mobile : au retour au premier plan (ou réseau revenu), la connexion
+    // peut être morte sans avoir déclenché `onerror`. On force une reconnexion
+    // avec token frais + un re-fetch pour rattraper ce qu'on a manqué en veille.
+    let reopenTimer: ReturnType<typeof setTimeout> | undefined;
+    const reopen = () => {
+      if (closed) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (reopenTimer) clearTimeout(reopenTimer);
+      reopenTimer = setTimeout(() => {
+        if (closed) return;
+        if (reconnect) {
+          clearTimeout(reconnect);
+          reconnect = undefined;
+        }
+        backoffMs = 1000;
+        es?.close();
+        es = undefined;
+        void connect();
+        fire();
+      }, 150);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') reopen();
+    };
+    window.addEventListener('online', reopen);
+    window.addEventListener('focus', reopen);
+    document.addEventListener('visibilitychange', onVisibility);
+
     void connect();
 
     return () => {
       closed = true;
       if (debounce) clearTimeout(debounce);
       if (reconnect) clearTimeout(reconnect);
+      if (reopenTimer) clearTimeout(reopenTimer);
+      window.removeEventListener('online', reopen);
+      window.removeEventListener('focus', reopen);
+      document.removeEventListener('visibilitychange', onVisibility);
       es?.close();
     };
   }, [enabled, typesKey, debounceMs]);
