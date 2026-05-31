@@ -1727,6 +1727,10 @@ app.post('/challenges/:id/accept', async (c) => {
     if (ch.opponentLogin !== me) {
       throw new HTTPException(403, { message: 'only the opponent can accept' });
     }
+    // Idempotent : ré-accepter un défi DÉJÀ accepté (double-clic, course, UI en
+    // retard sur mobile) renvoie simplement le défi, pas un 409. On ne lève le
+    // 409 que pour les transitions vraiment invalides (refusé/annulé/expiré).
+    if (ch.status === 'accepted') return ch;
     if (ch.status !== 'pending') {
       throw new HTTPException(409, { message: `challenge is ${ch.status}` });
     }
