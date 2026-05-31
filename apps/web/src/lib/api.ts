@@ -128,6 +128,10 @@ export type AdminAuditAction =
   | 'DELETE_MATCH'
   | 'EDIT_MATCH'
   | 'REFRESH_IMAGES'
+  | 'DELETE_CHALLENGE'
+  | 'DELETE_PENDING_MATCH'
+  | 'DELETE_REJECTED_MATCH'
+  | 'DELETE_OPS'
   | 'RESET_DATABASE';
 
 export interface AdminAuditEntry {
@@ -148,9 +152,14 @@ export interface Ops {
   targetLogin: string;
   declaredAt: string;
   expiresAt: string;
+  /** Nombre de matchs forcés déjà consommés (joués ou refusés). Max 3. */
+  forcedUsed: number;
   owner?: { login: string; imageUrl: string | null };
   target?: { login: string; imageUrl: string | null };
 }
+
+/** Nombre de matchs que la cible doit encore affronter sans pouvoir refuser. */
+export const OPS_FORCED_MATCHES = 3;
 
 export interface OpsMeResponse {
   current: Ops | null;
@@ -221,6 +230,29 @@ export interface Tournament {
   winner?: { login: string; imageUrl: string | null } | null;
 }
 
+export type AllHistoryEventType = 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
+
+export interface AllHistoryEvent {
+  id: string;
+  type: AllHistoryEventType;
+  at: string;
+  playerA: string;
+  playerB: string;
+  status?: string;
+  scoreA?: number;
+  scoreB?: number;
+  winner?: string;
+  deltaA?: number;
+  deltaB?: number;
+  countedForElo?: boolean;
+  contestReason?: string;
+  contestMessage?: string;
+  forcedUsed?: number;
+  scheduledAt?: string;
+  decidedAt?: string | null;
+  expiresAt?: string;
+}
+
 export class AuthError extends Error {}
 
 async function request<T>(
@@ -280,6 +312,12 @@ export const api = {
         body: JSON.stringify({ contestReason, contestMessage }),
       },
     ),
+  // Annulation de sa propre déclaration (réservé au déclarant, tant que pending).
+  cancelMatch: (id: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/${encodeURIComponent(id)}/cancel`,
+      { method: 'POST' },
+    ),
   challenges: () => request<Challenge[]>('/challenges'),
   createChallenge: (input: { opponentLogin: string; scheduledAt: string }) =>
     request<Challenge>('/challenges', {
@@ -292,7 +330,7 @@ export const api = {
       body: JSON.stringify({}),
     }),
   declineChallenge: (id: string) =>
-    request<{ id: string; status: string }>(
+    request<{ id: string; status: string; eloPenalty: number; isOps: boolean }>(
       `/challenges/${encodeURIComponent(id)}/decline`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
@@ -471,6 +509,22 @@ export const api = {
     if (filters?.limit) params.set('limit', String(filters.limit));
     const qs = params.toString();
     return request<AdminAuditEntry[]>(`/admin/audit-log${qs ? `?${qs}` : ''}`);
+  },
+  adminDeleteChallenge: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/challenges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeletePendingMatch: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/pending-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeleteRejectedMatch: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/rejected-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminDeleteOps: (id: string) =>
+    request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.login) params.set('login', filters.login);
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.limit) params.set('limit', String(filters.limit));
+    const qs = params.toString();
+    return request<AllHistoryEvent[]>(`/admin/all-history${qs ? `?${qs}` : ''}`);
   },
   createFeatureRequest: (text: string) =>
     request<{ id: string; text: string; status: string; createdAt: string }>(

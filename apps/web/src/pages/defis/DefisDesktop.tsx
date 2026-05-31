@@ -41,6 +41,7 @@ export function DefisDesktop() {
     opponentCounts,
     refresh,
     handleAction,
+    cancelDeclaration,
   } = useDefisLogic();
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
@@ -147,7 +148,7 @@ export function DefisDesktop() {
             {pendingWaiting.length > 0 && (
               <Section title="En attente de confirmation">
                 {pendingWaiting.map((p) => (
-                  <PendingWaitRow key={p.id} match={p} />
+                  <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
                 ))}
               </Section>
             )}
@@ -541,7 +542,7 @@ function PendingConfirmRow({
   );
 }
 
-function PendingWaitRow({ match }: { match: PendingMatch }) {
+function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   return (
     <div className="card-hud rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm">
       <span aria-hidden className="text-base opacity-50">⏳</span>
@@ -556,6 +557,15 @@ function PendingWaitRow({ match }: { match: PendingMatch }) {
       </span>
       <span className="text-[10px] text-muted">(toi – eux)</span>
       <span className="ml-auto text-[10px] text-muted italic">confirmation en attente…</span>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
+        title="Annuler ma déclaration"
+        aria-label="Annuler ma déclaration"
+      >
+        <X className="w-4 h-4" strokeWidth={2.5} />
+      </button>
     </div>
   );
 }

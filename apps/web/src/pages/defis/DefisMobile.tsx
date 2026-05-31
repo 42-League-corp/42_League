@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Swords, Users, Zap } from 'lucide-react';
+import { Plus, Swords, Users, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
@@ -29,6 +29,7 @@ export function DefisMobile() {
     opponentCounts,
     refresh,
     handleAction,
+    cancelDeclaration,
   } = useDefisLogic();
   const { leaderboard, locations } = useLeagueData();
   const navigate = useNavigate();
@@ -136,6 +137,15 @@ export function DefisMobile() {
                       {p.scoreOpponent}
                     </span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => cancelDeclaration(p)}
+                    aria-label="Annuler la déclaration"
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 active:scale-95 transition-colors"
+                  >
+                    <X className="w-4 h-4" strokeWidth={2.5} />
+                  </button>
                 </motion.div>
               ))}
             </div>
