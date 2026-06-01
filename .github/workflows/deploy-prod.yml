@@ -1,18 +1,44 @@
-name: Force build and deploy
-
-# Build FORCÉ des deux images (backend + frontend) puis déploiement, en un seul run.
-# Contrairement à deploy.yml : pas de paths-filter, pas de deploy_only — on rebuild
-# toujours tout et on déploie. Déclenchement manuel uniquement.
+name: Deploy to production
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: 'Skip builds and deploy existing :main images'
+        required: false
+        default: 'true'
 
 env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
   FRONTEND_IMAGE: ghcr.io/42-league-corp/42_league-frontend
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+              - 'packages/**'
+            frontend:
+              - 'apps/web/**'
+              - 'packages/**'
+
   build-backend:
+    needs: changes
+    if: |
+      github.event.inputs.deploy_only != 'true' &&
+      (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,6 +85,10 @@ jobs:
         continue-on-error: true
 
   build-frontend:
+    needs: changes
+    if: |
+      github.event.inputs.deploy_only != 'true' &&
+      (needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -117,7 +147,10 @@ jobs:
 
   deploy:
     needs: [build-backend, build-frontend]
-    if: needs.build-backend.result == 'success' && needs.build-frontend.result == 'success'
+    if: |
+      always() &&
+      needs.build-backend.result != 'failure' &&
+      needs.build-frontend.result != 'failure'
     runs-on: ubuntu-latest
 
     steps:
@@ -144,18 +177,36 @@ jobs:
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
             cd /opt/42_league
             mv Makefile.server Makefile
-            # Nettoyage préventif si peu d'espace (< 5GB libre sur /)
-            FREE_GB=$(df --output=avail / | tail -1 | awk '{print int($1/1024/1024)}')
-            if [ "$FREE_GB" -lt 5 ]; then
-              echo "⚠️  $FREE_GB GB libres, nettoyage agressif avant pull"
-              docker image prune -af
-              docker builder prune -af
-            fi
+
+            # ── Validation du Caddyfile AVANT tout redéploiement ───────────────
+            # Priorité #1 = zéro downtime. Un Caddyfile invalide (ex : hash
+            # basic-auth staging manquant dans caddy.env) ne doit JAMAIS faire
+            # tomber la prod. On valide dans un conteneur jetable ; si KO, `set -e`
+            # abort le deploy et les conteneurs actuels continuent de tourner.
+            docker run --rm \
+              -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+              --env-file caddy.env \
+              caddy:alpine caddy validate --config /etc/caddy/Caddyfile
+
+            # ── Nettoyage AVANT le pull ────────────────────────────────────────
+            # Les deploys empilent des images :sha ; on nettoie systématiquement
+            # avant de tirer les nouvelles. TOUT est non-bloquant (|| true) : un
+            # prune déjà en cours ("a prune operation is already running") ou une
+            # erreur ne doit JAMAIS faire échouer le deploy (set -e sinon abort).
+            echo "Espace avant nettoyage :"; df -h / | tail -1
+            docker container prune -f || true
+            docker image prune -af || true
+            docker builder prune -af || true
+            echo "Espace après nettoyage :"; df -h / | tail -1
+
             docker compose -f docker-compose.registry.yml pull
             docker compose -f docker-compose.registry.yml up -d --remove-orphans
-            # Reload Caddy config sans downtime (nouveau Caddyfile)
-            docker exec league-caddy caddy reload --config /etc/caddy/Caddyfile || docker compose -f docker-compose.registry.yml restart caddy
-            # Nettoyage post-deploy : supprime les anciennes versions :sha
-            docker image prune -af
+            # Recrée Caddy pour qu'il remonte le Caddyfile fraîchement copié.
+            # (un 'caddy reload' lit le fichier interne au conteneur et n'applique
+            #  pas toujours la nouvelle config — la recréation est fiable à 100%)
+            docker compose -f docker-compose.registry.yml up -d --force-recreate caddy
+
+            # Nettoyage post-deploy : vire les images :sha désormais inutilisées.
+            docker image prune -af || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

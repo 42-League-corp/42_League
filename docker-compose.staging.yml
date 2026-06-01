@@ -1,0 +1,59 @@
+# Stack STAGING — vit dans /opt/42_league_staging/ sur le VPS.
+# Tire les images `:develop` depuis GHCR. AUCUN Caddy ici : le reverse-proxy
+# edge (stack prod) atteint ces conteneurs via le réseau partagé `league_edge`.
+#
+# Isolation totale vis-à-vis de la prod :
+#   - conteneurs préfixés `league-stg-*` (pas de collision de noms)
+#   - base Postgres DÉDIÉE sur son propre volume `league_stg_pgdata`
+#   - projet compose distinct (dossier /opt/42_league_staging) → volumes séparés
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: league-stg-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: league
+      POSTGRES_PASSWORD: league
+      POSTGRES_DB: league
+    volumes:
+      - league_stg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U league -d league"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Volontairement PAS sur league_edge : la base reste injoignable depuis
+    # l'extérieur de la stack staging (le edge Caddy n'a aucune raison d'y toucher).
+
+  backend:
+    image: ghcr.io/42-league-corp/42_league-backend:develop
+    container_name: league-stg-backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # `postgres` résout vers le Postgres DE CETTE stack (réseau default),
+      # jamais celui de la prod. La DB prod est donc inatteignable d'ici.
+      - DATABASE_URL=postgresql://league:league@postgres:5432/league?schema=public
+      - PORT=3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default       # pour joindre postgres
+      - league_edge   # pour être joint par le edge Caddy (league-stg-backend:3000)
+
+  frontend:
+    image: ghcr.io/42-league-corp/42_league-frontend:develop
+    container_name: league-stg-frontend
+    restart: always
+    networks:
+      - default
+      - league_edge   # joint par le edge Caddy (league-stg-frontend:80)
+
+networks:
+  league_edge:
+    external: true
+
+volumes:
+  league_stg_pgdata:

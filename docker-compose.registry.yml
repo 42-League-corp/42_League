@@ -16,7 +16,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/42-league-corp/42_league-backend:latest
+    image: ghcr.io/42-league-corp/42_league-backend:main
     container_name: league-backend
     restart: always
     env_file:
@@ -29,7 +29,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/42-league-corp/42_league-frontend:latest
+    image: ghcr.io/42-league-corp/42_league-frontend:main
     container_name: league-frontend
     restart: always
 
@@ -37,6 +37,11 @@ services:
     image: caddy:alpine
     container_name: league-caddy
     restart: always
+    # Le hash bcrypt du basic-auth staging vit UNIQUEMENT ici (jamais commité).
+    # env_file passe la valeur LITTÉRALEMENT : le `$` du hash bcrypt n'est PAS
+    # interprété (contrairement à l'interpolation ${VAR} du .env de compose).
+    env_file:
+      - caddy.env
     ports:
       - "80:80"
       - "443:443"
@@ -47,6 +52,18 @@ services:
     depends_on:
       - backend
       - frontend
+    # `default`     → réseau de la stack prod (atteint backend/frontend/postgres)
+    # `league_edge` → réseau partagé pour atteindre les conteneurs du STAGING.
+    #                 C'est ce qui fait de ce Caddy l'unique reverse-proxy edge.
+    networks:
+      - default
+      - league_edge
+
+# Réseau partagé entre la stack prod (ce fichier) et la stack staging.
+# Créé une seule fois sur le serveur : `docker network create league_edge`.
+networks:
+  league_edge:
+    external: true
 
 volumes:
   league_pgdata:
