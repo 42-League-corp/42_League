@@ -152,6 +152,9 @@ jobs:
       needs.build-backend.result != 'failure' &&
       needs.build-frontend.result != 'failure'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # autorise le seed :main depuis :latest au 1er cutover
 
     steps:
       - uses: actions/checkout@v5
@@ -175,6 +178,20 @@ jobs:
           script: |
             set -e
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
+
+            # ── Seed :main depuis :latest au TOUT PREMIER cutover ──────────────
+            # Un push infra-only ne rebuild pas (paths-filter) ; si :main n'existe
+            # pas encore, on le crée depuis :latest (l'image déjà en prod) pour que
+            # le pull ci-dessous réussisse. Aux deploys suivants :main existe → sauté.
+            for IMG in ghcr.io/42-league-corp/42_league-backend ghcr.io/42-league-corp/42_league-frontend; do
+              if ! docker manifest inspect "$IMG:main" >/dev/null 2>&1; then
+                echo "Seed $IMG:main depuis :latest"
+                docker pull "$IMG:latest"
+                docker tag "$IMG:latest" "$IMG:main"
+                docker push "$IMG:main"
+              fi
+            done
+
             cd /opt/42_league
             mv Makefile.server Makefile
 
