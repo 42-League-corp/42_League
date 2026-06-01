@@ -36,8 +36,9 @@ export default defineManifest({
     gecko: {
       id: '42league@42league.fr',
       strict_min_version: '140.0',
+      data_collection_permissions: { required: [] },
     },
-  } as Record<string, unknown>,
+  },
   permissions: ['storage', 'identity', 'tabs'],
   host_permissions: [
     'https://intra.42.fr/*',
