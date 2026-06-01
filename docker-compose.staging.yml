@@ -36,6 +36,8 @@ services:
       # jamais celui de la prod. La DB prod est donc inatteignable d'ici.
       - DATABASE_URL=postgresql://league:league@postgres:5432/league?schema=public
       - PORT=3000
+      # Active la staging-gate du backend : API réservée aux superadmins.
+      - APP_ENV=staging
     depends_on:
       postgres:
         condition: service_healthy
