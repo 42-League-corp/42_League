@@ -205,11 +205,16 @@ fourni séparément) :
 
 1. **DNS** : enregistrement A `staging.42league.fr` → `163.172.141.178`.
 2. `docker network create league_edge` (réseau partagé).
-3. Générer le hash bcrypt et le mettre dans `/opt/42_league/caddy.env` :
+3. Générer le hash bcrypt et le mettre dans `/opt/42_league/caddy.env`.
+   ⚠️ **Piège** : Docker Compose interpole les valeurs de `env_file`, ce qui
+   mange les `$` du bcrypt. Il faut donc **doubler les `$` en `$$`** dans le
+   fichier (Compose les ramène à `$` au runtime) :
    ```bash
-   docker run --rm caddy:alpine caddy hash-password --plaintext 'TON_MOT_DE_PASSE'
-   # → coller le résultat :
-   #   echo 'STAGING_BASICAUTH_HASH=<le_hash>' > /opt/42_league/caddy.env
+   HASH=$(docker run --rm caddy:alpine caddy hash-password --plaintext 'TON_MOT_DE_PASSE')
+   # double les $ pour survivre à l'interpolation Compose :
+   printf 'STAGING_BASICAUTH_HASH=%s\n' "$(printf '%s' "$HASH" | sed 's/\$/$$/g')" > /opt/42_league/caddy.env
+   chmod 600 /opt/42_league/caddy.env
+   # résultat attendu : STAGING_BASICAUTH_HASH=$$2a$$14$$....
    ```
 4. Créer `/opt/42_league_staging/.env` (copie du `.env` prod, adaptée :
    `FT_OAUTH_REDIRECT_URI=https://staging.42league.fr/auth/callback`,

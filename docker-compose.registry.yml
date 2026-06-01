@@ -38,8 +38,9 @@ services:
     container_name: league-caddy
     restart: always
     # Le hash bcrypt du basic-auth staging vit UNIQUEMENT ici (jamais commité).
-    # env_file passe la valeur LITTÉRALEMENT : le `$` du hash bcrypt n'est PAS
-    # interprété (contrairement à l'interpolation ${VAR} du .env de compose).
+    # ⚠️ Compose INTERPOLE les valeurs de env_file : les `$` du bcrypt DOIVENT
+    # être échappés en `$$` dans caddy.env (Compose les ramène à `$` au runtime).
+    #   ex : STAGING_BASICAUTH_HASH=$$2a$$14$$xxxxxxxxxxxxxxxxxxxxxx...
     env_file:
       - caddy.env
     ports:
