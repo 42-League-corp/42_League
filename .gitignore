@@ -3,6 +3,7 @@ dist/
 dist-firefox/
 .env
 .env.local
+caddy.env
 *.log
 .DS_Store
 .vscode/

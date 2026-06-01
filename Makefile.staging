@@ -1,0 +1,36 @@
+.PHONY: deploy deploy-frontend deploy-backend logs logs-front logs-back ps restart down
+
+# Ops staging. Renommé en `Makefile` par le workflow lors du scp dans
+# /opt/42_league_staging/. La stack staging n'embarque PAS de Caddy : le
+# reverse-proxy edge vit dans la stack prod (/opt/42_league).
+COMPOSE = docker compose -f docker-compose.staging.yml
+
+deploy: ## Pull + redémarre front et back (staging)
+	$(COMPOSE) pull frontend backend
+	$(COMPOSE) up -d --no-deps frontend backend
+
+deploy-frontend: ## Pull + redémarre seulement le frontend (staging)
+	$(COMPOSE) pull frontend
+	$(COMPOSE) up -d --no-deps frontend
+
+deploy-backend: ## Pull + redémarre seulement le backend (staging)
+	$(COMPOSE) pull backend
+	$(COMPOSE) up -d --no-deps backend
+
+logs: ## Logs live de tous les services staging
+	$(COMPOSE) logs -f --tail=100
+
+logs-front: ## Logs du frontend staging
+	$(COMPOSE) logs -f --tail=100 frontend
+
+logs-back: ## Logs du backend staging
+	$(COMPOSE) logs -f --tail=100 backend
+
+ps: ## État des conteneurs staging
+	$(COMPOSE) ps
+
+restart: ## Redémarre les conteneurs staging sans pull
+	$(COMPOSE) restart
+
+down: ## Arrête la stack staging (la DB staging est conservée, volume nommé)
+	$(COMPOSE) down

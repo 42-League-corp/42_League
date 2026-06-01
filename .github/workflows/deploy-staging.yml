@@ -1,44 +1,24 @@
-name: Deploy to production
+name: Deploy to staging
 
+# Pipeline STAGING : build des images `:develop` → push GHCR → déploiement SSH
+# dans /opt/42_league_staging/. N'interfère JAMAIS avec la prod :
+#   - images taguées `:develop` (la prod tire `:main`)
+#   - déploie une stack compose distincte (projet 42_league_staging)
+#   - ne touche pas au Caddy edge (qui vit dans la stack prod)
 on:
   push:
     branches:
-      - main
+      - develop
   workflow_dispatch:
-    inputs:
-      deploy_only:
-        description: 'Skip builds and deploy existing :latest images'
-        required: false
-        default: 'true'
 
 env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
   FRONTEND_IMAGE: ghcr.io/42-league-corp/42_league-frontend
+  # URL publique (non sensible) bakée dans le bundle Vite du frontend staging.
+  STAGING_API_URL: https://staging.42league.fr/api
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            backend:
-              - 'apps/backend/**'
-              - 'packages/**'
-            frontend:
-              - 'apps/web/**'
-              - 'packages/**'
-
   build-backend:
-    needs: changes
-    if: |
-      github.event.inputs.deploy_only != 'true' &&
-      (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,13 +34,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push backend
+      - name: Build and push backend (develop)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ${{ env.BACKEND_IMAGE }}:latest,${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.BACKEND_IMAGE }}:develop,${{ env.BACKEND_IMAGE }}:dev-${{ github.sha }}
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.run_id }}
@@ -68,7 +48,7 @@ jobs:
       - name: Trivy scan (backend)
         uses: aquasecurity/trivy-action@v0.24.0
         with:
-          image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.BACKEND_IMAGE }}:dev-${{ github.sha }}
           format: sarif
           output: trivy-backend.sarif
           severity: CRITICAL,HIGH
@@ -81,14 +61,10 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-backend.sarif
-          category: trivy-backend
+          category: trivy-backend-staging
         continue-on-error: true
 
   build-frontend:
-    needs: changes
-    if: |
-      github.event.inputs.deploy_only != 'true' &&
-      (needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -112,15 +88,15 @@ jobs:
           echo "count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "date=$(date '+%Y-%m-%d %H:%M')" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push frontend
+      - name: Build and push frontend (develop)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile
           push: true
-          tags: ${{ env.FRONTEND_IMAGE }}:latest,${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.FRONTEND_IMAGE }}:develop,${{ env.FRONTEND_IMAGE }}:dev-${{ github.sha }}
           build-args: |
-            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_API_BASE_URL=${{ env.STAGING_API_URL }}
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.run_id }}
             APP_BUILD=${{ steps.build.outputs.count }}
@@ -129,7 +105,7 @@ jobs:
       - name: Trivy scan (frontend)
         uses: aquasecurity/trivy-action@v0.24.0
         with:
-          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.FRONTEND_IMAGE }}:dev-${{ github.sha }}
           format: sarif
           output: trivy-frontend.sarif
           severity: CRITICAL,HIGH
@@ -142,7 +118,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-frontend.sarif
-          category: trivy-frontend
+          category: trivy-frontend-staging
         continue-on-error: true
 
   deploy:
@@ -156,16 +132,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Copy config files to server
+      - name: Copy staging config to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 163.172.141.178
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.registry.yml,Caddyfile,Makefile.server"
-          target: /opt/42_league/
+          source: "docker-compose.staging.yml,Makefile.staging"
+          target: /opt/42_league_staging/
 
-      - name: Deploy via SSH
+      - name: Deploy staging via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 163.172.141.178
@@ -175,28 +151,18 @@ jobs:
           script: |
             set -e
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
-            cd /opt/42_league
-            mv Makefile.server Makefile
+            cd /opt/42_league_staging
+            mv Makefile.staging Makefile
 
-            # ── Nettoyage AVANT le pull ────────────────────────────────────────
-            # Les deploys empilent des images :sha ; on nettoie systématiquement
-            # avant de tirer les nouvelles. TOUT est non-bloquant (|| true) : un
-            # prune déjà en cours ("a prune operation is already running") ou une
-            # erreur ne doit JAMAIS faire échouer le deploy (set -e sinon abort).
-            echo "Espace avant nettoyage :"; df -h / | tail -1
-            docker container prune -f || true
-            docker image prune -af || true
-            docker builder prune -af || true
-            echo "Espace après nettoyage :"; df -h / | tail -1
+            # Réseau partagé edge (idempotent). Le Caddy edge (stack prod) y est
+            # déjà attaché ; il atteindra les nouveaux conteneurs staging via DNS.
+            docker network create league_edge 2>/dev/null || true
 
-            docker compose -f docker-compose.registry.yml pull
-            docker compose -f docker-compose.registry.yml up -d --remove-orphans
-            # Recrée Caddy pour qu'il remonte le Caddyfile fraîchement copié.
-            # (un 'caddy reload' lit le fichier interne au conteneur et n'applique
-            #  pas toujours la nouvelle config — la recréation est fiable à 100%)
-            docker compose -f docker-compose.registry.yml up -d --force-recreate caddy
+            docker compose -f docker-compose.staging.yml pull
+            # --remove-orphans est scopé au PROJET staging : n'affecte jamais la prod.
+            docker compose -f docker-compose.staging.yml up -d --remove-orphans
 
-            # Nettoyage post-deploy : vire les images :sha désormais inutilisées.
+            # Nettoyage des anciennes images :dev-<sha> devenues inutiles.
             docker image prune -af || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -25,3 +25,36 @@ www.42league.fr {
         reverse_proxy frontend:80
     }
 }
+
+# ── STAGING ───────────────────────────────────────────────────────────────────
+# Même Caddy, second domaine. Caddy provisionne automatiquement le certificat
+# TLS de staging.42league.fr dès que le DNS pointe sur le VPS (aucun certbot).
+# Les upstreams `league-stg-*` sont atteints via le réseau partagé `league_edge`.
+staging.42league.fr {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Empêche l'indexation du staging par les moteurs de recherche.
+        X-Robots-Tag "noindex, nofollow"
+        -Server
+    }
+
+    # Mur d'authentification HTTP Basic : tout le staging est privé.
+    # Le hash bcrypt est injecté via l'environnement (fichier caddy.env, jamais
+    # commité). Générer avec : docker run --rm caddy:alpine caddy hash-password --plaintext 'MotDePasse'
+    basic_auth {
+        admin {$STAGING_BASICAUTH_HASH}
+    }
+
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy league-stg-backend:3000 {
+            flush_interval -1
+        }
+    }
+    handle {
+        reverse_proxy league-stg-frontend:80
+    }
+}
