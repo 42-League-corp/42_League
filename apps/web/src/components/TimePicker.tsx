@@ -214,6 +214,7 @@ function WheelColumn({ values, value, onChange, ariaLabel }: WheelColumnProps) {
   // l'effet de repositionnement le saute (le DOM est déjà à la bonne place).
   const userOriginRef = useRef(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout>>();
+  const wheelThrottleRef = useRef(false);
 
   const index = Math.max(0, values.indexOf(value));
   const padCount = VISIBLE >> 1; // lignes de remplissage haut/bas
@@ -268,6 +269,7 @@ function WheelColumn({ values, value, onChange, ariaLabel }: WheelColumnProps) {
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
+      if (wheelThrottleRef.current) return;
       programmaticRef.current = false;
       const el = scrollRef.current;
       if (!el) return;
@@ -280,6 +282,8 @@ function WheelColumn({ values, value, onChange, ariaLabel }: WheelColumnProps) {
       if (nextIndex !== currentIndex) {
         const v = values[nextIndex];
         if (v !== undefined) {
+          wheelThrottleRef.current = true;
+          setTimeout(() => { wheelThrottleRef.current = false; }, 180);
           userOriginRef.current = true;
           onChange(v);
           haptic('selection');
