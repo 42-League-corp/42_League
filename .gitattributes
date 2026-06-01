@@ -1,0 +1,10 @@
+# Fins de ligne forcées en LF pour tout ce qui est exécuté/parsé côté serveur
+# Linux. Un CRLF (committé depuis Windows) casserait les scripts bash des
+# workflows (`set -e\r` → "command not found") ou les recettes Makefile (tabs).
+*.yml      text eol=lf
+*.yaml     text eol=lf
+Caddyfile  text eol=lf
+Makefile   text eol=lf
+Makefile.* text eol=lf
+*.sh       text eol=lf
+Dockerfile text eol=lf
