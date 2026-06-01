@@ -200,9 +200,14 @@ jobs:
             # basic-auth staging manquant dans caddy.env) ne doit JAMAIS faire
             # tomber la prod. On valide dans un conteneur jetable ; si KO, `set -e`
             # abort le deploy et les conteneurs actuels continuent de tourner.
+            # caddy.env stocke le hash bcrypt avec $$ (échappement requis par
+            # l'interpolation Compose de env_file). `docker run --env-file` lit la
+            # valeur LITTÉRALEMENT ; on dé-échappe $$ -> $ pour valider un bcrypt
+            # correct (sinon le provision basic_auth ferait planter la validation).
+            CADDY_HASH=$(grep '^STAGING_BASICAUTH_HASH=' caddy.env | cut -d= -f2- | sed 's/\$\$/$/g')
             docker run --rm \
               -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
-              --env-file caddy.env \
+              -e "STAGING_BASICAUTH_HASH=$CADDY_HASH" \
               caddy:alpine caddy validate --config /etc/caddy/Caddyfile
 
             # ── Nettoyage AVANT le pull ────────────────────────────────────────
