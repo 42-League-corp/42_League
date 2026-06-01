@@ -266,40 +266,52 @@ function WheelColumn({ values, value, onChange, ariaLabel }: WheelColumnProps) {
     }
   };
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      if (wheelThrottleRef.current) return;
-      programmaticRef.current = false;
-      const el = scrollRef.current;
-      if (!el) return;
-      const currentIndex = Math.max(
-        0,
-        Math.min(values.length - 1, Math.round(el.scrollTop / ITEM_H)),
-      );
-      const delta = e.deltaY > 0 ? 1 : -1;
-      const nextIndex = Math.max(0, Math.min(values.length - 1, currentIndex + delta));
-      if (nextIndex !== currentIndex) {
-        const v = values[nextIndex];
-        if (v !== undefined) {
-          wheelThrottleRef.current = true;
-          setTimeout(() => { wheelThrottleRef.current = false; }, 180);
-          userOriginRef.current = true;
-          onChange(v);
-          haptic('selection');
-          scrollToIndex(nextIndex, true);
-        }
+  // La molette doit avancer d'EXACTEMENT un cran par notch. On attache un
+  // listener wheel NATIF en `{ passive: false }` : le `onWheel` de React est
+  // passif, donc `preventDefault()` y est ignoré → le navigateur scrollait
+  // nativement (et le scroll-snap sautait plusieurs crans d'un coup).
+  const wheelLogicRef = useRef<(e: WheelEvent) => void>(() => {});
+  wheelLogicRef.current = (e: WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (wheelThrottleRef.current) return;
+    programmaticRef.current = false;
+    const el = scrollRef.current;
+    if (!el) return;
+    const currentIndex = Math.max(
+      0,
+      Math.min(values.length - 1, Math.round(el.scrollTop / ITEM_H)),
+    );
+    const delta = e.deltaY > 0 ? 1 : -1;
+    const nextIndex = Math.max(0, Math.min(values.length - 1, currentIndex + delta));
+    if (nextIndex !== currentIndex) {
+      const v = values[nextIndex];
+      if (v !== undefined) {
+        wheelThrottleRef.current = true;
+        setTimeout(() => {
+          wheelThrottleRef.current = false;
+        }, 120);
+        userOriginRef.current = true;
+        onChange(v);
+        haptic('selection');
+        scrollToIndex(nextIndex, true);
       }
-    },
-    [values, onChange, scrollToIndex],
-  );
+    }
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheelNative = (e: WheelEvent) => wheelLogicRef.current(e);
+    el.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', onWheelNative);
+  }, []);
 
   return (
     <div
       ref={scrollRef}
       onScroll={handleScroll}
       onPointerDown={() => { programmaticRef.current = false; }}
-      onWheel={handleWheel}
       role="listbox"
       aria-label={ariaLabel}
       className="flex-1 overflow-y-auto scrollbar-none"
