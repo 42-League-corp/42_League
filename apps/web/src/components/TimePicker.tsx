@@ -265,18 +265,37 @@ function WheelColumn({ values, value, onChange, ariaLabel }: WheelColumnProps) {
     }
   };
 
-  // Si l'utilisateur attrape la molette pendant une anim programmatique, on lui
-  // rend la main immédiatement.
-  const releaseToUser = () => {
-    programmaticRef.current = false;
-  };
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      programmaticRef.current = false;
+      const el = scrollRef.current;
+      if (!el) return;
+      const currentIndex = Math.max(
+        0,
+        Math.min(values.length - 1, Math.round(el.scrollTop / ITEM_H)),
+      );
+      const delta = e.deltaY > 0 ? 1 : -1;
+      const nextIndex = Math.max(0, Math.min(values.length - 1, currentIndex + delta));
+      if (nextIndex !== currentIndex) {
+        const v = values[nextIndex];
+        if (v !== undefined) {
+          userOriginRef.current = true;
+          onChange(v);
+          haptic('selection');
+          scrollToIndex(nextIndex, true);
+        }
+      }
+    },
+    [values, onChange, scrollToIndex],
+  );
 
   return (
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      onPointerDown={releaseToUser}
-      onWheel={releaseToUser}
+      onPointerDown={() => { programmaticRef.current = false; }}
+      onWheel={handleWheel}
       role="listbox"
       aria-label={ariaLabel}
       className="flex-1 overflow-y-auto scrollbar-none"
