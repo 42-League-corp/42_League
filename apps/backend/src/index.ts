@@ -446,6 +446,30 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // =========================================================================
+// STAGING GATE — accès réservé aux superadmins (APP_ENV=staging)
+// =========================================================================
+// Sur l'environnement de staging UNIQUEMENT, toute l'API est réservée aux
+// superadmins. On exempte la santé, tout le flux d'auth/OAuth (sinon impossible
+// de se connecter) et /me (le front le lit pour afficher l'écran « réservé aux
+// superadmins » côté non-superadmin). Défense en profondeur : même un appel API
+// direct par un non-superadmin est refusé ici, pas seulement masqué côté front.
+if (process.env.APP_ENV === 'staging') {
+  app.use('*', async (c, next) => {
+    if (c.req.method === 'OPTIONS') return next();
+    const p = c.req.path;
+    if (p === '/health' || p.startsWith('/auth') || p === '/me' || p.startsWith('/me/')) {
+      return next();
+    }
+    const login = await getSessionLogin(c);
+    if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
+    if (!SUPERADMINS.has(login.toLowerCase())) {
+      throw new HTTPException(403, { message: 'staging réservé aux superadmins' });
+    }
+    return next();
+  });
+}
+
+// =========================================================================
 // CONSENT-GATE — application côté serveur du consentement RGPD
 // =========================================================================
 // Défense en profondeur : la modale frontend peut être contournée (appel direct

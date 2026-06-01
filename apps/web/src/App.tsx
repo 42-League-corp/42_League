@@ -11,6 +11,8 @@ import { AuthReturnPage } from './pages/AuthReturnPage';
 import { GODPage } from './pages/GODPage';
 import { AboutPage } from './pages/AboutPage';
 import { ConsentGate } from './components/ConsentGate';
+import { StagingGate } from './components/StagingGate';
+import { IS_STAGING } from './lib/config';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -109,6 +111,12 @@ function AuthenticatedShell() {
   // n'affiche QUE la modale (le serveur refuse de toute façon le reste des données).
   if (!loading && me?.consentRequired) {
     return <ConsentGate login={me.login} onAccepted={() => void refresh()} />;
+  }
+
+  // Staging : accès réservé aux superadmins. Un utilisateur connecté non-superadmin
+  // voit un écran dédié plutôt que l'app (le backend refuse de toute façon ses données).
+  if (!loading && IS_STAGING && me && me.role !== 'SUPERADMIN') {
+    return <StagingGate login={me.login} />;
   }
 
   return (

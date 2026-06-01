@@ -41,13 +41,11 @@ staging.42league.fr {
         -Server
     }
 
-    # Mur d'authentification HTTP Basic : tout le staging est privé.
-    # Le hash bcrypt est injecté via l'environnement (fichier caddy.env, jamais
-    # commité). Générer avec : docker run --rm caddy:alpine caddy hash-password --plaintext 'MotDePasse'
-    basic_auth {
-        admin {$STAGING_BASICAUTH_HASH}
-    }
-
+    # Plus de basic-auth ici : l'accès au staging est réservé aux superadmins
+    # directement dans l'app (backend APP_ENV=staging + écran StagingGate côté
+    # front). Voir apps/backend/src/index.ts (staging-gate) et la whitelist
+    # SUPERADMINS. Le frontend statique reste servi, mais aucune donnée n'est
+    # accessible sans être superadmin.
     handle /api/* {
         uri strip_prefix /api
         reverse_proxy league-stg-backend:3000 {

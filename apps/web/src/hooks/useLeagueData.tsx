@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { IS_STAGING } from '../lib/config';
 import {
   AuthError,
   api,
@@ -133,6 +134,14 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
       // donc de les appeler — la <ConsentGate> est affichée à la place par AuthenticatedShell.
       const me = await api.me();
       if (me.consentRequired) {
+        setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
+        setLoading(false);
+        return;
+      }
+      // Staging : réservé aux superadmins. Un non-superadmin n'appelle pas les
+      // autres endpoints (le serveur les refuse) ; AuthenticatedShell affiche
+      // <StagingGate>. On conserve `me` pour connaître le login/rôle.
+      if (IS_STAGING && me.role !== 'SUPERADMIN') {
         setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
         setLoading(false);
         return;
