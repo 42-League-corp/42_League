@@ -27,6 +27,15 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   if (!user) return null;
   const titlesWon = pickRating(user, game).tournamentsWon;
 
+  // Badges cross-jeux : autres disciplines où ce joueur est actif.
+  const crossGameBadges = (['babyfoot', 'smash', 'chess'] as const)
+    .filter((g) => g !== game && (user.games ?? ['babyfoot']).includes(g))
+    .map((g) => {
+      const r = pickRating(user, g);
+      return { g, elo: r.elo, played: r.matchesPlayed };
+    })
+    .filter((b) => b.played > 0);
+
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
   const fullName =
@@ -194,6 +203,24 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
             icon={onWinStreak && streakAbs >= 3 ? <Flame className="w-3 h-3" strokeWidth={2.5} /> : undefined}
           />
         </div>
+
+        {/* Badges cross-jeux : indicateurs discrets des autres disciplines actives */}
+        {crossGameBadges.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="text-[9px] text-muted uppercase tracking-[0.14em] font-bold">Aussi actif :</span>
+            {crossGameBadges.map(({ g, elo }) => (
+              <span
+                key={g}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tabular-nums"
+                style={{ background: 'rgba(255,201,74,0.07)', border: '1px solid rgba(255,201,74,0.18)' }}
+                title={`${g} — ${elo} ELO`}
+              >
+                {g === 'smash' ? '🎮' : g === 'chess' ? '♟' : '⚽'}
+                <span className="font-mono text-muted-2">{elo}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Footer stats */}
         <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-3 gap-3 text-center">
