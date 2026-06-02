@@ -5,6 +5,7 @@ import type { PlayedMatch } from '../../../lib/api';
 import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
+import { GamePill, MatchScore } from '../../../components/MatchScore';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDatePair } from '../../../lib/format';
@@ -58,10 +59,9 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const isSmash = match.game === 'smash';
-  const isChess = match.game === 'chess';
   const oppChar = youAreA ? match.charB : match.charA;
-  const myScore = youAreA ? match.scoreA : match.scoreB;
-  const oppScore = youAreA ? match.scoreB : match.scoreA;
+  const winnerScore = youWon ? (youAreA ? match.scoreA : match.scoreB) : (youAreA ? match.scoreB : match.scoreA);
+  const loserScore = youWon ? (youAreA ? match.scoreB : match.scoreA) : (youAreA ? match.scoreA : match.scoreB);
   const delta = youAreA ? match.deltaA : match.deltaB;
 
   const date = fmtDatePair(match.playedAt, lang);
@@ -94,7 +94,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
             <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
           </PlayerLink>
           {isSmash && oppChar && <SmashCharIcon id={oppChar} size={18} className="shrink-0" />}
-          {isChess && <span className="text-[12px] opacity-70 shrink-0" title="Échecs">♟</span>}
+          <GamePill game={match.game} />
         </div>
         <div className="text-[10px] text-muted font-medium">
           {date.short}
@@ -103,12 +103,15 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
         </div>
       </div>
 
-      {/* Score */}
-      <div className="font-mono tabular-nums text-sm font-extrabold">
-        <span className={youWon ? 'text-teal' : 'text-text-strong'}>{myScore}</span>
-        <span className="text-muted mx-1 opacity-60">–</span>
-        <span className={youWon ? 'text-text-strong' : 'text-red'}>{oppScore}</span>
-      </div>
+      {/* Score atomic — rendu par discipline */}
+      <MatchScore
+        game={match.game}
+        winnerScore={winnerScore}
+        loserScore={loserScore}
+        myPerspective={youWon ? 'win' : 'loss'}
+        bestOf={match.bestOf}
+        compact
+      />
 
       {/* Delta ELO */}
       {match.countedForElo && (

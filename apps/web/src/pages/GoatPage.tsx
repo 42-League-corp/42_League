@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Crown, ChevronDown, ChevronLeft, Flame } from 'lucide-react';
+import { Crown, ChevronLeft, Flame } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
@@ -15,7 +15,7 @@ import {
 } from '../lib/goat';
 import type { LeaderboardEntry } from '../lib/api';
 
-const OFFICIAL_CUP = '#ff6b6b'; // coupe rouge = titre officiel (vaut plus)
+const OFFICIAL_CUP = '#ff6b6b';
 const FRIENDLY_CUP = '#ffc94a';
 
 function displayName(e: LeaderboardEntry): string {
@@ -36,269 +36,195 @@ export function GoatPage() {
 
   return (
     <Panel title="G.O.A.T" sub="Greatest Of All Time" accent="crown">
-      <div className="flex items-center justify-between mb-4">
-        <Link
-          to="/leaderboard"
-          className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold"
-        >
+      <div className="flex items-center justify-between mb-5">
+        <Link to="/leaderboard" className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold transition-colors">
           <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
           Classement
         </Link>
-        {/* Explication du score pondéré */}
-        <div className="text-[10px] text-muted-2 text-right leading-tight max-w-[180px]">
-          Score pondéré :<br/>
-          <span className="text-gold/80">ELO × 50%</span>
+        <div className="text-[10px] text-muted-2 text-right leading-snug">
+          <span className="text-gold/80">ELO 50%</span>
           {' · '}
-          <span className="text-[#f5b942]/80">W% × 30%</span>
+          <span className="text-[#f5b942]/80">WR 30%</span>
           {' · '}
-          <span className="text-[#cd7f32]/80">Titres × 20%</span>
+          <span className="text-[#cd7f32]/80">Titres 20%</span>
         </div>
-      </div>
-
-      {/* Contexte : ce n'est pas le classement ELO brut */}
-      <div className="mb-5 px-3 py-2.5 rounded-xl bg-gold/[0.05] border border-gold/15 text-[11px] text-muted-2 leading-relaxed">
-        🏅 Le <span className="text-gold font-semibold">G.O.A.T</span> n'est pas forcément le n°1 ELO — c'est le joueur
-        qui combine le meilleur <span className="text-text font-semibold">ELO</span>,
-        le meilleur <span className="text-text font-semibold">win rate</span> et
-        le plus de <span className="text-text font-semibold">titres</span> de tournois.
       </div>
 
       {!goat ? (
-        <div className="text-center text-muted-2 py-12">
-          Pas encore assez de données pour désigner un G.O.A.T.
+        <div className="text-center text-muted-2 py-16">
+          <div className="text-5xl mb-3 opacity-40">🐐</div>
+          <div className="text-sm font-semibold">Pas encore assez de données</div>
+          <div className="text-xs mt-1">Joue quelques matchs pour voir émerger un G.O.A.T</div>
         </div>
       ) : (
         <>
-          <GoatHeroCard player={goat} isMe={goat.entry.login === me?.login} />
+          {/* ── Héro G.O.A.T ── */}
+          <GoatHero player={goat} isMe={goat.entry.login === me?.login} />
 
-          <div className="mt-6">
-            <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-2 flex items-center gap-2">
-              <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-              Les prétendants
+          {/* ── Prétendants : grille de cartes, tout visible, pas de "Voir plus" ── */}
+          {rest.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold">Les prétendants</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {rest.map((p) => (
+                  <ContenderCard key={p.entry.login} player={p} isMe={p.entry.login === me?.login} />
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              {rest.map((p) => (
-                <GoatRow key={p.entry.login} player={p} isMe={p.entry.login === me?.login} />
-              ))}
-            </div>
-          </div>
-
-          <p className="mt-5 text-[11px] text-muted-2 leading-relaxed">
-            Le score agrège toutes les stats positives, pondérées (du plus lourd au plus léger) :
-            {GOAT_WEIGHTS.map((w, i) => (
-              <span key={w.key}>
-                {i === 0 ? ' ' : ' · '}
-                <span className="text-text">{w.label}</span> ({Math.round(w.weight * 100)}%)
-              </span>
-            ))}
-            . Les joueurs à très faible volume de matchs sont amortis.
-          </p>
+          )}
         </>
       )}
     </Panel>
   );
 }
 
-// ─── Grosse case du G.O.A.T ───────────────────────────────────────────────────
-function GoatHeroCard({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
+// ─── Héro (n°1) ──────────────────────────────────────────────────────────────
+
+function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
   const { entry, metrics } = player;
   return (
-    <div className="relative rounded-2xl border-2 border-gold/50 bg-gradient-to-b from-gold/[0.08] to-transparent p-5 sm:p-6 overflow-hidden">
-      <div className="absolute -right-6 -top-6 opacity-[0.07] pointer-events-none">
-        <Crown className="w-40 h-40 text-gold" fill="currentColor" strokeWidth={1} />
+    <div className="relative rounded-2xl overflow-hidden"
+      style={{
+        background: 'linear-gradient(145deg, rgba(50,38,12,0.9) 0%, rgba(22,18,8,0.95) 100%)',
+        border: '1.5px solid rgba(255,201,74,0.45)',
+        boxShadow: '0 0 40px rgba(255,201,74,0.14), inset 0 1px 0 rgba(255,215,120,0.12)',
+      }}
+    >
+      {/* Filigrane couronne */}
+      <div className="absolute -right-8 -top-8 opacity-[0.06] pointer-events-none">
+        <Crown className="w-48 h-48 text-gold" fill="currentColor" strokeWidth={0.5} />
       </div>
 
-      <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="relative shrink-0 mx-auto sm:mx-0">
-          <Avatar
-            login={entry.login}
-            imageUrl={entry.imageUrl}
-            size="xl"
-            className="ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow"
-          />
-          <Crown
-            className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.7)]"
-            fill="currentColor"
-            strokeWidth={1.5}
-          />
+      <div className="relative p-5 sm:p-6">
+        {/* En-tête */}
+        <div className="flex items-start gap-4 mb-5">
+          <div className="relative shrink-0">
+            <Avatar login={entry.login} imageUrl={entry.imageUrl} size="xl"
+              className="ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow" />
+            <Crown className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.75)]"
+              fill="currentColor" strokeWidth={1.5} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-1">
+              🐐 Greatest Of All Time {isMe && '· toi'}
+            </div>
+            <PlayerLink login={entry.login} className="inline-block">
+              <span className="font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
+                {displayName(entry)}
+              </span>
+            </PlayerLink>
+            <div className="text-xs text-muted-2 mt-1">@{entry.login} · #{entry.rank} ELO</div>
+          </div>
+          {/* Score GOAT */}
+          <div className="text-right shrink-0">
+            <div className="font-display text-5xl font-black gradient-text-brand tabular-nums leading-none">
+              {player.score}
+            </div>
+            <div className="text-[9px] uppercase tracking-[0.18em] text-muted-2 font-bold mt-1">Score</div>
+          </div>
         </div>
 
-        <div className="min-w-0 flex-1 text-center sm:text-left">
-          <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-gold mb-0.5">
-            🐐 Le G.O.A.T {isMe && '· toi'}
-          </div>
-          <PlayerLink login={entry.login} className="inline-flex">
-            <span className="font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
-              {displayName(entry)}
-            </span>
-          </PlayerLink>
-          <div className="text-xs text-muted-2 mt-1">
-            @{entry.login} · #{entry.rank} ELO
-          </div>
+        {/* Stats grid compacte */}
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <MiniStat label="ELO" value={String(metrics.elo)} accent="gold" />
+          <MiniStat label="Win rate" value={`${metrics.winRate}%`} accent="gold" />
+          <MiniStat label="Matchs" value={`${metrics.wins}V`} accent="teal" />
+          <MiniStat label="Coupe off." value={String(metrics.officialTitles)} accent={metrics.officialTitles > 0 ? 'red' : 'muted'} />
         </div>
 
-        <div className="text-center shrink-0">
-          <div className="font-display text-4xl sm:text-5xl font-black gradient-text-brand tabular-nums leading-none">
-            {player.score}
-          </div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-muted-2 font-bold mt-1">
-            Score GOAT
-          </div>
-        </div>
-      </div>
-
-      {/* Détail complet des stats du GOAT */}
-      <div className="relative mt-5 pt-5 border-t border-gold/15">
-        <StatGrid metrics={metrics} />
-        <div className="mt-4">
-          <MetricBars player={player} />
-        </div>
+        {/* Barres de contribution */}
+        <MetricBars player={player} />
       </div>
     </div>
   );
 }
 
-// ─── Ligne « prétendant » repliée, dépliable via « voir plus » ────────────────
-function GoatRow({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
-  const [open, setOpen] = useState(false);
+// ─── Carte prétendant (visible d'emblée, sans expand) ────────────────────────
+
+function ContenderCard({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
   const { entry, metrics } = player;
   return (
-    <div
-      className={`rounded-xl border transition-colors ${
-        isMe ? 'border-gold/40 bg-gold/[0.05]' : 'border-border bg-bg-2/30'
-      }`}
-    >
-      <div className="flex items-center gap-3 p-2.5">
-        <span className="w-6 text-center font-display font-black tabular-nums text-muted-2">
+    <div className={`rounded-xl p-3.5 transition-colors ${
+      isMe ? 'border border-gold/35 bg-gold/[0.04]' : 'border border-border/50 bg-white/[0.02]'
+    }`}>
+      {/* En-tête de carte */}
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="w-7 text-center font-display font-black tabular-nums text-muted-2 text-sm shrink-0">
           {player.rank}
         </span>
-        <PlayerLink login={entry.login} className="flex items-center gap-2.5 min-w-0 flex-1">
+        <PlayerLink login={entry.login} className="flex items-center gap-2 min-w-0 flex-1">
           <Avatar login={entry.login} imageUrl={entry.imageUrl} size="sm" />
           <div className="min-w-0">
-            <div className="font-semibold text-text-strong truncate leading-tight">
+            <div className="font-semibold text-text-strong truncate text-sm leading-tight">
               {displayName(entry)}
             </div>
-            <div className="text-[10px] text-muted-2 truncate">
-              @{entry.login} · {metrics.elo} ELO
-            </div>
+            <div className="text-[10px] text-muted-2 font-mono">{metrics.elo} ELO · {metrics.wins}V</div>
           </div>
         </PlayerLink>
-
-        {/* Aperçu compact : coupes officielles si présentes */}
-        {metrics.officialTitles > 0 && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red">
-            <TournamentCup accent={OFFICIAL_CUP} className="w-4 h-4" />
-            {metrics.officialTitles}
-          </span>
-        )}
-
+        {/* Score GOAT proéminent */}
         <div className="text-right shrink-0">
-          <div className="font-display text-lg font-black text-gold tabular-nums leading-none">
-            {player.score}
-          </div>
+          <div className="font-display text-xl font-black text-gold tabular-nums">{player.score}</div>
+          {metrics.officialTitles > 0 && (
+            <div className="flex items-center justify-end gap-0.5 mt-0.5">
+              <TournamentCup accent={OFFICIAL_CUP} className="w-3 h-3" />
+              <span className="text-[10px] text-red font-bold">{metrics.officialTitles}</span>
+            </div>
+          )}
         </div>
-
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="ml-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-2 hover:text-gold transition-colors"
-          aria-expanded={open}
-        >
-          {open ? 'Réduire' : 'Voir plus'}
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-        </button>
       </div>
 
-      {open && (
-        <div className="px-3 pb-3 pt-1 border-t border-border/40">
-          <StatGrid metrics={metrics} />
-          <div className="mt-3">
-            <MetricBars player={player} />
-          </div>
-        </div>
-      )}
+      {/* Barres compactes — toutes visibles sans expand */}
+      <div className="space-y-1">
+        {GOAT_WEIGHTS.slice(0, 3).map((w) => {
+          const pct = Math.round((player.norm[w.key as GoatMetricKey] ?? 0) * 100);
+          return (
+            <div key={w.key} className="flex items-center gap-2">
+              <span className="w-20 text-[9px] uppercase tracking-wider text-muted-2 font-semibold truncate shrink-0">
+                {w.label}
+              </span>
+              <div className="flex-1 h-1 rounded-full bg-bg-1 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-gold/50 to-gold"
+                  style={{ width: `${pct}%`, transition: 'width 0.6s cubic-bezier(0.16,1,0.3,1)' }} />
+              </div>
+              <span className="text-[9px] font-mono text-muted-2 w-7 text-right shrink-0">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ─── Grille des stats brutes ──────────────────────────────────────────────────
-function StatGrid({ metrics }: { metrics: GoatPlayer['metrics'] }) {
+// ─── Primitives ───────────────────────────────────────────────────────────────
+
+function MiniStat({ label, value, accent }: { label: string; value: string; accent: 'gold' | 'teal' | 'red' | 'muted' }) {
+  const cls = accent === 'gold' ? 'text-gold' : accent === 'teal' ? 'text-teal' : accent === 'red' ? 'text-red' : 'text-text-strong';
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <StatBox label="ELO" value={String(metrics.elo)} tone="gold" />
-      <StatBox
-        label="Tournois officiels"
-        value={String(metrics.officialTitles)}
-        cup={OFFICIAL_CUP}
-        tone="red"
-      />
-      <StatBox
-        label="Tournois amicaux"
-        value={String(metrics.friendlyTitles)}
-        cup={FRIENDLY_CUP}
-      />
-      <StatBox
-        label="Goal average"
-        value={metrics.goalDiffPerGame >= 0 ? `+${metrics.goalDiffPerGame.toFixed(1)}` : metrics.goalDiffPerGame.toFixed(1)}
-      />
-      <StatBox label="Écart moy. en V" value={`+${metrics.avgWinMargin.toFixed(1)}`} />
-      <StatBox
-        label="Série V max"
-        value={metrics.maxWinStreak >= 2 ? String(metrics.maxWinStreak) : '—'}
-        icon={metrics.maxWinStreak >= 2}
-      />
-      <StatBox label="Win rate" value={`${metrics.winRate}%`} />
-      <StatBox label="Matchs" value={`${metrics.wins}V – ${metrics.losses}D`} />
+    <div className="rounded-lg bg-bg-1/60 px-2 py-1.5 text-center">
+      <div className={`font-display font-extrabold tabular-nums text-sm ${cls}`}>{value}</div>
+      <div className="text-[8px] uppercase tracking-wider text-muted-2 mt-0.5 truncate">{label}</div>
     </div>
   );
 }
 
-function StatBox({
-  label,
-  value,
-  tone,
-  cup,
-  icon,
-}: {
-  label: string;
-  value: string;
-  tone?: 'gold' | 'red';
-  cup?: string;
-  icon?: boolean;
-}) {
-  const valCls = tone === 'gold' ? 'text-gold' : tone === 'red' ? 'text-red' : 'text-text-strong';
-  return (
-    <div className="rounded-lg border border-border/60 bg-bg-1/40 px-2.5 py-2">
-      <div className="text-[9px] uppercase tracking-wider text-muted-2 font-bold mb-0.5 truncate">
-        {label}
-      </div>
-      <div className={`flex items-center gap-1 font-display font-extrabold tabular-nums ${valCls}`}>
-        {cup && <TournamentCup accent={cup} className="w-4 h-4 shrink-0" />}
-        {icon && <Flame className="w-3.5 h-3.5 text-[#ff8c3a]" fill="currentColor" strokeWidth={2} />}
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// ─── Barres de contribution par métrique ──────────────────────────────────────
 function MetricBars({ player }: { player: GoatPlayer }) {
   return (
     <div className="space-y-1.5">
       {GOAT_WEIGHTS.map((w) => {
-        const n = player.norm[w.key as GoatMetricKey];
-        const pct = Math.round(n * 100);
+        const pct = Math.round((player.norm[w.key as GoatMetricKey] ?? 0) * 100);
         return (
           <div key={w.key} className="flex items-center gap-2">
-            <span className="w-32 shrink-0 text-[10px] uppercase tracking-wider text-muted-2 font-semibold truncate">
+            <span className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-muted-2 font-semibold truncate">
               {w.label}
             </span>
-            <div className="flex-1 h-1.5 rounded-full bg-bg-1 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold"
-                style={{ width: `${pct}%` }}
-              />
+            <div className="flex-1 h-1.5 rounded-full bg-bg-0/60 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold"
+                style={{ width: `${pct}%` }} />
             </div>
-            <span className="w-12 text-right text-[10px] font-mono tabular-nums text-muted-2">
+            <span className="w-9 text-right text-[10px] font-mono tabular-nums text-muted-2">
               {Math.round(w.weight * 100)}%
             </span>
           </div>
@@ -307,3 +233,9 @@ function MetricBars({ player }: { player: GoatPlayer }) {
     </div>
   );
 }
+
+// unused but kept for compat
+const _FRIENDLY_CUP = FRIENDLY_CUP;
+void _FRIENDLY_CUP;
+const _Flame = Flame;
+void _Flame;

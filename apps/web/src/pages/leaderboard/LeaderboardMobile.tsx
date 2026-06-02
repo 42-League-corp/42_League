@@ -163,9 +163,16 @@ export function LeaderboardMobile() {
           </div>
         ) : (
         <>
+        {/* ── Banner GAME en tout premier, avant même le podium ────────── */}
         <LeaderboardBanner />
-        {/* Bascule liste / nuage + accès G.O.A.T */}
-        <div className="flex items-center justify-center gap-2 pt-1">
+
+        {/* Podium top 3 — directement sous le banner */}
+        {viewMode !== 'graph' && top3.length > 0 && !normalizedQuery && (
+          <Podium top3={top3} statsByLogin={podiumStats} />
+        )}
+
+        {/* Bascule liste / nuage + accès G.O.A.T (en dessous du podium) */}
+        <div className="flex items-center justify-center gap-2">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />
           <Link
             to="/goat"
@@ -185,10 +192,8 @@ export function LeaderboardMobile() {
           />
         ) : (
         <>
-        {/* Podium top 3 — toujours en haut (masqué seulement pendant une recherche). */}
-        {top3.length > 0 && !normalizedQuery && (
-          <Podium top3={top3} statsByLogin={podiumStats} />
-        )}
+        {/* (podium déjà rendu au-dessus) */}
+        {false && null /* placeholder to keep nesting */}
 
         {/* Stats globales */}
         <motion.div

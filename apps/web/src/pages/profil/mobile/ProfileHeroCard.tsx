@@ -204,21 +204,28 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           />
         </div>
 
-        {/* Badges cross-jeux : indicateurs discrets des autres disciplines actives */}
+        {/* Autres disciplines — section lisible, intégrée dans la carte héro */}
         {crossGameBadges.length > 0 && (
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <span className="text-[9px] text-muted uppercase tracking-[0.14em] font-bold">Aussi actif :</span>
-            {crossGameBadges.map(({ g, elo }) => (
-              <span
-                key={g}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tabular-nums"
-                style={{ background: 'rgba(255,201,74,0.07)', border: '1px solid rgba(255,201,74,0.18)' }}
-                title={`${g} — ${elo} ELO`}
-              >
-                {g === 'smash' ? '🎮' : g === 'chess' ? '♟' : '⚽'}
-                <span className="font-mono text-muted-2">{elo}</span>
-              </span>
-            ))}
+          <div className="mt-3 pt-3 border-t border-white/[0.07]">
+            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2">
+              Aussi actif sur
+            </div>
+            <div className="flex items-center gap-2">
+              {crossGameBadges.map(({ g, elo, played }) => (
+                <div
+                  key={g}
+                  className="flex-1 rounded-xl px-2.5 py-2 flex flex-col items-center gap-0.5"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  <span className="text-base leading-none">
+                    {g === 'smash' ? '🎮' : g === 'chess' ? '♟' : '⚽'}
+                  </span>
+                  <span className="font-mono font-extrabold tabular-nums text-[11px] text-gold/90">{elo}</span>
+                  <span className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO</span>
+                  <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

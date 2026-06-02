@@ -14,24 +14,50 @@
     --accent-teal-deep: 107 74 20; /* #6b4a14 */
   }
 
-  /* Mode Smash : tout le thème « jaune » bascule en ROUGE. */
+  /* ─── MODE SMASH : univers rouge combat ────────────────────────────────── */
   [data-game='smash'] {
-    --accent-gold: 255 77 92; /* rouge vif */
+    --accent-gold: 255 77 92;
     --accent-gold-dim: 214 54 70;
     --accent-gold-deep: 120 26 34;
     --accent-teal: 255 77 92;
     --accent-teal-dim: 214 54 70;
     --accent-teal-deep: 120 26 34;
   }
+  /* Fond : teinté rouge sombre + vignette d'impact */
+  [data-game='smash'] body {
+    background:
+      radial-gradient(ellipse 60% 40% at 50% -5%, rgba(255, 60, 80, 0.10) 0%, transparent 55%),
+      radial-gradient(ellipse 100% 60% at 50% 115%, rgba(140, 20, 30, 0.08) 0%, transparent 55%),
+      linear-gradient(180deg, #0e0607 0%, #080304 100%);
+  }
+  /* Grille technique en rouge très subtil */
+  [data-game='smash'] body::before {
+    background-image:
+      linear-gradient(rgba(255, 77, 92, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 77, 92, 0.025) 1px, transparent 1px);
+  }
 
-  /* Mode Échecs : thème VERT. */
+  /* ─── MODE ÉCHECS : univers vert nuit ───────────────────────────────────── */
   [data-game='chess'] {
-    --accent-gold: 86 196 110; /* vert */
+    --accent-gold: 86 196 110;
     --accent-gold-dim: 58 158 80;
     --accent-gold-deep: 24 88 44;
     --accent-teal: 86 196 110;
     --accent-teal-dim: 58 158 80;
     --accent-teal-deep: 24 88 44;
+  }
+  /* Fond : teinté vert foncé + damier très discret */
+  [data-game='chess'] body {
+    background:
+      radial-gradient(ellipse 60% 40% at 50% -5%, rgba(40, 140, 60, 0.08) 0%, transparent 55%),
+      radial-gradient(ellipse 100% 60% at 50% 115%, rgba(20, 80, 40, 0.07) 0%, transparent 55%),
+      linear-gradient(180deg, #050e08 0%, #030906 100%);
+  }
+  /* Grille technique en vert très subtil */
+  [data-game='chess'] body::before {
+    background-image:
+      linear-gradient(rgba(86, 196, 110, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(86, 196, 110, 0.025) 1px, transparent 1px);
   }
 
   html,

@@ -1,21 +1,20 @@
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronDown, HelpCircle, Plus, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Trophy, Swords, Crown, ChevronRight, Info } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useFAB } from '../../mobile/primitives/FAB';
-import { MetalFrame } from '../../mobile/primitives/MetalFrame';
-import { TrophySilhouette } from '../../mobile/primitives/Silhouettes';
-import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
-import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { TournamentCard } from './mobile/TournamentCard';
 import { CreateTournamentSheet } from './mobile/CreateTournamentSheet';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import type { Tournament } from '../../lib/api';
 
 type Filter = 'all' | 'live' | 'open' | 'done';
 
 export function TournoisMobile() {
   const { tournaments, refresh } = useLeagueData();
+  const { game } = useGameMode();
   const [createOpen, setCreateOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
 
@@ -29,210 +28,337 @@ export function TournoisMobile() {
     return c;
   }, [tournaments]);
 
-  const liveTournament: Tournament | undefined = tournaments.find((t) => t.status === 'in_progress');
+  const liveTournament = tournaments.find((t) => t.status === 'in_progress');
 
   const filtered = useMemo(() => {
-    // En 'all', le tournoi live est déjà mis en avant dans le Hero → on l'exclut
-    // de la liste pour ne pas le dupliquer.
-    if (filter === 'all') {
-      return liveTournament
-        ? tournaments.filter((t) => t.id !== liveTournament.id)
-        : tournaments;
-    }
+    if (filter === 'all') return liveTournament ? tournaments.filter((t) => t.id !== liveTournament.id) : tournaments;
     if (filter === 'live') return tournaments.filter((t) => t.status === 'in_progress');
     if (filter === 'open') return tournaments.filter((t) => t.status === 'registration');
     if (filter === 'done') return tournaments.filter((t) => t.status === 'finished');
     return tournaments;
   }, [tournaments, filter, liveTournament]);
 
-  const filterChoices: SegmentChoice<Filter>[] = [
-    { value: 'all', label: 'Tous', badge: tournaments.length },
-    { value: 'live', label: 'Live', badge: counts.live },
-    { value: 'open', label: 'Inscr.', badge: counts.open },
-    { value: 'done', label: 'Finis', badge: counts.done },
-  ];
-
   useFAB({
     Icon: Plus,
-    label: 'Nouveau',
+    label: 'Nouveau tournoi',
     onClick: () => setCreateOpen(true),
     pulse: tournaments.length === 0,
   });
 
   return (
     <PullToRefresh onRefresh={refresh}>
-      <div className="space-y-5">
+      <div className="space-y-5 pb-8">
 
-        {/* ── Comment ça marche (toujours EN HAUT, collapsible) ──────────── */}
-        {/* Ouvert par défaut si aucun tournoi — fermé si la liste est fournie. */}
-        <HowItWorks defaultOpen={tournaments.length === 0} />
-
-        {/* Hero "Tournoi en cours" si il y en a un */}
+        {/* ── 0. Tournoi LIVE — hero card pleine largeur ──────────── */}
         {liveTournament && filter === 'all' && (
-          <LiveTournamentHero tournament={liveTournament} />
+          <LiveHero tournament={liveTournament} />
         )}
 
-        {/* Filtres */}
-        <SegmentedControl<Filter>
-          value={filter}
-          onChange={setFilter}
-          choices={filterChoices}
-        />
-
-        {/* Liste */}
-        {filtered.length === 0 ? (
-          filter === 'all' ? null : <EmptyState filter={filter} />
-        ) : (
-          <StaggerList className="space-y-3">
-            {filtered.map((t) => (
-              <StaggerItem key={t.id}>
-                <TournamentCard tournament={t} />
-              </StaggerItem>
-            ))}
-          </StaggerList>
+        {/* ── 1. Onboarding inline si aucun tournoi (explique + incite) ── */}
+        {tournaments.length === 0 && (
+          <OnboardingHero onCreateClick={() => setCreateOpen(true)} game={game} />
         )}
+
+        {/* ── 2. Filtres pill (seulement s'il y a des tournois) ──── */}
+        {tournaments.length > 0 && (
+          <FilterPills filter={filter} onChange={setFilter} counts={counts} total={tournaments.length} />
+        )}
+
+        {/* ── 3. Liste ──────────────────────────────────────────────── */}
+        <AnimatePresence mode="wait">
+          {filtered.length === 0 ? (
+            filter !== 'all' && <EmptyFilter key={filter} filter={filter} />
+          ) : (
+            <motion.div
+              key={filter}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-3"
+            >
+              {filtered.map((t, i) => (
+                <motion.div
+                  key={t.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.22 }}
+                >
+                  <TournamentCard tournament={t} />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── 4. Aide discrète (accessible mais pas intrusif) ─────── */}
+        {tournaments.length > 0 && <QuickHelp />}
 
       </div>
 
-      <CreateTournamentSheet
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onDone={refresh}
-      />
+      <CreateTournamentSheet open={createOpen} onClose={() => setCreateOpen(false)} onDone={refresh} />
     </PullToRefresh>
   );
 }
 
-function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
-  const count = tournament.entries?.length ?? 0;
+// ─── Onboarding visuel (page vide) ───────────────────────────────────────────
+
+function OnboardingHero({ onCreateClick, game }: { onCreateClick: () => void; game: string }) {
+  const gameEmoji = game === 'smash' ? '🎮' : game === 'chess' ? '♟' : '⚽';
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.96 }}
+      initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="gpu"
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: 'linear-gradient(145deg, rgba(42,34,14,0.85) 0%, rgba(16,14,8,0.95) 100%)',
+        border: '1.5px solid rgba(255,201,74,0.3)',
+      }}
     >
-      <MetalFrame variant="hero" gear shimmer conic glow>
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent animate-pulse z-[1]" />
+      {/* Visuel décoratif en haut */}
+      <div className="relative h-28 flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0" style={{
+          background: 'radial-gradient(ellipse 80% 100% at 50% 100%, rgba(255,201,74,0.12) 0%, transparent 70%)',
+        }} />
+        {/* Bracket visuel */}
+        <svg viewBox="0 0 280 80" className="w-full h-full opacity-25" aria-hidden>
+          {/* Round 1 → 4 joueurs */}
+          {[20, 20, 60, 60].map((y, i) => (
+            <line key={`r1-${i}`} x1={20 + (i % 2) * 40} y1={y} x2={60 + (i % 2) * 40} y2={y}
+              stroke="#ffc94a" strokeWidth="2" strokeLinecap="round" />
+          ))}
+          {/* Round 1 verticals */}
+          <line x1={60} y1={20} x2={60} y2={60} stroke="#ffc94a" strokeWidth="2" />
+          <line x1={100} y1={20} x2={100} y2={60} stroke="#ffc94a" strokeWidth="2" />
+          {/* Round 2 */}
+          <line x1={60} y1={40} x2={120} y2={40} stroke="#ffc94a" strokeWidth="2" strokeLinecap="round" />
+          <line x1={100} y1={40} x2={160} y2={40} stroke="#ffc94a" strokeWidth="2" strokeLinecap="round" />
+          <line x1={120} y1={40} x2={120} y2={50} stroke="#ffc94a" strokeWidth="2" />
+          <line x1={160} y1={40} x2={160} y2={50} stroke="#ffc94a" strokeWidth="2" />
+          {/* Finale */}
+          <line x1={120} y1={50} x2={200} y2={50} stroke="#ffc94a" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1={160} y1={50} x2={200} y2={50} stroke="#ffc94a" strokeWidth="2.5" />
+          {/* Trophy */}
+          <text x={210} y={55} fontSize="22" textAnchor="middle">🏆</text>
+        </svg>
+        <div className="absolute top-3 left-3 text-2xl">{gameEmoji}</div>
+      </div>
 
-        {/* Silhouette trophée décorative en arrière-plan (clippée par MetalFrame) */}
-        <div className="absolute right-2 bottom-2 w-28 h-28 opacity-[0.07] pointer-events-none text-gold">
-          <TrophySilhouette className="w-full h-full" />
-        </div>
+      <div className="px-5 pb-5">
+        <h2 className="font-display text-lg font-black text-text-strong mb-1">
+          Crée le premier tournoi !
+        </h2>
+        <p className="text-xs text-muted-2 leading-relaxed mb-4">
+          Rassemble tes collègues, génère un bracket, et que le meilleur gagne.
+        </p>
 
-        <div className="relative p-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 text-gold text-[9px] font-extrabold uppercase tracking-[0.18em] border border-gold/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
-              En cours
-            </span>
-            <span className="text-[10px] text-muted-2 uppercase tracking-wider font-bold">
-              · {count}/{tournament.capacity} joueurs
-            </span>
-          </div>
-          <div className="flex items-center gap-2 mb-1">
-            <Trophy
-              className="w-5 h-5 text-gold flex-shrink-0"
-              strokeWidth={2.5}
-              fill="rgba(255,201,74,0.35)"
-            />
-            <h3 className="text-xl font-extrabold text-text-strong tracking-tight truncate">
-              {tournament.name}
-            </h3>
-          </div>
-          <div className="text-xs text-muted-2 mb-3">
-            Organisé par{' '}
-            <span className="font-bold text-text-strong">{tournament.createdByLogin}</span>
-          </div>
-          <a
-            href={`/tournaments/${encodeURIComponent(tournament.id)}`}
-            className="shine inline-flex items-center gap-1.5 px-4 py-2 rounded-xl metal-plate-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider active:scale-95 transition-transform tap-transparent"
+        {/* 2 chemins clairs */}
+        <div className="space-y-2 mb-4">
+          <button
+            type="button"
+            onClick={onCreateClick}
+            className="shine w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-gold/50 bg-gold/[0.08] active:scale-[0.98] transition-all tap-transparent"
           >
-            Voir le bracket
-            <span>→</span>
-          </a>
+            <div className="w-9 h-9 rounded-xl bg-gold/20 flex items-center justify-center shrink-0">
+              <Swords className="w-5 h-5 text-gold" strokeWidth={2.2} />
+            </div>
+            <div className="text-left flex-1">
+              <div className="font-extrabold text-sm text-gold">Tournoi amical</div>
+              <div className="text-[10px] text-muted-2">Tout le monde peut en créer · ELO non impacté</div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gold/50 shrink-0" strokeWidth={2.5} />
+          </button>
+
+          <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/40 bg-white/[0.02] opacity-60">
+            <div className="w-9 h-9 rounded-xl bg-gold/10 flex items-center justify-center shrink-0">
+              <Crown className="w-5 h-5 text-gold/70" strokeWidth={2.2} />
+            </div>
+            <div className="text-left flex-1">
+              <div className="font-extrabold text-sm text-text-strong">Tournoi officiel</div>
+              <div className="text-[10px] text-muted-2">Admins uniquement · ELO + récompenses exclusives</div>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-2 shrink-0">Admin</span>
+          </div>
         </div>
-      </MetalFrame>
+
+        {/* Mini explication du format */}
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { icon: '⚡', label: 'Élimination', desc: 'Bracket direct, rapide' },
+            { icon: '🏊', label: 'Poules + bracket', desc: '≥ 12 joueurs, phases' },
+          ].map((f) => (
+            <div key={f.label} className="rounded-lg px-3 py-2.5 bg-white/[0.03] border border-border/30">
+              <div className="text-base mb-0.5">{f.icon}</div>
+              <div className="text-[11px] font-bold text-text-strong">{f.label}</div>
+              <div className="text-[10px] text-muted-2">{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </motion.div>
   );
 }
 
-function HowItWorks({ defaultOpen = false }: { defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section>
-      {/* Trigger collapsible */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-1 py-2 tap-transparent hover:bg-white/[0.02] rounded-xl transition-colors"
-      >
-        <HelpCircle className="w-4 h-4 text-gold/70 flex-shrink-0" strokeWidth={2.2} />
-        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90 flex-1 text-left">
-          Comment ça marche ?
-        </span>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-2 transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2.5}
-        />
-      </button>
+// ─── Hero d'un tournoi live ───────────────────────────────────────────────────
 
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18 }}
-          className="mt-2 space-y-2"
-        >
-          {/* Amical */}
-          <div className="rounded-2xl p-4 bg-white/[0.025]">
-            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2 flex items-center gap-2">
-              <span>🎲</span> Tournoi amical
-            </h3>
-            <ul className="space-y-1.5 text-xs text-muted-2 leading-relaxed">
-              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">1.</span> Appuie sur <span className="text-text-strong font-semibold">+ Nouveau</span> en bas à droite.</li>
-              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">2.</span> Choisis un nom, la capacité (8–64 joueurs), la discipline.</li>
-              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">3.</span> Les participants s'inscrivent, puis tu démarres le bracket.</li>
-              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">4.</span> Chaque match : l'un des joueurs saisit le score, l'autre confirme.</li>
-            </ul>
-            <p className="mt-2 text-[10px] text-muted-2/70">⚡ Sans impact sur le classement ELO — juste pour le fun !</p>
+function LiveHero({ tournament }: { tournament: Tournament }) {
+  const count = tournament.entries?.length ?? 0;
+  return (
+    <Link to={`/tournaments/${encodeURIComponent(tournament.id)}`} className="block">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="relative rounded-2xl overflow-hidden active:scale-[0.98] transition-transform tap-transparent"
+        style={{
+          background: 'linear-gradient(145deg, rgba(42,34,12,0.9) 0%, rgba(18,15,6,0.96) 100%)',
+          border: '1.5px solid rgba(255,201,74,0.5)',
+          boxShadow: '0 0 32px rgba(255,201,74,0.18)',
+        }}
+      >
+        {/* Scanline live */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent animate-pulse" />
+
+        <div className="p-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gold/15 border border-gold/30 text-gold text-[9px] font-extrabold uppercase tracking-[0.18em]">
+              <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+              Live
+            </span>
+            <span className="text-[10px] text-muted-2 font-bold">
+              {count}/{tournament.capacity} joueurs · {tournament.game && tournament.game !== 'babyfoot'
+                ? (tournament.game === 'smash' ? '🎮 Smash' : '♟ Échecs')
+                : '⚽ Babyfoot'}
+            </span>
           </div>
-          {/* Officiel */}
-          <div className="rounded-2xl p-4 bg-gold/[0.04] border border-gold/20">
-            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2 flex items-center gap-2">
-              <span>👑</span> Tournoi officiel
-            </h3>
-            <p className="text-xs text-muted-2 leading-relaxed">
-              Lancé par les admins uniquement — donne lieu à des récompenses spéciales :{' '}
-              <span className="text-gold font-semibold">titres exclusifs</span> et{' '}
-              <span className="text-gold font-semibold">cosmétiques</span>.
-              L'ELO <span className="text-gold font-semibold">compte</span> dans le classement.
-            </p>
+
+          <div className="flex items-center gap-3 mb-3">
+            <Trophy className="w-6 h-6 text-gold shrink-0" strokeWidth={2.2} fill="rgba(255,201,74,0.35)" />
+            <div className="min-w-0">
+              <h3 className="text-xl font-extrabold text-text-strong tracking-tight truncate">{tournament.name}</h3>
+              <div className="text-[11px] text-muted-2">Par {tournament.createdByLogin}</div>
+            </div>
           </div>
-          {/* Format */}
-          <div className="rounded-2xl p-3 bg-white/[0.015] flex gap-3 text-[11px] text-muted-2">
-            <span>ℹ️</span>
-            <span>Deux formats : <span className="text-text-strong font-semibold">Élimination directe</span> (bracket dès le départ) ou <span className="text-text-strong font-semibold">Phase de poules + bracket</span> (≥12 joueurs).</span>
+
+          {/* Progress bar */}
+          <div className="h-1.5 rounded-full bg-bg-0/60 overflow-hidden mb-3">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold to-[#ffdb8a]"
+              style={{ width: `${Math.min(100, Math.round(count / tournament.capacity * 100))}%` }} />
           </div>
-        </motion.div>
-      )}
-    </section>
+
+          <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl metal-plate-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider">
+            Voir le bracket <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+          </div>
+        </div>
+      </motion.div>
+    </Link>
   );
 }
 
-function EmptyState({ filter }: { filter: Filter }) {
-  const messages: Record<Filter, { emoji: string; main: string; sub: string }> = {
-    all: { emoji: '🏆', main: 'Aucun tournoi', sub: 'Sois le premier — lance-en un !' },
-    live: { emoji: '⏳', main: 'Aucun tournoi en cours', sub: 'Rends-toi dans Inscriptions.' },
-    open: { emoji: '📝', main: 'Aucune inscription ouverte', sub: 'Crée un tournoi pour démarrer.' },
-    done: { emoji: '🥇', main: 'Pas encore de tournoi terminé', sub: '' },
-  };
-  const m = messages[filter];
+// ─── Filtres en pills colorées ────────────────────────────────────────────────
+
+interface FilterPillsProps {
+  filter: Filter;
+  onChange: (f: Filter) => void;
+  counts: { live: number; open: number; done: number };
+  total: number;
+}
+
+const PILL_META: Record<Filter, { label: string; accent: string }> = {
+  all: { label: 'Tous', accent: 'border-border text-muted-2 bg-transparent' },
+  live: { label: '● Live', accent: 'border-gold/50 text-gold' },
+  open: { label: 'Inscriptions', accent: 'border-teal/50 text-teal' },
+  done: { label: 'Terminés', accent: 'border-border/60 text-muted-2' },
+};
+
+function FilterPills({ filter, onChange, counts, total }: FilterPillsProps) {
+  const opts: Array<{ key: Filter; badge: number }> = [
+    { key: 'all', badge: total },
+    { key: 'live', badge: counts.live },
+    { key: 'open', badge: counts.open },
+    { key: 'done', badge: counts.done },
+  ];
   return (
-    <div className="text-center py-12 px-4">
-      <div className="text-5xl mb-3 opacity-60">{m.emoji}</div>
-      <div className="text-sm text-text-strong font-bold mb-1">{m.main}</div>
+    <div className="flex gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
+      {opts.map(({ key, badge }) => {
+        const active = filter === key;
+        const m = PILL_META[key];
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-extrabold uppercase tracking-[0.12em] transition-all tap-transparent ${
+              active
+                ? `${m.accent} bg-white/[0.06]`
+                : 'border-border/40 text-muted-2 bg-transparent'
+            }`}
+          >
+            {m.label}
+            {badge > 0 && (
+              <span className={`font-mono text-[9px] ${active ? 'opacity-80' : 'opacity-50'}`}>
+                {badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Empty filter state ───────────────────────────────────────────────────────
+
+function EmptyFilter({ filter }: { filter: Filter }) {
+  const msgs: Record<Filter, { emoji: string; main: string; sub: string }> = {
+    all: { emoji: '🏆', main: 'Aucun tournoi', sub: '' },
+    live: { emoji: '⏳', main: 'Aucun tournoi en cours', sub: 'Rendez-vous dans Inscriptions.' },
+    open: { emoji: '📝', main: "Pas d'inscriptions ouvertes", sub: 'Lance-en un avec + en bas a droite.' },
+    done: { emoji: '🥇', main: 'Aucun tournoi terminé', sub: 'Les résultats apparaîtront ici.' },
+  };
+  const m = msgs[filter];
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10">
+      <div className="text-4xl mb-3 opacity-50">{m.emoji}</div>
+      <div className="text-sm font-bold text-text-strong mb-1">{m.main}</div>
       {m.sub && <div className="text-xs text-muted-2">{m.sub}</div>}
+    </motion.div>
+  );
+}
+
+// ─── Aide rapide discrète ─────────────────────────────────────────────────────
+
+function QuickHelp() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[10px] text-muted-2 hover:text-muted transition-colors tap-transparent">
+        <Info className="w-3.5 h-3.5" strokeWidth={2} />
+        Comment ça marche ?
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
+            className="mt-2 space-y-2 overflow-hidden">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { num: '1', text: '+ Nouveau → choisis nom, capacité, discipline.' },
+                { num: '2', text: "Les joueurs s'inscrivent depuis la carte." },
+                { num: '3', text: 'Démarre : le bracket se génère automatiquement.' },
+                { num: '4', text: 'Chaque match : saisir le score + confirmer.' },
+              ].map(({ num, text }) => (
+                <div key={num} className="flex gap-2 text-[10px] text-muted-2 p-2 rounded-lg bg-white/[0.02]">
+                  <span className="w-4 h-4 rounded-full bg-gold/15 text-gold text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">{num}</span>
+                  <span>{text}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
