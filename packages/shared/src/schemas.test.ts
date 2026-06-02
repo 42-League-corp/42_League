@@ -15,6 +15,7 @@ import {
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
 } from './schemas.js';
+import { validateTournamentScore } from './games.js';
 
 // Helpers pour construire des dates stables relatives à maintenant.
 const futureISO = (msAhead = 3_600_000) =>
@@ -809,7 +810,7 @@ describe('DeclareOpsSchema', () => {
   });
 });
 
-describe('TournamentRecordSchema', () => {
+describe('TournamentRecordSchema (forme du score, range)', () => {
   it('accepte 10-5 (scoreA / scoreB)', () => {
     expect(
       TournamentRecordSchema.safeParse({ scoreA: 10, scoreB: 5 }).success,
@@ -820,15 +821,10 @@ describe('TournamentRecordSchema', () => {
       TournamentRecordSchema.safeParse({ scoreA: 4, scoreB: 10 }).success,
     ).toBe(true);
   });
-  it('rejette 10-10', () => {
-    expect(
-      TournamentRecordSchema.safeParse({ scoreA: 10, scoreB: 10 }).success,
-    ).toBe(false);
-  });
-  it('rejette 7-3 (aucun à 10)', () => {
-    expect(
-      TournamentRecordSchema.safeParse({ scoreA: 7, scoreB: 3 }).success,
-    ).toBe(false);
+  it('accepte une forme non-babyfoot (la règle par discipline est validée à part)', () => {
+    // échecs 1-0, smash 2-1 : la forme passe le schéma ; validateTournamentScore tranche.
+    expect(TournamentRecordSchema.safeParse({ scoreA: 1, scoreB: 0 }).success).toBe(true);
+    expect(TournamentRecordSchema.safeParse({ scoreA: 2, scoreB: 1 }).success).toBe(true);
   });
   it('rejette un score hors borne', () => {
     expect(
@@ -840,6 +836,28 @@ describe('TournamentRecordSchema', () => {
   });
   it('rejette null', () => {
     expect(TournamentRecordSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe('validateTournamentScore (règle par discipline)', () => {
+  it('babyfoot : un camp doit atteindre 10, pas de nul', () => {
+    expect(validateTournamentScore('babyfoot', 10, 5)).toBeNull();
+    expect(validateTournamentScore('babyfoot', 10, -3)).toBeNull();
+    expect(validateTournamentScore('babyfoot', 7, 3)).not.toBeNull();
+    expect(validateTournamentScore('babyfoot', 10, 10)).not.toBeNull();
+  });
+  it('échecs : 1-0 uniquement', () => {
+    expect(validateTournamentScore('chess', 1, 0)).toBeNull();
+    expect(validateTournamentScore('chess', 0, 1)).toBeNull();
+    expect(validateTournamentScore('chess', 10, 0)).not.toBeNull();
+    expect(validateTournamentScore('chess', 2, 1)).not.toBeNull();
+  });
+  it('smash : 1 à 3 games gagnés, perdant en dessous, pas de nul', () => {
+    expect(validateTournamentScore('smash', 2, 0)).toBeNull();
+    expect(validateTournamentScore('smash', 2, 1)).toBeNull();
+    expect(validateTournamentScore('smash', 3, 2)).toBeNull();
+    expect(validateTournamentScore('smash', 4, 1)).not.toBeNull();
+    expect(validateTournamentScore('smash', 1, 1)).not.toBeNull();
   });
 });
 
