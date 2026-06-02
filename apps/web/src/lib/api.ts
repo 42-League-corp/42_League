@@ -614,6 +614,11 @@ export const api = {
 
   // ── Admin ──────────────────────────────────────────────────────────────────
   adminUsers: () => request<AdminUser[]>('/admin/users'),
+  setStagingAccess: (login: string, grant: boolean) =>
+    request<{ login: string; role: string; stagingAccess: boolean }>(
+      `/admin/users/${encodeURIComponent(login)}/staging-access`,
+      { method: 'POST', body: JSON.stringify({ grant }) },
+    ),
   setUserRole: (login: string, role: 'USER' | 'ADMIN') =>
     request<{ login: string; role: string }>(
       `/admin/users/${encodeURIComponent(login)}/role`,
