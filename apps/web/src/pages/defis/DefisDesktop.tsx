@@ -1,10 +1,8 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Swords, X } from 'lucide-react';
+import { Plus, Swords, X, ChevronDown, Clock, Zap } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
-import { StatCard } from '../../components/StatCard';
-import { RankedBadge } from '../../components/RankedBadge';
 import { Button } from '../../components/Button';
 import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
@@ -19,24 +17,46 @@ import {
   type PendingMatch,
 } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
 import { useDefisLogic } from './shared/useDefisLogic';
-import { DeclareGameFlow, WINNING_SCORE, LOSER_SCORE_MIN, LOSER_SCORE_MAX } from './shared/DeclareGameFlow';
+import {
+  DeclareGameFlow,
+  WINNING_SCORE,
+  LOSER_SCORE_MIN,
+  LOSER_SCORE_MAX,
+} from './shared/DeclareGameFlow';
 import { ChallengeFlow } from './shared/ChallengeFlow';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type Kind = 'incoming' | 'outgoing' | 'accepted';
 type OpenCard = 'declare' | 'challenge' | null;
+const NOOP = () => {};
 
-/**
- * Vue desktop de la page Défis — reprend l'UX existante en se branchant
- * sur le hook partagé `useDefisLogic` et la `DeclareGameFlow` extraite.
- */
+// ─── Badges de discipline ─────────────────────────────────────────────────────
+const GAME_BADGE: Partial<Record<Game, string>> = {
+  smash: '🎮 Smash',
+  chess: '♟ Échecs',
+};
+
+function GameTag({ game }: { game?: Game }) {
+  if (!game || game === 'babyfoot') return null;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] bg-accent/12 text-accent border border-accent/25">
+      {GAME_BADGE[game]}
+    </span>
+  );
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────────
+
 export function DefisDesktop() {
   const t = useT();
   const { lang } = useI18n();
   const { locations } = useLeagueData();
+  const { game } = useGameMode();
   const {
     myLogin,
     incoming,
@@ -54,10 +74,7 @@ export function DefisDesktop() {
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
   const [presetOpp, setPresetOpp] = useState<LeaderboardEntry | null>(null);
-  const [showAllTargets, setShowAllTargets] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
-
-  const TARGETS_PREVIEW = 9;
 
   const openChallengeWith = (player: LeaderboardEntry | null) => {
     setPresetOpp(player);
@@ -75,8 +92,11 @@ export function DefisDesktop() {
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')} accent="swords">
       <div ref={topRef} />
-      <DefisStatsBar />
-      <ActionBento
+
+      {/* ── 1. HERO CTAs ─────────────────────────────────────────────────── */}
+      {/* Les 2 boutons les plus importants du site : toujours au-dessus du pli,
+          taille héro, jamais discrets. */}
+      <HeroCTAs
         openCard={openCard}
         presetOpp={presetOpp}
         others={others}
@@ -88,202 +108,44 @@ export function DefisDesktop() {
           if (c === 'challenge') setPresetOpp(null);
           setOpenCard(c);
         }}
-        onClose={() => {
-          setOpenCard(null);
-          setPresetOpp(null);
-        }}
+        onClose={() => { setOpenCard(null); setPresetOpp(null); }}
         onDone={refresh}
       />
 
-      {/* Command center : à gauche le flux d'activité (à confirmer + défis),
-          à droite le roster d'adversaires. Quand il n'y a aucune activité, le
-          roster s'étale sur toute la largeur (réagencement « Uber Eats »). */}
-      <div className={`grid gap-5 items-stretch lg:min-h-[58vh] ${hasActivity ? 'lg:grid-cols-12' : ''}`}>
-        {hasActivity && (
-          <div className="lg:col-span-5 space-y-4">
-            {pendingToConfirm.length > 0 && (
-              <Section title="À confirmer">
-                {pendingToConfirm.map((p) => (
-                  <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
-                ))}
-              </Section>
-            )}
-            {incoming.length > 0 && (
-              <Section title={t('defis.received')}>
-                {incoming.map((c) => (
-                  <ChallengeRow
-                    key={c.id}
-                    challenge={c}
-                    kind="incoming"
-                    myLogin={myLogin}
-                    lang={lang}
-                    onAccept={() => handleAction(c.id, 'accept')}
-                    onDecline={() => handleAction(c.id, 'decline')}
-                  />
-                ))}
-              </Section>
-            )}
-            {accepted.length > 0 && (
-              <Section title={t('defis.scheduled')}>
-                {accepted.map((c) => (
-                  <ChallengeRow
-                    key={c.id}
-                    challenge={c}
-                    kind="accepted"
-                    myLogin={myLogin}
-                    lang={lang}
-                    onAccept={NOOP}
-                    onDecline={() => handleAction(c.id, 'decline')}
-                  />
-                ))}
-              </Section>
-            )}
-            {outgoing.length > 0 && (
-              <Section title={t('defis.sent')}>
-                {outgoing.map((c) => (
-                  <ChallengeRow
-                    key={c.id}
-                    challenge={c}
-                    kind="outgoing"
-                    myLogin={myLogin}
-                    lang={lang}
-                    onAccept={NOOP}
-                    onDecline={() => handleAction(c.id, 'decline')}
-                  />
-                ))}
-              </Section>
-            )}
-            {pendingWaiting.length > 0 && (
-              <Section title="En attente de confirmation">
-                {pendingWaiting.map((p) => (
-                  <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
-                ))}
-              </Section>
-            )}
-          </div>
-        )}
+      {/* ── 2. ACTIVITÉ (flux compact, en dessous des CTAs) ──────────────── */}
+      {hasActivity && (
+        <ActivityStream
+          pendingToConfirm={pendingToConfirm}
+          pendingWaiting={pendingWaiting}
+          incoming={incoming}
+          accepted={accepted}
+          outgoing={outgoing}
+          myLogin={myLogin}
+          lang={lang}
+          refresh={refresh}
+          handleAction={handleAction}
+          cancelDeclaration={cancelDeclaration}
+        />
+      )}
 
-        <div className={`flex flex-col ${hasActivity ? 'lg:col-span-7' : ''}`}>
-          <Section title={t('defis.challenge')}>
-            {others.length === 0 ? (
-              <div className="text-center text-muted-2 py-6">{t('defis.empty')}</div>
-            ) : (
-              <>
-                <div
-                  className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
-                    hasActivity ? '' : 'xl:grid-cols-3'
-                  }`}
-                >
-                  {(showAllTargets ? others : others.slice(0, TARGETS_PREVIEW)).map((u) => (
-                    <ChallengeCard key={u.login} player={u} onChallenge={openChallengeWith} />
-                  ))}
-                </div>
-                {others.length > TARGETS_PREVIEW && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllTargets((v) => !v)}
-                    className="mt-3 w-full py-2 rounded-lg border border-gold/30 text-gold/90 text-xs font-gaming font-extrabold uppercase tracking-[0.14em] hover:bg-gold/[0.06] hover:border-gold transition-colors"
-                  >
-                    {showAllTargets
-                      ? '▲ Afficher moins'
-                      : `▼ Afficher plus (${others.length - TARGETS_PREVIEW} joueurs)`}
-                  </button>
-                )}
-              </>
-            )}
-          </Section>
-
-          {/* Espace souple : pousse les stats vers le bas pour que la colonne
-              occupe toute la hauteur disponible (au lieu de laisser un grand vide). */}
-          <div className="flex-1 min-h-[24px]" />
-
-          <ChallengeStats
-            incoming={incoming.length}
-            outgoing={outgoing.length}
-            accepted={accepted.length}
-            pending={pendingToConfirm.length + pendingWaiting.length}
-            available={others.length}
-          />
-        </div>
-      </div>
+      {/* ── 3. POOL COMPLET DE JOUEURS ───────────────────────────────────── */}
+      <PlayerPool
+        players={others}
+        leaderboard={[]}
+        game={game}
+        onChallenge={openChallengeWith}
+        onDeclare={(p) => { setPresetOpp(p); setOpenCard('declare'); }}
+      />
     </Panel>
   );
 }
 
-const NOOP = () => {};
+// ─── Hero CTAs ────────────────────────────────────────────────────────────────
+// Les 2 boutons d'action principaux du site : Déclarer + Défier.
+// Fermés : grandes cartes hero avec glow et animation d'entrée.
+// Ouverts : expansion pleine largeur avec le flow de saisie intégré.
 
-// ─── Barre de stats perso (remplit le haut du panneau Défis) ─────────────────
-
-function DefisStatsBar() {
-  const { me, matches, leaderboard } = useLeagueData();
-  const stats = useMemo(() => {
-    const login = me?.login;
-    if (!login) return null;
-    const mine = matches.filter(
-      (m) => m.playerALogin === login || m.playerBLogin === login,
-    );
-    let wins = 0;
-    let losses = 0;
-    for (const m of mine) {
-      const isA = m.playerALogin === login;
-      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-      if (won) wins += 1;
-      else losses += 1;
-    }
-    const recent = [...mine].sort(
-      (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
-    );
-    let streak = 0;
-    for (const m of recent) {
-      const isA = m.playerALogin === login;
-      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-      if (streak === 0) streak = won ? 1 : -1;
-      else if (won && streak > 0) streak += 1;
-      else if (!won && streak < 0) streak -= 1;
-      else break;
-    }
-    const total = wins + losses;
-    return {
-      elo: me?.user?.elo ?? 1000,
-      rank: leaderboard.find((u) => u.login === login)?.rank ?? null,
-      wins,
-      losses,
-      winRate: total ? Math.round((wins / total) * 100) : 0,
-      streak,
-    };
-  }, [me, matches, leaderboard]);
-
-  if (!stats) return null;
-
-  const streakLabel =
-    stats.streak > 0
-      ? `${stats.streak} V`
-      : stats.streak < 0
-        ? `${Math.abs(stats.streak)} D`
-        : '—';
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
-      <StatCard value={stats.rank ? `#${stats.rank}` : '—'} label="Rang" tone="gold" />
-      <StatCard
-        value={String(stats.elo)}
-        label={<>ELO <RankedBadge size="xs" /></>}
-        tone="teal"
-      />
-      <StatCard value={`${stats.wins}-${stats.losses}`} label="Bilan V-D" tone="neutral" />
-      <StatCard
-        value={`${stats.winRate}%`}
-        label="Win rate"
-        tone={stats.winRate >= 50 ? 'win' : 'loss'}
-      />
-      <StatCard value={streakLabel} label="Série" tone={stats.streak >= 0 ? 'win' : 'loss'} />
-    </div>
-  );
-}
-
-// ─── Bento d'actions « Déclarer / Défier » — réagencement selon l'espace ─────
-
-interface ActionBentoProps {
+interface HeroCTAsProps {
   openCard: OpenCard;
   presetOpp: LeaderboardEntry | null;
   others: LeaderboardEntry[];
@@ -296,33 +158,17 @@ interface ActionBentoProps {
   onDone: () => Promise<void>;
 }
 
-/**
- * Deux cartes d'action côte à côte. Quand l'une s'ouvre, elle prend toute la
- * largeur et l'autre s'efface — layout « Uber Eats » qui se réagence selon
- * l'espace disponible (transitions framer layout).
- */
-function ActionBento({
-  openCard,
-  presetOpp,
-  others,
-  recentOpponents,
-  opponentCounts,
-  myLogin,
-  locations,
-  onOpen,
-  onClose,
-  onDone,
-}: ActionBentoProps) {
-  const submitAndClose = async () => {
-    await onDone();
-    onClose();
-  };
+function HeroCTAs({
+  openCard, presetOpp, others, recentOpponents, opponentCounts,
+  myLogin, locations, onOpen, onClose, onDone,
+}: HeroCTAsProps) {
+  const submitAndClose = async () => { await onDone(); onClose(); };
 
   return (
-    <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
       <AnimatePresence mode="popLayout">
         {(openCard === null || openCard === 'declare') && (
-          <ActionCard
+          <HeroCTACard
             key="declare"
             kind="declare"
             expanded={openCard === 'declare'}
@@ -338,11 +184,11 @@ function ActionBento({
               locations={locations}
               onSubmitted={submitAndClose}
             />
-          </ActionCard>
+          </HeroCTACard>
         )}
 
         {(openCard === null || openCard === 'challenge') && (
-          <ActionCard
+          <HeroCTACard
             key="challenge"
             kind="challenge"
             expanded={openCard === 'challenge'}
@@ -360,64 +206,92 @@ function ActionBento({
               presetOpponent={presetOpp}
               onSubmitted={submitAndClose}
             />
-          </ActionCard>
+          </HeroCTACard>
         )}
       </AnimatePresence>
     </motion.div>
   );
 }
 
-interface ActionCardMeta {
-  Icon: typeof Plus;
-  label: string;
-  sub: string;
-}
+const CTA_META = {
+  declare: {
+    Icon: Plus,
+    label: 'Déclarer une game',
+    sub: 'Enregistrer une partie déjà jouée',
+    gradient: 'from-gold/25 via-gold/8 to-transparent',
+    border: 'border-gold/50 hover:border-gold',
+    glow: '0 0 36px rgba(255,201,74,0.22)',
+    iconBg: 'bg-gold/20',
+    accent: 'text-gold',
+  },
+  challenge: {
+    Icon: Swords,
+    label: 'Défier un joueur',
+    sub: 'Programmer un duel à venir',
+    gradient: 'from-accent/20 via-accent/6 to-transparent',
+    border: 'border-accent/50 hover:border-accent',
+    glow: '0 0 36px rgba(var(--accent-gold),0.20)',
+    iconBg: 'bg-accent/20',
+    accent: 'text-accent',
+  },
+} as const;
 
-const ACTION_META: Record<Exclude<OpenCard, null>, ActionCardMeta> = {
-  declare: { Icon: Plus, label: 'Déclarer une game passée', sub: 'Game déjà jouée' },
-  challenge: { Icon: Swords, label: 'Défier un joueur', sub: 'Programmer un duel' },
-};
-
-interface ActionCardProps {
-  kind: Exclude<OpenCard, null>;
+interface HeroCTACardProps {
+  kind: keyof typeof CTA_META;
   expanded: boolean;
   onOpen: () => void;
   onClose: () => void;
   children: ReactNode;
 }
 
-function ActionCard({ kind, expanded, onOpen, onClose, children }: ActionCardProps) {
-  const meta = ACTION_META[kind];
+function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardProps) {
+  const meta = CTA_META[kind];
   const Icon = meta.Icon;
 
   if (!expanded) {
     return (
       <motion.button
         layout
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
         type="button"
         onClick={onOpen}
-        className="shine group flex items-center gap-3 py-5 px-5 rounded-2xl border border-dashed border-gold/30 hover:border-gold hover:bg-gold/[0.06] transition-all duration-300 text-left shadow-sm hover:shadow-gold-glow"
+        className={`shine group relative overflow-hidden rounded-2xl border-2 ${meta.border}
+          bg-gradient-to-br from-bg-2/80 to-bg-1/90
+          flex items-center gap-5 px-7 py-6
+          transition-all duration-300 text-left
+          active:scale-[0.98]`}
+        style={{ boxShadow: meta.glow }}
       >
+        {/* Gradient d'accent en background */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${meta.gradient} opacity-60 pointer-events-none`} />
+        {/* Filet doré en haut */}
+        <div className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-gold/50 to-transparent pointer-events-none" />
+
+        {/* Icône grande et ronde */}
         <span
-          className="flex items-center justify-center w-10 h-10 rounded-full border border-gold/50 group-hover:scale-110 transition-transform flex-shrink-0"
-          style={{
-            background: 'linear-gradient(135deg, rgba(255,201,74,0.25), rgba(255,201,74,0.08))',
-            boxShadow: 'inset 0 1px 0 rgba(255,247,228,0.2), 0 0 12px rgba(255,201,74,0.25)',
-          }}
+          className={`relative flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-2xl ${meta.iconBg}
+            group-hover:scale-110 transition-transform duration-300`}
+          style={{ boxShadow: 'inset 0 1px 0 rgba(255,247,228,0.18)' }}
         >
-          <Icon className="w-5 h-5 text-gold" strokeWidth={2.5} />
+          <Icon className={`w-8 h-8 ${meta.accent}`} strokeWidth={2.2} />
         </span>
-        <span className="min-w-0">
-          <span className="block font-gaming text-sm font-extrabold uppercase tracking-[0.14em] text-text-strong group-hover:text-gold transition-colors">
+
+        {/* Texte */}
+        <span className="relative min-w-0 flex-1">
+          <span className={`block font-display text-xl font-black tracking-tight ${meta.accent} leading-none mb-1.5`}>
             {meta.label}
           </span>
-          <span className="block text-[10px] text-muted uppercase tracking-[0.16em] font-extrabold mt-0.5">
+          <span className="block text-[11px] text-muted-2 font-medium uppercase tracking-[0.16em]">
             {meta.sub}
           </span>
+        </span>
+
+        {/* Flèche */}
+        <span className={`relative ${meta.accent} opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all`}>
+          →
         </span>
       </motion.button>
     );
@@ -439,49 +313,271 @@ function ActionCard({ kind, expanded, onOpen, onClose, children }: ActionCardPro
       }}
     >
       <div className="relative flex items-center justify-between mb-6">
-        <span className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold flex items-center gap-2">
-          <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-          {meta.label}
-        </span>
+        <div className="flex items-center gap-3">
+          <Icon className={`w-5 h-5 ${meta.accent}`} strokeWidth={2.5} />
+          <span className={`font-display text-base font-black ${meta.accent}`}>
+            {meta.label}
+          </span>
+        </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Fermer"
-          className="text-muted hover:text-text-strong transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
+          className="text-muted hover:text-text-strong transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
         >
           <X className="w-4 h-4" strokeWidth={2.5} />
         </button>
       </div>
-
-      {/* Largeur de lecture confortable pour le flow */}
-      <div className="relative w-full max-w-md mx-auto">{children}</div>
+      <div className="relative w-full max-w-md mx-auto flex-1">{children}</div>
     </motion.div>
   );
 }
 
-// ─── Match en attente de confirmation (desktop layout) ───────────────────────
+// ─── Flux d'activité (compact) ───────────────────────────────────────────────
+// Regroupé dans une section dépliable pour ne pas écraser les CTAs.
 
-function PendingConfirmRow({
-  match,
-  onDone,
-}: {
-  match: PendingMatch;
-  onDone: () => Promise<void>;
+interface ActivityStreamProps {
+  pendingToConfirm: PendingMatch[];
+  pendingWaiting: PendingMatch[];
+  incoming: Challenge[];
+  accepted: Challenge[];
+  outgoing: Challenge[];
+  myLogin: string | undefined;
+  lang: Lang;
+  refresh: () => Promise<void>;
+  handleAction: (id: string, action: 'accept' | 'decline') => Promise<void>;
+  cancelDeclaration: (match: PendingMatch) => void;
+}
+
+function ActivityStream({
+  pendingToConfirm, pendingWaiting, incoming, accepted, outgoing,
+  myLogin, lang, refresh, handleAction, cancelDeclaration,
+}: ActivityStreamProps) {
+  const urgentCount = pendingToConfirm.length + incoming.length;
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mb-8 rounded-2xl overflow-hidden border border-border/40 bg-white/[0.015]">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors"
+      >
+        {urgentCount > 0 && (
+          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gold text-[#1a1100] text-[10px] font-extrabold flex items-center justify-center">
+            {urgentCount}
+          </span>
+        )}
+        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90 flex-1 text-left">
+          Activité en cours
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2.5}
+        />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4">
+          {pendingToConfirm.length > 0 && (
+            <ActivityGroup label="À confirmer" badge={pendingToConfirm.length} urgent>
+              {pendingToConfirm.map((p) => (
+                <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
+              ))}
+            </ActivityGroup>
+          )}
+          {incoming.length > 0 && (
+            <ActivityGroup label="Défis reçus" badge={incoming.length} urgent>
+              {incoming.map((c) => (
+                <ChallengeRow key={c.id} challenge={c} kind="incoming" myLogin={myLogin} lang={lang}
+                  onAccept={() => handleAction(c.id, 'accept')}
+                  onDecline={() => handleAction(c.id, 'decline')} />
+              ))}
+            </ActivityGroup>
+          )}
+          {accepted.length > 0 && (
+            <ActivityGroup label="Duels programmés" badge={accepted.length}>
+              {accepted.map((c) => (
+                <ChallengeRow key={c.id} challenge={c} kind="accepted" myLogin={myLogin} lang={lang}
+                  onAccept={NOOP}
+                  onDecline={() => handleAction(c.id, 'decline')} />
+              ))}
+            </ActivityGroup>
+          )}
+          {outgoing.length > 0 && (
+            <ActivityGroup label="Défis envoyés" badge={outgoing.length}>
+              {outgoing.map((c) => (
+                <ChallengeRow key={c.id} challenge={c} kind="outgoing" myLogin={myLogin} lang={lang}
+                  onAccept={NOOP}
+                  onDecline={() => handleAction(c.id, 'decline')} />
+              ))}
+            </ActivityGroup>
+          )}
+          {pendingWaiting.length > 0 && (
+            <ActivityGroup label="En attente de confirmation" badge={pendingWaiting.length}>
+              {pendingWaiting.map((p) => (
+                <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
+              ))}
+            </ActivityGroup>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivityGroup({ label, badge, urgent = false, children }: {
+  label: string; badge: number; urgent?: boolean; children: ReactNode;
 }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="font-gaming text-[9px] uppercase tracking-[0.16em] font-extrabold text-muted-2">{label}</span>
+        <span className={`text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded-full ${urgent ? 'text-gold bg-gold/15' : 'text-muted bg-bg-2'}`}>
+          {badge}
+        </span>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+// ─── Pool complet de joueurs ──────────────────────────────────────────────────
+// Tous les joueurs, triés par rang, avec ELO + WR + boutons d'action.
+
+interface PlayerPoolProps {
+  players: LeaderboardEntry[];
+  leaderboard: LeaderboardEntry[];
+  game: Game;
+  onChallenge: (player: LeaderboardEntry) => void;
+  onDeclare: (player: LeaderboardEntry) => void;
+}
+
+function PlayerPool({ players, leaderboard: _lb, game: _game, onChallenge, onDeclare }: PlayerPoolProps) {
+  const t = useT();
+  const [query, setQuery] = useState('');
+  const filtered = query.trim()
+    ? players.filter((p) => p.login.toLowerCase().includes(query.trim().toLowerCase()))
+    : players;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+          Pool de joueurs
+          <span className="font-mono text-muted-2 normal-case tracking-normal">
+            · {players.length} joueurs
+          </span>
+        </div>
+        <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
+        {/* Mini recherche */}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filtrer…"
+          className="w-36 px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-medium focus:border-gold outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
+        />
+      </div>
+
+      {players.length === 0 ? (
+        <div className="text-center text-muted-2 py-8 text-sm">{t('defis.empty')}</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+          {filtered.map((u) => (
+            <PlayerCard
+              key={u.login}
+              player={u}
+              onChallenge={onChallenge}
+              onDeclare={onDeclare}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayerCard({
+  player,
+  onChallenge,
+  onDeclare,
+}: {
+  player: LeaderboardEntry;
+  onChallenge: (p: LeaderboardEntry) => void;
+  onDeclare: (p: LeaderboardEntry) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      className="card-hud rounded-xl p-3 hover-glow flex items-center gap-3 group"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Rang */}
+      <span className="w-8 flex-shrink-0 text-center font-mono font-extrabold tabular-nums text-sm text-muted-2">
+        #{player.rank}
+      </span>
+
+      {/* Avatar + infos */}
+      <PlayerLink login={player.login} className="flex-1 min-w-0">
+        <Avatar login={player.login} imageUrl={player.imageUrl} size="md" />
+        <div className="min-w-0 flex-1">
+          <div className="font-display font-bold truncate text-text-strong text-sm">{player.login}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-gold font-extrabold font-mono tabular-nums text-[11px]">{player.elo}</span>
+            <span className="text-[10px] text-muted-2">ELO</span>
+          </div>
+        </div>
+      </PlayerLink>
+
+      {/* Boutons d'action (visibles au hover) */}
+      <AnimatePresence>
+        {hovered && (
+          <motion.div
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 8 }}
+            transition={{ duration: 0.15 }}
+            className="flex items-center gap-1.5 flex-shrink-0"
+          >
+            <button
+              type="button"
+              onClick={() => onDeclare(player)}
+              title="Déclarer une game passée"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-gold hover:bg-gold/10 transition-colors"
+            >
+              <Plus className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onChallenge(player)}
+              title="Défier ce joueur"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-accent hover:bg-accent/10 transition-colors"
+            >
+              <Swords className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Ligne de match en attente de confirmation ────────────────────────────────
+
+function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () => Promise<void> }) {
   const flash = useFlash();
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Une fois tranché (confirmé/contesté), la ligne se retire immédiatement —
-  // sans attendre le refresh réseau.
   const [resolved, setResolved] = useState(false);
-
-  // Vainqueur par comparaison de scores (toutes disciplines : 10-x, 1-0, 2-1).
   const iWon = match.scoreOpponent > match.scoreDeclarer;
 
   const handleConfirm = async () => {
     setBusy(true);
     try {
-      // Confirmation directe du score déclaré (point de vue « toi ») — pas de re-saisie.
       await api.confirmMatch(match.id, match.scoreOpponent, match.scoreDeclarer, {
         game: match.game,
         bestOf: match.bestOf as 3 | 5 | undefined,
@@ -495,11 +591,7 @@ function PendingConfirmRow({
     }
   };
 
-  const handleContestSubmit = async (
-    reason: 'never_played' | 'wrong_score',
-    message: string,
-  ) => {
-    // Ferme la popup tout de suite et retire la ligne au succès.
+  const handleContestSubmit = async (reason: 'never_played' | 'wrong_score', message: string) => {
     setContesting(false);
     setBusy(true);
     try {
@@ -517,38 +609,30 @@ function PendingConfirmRow({
 
   return (
     <>
-      <div className="relative card-hud border-gold/50 rounded-xl p-3 animate-pop hover-glow">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span aria-hidden className="text-base">⚡</span>
-          <PlayerLink login={match.declarerLogin} className="font-semibold text-gold">
-            {match.declarerLogin}
-          </PlayerLink>
-          <span className="text-muted-2">a déclaré :</span>
-          <span className="font-bold tabular-nums text-text-strong text-base">
-            {match.scoreDeclarer}
-            <span className="text-muted mx-1.5">–</span>
-            {match.scoreOpponent}
-          </span>
-          <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">(eux – toi)</span>
-        </div>
-
-        <div className="mt-1.5 text-[11px] text-muted-2">
-          Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'}. Confirme si c'est exact.
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" loading={busy} onClick={handleConfirm} className="flex-1">✓ Confirmer</Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setContesting(true)}
-            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
-          >
+      <div className="relative rounded-xl p-3 border border-gold/40 bg-gold/[0.05] animate-pop flex flex-wrap items-center gap-2.5">
+        <Zap className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.4)" />
+        <PlayerLink login={match.declarerLogin} className="font-semibold text-gold text-sm">
+          {match.declarerLogin}
+        </PlayerLink>
+        <span className="text-muted-2 text-sm">a déclaré :</span>
+        <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
+          {match.scoreDeclarer}
+          <span className="text-muted mx-1">–</span>
+          {match.scoreOpponent}
+        </span>
+        <GameTag game={match.game} />
+        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">(eux – toi)</span>
+        <span className="text-[11px] text-muted-2 hidden sm:inline">
+          → Tu as {iWon ? 'gagné' : 'perdu'}
+        </span>
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" loading={busy} onClick={handleConfirm}>✓ Confirmer</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
+            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
             Contester
           </Button>
         </div>
       </div>
-
       {contesting && (
         <ContestModal
           declarerLogin={match.declarerLogin}
@@ -564,46 +648,27 @@ function PendingConfirmRow({
 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   return (
-    <div className="card-hud rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm">
-      <span aria-hidden className="text-base opacity-50">⏳</span>
+    <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
+      <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
       <span className="text-muted-2">En attente de</span>
-      <PlayerLink login={match.opponentLogin} className="font-semibold">
-        {match.opponentLogin}
-      </PlayerLink>
-      <span className="font-bold tabular-nums text-text-strong">
+      <PlayerLink login={match.opponentLogin} className="font-semibold">{match.opponentLogin}</PlayerLink>
+      <span className="font-mono font-extrabold tabular-nums text-text-strong">
         {match.scoreDeclarer}
         <span className="text-muted mx-1">–</span>
         {match.scoreOpponent}
       </span>
-      <span className="text-[10px] text-muted">(toi – eux)</span>
+      <GameTag game={match.game} />
       <span className="ml-auto text-[10px] text-muted italic">confirmation en attente…</span>
-      <button
-        type="button"
-        onClick={onCancel}
+      <button type="button" onClick={onCancel}
         className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
-        title="Annuler ma déclaration"
-        aria-label="Annuler ma déclaration"
-      >
+        title="Annuler" aria-label="Annuler">
         <X className="w-4 h-4" strokeWidth={2.5} />
       </button>
     </div>
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div>
-      <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-2 flex items-center gap-2">
-        <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-        {title}
-        <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
-      </div>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
+// ─── Ligne de défi ────────────────────────────────────────────────────────────
 
 interface ChallengeRowProps {
   challenge: Challenge;
@@ -614,28 +679,23 @@ interface ChallengeRowProps {
   onDecline: () => void;
 }
 
-const KIND_LABEL: Record<Kind, string> = {
-  incoming: 'Défi de',
-  outgoing: 'Défi à',
-  accepted: 'Match vs',
-};
-
 function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: ChallengeRowProps) {
-  const opponent =
-    challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
+  const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
   const when = fmtRelative(challenge.scheduledAt, lang);
   const [recording, setRecording] = useState(false);
 
+  const KIND_ICON = { incoming: '⚔', outgoing: '→', accepted: '🎯' };
+  const KIND_LABEL = { incoming: 'Défi reçu de', outgoing: 'Défi envoyé à', accepted: 'Match vs' };
+
   return (
-    <div className="card-hud rounded-xl p-3 hover-glow">
+    <div className="rounded-xl p-3 border border-border/50 bg-white/[0.02] hover:border-accent/30 transition-colors">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span aria-hidden className="text-base text-gold">⚔</span>
-        <span className="text-muted-2">{KIND_LABEL[kind]}</span>
-        <PlayerLink login={opponent} className="font-semibold">
-          {opponent}
-        </PlayerLink>
-        <span className={`text-xs ${when.late ? 'text-red' : 'text-muted-2'}`}>{when.text}</span>
-        <div className="flex-1" />
+        <span aria-hidden>{KIND_ICON[kind]}</span>
+        <span className="text-muted-2 text-[11px]">{KIND_LABEL[kind]}</span>
+        <PlayerLink login={opponent} className="font-semibold text-sm">{opponent}</PlayerLink>
+        {/* Game badge proéminent */}
+        <GameTag game={challenge.game} />
+        <span className={`text-[11px] ml-auto ${when.late ? 'text-red' : 'text-muted-2'}`}>{when.text}</span>
 
         {kind === 'incoming' && (
           <>
@@ -665,16 +725,10 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
   );
 }
 
-function RecordResultForm({
-  challengeId,
-  game,
-  oppLogin,
-  onDone,
-}: {
-  challengeId: string;
-  game: Game;
-  oppLogin: string;
-  onDone: () => void;
+// ─── Formulaire d'enregistrement d'un résultat de défi ───────────────────────
+
+function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
+  challengeId: string; game: Game; oppLogin: string; onDone: () => void;
 }) {
   const { refresh } = useLeagueData();
   const flash = useFlash();
@@ -695,35 +749,23 @@ function RecordResultForm({
     }
   };
 
-  // ── Échecs : résultat binaire, en un seul geste. ──
   if (game === 'chess') {
     return (
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <OutcomeButton kind="win" onClick={() => send({ scoreSelf: 1, scoreOpponent: 0, game: 'chess' })}>
-          J'ai gagné
-        </OutcomeButton>
-        <OutcomeButton kind="loss" onClick={() => send({ scoreSelf: 0, scoreOpponent: 1, game: 'chess' })}>
-          J'ai perdu
-        </OutcomeButton>
+        <OutcomeButton kind="win" onClick={() => send({ scoreSelf: 1, scoreOpponent: 0, game: 'chess' })}>J'ai gagné</OutcomeButton>
+        <OutcomeButton kind="loss" onClick={() => send({ scoreSelf: 0, scoreOpponent: 1, game: 'chess' })}>J'ai perdu</OutcomeButton>
       </div>
     );
   }
-
-  // ── Smash : un set demande les persos + les vies → on renvoie vers
-  //    « Déclarer une partie », plus complet (et déjà rodé). ──
   if (game === 'smash') {
     return (
-      <div className="mt-3 space-y-2 text-center">
-        <p className="text-xs text-muted-2 leading-relaxed">
-          Pour un set Smash (persos, vies restantes), saisis le résultat via
-          <span className="text-text font-semibold"> « Déclarer une partie »</span>.
-        </p>
+      <div className="mt-3 text-center space-y-2">
+        <p className="text-xs text-muted-2">Pour un set Smash, utilise <span className="text-text font-semibold">« Déclarer une game »</span>.</p>
         <Button size="sm" variant="ghost" onClick={onDone} className="w-full">OK</Button>
       </div>
     );
   }
 
-  // ── Babyfoot : abaque du score du perdant. ──
   if (iWon === null) {
     return (
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -733,97 +775,39 @@ function RecordResultForm({
     );
   }
 
-  const loserLabel = iWon ? oppLogin : 'Moi';
+  const winnerLogin = iWon ? 'Moi' : oppLogin;
+  const loserLogin = iWon ? oppLogin : 'Moi';
+
   return (
     <div className="mt-3 space-y-3">
-      <div className="text-xs text-muted text-center">
-        Score de <span className="text-text font-semibold">{loserLabel}</span>
+      {/* Score visuel côte à côte */}
+      <div className="flex items-stretch gap-2">
+        {[{ login: winnerLogin, score: WINNING_SCORE, isWinner: true },
+          { login: loserLogin, score: loserScore, isWinner: false }].map(({ login, score, isWinner }) => (
+          <div key={login} className={`flex-1 rounded-xl flex flex-col items-center py-3 gap-1
+            ${isWinner ? 'bg-gold/10 border border-gold/40' : loserScore < 0 ? 'bg-red/[0.07] border border-red/30' : 'bg-bg-2/60 border border-border/60'}`}>
+            <span className="text-[9px] uppercase tracking-wider text-muted font-bold">{login === 'Moi' ? 'Toi' : login}</span>
+            <span className={`font-display text-3xl font-black tabular-nums ${isWinner ? 'text-gold' : loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>
+              {score}
+            </span>
+            {isWinner && <span className="text-[8px] text-gold/50 font-extrabold uppercase tracking-wider">🔒</span>}
+            {!isWinner && <span className="text-[8px] text-muted-2 font-extrabold uppercase tracking-wider">← glisser</span>}
+          </div>
+        ))}
       </div>
-      <AbacusSlider
-        value={loserScore}
-        onChange={setLoserScore}
-        min={LOSER_SCORE_MIN}
-        max={LOSER_SCORE_MAX}
-      />
+      <AbacusSlider value={loserScore} onChange={setLoserScore} min={LOSER_SCORE_MIN} max={LOSER_SCORE_MAX} />
       <div className="flex gap-2 pt-1">
         <Button size="sm" variant="ghost" onClick={() => setIWon(null)} className="flex-none">←</Button>
-        <Button
-          size="sm"
-          loading={busy}
-          onClick={() =>
-            send({
-              scoreSelf: iWon ? WINNING_SCORE : loserScore,
-              scoreOpponent: iWon ? loserScore : WINNING_SCORE,
-              game: 'babyfoot',
-            })
-          }
-          className="flex-1"
-        >
-          Envoyer
-        </Button>
+        <Button size="sm" loading={busy}
+          onClick={() => send({
+            scoreSelf: iWon ? WINNING_SCORE : loserScore,
+            scoreOpponent: iWon ? loserScore : WINNING_SCORE,
+            game: 'babyfoot',
+          })}
+          className="flex-1">Envoyer</Button>
         <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">Annuler</Button>
       </div>
     </div>
   );
 }
 
-interface ChallengeCardProps {
-  player: LeaderboardEntry;
-  onChallenge: (player: LeaderboardEntry) => void;
-}
-
-// ─── Stats des défis en cours (comble l'espace sous le roster) ───────────────
-
-function ChallengeStats({
-  incoming,
-  outgoing,
-  accepted,
-  pending,
-  available,
-}: {
-  incoming: number;
-  outgoing: number;
-  accepted: number;
-  pending: number;
-  available: number;
-}) {
-  return (
-    <div className="mt-6">
-      <Section title="Stats des défis">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          <StatCard value={String(incoming)} label="Reçus" tone="gold" />
-          <StatCard value={String(outgoing)} label="Envoyés" tone="teal" />
-          <StatCard value={String(accepted)} label="Programmés" tone="win" />
-          <StatCard value={String(pending)} label="À confirmer" tone="loss" />
-          <StatCard value={String(available)} label="À défier" tone="neutral" />
-        </div>
-        <p className="text-[11px] text-muted-2 mt-2 leading-relaxed">
-          {pending > 0
-            ? `${pending} match${pending > 1 ? 's' : ''} en attente de confirmation — pense à valider tes scores.`
-            : accepted > 0
-              ? `${accepted} duel${accepted > 1 ? 's' : ''} programmé${accepted > 1 ? 's' : ''} : saisis le score une fois joué.`
-              : 'Aucun défi en cours — lance-toi en défiant un joueur ci-dessus !'}
-        </p>
-      </Section>
-    </div>
-  );
-}
-
-function ChallengeCard({ player, onChallenge }: ChallengeCardProps) {
-  return (
-    <div className="card-hud rounded-xl p-3 hover-glow">
-      <div className="flex items-center gap-2.5">
-        <PlayerLink login={player.login} className="flex-1 min-w-0">
-          <Avatar login={player.login} imageUrl={player.imageUrl} size="md" />
-          <div className="min-w-0">
-            <div className="font-display font-bold truncate text-text-strong">{player.login}</div>
-            <div className="text-[11px] text-muted-2">
-              <span className="text-gold font-extrabold font-mono tabular-nums">{player.elo}</span> ELO · #{player.rank}
-            </div>
-          </div>
-        </PlayerLink>
-        <Button size="sm" onClick={() => onChallenge(player)}>Défier</Button>
-      </div>
-    </div>
-  );
-}

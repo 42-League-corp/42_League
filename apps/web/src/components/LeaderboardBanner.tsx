@@ -1,49 +1,47 @@
 import { useGameMode } from '../hooks/useGameMode';
 
 /**
- * Bandeau de fond du classement, thématisé par mode :
- *  - babyfoot : feutrine verte + lignes de terrain ;
- *  - smash : champ de bataille rouge + Smash Ball.
- * Purement décoratif (image de fond représentant la discipline).
+ * Bandeau visuel thématisé par discipline — élément de contexte DISCRET
+ * positionné en tête du leaderboard. Il donne l'atmosphère (terrain, couleurs)
+ * sans prendre la parole : pas de titre "Classement Babyfoot" en gros, juste
+ * une immersion visuelle subtile.
+ *
+ * - Babyfoot : terrain en feutrine verte avec lignes et barres
+ * - Smash    : fond sombre rouge avec Smash Ball
+ * - Échecs   : échiquier discret vert foncé
  */
 export function LeaderboardBanner() {
   const { game } = useGameMode();
-  const meta =
-    game === 'smash'
-      ? { name: 'Smash', tag: '1 contre 1 · stocks', cls: 'text-red' }
-      : game === 'chess'
-        ? { name: 'Échecs', tag: '1 contre 1 · victoire / défaite', cls: 'text-[#56c46e]' }
-        : { name: 'Babyfoot', tag: '1 contre 1 · 10 buts', cls: 'text-gold' };
   return (
-    <div className="relative h-24 sm:h-28 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden mb-4 border-b sm:border border-border/50">
+    <div className="relative -mx-4 sm:mx-0 h-16 sm:h-20 sm:rounded-xl overflow-hidden mb-5">
       {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : <FoosField />}
-      <div className="absolute inset-0 bg-gradient-to-t from-bg-1/90 via-bg-1/30 to-transparent" />
-      <div className="absolute left-4 bottom-3">
-        <div className="font-display text-xl sm:text-2xl font-black text-text-strong tracking-tight drop-shadow">
-          Classement {meta.name}
-        </div>
-        <div className={`text-[10px] uppercase tracking-[0.18em] font-extrabold ${meta.cls}`}>
-          {meta.tag}
-        </div>
+      {/* Fondu vers le bas — le contenu de la page apparaît proprement */}
+      <div className="absolute inset-0 bg-gradient-to-t from-bg-1 via-bg-1/50 to-transparent" />
+      {/* Petit label discret */}
+      <div className="absolute left-4 bottom-2 flex items-center gap-2 opacity-50">
+        <div className="w-1 h-3 bg-gradient-to-b from-accent to-accent-dim rounded-full" />
+        <span className="text-[9px] uppercase tracking-[0.22em] font-extrabold text-muted-2">
+          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : 'Babyfoot'} · classement
+        </span>
       </div>
     </div>
   );
 }
 
 function ChessField() {
-  // Échiquier vert + pièces stylisées.
   const cells = [];
   for (let r = 0; r < 4; r++)
     for (let col = 0; col < 14; col++)
-      if ((r + col) % 2 === 0) cells.push(<rect key={`${r}-${col}`} x={col * 28.6} y={r * 30} width="28.6" height="30" fill="#0f3d2a" opacity="0.6" />);
+      if ((r + col) % 2 === 0)
+        cells.push(<rect key={`${r}-${col}`} x={col * 28.6} y={r * 30} width="28.6" height="30" fill="#0f3d2a" opacity="0.55" />);
   return (
     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
-      <rect width="400" height="120" fill="#0c2a1c" />
+      <rect width="400" height="120" fill="#080f0a" />
       {cells}
-      <g transform="translate(330,60)" fill="#dfeee2" opacity="0.9">
-        <path d="M0 -34 v10 M-7 -29 h14" stroke="#dfeee2" strokeWidth="5" strokeLinecap="round" />
-        <path d="M0 -22 C-12 -22 -15 -8 -7 0 L-12 30 h24 l-5 -30 C15 -8 12 -22 0 -22 Z" />
-        <rect x="-16" y="30" width="32" height="9" rx="3" />
+      <g transform="translate(360,55)" fill="#56c46e" opacity="0.6">
+        <path d="M0 -22 v6 M-4 -18 h8" stroke="#56c46e" strokeWidth="3.5" strokeLinecap="round" />
+        <path d="M0 -14 C-9 -14 -11 -4 -6 2 L-9 18 h18 l-3 -16 C11 -4 9 -14 0 -14 Z" />
+        <rect x="-12" y="18" width="24" height="6" rx="2" />
       </g>
     </svg>
   );
@@ -53,24 +51,22 @@ function FoosField() {
   return (
     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
       <defs>
-        <linearGradient id="foos-felt" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#13402f" />
-          <stop offset="100%" stopColor="#0c2a20" />
+        <linearGradient id="lb-felt" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0d3322" />
+          <stop offset="100%" stopColor="#08201a" />
         </linearGradient>
       </defs>
-      <rect width="400" height="120" fill="url(#foos-felt)" />
-      {/* Lignes de terrain */}
-      <rect x="14" y="12" width="372" height="96" fill="none" stroke="#ffffff" strokeOpacity="0.25" strokeWidth="2" rx="6" />
-      <line x1="200" y1="12" x2="200" y2="108" stroke="#ffffff" strokeOpacity="0.25" strokeWidth="2" />
-      <circle cx="200" cy="60" r="22" fill="none" stroke="#ffffff" strokeOpacity="0.25" strokeWidth="2" />
-      {/* Barres de babyfoot */}
+      <rect width="400" height="120" fill="url(#lb-felt)" />
+      <rect x="14" y="12" width="372" height="96" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" rx="6" />
+      <line x1="200" y1="12" x2="200" y2="108" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
+      <circle cx="200" cy="60" r="22" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
       {[70, 140, 260, 330].map((x) => (
         <g key={x}>
-          <line x1={x} y1="6" x2={x} y2="114" stroke="#c0a060" strokeOpacity="0.5" strokeWidth="3" />
-          <circle cx={x} cy="60" r="5" fill="#1a1208" stroke="#c0a060" strokeOpacity="0.6" strokeWidth="2" />
+          <line x1={x} y1="6" x2={x} y2="114" stroke="#a08040" strokeOpacity="0.35" strokeWidth="2" />
+          <circle cx={x} cy="60" r="4" fill="#0f0a04" stroke="#a08040" strokeOpacity="0.4" strokeWidth="1.5" />
         </g>
       ))}
-      <circle cx="200" cy="60" r="6" fill="#f5f0e0" opacity="0.85" />
+      <circle cx="200" cy="60" r="6" fill="rgba(245,240,225,0.6)" />
     </svg>
   );
 }
@@ -79,30 +75,25 @@ function SmashField() {
   return (
     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
       <defs>
-        <linearGradient id="smash-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#3a0d12" />
-          <stop offset="100%" stopColor="#160a0c" />
+        <linearGradient id="lb-smash" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#200408" />
+          <stop offset="100%" stopColor="#0d0204" />
         </linearGradient>
-        <radialGradient id="smash-ball2" cx="40%" cy="35%" r="70%">
+        <radialGradient id="lb-ball" cx="38%" cy="33%" r="70%">
           <stop offset="0%" stopColor="#fff" />
-          <stop offset="45%" stopColor="#ff8a3a" />
-          <stop offset="100%" stopColor="#d11f2f" />
+          <stop offset="40%" stopColor="#ff8a3a" />
+          <stop offset="100%" stopColor="#c01824" />
         </radialGradient>
       </defs>
-      <rect width="400" height="120" fill="url(#smash-bg)" />
-      {/* Éclats */}
-      {[40, 120, 300, 360].map((x, i) => (
-        <path
-          key={x}
-          d={`M${x} ${20 + i * 8} l8 18 -14 -4 6 16 -16 -10`}
-          fill="#ff5366"
-          opacity="0.18"
-        />
+      <rect width="400" height="120" fill="url(#lb-smash)" />
+      {[40, 130, 280, 370].map((x, i) => (
+        <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
+          fill="#ff3d50" opacity="0.12" />
       ))}
-      {/* Smash Ball */}
-      <g transform="translate(330,60)">
-        <circle r="34" fill="url(#smash-ball2)" stroke="#fff" strokeWidth="2" opacity="0.9" />
-        <path d="M0 -32 C-9 -10 -9 14 0 32 M-32 0 C-10 -9 14 -9 32 0" fill="none" stroke="#7a0d15" strokeWidth="5" strokeLinecap="round" opacity="0.85" />
+      <g transform="translate(354,58)">
+        <circle r="26" fill="url(#lb-ball)" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" opacity="0.7" />
+        <path d="M0 -24 C-7 -8 -7 10 0 24 M-24 0 C-8 -7 10 -7 24 0"
+          fill="none" stroke="#6a0810" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
       </g>
     </svg>
   );

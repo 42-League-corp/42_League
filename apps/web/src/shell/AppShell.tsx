@@ -6,6 +6,7 @@ import { NotifBanner } from '../components/NotifBanner';
 import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
 import { GameModeSwitch } from '../components/GameModeSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
+import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
 
 interface AppShellProps {
   children: ReactNode;
@@ -32,6 +33,8 @@ export function AppShell({ children }: AppShellProps) {
       <OpsRevealOverlay />
       <GameModeSwitch />
       <GameOnboarding />
+      {/* Overlay cinématique de changement d'univers — pointer-events-none */}
+      <GameTransitionOverlay />
     </>
   );
 }
