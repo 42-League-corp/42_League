@@ -125,6 +125,15 @@
   }
 }
 
+/* Mode capture/preview : fige les animations CSS keyframes (pulse/shimmer/ember…)
+   pour que le rendu soit "idle". Classe posée sur <html> (cf. index.html) seulement
+   si le flag localStorage __previewStatic="1". Jamais en prod. */
+.preview-static *,
+.preview-static *::before,
+.preview-static *::after {
+  animation: none !important;
+}
+
 @layer utilities {
   /* Scrollbar custom — fine dorée sur desktop. */
   .custom-scrollbar {

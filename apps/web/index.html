@@ -35,6 +35,25 @@
   </head>
   <body class="bg-bg-0 text-text antialiased font-sans">
     <div id="root"></div>
+    <!-- Preview/captures : neutralise le flux SSE pour que le réseau soit "idle"
+         (sinon preview_screenshot time-out). Totalement inerte sauf si le flag
+         localStorage __previewStatic="1" est posé (jamais en prod). -->
+    <script>
+      try {
+        if (localStorage.getItem('__previewStatic') === '1') {
+          document.documentElement.classList.add('preview-static');
+          if (window.EventSource) {
+            window.EventSource = class {
+              constructor() {}
+              close() {}
+              addEventListener() {}
+              removeEventListener() {}
+              dispatchEvent() { return false; }
+            };
+          }
+        }
+      } catch (_) {}
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

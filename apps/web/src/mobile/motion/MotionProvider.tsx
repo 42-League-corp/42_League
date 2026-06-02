@@ -13,6 +13,13 @@ interface MotionProviderProps {
  * Note : on n'utilise volontairement PAS `LazyMotion` ici car ça forcerait à
  * migrer tous les `motion.*` en `m.*`. Trade-off bundle vs simplicité retenu.
  */
+// Mode capture/preview : fige les animations Framer pour que le rendu soit
+// "idle" (sinon preview_screenshot time-out). Inerte sauf flag localStorage.
+const PREVIEW_STATIC =
+  typeof window !== 'undefined' && window.localStorage?.getItem('__previewStatic') === '1';
+
 export function MotionProvider({ children }: MotionProviderProps) {
-  return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
+  return (
+    <MotionConfig reducedMotion={PREVIEW_STATIC ? 'always' : 'user'}>{children}</MotionConfig>
+  );
 }
