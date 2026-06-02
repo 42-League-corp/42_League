@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Trophy } from 'lucide-react';
+import { ChevronDown, HelpCircle, Plus, Trophy } from 'lucide-react';
 import { useFAB } from '../../mobile/primitives/FAB';
 import { MetalFrame } from '../../mobile/primitives/MetalFrame';
 import { TrophySilhouette } from '../../mobile/primitives/Silhouettes';
@@ -62,6 +62,11 @@ export function TournoisMobile() {
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
+
+        {/* ── Comment ça marche (toujours EN HAUT, collapsible) ──────────── */}
+        {/* Ouvert par défaut si aucun tournoi — fermé si la liste est fournie. */}
+        <HowItWorks defaultOpen={tournaments.length === 0} />
+
         {/* Hero "Tournoi en cours" si il y en a un */}
         {liveTournament && filter === 'all' && (
           <LiveTournamentHero tournament={liveTournament} />
@@ -76,7 +81,7 @@ export function TournoisMobile() {
 
         {/* Liste */}
         {filtered.length === 0 ? (
-          <EmptyState filter={filter} />
+          filter === 'all' ? null : <EmptyState filter={filter} />
         ) : (
           <StaggerList className="space-y-3">
             {filtered.map((t) => (
@@ -86,9 +91,6 @@ export function TournoisMobile() {
             ))}
           </StaggerList>
         )}
-
-        {/* Comment ça marche ? (parité avec la version desktop) */}
-        <HowItWorks />
 
       </div>
 
@@ -155,40 +157,65 @@ function LiveTournamentHero({ tournament }: { tournament: Tournament }) {
   );
 }
 
-function HowItWorks() {
+function HowItWorks({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="pt-2">
-      <div className="flex items-center gap-2 mb-3 px-1">
-        <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90">
+    <section>
+      {/* Trigger collapsible */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-1 py-2 tap-transparent hover:bg-white/[0.02] rounded-xl transition-colors"
+      >
+        <HelpCircle className="w-4 h-4 text-gold/70 flex-shrink-0" strokeWidth={2.2} />
+        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90 flex-1 text-left">
           Comment ça marche ?
         </span>
-        <div className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent ml-2" />
-      </div>
-      <div className="space-y-3">
-        <div className="card-hud rounded-2xl p-4">
-          <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2">
-            🎲 Tournoi amical
-          </h3>
-          <p className="text-xs text-muted-2 leading-relaxed">
-            Tout le monde peut en lancer un : choisis un nom, 8 ou 16 joueurs, puis démarre le
-            bracket avec le bouton <span className="text-text-strong font-semibold">Nouveau</span>.
-            Idéal pour s'amuser entre collègues — sans impact sur le classement.
-          </p>
-        </div>
-        <div className="card-hud rounded-2xl p-4 border border-gold/40">
-          <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2">
-            👑 Tournoi officiel
-          </h3>
-          <p className="text-xs text-muted-2 leading-relaxed">
-            Réservé aux admins : seuls les administrateurs peuvent les lancer. En échange, ils
-            donnent lieu à des récompenses très spéciales —{' '}
-            <span className="text-gold font-semibold">titres exclusifs</span>,{' '}
-            <span className="text-gold font-semibold">League Coins</span> et{' '}
-            <span className="text-gold font-semibold">cosmétiques</span>.
-          </p>
-        </div>
-      </div>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-2 transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2.5}
+        />
+      </button>
+
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18 }}
+          className="mt-2 space-y-2"
+        >
+          {/* Amical */}
+          <div className="rounded-2xl p-4 bg-white/[0.025]">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-teal mb-2 flex items-center gap-2">
+              <span>🎲</span> Tournoi amical
+            </h3>
+            <ul className="space-y-1.5 text-xs text-muted-2 leading-relaxed">
+              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">1.</span> Appuie sur <span className="text-text-strong font-semibold">+ Nouveau</span> en bas à droite.</li>
+              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">2.</span> Choisis un nom, la capacité (8–64 joueurs), la discipline.</li>
+              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">3.</span> Les participants s'inscrivent, puis tu démarres le bracket.</li>
+              <li className="flex items-start gap-2"><span className="text-teal mt-0.5">4.</span> Chaque match : l'un des joueurs saisit le score, l'autre confirme.</li>
+            </ul>
+            <p className="mt-2 text-[10px] text-muted-2/70">⚡ Sans impact sur le classement ELO — juste pour le fun !</p>
+          </div>
+          {/* Officiel */}
+          <div className="rounded-2xl p-4 bg-gold/[0.04] border border-gold/20">
+            <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-gold mb-2 flex items-center gap-2">
+              <span>👑</span> Tournoi officiel
+            </h3>
+            <p className="text-xs text-muted-2 leading-relaxed">
+              Lancé par les admins uniquement — donne lieu à des récompenses spéciales :{' '}
+              <span className="text-gold font-semibold">titres exclusifs</span> et{' '}
+              <span className="text-gold font-semibold">cosmétiques</span>.
+              L'ELO <span className="text-gold font-semibold">compte</span> dans le classement.
+            </p>
+          </div>
+          {/* Format */}
+          <div className="rounded-2xl p-3 bg-white/[0.015] flex gap-3 text-[11px] text-muted-2">
+            <span>ℹ️</span>
+            <span>Deux formats : <span className="text-text-strong font-semibold">Élimination directe</span> (bracket dès le départ) ou <span className="text-text-strong font-semibold">Phase de poules + bracket</span> (≥12 joueurs).</span>
+          </div>
+        </motion.div>
+      )}
     </section>
   );
 }

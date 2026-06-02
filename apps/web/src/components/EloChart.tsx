@@ -100,7 +100,7 @@ export function EloChart({
   myLogin,
   currentElo,
   game = 'babyfoot',
-  hideStartLabel = false,
+  hideStartLabel: _hideStartLabel = false, // conservé pour compat. callers — label supprimé
   maxPoints,
   height = 100,
 }: EloChartProps) {
@@ -242,50 +242,17 @@ export function EloChart({
           />
         ))}
 
-        {/* Ligne de référence ELO de départ (1000), pointillés */}
+        {/* Ligne de référence ELO de départ (1000), pointillés subtils — sans label */}
         {showStartLine && (
-          <>
-            <line
-              x1={padL}
-              y1={startLineY}
-              x2={W - padR}
-              y2={startLineY}
-              stroke="rgba(228,231,237,0.28)"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-            />
-            {/* Étiquette « départ » sur un fond opaque, basculée sous la ligne si
-                celle-ci est trop haute — évite tout chevauchement avec les
-                valeurs ELO ou le bord supérieur. Masquée sur les fiches d'autres
-                joueurs (hideStartLabel). */}
-            {!hideStartLabel && (() => {
-              const below = startLineY < 14;
-              const ty = below ? startLineY + 10 : startLineY - 4;
-              return (
-                <>
-                  <rect
-                    x={padL}
-                    y={ty - 8}
-                    width={30}
-                    height={11}
-                    rx={2}
-                    fill="#14151c"
-                    opacity={0.9}
-                  />
-                  <text
-                    x={padL + 3}
-                    y={ty}
-                    fontSize={8}
-                    fontWeight={700}
-                    className="font-mono uppercase"
-                    fill="rgba(228,231,237,0.6)"
-                  >
-                    départ
-                  </text>
-                </>
-              );
-            })()}
-          </>
+          <line
+            x1={padL}
+            y1={startLineY}
+            x2={W - padR}
+            y2={startLineY}
+            stroke="rgba(228,231,237,0.18)"
+            strokeWidth="1"
+            strokeDasharray="3 5"
+          />
         )}
 
         {/* Area fill */}
@@ -414,32 +381,52 @@ export function EloChart({
         })}
       </svg>
 
-      {/* Tooltip HTML au survol */}
-      {hoveredPt && (
+      {/* Tooltip premium au survol — glass card avec accentuation par delta */}
+      {hoveredPt && !hoveredPt.isStart && (
         <div
-          className="absolute z-20 pointer-events-none -translate-x-1/2 -translate-y-full card-hud rounded-lg px-2.5 py-1.5 shadow-xl whitespace-nowrap"
+          className="absolute z-20 pointer-events-none -translate-x-1/2 rounded-xl whitespace-nowrap overflow-hidden"
           style={{
-            left: Math.min(Math.max(hoveredPt.x, 60), W - 60),
-            top: Math.max(hoveredPt.y - 8, 4),
+            left: Math.min(Math.max(hoveredPt.x, 70), W - 70),
+            top: Math.max(hoveredPt.y - 70, 2),
+            background: 'linear-gradient(145deg, rgba(28,24,18,0.95) 0%, rgba(18,15,11,0.98) 100%)',
+            border: `1px solid ${hoveredPt.delta >= 0 ? 'rgba(255,201,74,0.35)' : 'rgba(255,83,102,0.35)'}`,
+            boxShadow: `0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,215,120,0.08)`,
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            minWidth: 120,
           }}
         >
-          <div className="text-[10px] font-mono text-muted-2 leading-tight">{fmtDateFr(hoveredPt.date)}</div>
-          <div className="text-xs font-extrabold text-text-strong leading-tight">
-            {Math.round(hoveredPt.elo)} ELO
-            {!hoveredPt.isStart && (
-              <span className={`ml-1.5 font-mono ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
-                {hoveredPt.delta >= 0 ? '+' : ''}
-                {hoveredPt.delta}
+          {/* Barre colorée en haut selon le gain/perte */}
+          <div
+            className="h-[2px] w-full"
+            style={{ background: hoveredPt.delta >= 0 ? GOLD : RED, opacity: 0.8 }}
+          />
+          <div className="px-3 py-2">
+            {/* ELO + delta */}
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="font-display text-base font-black tabular-nums"
+                style={{ color: hoveredPt.delta >= 0 ? GOLD : RED, textShadow: '0 0 12px currentColor' }}>
+                {Math.round(hoveredPt.elo)}
               </span>
-            )}
-          </div>
-          {hoveredPt.isStart ? (
-            <div className="text-[10px] text-muted-2 leading-tight">Départ</div>
-          ) : (
-            <div className="text-[10px] text-muted-2 leading-tight">
-              vs {hoveredPt.opponent} · {hoveredPt.scoreFor}-{hoveredPt.scoreAgainst}
+              <span className="text-[9px] text-muted uppercase tracking-wider font-bold">ELO</span>
+              <span className={`ml-auto text-[11px] font-mono font-extrabold tabular-nums ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
+                {hoveredPt.delta >= 0 ? '+' : ''}{hoveredPt.delta}
+              </span>
             </div>
-          )}
+            {/* Adversaire */}
+            {hoveredPt.opponent && (
+              <div className="text-[10px] text-muted-2 font-semibold truncate max-w-[120px]">
+                vs {hoveredPt.opponent}
+                {hoveredPt.scoreFor != null && hoveredPt.scoreAgainst != null && (
+                  <span className="ml-1 font-mono text-muted-2/70">
+                    ({hoveredPt.scoreFor}–{hoveredPt.scoreAgainst})
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Date */}
+            <div className="text-[9px] text-muted mt-0.5 font-mono opacity-60">{fmtDateFr(hoveredPt.date)}</div>
+          </div>
         </div>
       )}
     </div>

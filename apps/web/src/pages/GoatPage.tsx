@@ -35,14 +35,33 @@ export function GoatPage() {
   const rest = ranking.slice(1);
 
   return (
-    <Panel title="G.O.A.T" sub="Greatest Of All Time · score pondéré" accent="crown">
-      <Link
-        to="/leaderboard"
-        className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold mb-4"
-      >
-        <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-        Retour au classement
-      </Link>
+    <Panel title="G.O.A.T" sub="Greatest Of All Time" accent="crown">
+      <div className="flex items-center justify-between mb-4">
+        <Link
+          to="/leaderboard"
+          className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+          Classement
+        </Link>
+        {/* Explication du score pondéré */}
+        <div className="text-[10px] text-muted-2 text-right leading-tight max-w-[180px]">
+          Score pondéré :<br/>
+          <span className="text-gold/80">ELO × 50%</span>
+          {' · '}
+          <span className="text-[#f5b942]/80">W% × 30%</span>
+          {' · '}
+          <span className="text-[#cd7f32]/80">Titres × 20%</span>
+        </div>
+      </div>
+
+      {/* Contexte : ce n'est pas le classement ELO brut */}
+      <div className="mb-5 px-3 py-2.5 rounded-xl bg-gold/[0.05] border border-gold/15 text-[11px] text-muted-2 leading-relaxed">
+        🏅 Le <span className="text-gold font-semibold">G.O.A.T</span> n'est pas forcément le n°1 ELO — c'est le joueur
+        qui combine le meilleur <span className="text-text font-semibold">ELO</span>,
+        le meilleur <span className="text-text font-semibold">win rate</span> et
+        le plus de <span className="text-text font-semibold">titres</span> de tournois.
+      </div>
 
       {!goat ? (
         <div className="text-center text-muted-2 py-12">

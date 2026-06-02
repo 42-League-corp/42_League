@@ -86,10 +86,16 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
                   {t.name}
                 </h3>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-2">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-2 flex-wrap">
                 <span className={`px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] ${isOfficial ? 'text-gold bg-gold/10 border border-gold/30' : 'text-muted-2 bg-bg-2'}`}>
                   {isOfficial ? '★ Officiel' : 'Amical'}
                 </span>
+                {/* Discipline du tournoi */}
+                {t.game && t.game !== 'babyfoot' && (
+                  <span className="px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] bg-accent/10 text-accent border border-accent/25">
+                    {t.game === 'smash' ? '🎮 Smash' : '♟ Échecs'}
+                  </span>
+                )}
                 <span className="opacity-60">·</span>
                 <span>par <span className="text-text-strong font-semibold">{t.createdByLogin}</span></span>
               </div>
