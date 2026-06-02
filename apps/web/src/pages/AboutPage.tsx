@@ -565,23 +565,27 @@ const TEAM: Member[] = [
   },
   {
     login: 'abidaux',
-    role: 'Cofondateur',
+    role: 'Cofondateur · Dev',
     accent: 'gold',
     blurb: (
       <>
-        Il a mis un <span className="text-text font-semibold">gros coup de boost</span> au projet et
-        l'a fait voir bien plus grand. C'est lui qui pousse pour viser toujours plus haut.
+        Il a transformé l'<span className="text-text font-semibold">extension de campus</span> en
+        vrai site web, puis l'a <span className="text-gold font-semibold">hébergé et déployé en ligne</span>.
+        Derrière les grosses features — OPS, GOD panel, CI/CD, RGPD — c'est lui qui fait tenir
+        le projet debout.
       </>
     ),
   },
   {
     login: 'jagharra',
-    role: 'Conseiller · Pentester',
+    role: 'Sécurité · Pentester',
     accent: 'violet',
     blurb: (
       <>
-        Le mec qui <span className="text-text font-semibold">casse tout avant les autres</span> pour
-        qu'on répare à temps. Retours sans filtre et chasse aux bugs pendant toute la bêta.
+        Son expertise en <span className="text-text font-semibold">cybersécurité</span> a blindé le
+        projet : il audite les routes, traque les failles et{' '}
+        <span className="text-[#c97bff] font-semibold">patch avant que ça devienne un problème</span>.
+        Pas de vulnérabilité qui passe entre ses doigts.
       </>
     ),
   },
