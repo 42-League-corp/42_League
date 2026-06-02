@@ -129,7 +129,8 @@ export function GameTransitionOverlay() {
     prevGameRef.current = game;
     setDisplayedGame(game);
     setActive(true);
-    const t = setTimeout(() => setActive(false), 680);
+    // 480ms total : entrée punch (120ms) + symbol spring + sortie éclair (150ms)
+    const t = setTimeout(() => setActive(false), 480);
     return () => clearTimeout(t);
   }, [game]);
 
@@ -143,7 +144,7 @@ export function GameTransitionOverlay() {
           className="fixed inset-0 z-[9990] pointer-events-none flex items-center justify-center overflow-hidden"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.25, ease: 'easeIn' } }}
+          exit={{ opacity: 0, transition: { duration: 0.13, ease: [0.55, 0, 1, 0.45] } }}
           transition={{ duration: 0.08 }}
           style={{ background: u.bg }}
         >

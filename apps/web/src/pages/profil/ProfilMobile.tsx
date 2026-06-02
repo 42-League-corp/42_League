@@ -1,5 +1,4 @@
 import { LogOut } from 'lucide-react';
-import { pickRating } from '../../lib/gameStats';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
@@ -27,37 +26,11 @@ export function ProfilMobile() {
     );
   }
 
-  const user = me?.user;
-  // Autres disciplines actives (avec au moins 1 match joué)
-  const crossGames = (['babyfoot', 'smash', 'chess'] as const)
-    .filter((g) => g !== game && user && (user.games ?? ['babyfoot']).includes(g))
-    .map((g) => {
-      const r = user ? pickRating(user, g) : { elo: 1000, matchesPlayed: 0, tournamentsWon: 0 };
-      return { g, elo: r.elo, played: r.matchesPlayed };
-    });
-
-  const GAME_LABEL: Record<string, string> = { babyfoot: '⚽ Babyfoot', smash: '🎮 Smash', chess: '♟ Échecs' };
-
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
+        {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
         <ProfileHeroCard stats={stats} />
-
-        {/* Stats cross-jeux : autres disciplines du joueur */}
-        {crossGames.length > 0 && (
-          <div className="rounded-2xl bg-white/[0.025] px-4 py-3 space-y-2">
-            <div className="text-[9px] uppercase tracking-[0.18em] font-extrabold text-muted-2 mb-1">Autres disciplines</div>
-            {crossGames.map(({ g, elo, played }) => (
-              <div key={g} className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-text-strong">{GAME_LABEL[g]}</span>
-                <div className="flex items-center gap-3 text-muted-2 font-mono">
-                  <span className="text-gold font-extrabold tabular-nums">{elo} ELO</span>
-                  <span className="text-[10px]">{played} match{played !== 1 ? 's' : ''}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* ELO evolution chart */}
         {myLogin && (
