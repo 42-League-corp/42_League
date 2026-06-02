@@ -16,8 +16,12 @@ import {
   type MatchResultInput,
   type PendingMatch,
 } from '../../lib/api';
+import { useMemo } from 'react';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
+import { pickRating } from '../../lib/gameStats';
+import { RankedBadge } from '../../components/RankedBadge';
+import { StatCard } from '../../components/StatCard';
 import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
@@ -55,7 +59,7 @@ function GameTag({ game }: { game?: Game }) {
 export function DefisDesktop() {
   const t = useT();
   const { lang } = useI18n();
-  const { locations } = useLeagueData();
+  const { locations, me, matches, leaderboard } = useLeagueData();
   const { game } = useGameMode();
   const {
     myLogin,
@@ -76,6 +80,27 @@ export function DefisDesktop() {
   const [presetOpp, setPresetOpp] = useState<LeaderboardEntry | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
+  // Stats game-aware : filtrées sur la discipline courante (corrige le bug ELO global).
+  const gameStats = useMemo(() => {
+    const login = myLogin;
+    if (!me?.user || !login) return null;
+    const mine = (matches ?? []).filter(
+      (m) => (m.game ?? 'babyfoot') === game &&
+        (m.playerALogin === login || m.playerBLogin === login),
+    );
+    let wins = 0; let losses = 0; let streak = 0; let streakBroken = false;
+    for (const m of [...mine].sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt))) {
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (won) wins++; else losses++;
+      if (!streakBroken) { if (won) streak++; else streakBroken = true; }
+    }
+    const total = wins + losses;
+    const rank = leaderboard.find((u) => u.login === login)?.rank ?? null;
+    const rating = pickRating(me.user, game);
+    return { elo: rating.elo, rank, wins, losses, winRate: total ? Math.round(wins / total * 100) : 0, streak };
+  }, [me, myLogin, matches, leaderboard, game]);
+
   const openChallengeWith = (player: LeaderboardEntry | null) => {
     setPresetOpp(player);
     setOpenCard('challenge');
@@ -92,6 +117,21 @@ export function DefisDesktop() {
   return (
     <Panel title={t('panel.defis.title')} sub={t('panel.defis.sub')} accent="swords">
       <div ref={topRef} />
+
+      {/* ── Stats game-aware (mini bar, toujours visible) ────────────────── */}
+      {gameStats && (
+        <div className="grid grid-cols-5 gap-2 mb-6">
+          <StatCard value={gameStats.rank ? `#${gameStats.rank}` : '—'} label="Rang" tone="gold" />
+          <StatCard value={String(gameStats.elo)} label={<>ELO <RankedBadge size="xs" /></>} tone="teal" />
+          <StatCard value={`${gameStats.wins}-${gameStats.losses}`} label="V-D" tone="neutral" />
+          <StatCard value={`${gameStats.winRate}%`} label="Win rate" tone={gameStats.winRate >= 50 ? 'win' : 'loss'} />
+          <StatCard
+            value={gameStats.streak > 0 ? `${gameStats.streak}V` : gameStats.streak < 0 ? `${Math.abs(gameStats.streak)}D` : '—'}
+            label="Série"
+            tone={gameStats.streak > 0 ? 'win' : gameStats.streak < 0 ? 'loss' : 'neutral'}
+          />
+        </div>
+      )}
 
       {/* ── 1. HERO CTAs ─────────────────────────────────────────────────── */}
       {/* Les 2 boutons les plus importants du site : toujours au-dessus du pli,
