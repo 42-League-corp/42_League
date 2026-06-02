@@ -161,16 +161,13 @@ export const DeclareOpsSchema = z.object({
 
 export type DeclareOpsInput = z.infer<typeof DeclareOpsSchema>;
 
-export const TournamentRecordSchema = z
-  .object({
-    scoreA: MatchScoreSchema,
-    scoreB: MatchScoreSchema,
-  })
-  .refine((m) => m.scoreA === 10 || m.scoreB === 10, 'one side must reach 10 goals')
-  .refine(
-    (m) => !(m.scoreA === 10 && m.scoreB === 10),
-    'only one side can reach 10 goals',
-  );
+// Forme du score d'un match de tournoi (range). La règle PAR DISCIPLINE
+// (babyfoot 10-x, échecs 1-0, smash set) est validée côté serveur via
+// `validateTournamentScore(tournament.game, …)` — cf. packages/shared/games.ts.
+export const TournamentRecordSchema = z.object({
+  scoreA: MatchScoreSchema,
+  scoreB: MatchScoreSchema,
+});
 
 export type TournamentRecordInput = z.infer<typeof TournamentRecordSchema>;
 
