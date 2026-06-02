@@ -1,10 +1,25 @@
-import type { Game, MeResponse } from './api';
+import type { Game } from './api';
 
-type MeUser = NonNullable<MeResponse['user']>;
+/**
+ * Source minimale de stats par discipline. Structurel → compatible aussi bien
+ * avec `MeResponse['user']` (mon profil) qu'avec `UserProfile['user']` (fiche
+ * d'un autre joueur) : les deux exposent l'ELO global + les colonnes par-jeu.
+ */
+export interface RatingSource {
+  elo: number;
+  matchesPlayed: number;
+  tournamentsWon: number;
+  eloSmash?: number;
+  matchesPlayedSmash?: number;
+  tournamentsWonSmash?: number;
+  eloChess?: number;
+  matchesPlayedChess?: number;
+  tournamentsWonChess?: number;
+}
 
 /** Rating + compteurs du joueur pour une discipline donnée. */
 export function pickRating(
-  user: MeUser,
+  user: RatingSource,
   game: Game,
 ): { elo: number; matchesPlayed: number; tournamentsWon: number } {
   if (game === 'smash') {

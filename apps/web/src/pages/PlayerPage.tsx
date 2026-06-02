@@ -18,6 +18,8 @@ import {
 } from '../lib/api';
 import { fmtCountdown, fmtDatePair } from '../lib/format';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
+import { pickRating } from '../lib/gameStats';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useI18n, useT } from '../lib/i18n';
@@ -29,6 +31,7 @@ export function PlayerPage() {
   const t = useT();
   const { locale, lang } = useI18n();
   const { me, opsMe, locations, refresh } = useLeagueData();
+  const { game } = useGameMode();
   const flash = useFlash();
   const confirm = useConfirm();
 
@@ -104,6 +107,8 @@ export function PlayerPage() {
   }
 
   const p = profile;
+  // Stats de la discipline courante (la fiche s'isole comme le profil perso).
+  const rating = pickRating(p.user, game);
   const winRate =
     p.wins + p.losses === 0
       ? 0
@@ -129,7 +134,7 @@ export function PlayerPage() {
               {t('profil.campus')} · {p.user.campus ?? '—'}
             </span>
             <span className="bg-gold/10 border border-gold/30 text-gold px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
-              {p.user.elo} ELO
+              {rating.elo} ELO
             </span>
             {onlineHost && <OnlineBadge host={onlineHost} />}
           </div>
@@ -302,7 +307,8 @@ export function PlayerPage() {
           <EloChart
             matches={p.recent}
             myLogin={p.user.login}
-            currentElo={p.user.elo}
+            currentElo={rating.elo}
+            game={game}
             hideStartLabel
             height={104}
           />
