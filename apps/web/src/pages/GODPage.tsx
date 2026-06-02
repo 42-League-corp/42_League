@@ -556,6 +556,10 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
 
 // ── Tab: UTILISATEURS ──────────────────────────────────────────────────────
 
+// Logins hardcodés côté serveur — on ne leur propose pas le toggle staging
+// (ils ont accès quoi qu'il arrive, et le backend les protège de toute façon).
+const HARDCODED_SUPERADMINS = new Set(['abidaux', 'throbert']);
+
 function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -657,6 +661,15 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     load();
   }
 
+  async function toggleStaging(login: string, currentRole: string) {
+    const grant = currentRole !== 'SUPERADMIN';
+    const msg = grant
+      ? `Donner l'accès à staging.42league.fr à @${login} ?`
+      : `Retirer l'accès staging à @${login} ? Son rôle repassera à USER.`;
+    if (!(await requestConfirm(msg, { danger: !grant, confirmLabel: grant ? 'Accorder' : 'Retirer' }))) return;
+    await withPending(login, () => api.setStagingAccess(login, grant));
+  }
+
   return (
     <div className="p-4">
       {editingStats && (
@@ -754,8 +767,10 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
             <tbody>
               {filtered.map((u) => {
                 const isSelf = u.login === myLogin;
+                const isHardcoded = HARDCODED_SUPERADMINS.has(u.login.toLowerCase());
                 const isSuperAdmin = u.role === 'SUPERADMIN';
-                const isLocked = isSelf || isSuperAdmin;
+                // Hardcodés + soi-même : on ne touche pas au rôle ni au ban.
+                const isLocked = isSelf || isHardcoded;
                 const isDeletable = deletableLogins.includes(u.login);
                 return (
                   <tr key={u.login} className={`border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors ${selected.has(u.login) ? 'bg-red-500/5' : ''}`}>
@@ -773,13 +788,23 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
                     <td className="py-2 px-3">
                       {isLocked ? (
-                        <span className="text-zinc-700 text-xs">—</span>
+                        // Superadmins hardcodés : seul le bouton staging est masqué
+                        // (accès permanent), mais on affiche quand même leur statut.
+                        <span className="text-zinc-600 text-xs font-mono">permanent</span>
                       ) : (
-                        <div className="flex items-center gap-1.5 justify-end">
-                          {myRole === 'SUPERADMIN' && (
+                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                          {myRole === 'SUPERADMIN' && !isSuperAdmin && (
                             u.role === 'USER'
                               ? <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'ADMIN'))} disabled={pending === u.login} variant="default">→ ADMIN</Btn>
-                              : <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
+                              : u.role === 'ADMIN'
+                                ? <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
+                                : null
+                          )}
+                          {/* Accès staging — visible aux SUPERADMIN hardcodés uniquement */}
+                          {myRole === 'SUPERADMIN' && (
+                            isSuperAdmin
+                              ? <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">🔒 Retirer staging</Btn>
+                              : <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="ghost" className="border border-zinc-600">🔒 Staging</Btn>
                           )}
                           {u.bannedAt
                             ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">Unban</Btn>
