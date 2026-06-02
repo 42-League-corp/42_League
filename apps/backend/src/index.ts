@@ -1979,6 +1979,16 @@ app.post('/challenges/:id/record', async (c) => {
     }
     const opponentOfMe =
       ch.challengerLogin === me ? ch.opponentLogin : ch.challengerLogin;
+    // Défense : on revalide le résultat selon la discipline RÉELLE du défi
+    // (et non le `game` du client, qui peut être absent → défaut babyfoot).
+    // Sans ça, un défi d'échecs/smash pouvait être stocké avec un score
+    // babyfoot 10-0 (la cause du « 10-0 aux échecs »).
+    const checked = RecordResultSchema.safeParse({ ...parsed.data, game: ch.game });
+    if (!checked.success) {
+      throw new HTTPException(400, {
+        message: `Score invalide pour ${ch.game} : ${checked.error.message}`,
+      });
+    }
     await tx.challenge.update({
       where: { id },
       data: { status: 'recorded' },

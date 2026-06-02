@@ -8,8 +8,6 @@ import { api, type PendingMatch } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
-const WINNING_SCORE = 10;
-
 interface PendingMatchCardProps {
   match: PendingMatch;
   onDone: () => Promise<void>;
@@ -29,7 +27,9 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
   // immédiatement — sans attendre le refresh réseau (qui peut être lent).
   const [resolved, setResolved] = useState(false);
 
-  const iWon = match.scoreOpponent === WINNING_SCORE;
+  // Vainqueur déterminé par comparaison de scores (et non « = 10 ») : valable
+  // pour toutes les disciplines (babyfoot 10-x, échecs 1-0, smash 2-1).
+  const iWon = match.scoreOpponent > match.scoreDeclarer;
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -100,7 +100,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
           <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
             <span
               className={`text-4xl font-black tabular-nums ${
-                match.scoreDeclarer === WINNING_SCORE ? 'text-gold text-gold-emboss' : 'text-text-strong'
+                match.scoreDeclarer > match.scoreOpponent ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
               {match.scoreDeclarer}
@@ -108,7 +108,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             <span className="text-2xl text-muted">–</span>
             <span
               className={`text-4xl font-black tabular-nums ${
-                match.scoreOpponent === WINNING_SCORE ? 'text-gold text-gold-emboss' : 'text-text-strong'
+                match.scoreOpponent > match.scoreDeclarer ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
               {match.scoreOpponent}

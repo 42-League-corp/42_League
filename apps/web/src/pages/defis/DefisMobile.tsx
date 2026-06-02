@@ -129,11 +129,11 @@ export function DefisMobile() {
                   </div>
 
                   <div className="font-display tabular-nums font-black text-text-strong text-sm flex items-center gap-1">
-                    <span className={p.scoreDeclarer === 10 ? 'text-gold' : 'text-muted-2'}>
+                    <span className={p.scoreDeclarer > p.scoreOpponent ? 'text-gold' : 'text-muted-2'}>
                       {p.scoreDeclarer}
                     </span>
                     <span className="text-muted mx-0.5">–</span>
-                    <span className={p.scoreOpponent === 10 ? 'text-gold' : 'text-red'}>
+                    <span className={p.scoreOpponent > p.scoreDeclarer ? 'text-gold' : 'text-red'}>
                       {p.scoreOpponent}
                     </span>
                   </div>
