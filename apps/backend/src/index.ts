@@ -462,8 +462,11 @@ if (process.env.APP_ENV === 'staging') {
     }
     const login = await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
-    if (!SUPERADMINS.has(login.toLowerCase())) {
-      throw new HTTPException(403, { message: 'staging réservé aux superadmins' });
+    // getUserRole vérifie d'abord le set hardcodé (abidaux/throbert), puis le
+    // rôle DB — ce qui inclut les accès staging accordés via le panel GOD.
+    const role = await getUserRole(login);
+    if (role !== 'SUPERADMIN') {
+      throw new HTTPException(403, { message: 'staging: accès réservé' });
     }
     return next();
   });
@@ -2551,6 +2554,38 @@ app.post('/admin/users/:login/role', async (c) => {
     payload: { from: target.role, to: parsed.data.role },
   });
   return c.json({ login: updated.login, role: updated.role });
+});
+
+// Accès staging : accorde ou retire le rôle SUPERADMIN en DB à un utilisateur,
+// ce qui lui donne (ou lui retire) l'accès à staging.42league.fr.
+// Réservé aux superadmins hardcodés (abidaux / throbert).
+// Les superadmins hardcodés ne peuvent pas être modifiés (ils ont leurs propres accès).
+app.post('/admin/users/:login/staging-access', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const targetLogin = c.req.param('login');
+  if (SUPERADMINS.has(targetLogin.toLowerCase())) {
+    throw new HTTPException(400, { message: 'cannot modify a hardcoded superadmin' });
+  }
+  const target = await prisma.user.findUnique({ where: { login: targetLogin } });
+  if (!target) throw new HTTPException(404, { message: 'user not found' });
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ grant: z.boolean() }).safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  // Accord → SUPERADMIN. Révocation → USER (rôle neutre par défaut).
+  const newRole = parsed.data.grant ? 'SUPERADMIN' : 'USER';
+  const updated = await prisma.user.update({
+    where: { login: targetLogin },
+    data: { role: newRole },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'SET_ROLE',
+    target: targetLogin,
+    payload: { from: target.role, to: newRole, stagingAccess: parsed.data.grant },
+  });
+  return c.json({ login: updated.login, role: updated.role, stagingAccess: parsed.data.grant });
 });
 
 /* ============ FEATURE REQUESTS ============ */

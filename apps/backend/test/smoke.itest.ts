@@ -27,9 +27,14 @@ describe('infra intégration (smoke)', () => {
     expect(r.body.role).toBe('USER');
   });
 
-  it('resetDb isole bien : alice n\'existe plus au test suivant', async () => {
+  it('resetDb isole bien : alice n\'a plus les données du test précédent', async () => {
+    // /me appelle getOrCreateUser → alice est (re)créée automatiquement,
+    // donc user n'est PAS null. Mais l'isolation est prouvée par imageUrl=null :
+    // seedUser() pose imageUrl='https://example.test/alice.jpg', alors que
+    // getOrCreateUser sans profil laisse imageUrl à null.
     const r = await get('/me', { login: 'alice' });
     expect(r.status).toBe(200);
-    expect(r.body.user).toBeNull(); // pas seedé dans ce test → user absent
+    expect(r.body.user).not.toBeNull();          // créée fresh par getOrCreateUser
+    expect(r.body.user.imageUrl).toBeNull();     // pas la alice seedée du test précédent
   });
 });

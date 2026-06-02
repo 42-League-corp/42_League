@@ -74,11 +74,13 @@ describe('challenges — accept / decline', () => {
     expect(r.body.status).toBe('accepted');
   });
 
-  it('accepter deux fois → 409', async () => {
+  it('accepter deux fois → idempotent (200)', async () => {
+    // commit 960d0ff : l'accept est idempotent, plus de 409.
     const id = await createChallenge('alice', 'bob');
     await post(`/challenges/${id}/accept`, { login: 'bob' });
     const r = await post(`/challenges/${id}/accept`, { login: 'bob' });
-    expect(r.status).toBe(409);
+    expect(r.status).toBe(200);
+    expect(r.body.status).toBe('accepted');
   });
 
   it('refuser un défi PENDING → declined, aucune pénalité', async () => {
