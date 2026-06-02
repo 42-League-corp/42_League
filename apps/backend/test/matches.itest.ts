@@ -238,25 +238,25 @@ describe('matches — anti-farming (max 2 comptés / paire / fenêtre)', () => {
     return r.body;
   }
 
-  it('le 3e match consécutif est enregistré mais ne bouge plus l’ELO', async () => {
+  it(‘ranked illimité : le 3e match consécutif compte pour l’ELO (anti-farming supprimé)’, async () => {
+    // shouldCountForElo renvoie toujours true — plus de plafond par paire.
     await declareAndConfirm(); // compté
     await declareAndConfirm(); // compté
 
-    const aliceAfter2 = await get('/users/alice', { login: 'alice' });
+    const aliceAfter2 = await get(‘/users/alice’, { login: ‘alice’ });
     const eloAfter2 = aliceAfter2.body.user.elo;
 
     const third = await declareAndConfirm();
-    expect(third.countedForElo).toBe(false);
-    expect(third.deltaA).toBe(0);
-    expect(third.deltaB).toBe(0);
+    expect(third.countedForElo).toBe(true);   // compte (anti-farming supprimé)
+    expect(third.deltaA).not.toBe(0);          // ELO bougé
+    expect(third.deltaB).not.toBe(0);
 
-    const aliceAfter3 = await get('/users/alice', { login: 'alice' });
-    expect(aliceAfter3.body.user.elo).toBe(eloAfter2); // ELO figé
-    // matchesPlayed n'est incrémenté que pour les matchs comptés
-    expect(aliceAfter3.body.user.matchesPlayed).toBe(2);
+    const aliceAfter3 = await get(‘/users/alice’, { login: ‘alice’ });
+    expect(aliceAfter3.body.user.elo).not.toBe(eloAfter2); // ELO a changé
+    expect(aliceAfter3.body.user.matchesPlayed).toBe(3);   // les 3 comptent
 
-    // mais les 3 matchs sont bien enregistrés
-    const played = await get('/matches', { login: 'alice' });
+    // les 3 matchs sont bien enregistrés
+    const played = await get(‘/matches’, { login: ‘alice’ });
     expect(played.body).toHaveLength(3);
   });
 });
