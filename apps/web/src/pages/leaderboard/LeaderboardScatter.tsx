@@ -201,9 +201,17 @@ export function LeaderboardScatter({
         </ZoomBtn>
       </div>
 
-      {/* Légende */}
-      <div className="absolute top-2 left-2 z-20 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2 pointer-events-none">
-        ELO ↑ · Win % → · les meilleurs en haut à droite
+      {/* Légende + explication */}
+      <div className="absolute top-2 left-2 z-20 pointer-events-none flex flex-col gap-1">
+        <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2">
+          ELO ↑  ·  Win % →
+        </div>
+        <div className="flex items-center gap-2 text-[9px] text-muted-2/80 font-medium">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold/70" />
+          Haut-droite = meilleur
+          <span className="opacity-40">·</span>
+          <span>Tap = profil</span>
+        </div>
       </div>
 
       <div
