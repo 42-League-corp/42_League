@@ -571,8 +571,7 @@ const TEAM: Member[] = [
       <>
         Il a transformé l'<span className="text-text font-semibold">extension de campus</span> en
         vrai site web, puis l'a <span className="text-gold font-semibold">hébergé et déployé en ligne</span>.
-        Les <span className="text-text font-semibold">designs et les animations</span> de l'app,
-        c'est lui.
+        C'est lui notamment derrière les <span className="text-text font-semibold">designs et les animations</span>.
       </>
     ),
   },
