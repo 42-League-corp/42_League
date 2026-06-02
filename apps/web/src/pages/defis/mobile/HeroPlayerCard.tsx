@@ -4,6 +4,8 @@ import { Crown, Flame, MapPin, Trophy, Zap, Cog } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useGameMode } from '../../../hooks/useGameMode';
+import { pickRating } from '../../../lib/gameStats';
 
 /**
  * Hero card "RPG / Esport" du joueur — pièce maîtresse de la page Défis.
@@ -20,16 +22,24 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
  */
 export function HeroPlayerCard() {
   const { me, matches, leaderboard } = useLeagueData();
+  const { game } = useGameMode();
   const user = me?.user;
   const myLogin = me?.login;
   const reducedMotion = useReducedMotion();
 
+  // Toutes les stats sont CLOISONNÉES par discipline :
+  // l'ELO affiché, le rang, les victoires et la série correspondent
+  // uniquement aux matchs du mode de jeu courant.
   const stats = useMemo(() => {
     if (!user || !myLogin) {
-      return { wins: 0, losses: 0, total: 0, winRate: 0, streak: 0, rank: 0 };
+      return { wins: 0, losses: 0, total: 0, winRate: 0, streak: 0, rank: 0, elo: 1000 };
     }
     const mine = matches
-      .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
+      .filter(
+        (m) =>
+          (m.game ?? 'babyfoot') === game &&
+          (m.playerALogin === myLogin || m.playerBLogin === myLogin),
+      )
       .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
     let wins = 0;
     let losses = 0;
@@ -48,8 +58,9 @@ export function HeroPlayerCard() {
     const total = wins + losses;
     const winRate = total === 0 ? 0 : Math.round((wins / total) * 100);
     const rank = leaderboard.find((u) => u.login === myLogin)?.rank ?? 0;
-    return { wins, losses, total, winRate, streak, rank };
-  }, [user, myLogin, matches, leaderboard]);
+    const elo = pickRating(user, game).elo;
+    return { wins, losses, total, winRate, streak, rank, elo };
+  }, [user, myLogin, matches, leaderboard, game]);
 
   if (!user) return null;
 
@@ -187,12 +198,12 @@ export function HeroPlayerCard() {
           )}
         </div>
 
-        {/* ELO géant */}
+        {/* ELO géant — toujours celui du jeu courant */}
         <div className="relative mb-1">
           <div
             className="font-display text-[68px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss"
           >
-            <AnimatedCounter value={user.elo} duration={1.4} />
+            <AnimatedCounter value={stats.elo} duration={1.4} />
           </div>
           <div className="text-[10px] text-muted uppercase tracking-[0.36em] font-extrabold mt-0.5">
             ELO
@@ -226,11 +237,11 @@ export function HeroPlayerCard() {
                 <span className="tabular-nums">TOP {topPercent}%</span>
               </motion.div>
             )}
-            {user.tournamentsWon > 0 && (
+            {pickRating(user, game).tournamentsWon > 0 && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gold/40 bg-gold/10 text-gold font-gaming text-[10px] font-extrabold uppercase tracking-wider">
                 <Trophy className="w-3 h-3" strokeWidth={2.5} />
-                <span className="font-mono tabular-nums">{user.tournamentsWon}</span>
-                <span>tournoi{user.tournamentsWon > 1 ? 's' : ''}</span>
+                <span className="font-mono tabular-nums">{pickRating(user, game).tournamentsWon}</span>
+                <span>tournoi{pickRating(user, game).tournamentsWon > 1 ? 's' : ''}</span>
               </div>
             )}
           </div>
