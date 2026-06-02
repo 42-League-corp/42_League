@@ -244,6 +244,14 @@ export interface UserProfile {
     title: string | null;
     dodgeCount: number;
     tournamentsWon: number;
+    // Stats par discipline (renvoyées par le backend ; permettent d'isoler la
+    // fiche d'un joueur par jeu, comme le profil perso).
+    eloSmash?: number;
+    matchesPlayedSmash?: number;
+    tournamentsWonSmash?: number;
+    eloChess?: number;
+    matchesPlayedChess?: number;
+    tournamentsWonChess?: number;
     createdAt: string;
   };
   rank: number | null;
