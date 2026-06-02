@@ -96,11 +96,15 @@ model UserBadge {
   userLogin String   @map("user_login")
   code      String   // code du badge (cf. catalogue front), ex. 'beta_tester', 'season_champion'
   seasonId  String?  @map("season_id") // saison associée (badges de palmarès), si pertinent
+  // Discipline liée ('' = badge global, 'babyfoot'/'smash'/'chess' = spécifique).
+  // Permet de distinguer un champion babyfoot et un champion chess sur la même saison.
+  game      String   @default("") // '' | 'babyfoot' | 'smash' | 'chess'
   awardedAt DateTime @default(now()) @map("awarded_at")
 
   user User @relation("userBadges", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
 
-  @@unique([userLogin, code])
+  // Un joueur ne peut détenir qu'un exemplaire d'un badge donné par discipline.
+  @@unique([userLogin, code, game])
   @@index([userLogin])
   @@map("user_badges")
 }
