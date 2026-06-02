@@ -565,14 +565,14 @@ const TEAM: Member[] = [
   },
   {
     login: 'abidaux',
-    role: 'Cofondateur · Dev',
+    role: 'Cofondateur',
     accent: 'gold',
     blurb: (
       <>
         Il a transformé l'<span className="text-text font-semibold">extension de campus</span> en
         vrai site web, puis l'a <span className="text-gold font-semibold">hébergé et déployé en ligne</span>.
-        Derrière les grosses features — OPS, GOD panel, CI/CD, RGPD — c'est lui qui fait tenir
-        le projet debout.
+        Les <span className="text-text font-semibold">designs et les animations</span> de l'app,
+        c'est lui.
       </>
     ),
   },
