@@ -1033,7 +1033,8 @@ app.post('/seasons/close', async (c) => {
 
     // Snapshot par discipline : on fige un classement distinct pour chaque jeu
     // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
-    const champions = new Set<string>();
+    // Map gameId → login du champion (pour badge avec discipline cloisonnée).
+    const champions = new Map<string, string>();
     let totalPlayers = 0;
 
     for (const g of GAME_IDS) {
@@ -1073,15 +1074,15 @@ app.post('/seasons/close', async (c) => {
         });
       }
       const champ = users[0]?.login;
-      if (champ) champions.add(champ);
+      if (champ) champions.set(g, champ);
     }
 
-    // Badge champion pour le n°1 de chaque discipline.
-    for (const champ of champions) {
+    // Badge champion pour le n°1 de chaque discipline — cloisonné par jeu.
+    for (const [game, champ] of champions) {
       await tx.userBadge.upsert({
-        where: { userLogin_code: { userLogin: champ, code: 'season_champion' } },
+        where: { userLogin_code_game: { userLogin: champ, code: 'season_champion', game } },
         update: { seasonId: active.id },
-        create: { id: randomUUID(), userLogin: champ, code: 'season_champion', seasonId: active.id },
+        create: { id: randomUUID(), userLogin: champ, code: 'season_champion', game, seasonId: active.id },
       });
     }
 
