@@ -58,6 +58,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const isSmash = match.game === 'smash';
+  const isChess = match.game === 'chess';
   const oppChar = youAreA ? match.charB : match.charA;
   const myScore = youAreA ? match.scoreA : match.scoreB;
   const oppScore = youAreA ? match.scoreB : match.scoreA;
@@ -93,6 +94,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
             <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
           </PlayerLink>
           {isSmash && oppChar && <SmashCharIcon id={oppChar} size={18} className="shrink-0" />}
+          {isChess && <span className="text-[12px] opacity-70 shrink-0" title="Échecs">♟</span>}
         </div>
         <div className="text-[10px] text-muted font-medium">
           {date.short}

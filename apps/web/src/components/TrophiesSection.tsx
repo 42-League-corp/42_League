@@ -57,6 +57,64 @@ const COLOR_GLOW: Record<TrophyColor, string> = {
   sapphire: 'rgba(59,130,246,0.1)',
 };
 
+// ─── Catégories de trophées (progressive disclosure) ─────────────────────────
+
+type TrophyCategoryKey = 'perfs' | 'exploits' | 'activite' | 'honte';
+
+interface TrophyCategory {
+  key: TrophyCategoryKey;
+  label: string;
+  emoji: string;
+  defaultOpen: boolean;
+}
+
+const TROPHY_CATEGORIES: TrophyCategory[] = [
+  { key: 'perfs',    label: 'Performances',  emoji: '🏆', defaultOpen: true },
+  { key: 'exploits', label: 'Exploits',       emoji: '⚡', defaultOpen: false },
+  { key: 'activite', label: 'Activité',       emoji: '📅', defaultOpen: false },
+  { key: 'honte',    label: 'Hontes',         emoji: '💀', defaultOpen: false },
+];
+
+// Mapping titre → catégorie. Les titres non listés tombent dans 'activite'.
+const TITLE_TO_CATEGORY: Record<string, TrophyCategoryKey> = {
+  // Performances
+  'Elo KING':          'perfs',
+  'G.O.A.T':           'perfs',
+  'Smash God':         'perfs',
+  'Maître du jeu':     'perfs',
+  'Sniper':            'perfs',
+  'Le Stratège':       'perfs',
+  'En feu':            'perfs',
+  'Combo King':        'perfs',
+  'Série gagnante':    'perfs',
+  'Chasseur de primes':'perfs',
+  'Némésis':           'perfs',
+  // Exploits
+  'Destroyer':         'exploits',
+  'Le Serré':          'exploits',
+  'Negativer':         'exploits',
+  'Annihilateur':      'exploits',
+  'Spectacle':         'exploits',
+  'Sweep Master':      'exploits',
+  'Sans Pitié':        'exploits',
+  'Pissette Master':   'exploits',
+  // Hontes
+  'Loooooooooser':     'honte',
+  'Glissade':          'honte',
+  'Zéro Absolu':       'honte',
+  'Le Boulet':         'honte',
+  'Le Couard':         'honte',
+  // Activité (reste)
+  'Marathonien':       'activite',
+  'Le Noctambule':     'activite',
+  'Bourreau de travail':'activite',
+  'Rivalité':          'activite',
+};
+
+function categoryOf(title: string): TrophyCategoryKey {
+  return TITLE_TO_CATEGORY[title] ?? 'activite';
+}
+
 // ─── Tilt card wrapper ────────────────────────────────────────────────────────
 
 function TiltCard({
@@ -112,21 +170,15 @@ function TiltCard({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Tente de parser une valeur de type "JoueurA vs JoueurB (X matchs)"
- * pour afficher les deux PPs face à face dans l'encart Rivalité.
- */
 function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
   const match = value.match(/^([\w-]+)\s+vs\s+([\w-]+)(.*)$/);
   if (match) {
     const [, login1, login2, rest] = match;
     const u1 = leaderboard.find((u) => u.login === login1);
     const u2 = leaderboard.find((u) => u.login === login2);
-    
     if (u1 && u2) {
       const name1 = u1.firstName && u1.lastName ? `${u1.firstName} ${u1.lastName}` : u1.login;
       const name2 = u2.firstName && u2.lastName ? `${u2.firstName} ${u2.lastName}` : u2.login;
-      
       return (
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <PlayerLink login={u1.login} className="!gap-1.5">
@@ -144,6 +196,56 @@ function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
     }
   }
   return <div className="text-text-strong font-semibold text-sm">{value}</div>;
+}
+
+// ─── Accordéon de catégorie ───────────────────────────────────────────────────
+
+function CategoryAccordion({
+  category,
+  trophies,
+  leaderboard,
+}: {
+  category: TrophyCategory;
+  trophies: TrophyResult[];
+  leaderboard: LeaderboardEntry[];
+}) {
+  const [open, setOpen] = useState(category.defaultOpen);
+  const earned = trophies.filter((t) => t.earned).length;
+
+  if (trophies.length === 0) return null;
+
+  return (
+    <div className="rounded-xl overflow-hidden">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 py-3 px-1 hover:bg-white/[0.02] transition-colors tap-transparent"
+      >
+        <span className="text-base w-6 text-center leading-none">{category.emoji}</span>
+        <span className="font-gaming text-[11px] uppercase tracking-[0.16em] font-extrabold text-text-strong flex-1 text-left">
+          {category.label}
+        </span>
+        {/* Compteur earned/total */}
+        <span className="text-[10px] font-mono tabular-nums text-muted-2 font-bold">
+          <span className={earned === trophies.length ? 'text-gold' : 'text-muted-2'}>{earned}</span>
+          <span className="text-muted mx-0.5">/</span>
+          <span>{trophies.length}</span>
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-2 transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2.5}
+        />
+      </button>
+
+      {/* Contenu */}
+      {open && (
+        <div className="pt-1 pb-2">
+          <TrophyGrid trophies={trophies} leaderboard={leaderboard} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Main section ─────────────────────────────────────────────────────────────
@@ -179,7 +281,6 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
     () => (boards ? computeMixTrophies(boards, matches) : []),
     [boards, matches],
   );
-  // Annuaire fusionné (avatars) pour les gagnants inter-jeux.
   const mergedBoard = useMemo<LeaderboardEntry[]>(() => {
     if (!boards) return leaderboard;
     const seen = new Map<string, LeaderboardEntry>();
@@ -188,7 +289,7 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
     return [...seen.values()];
   }, [boards, leaderboard]);
 
-  // Trophées regroupés par détenteur, joueurs classés par nombre de trophées décroissant.
+  // Trophées par détenteur (vue "par joueur").
   const holders = useMemo<TrophyHolder[]>(() => {
     const byLogin = new Map<string, TrophyHolder>();
     for (const t of trophies) {
@@ -205,8 +306,18 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
     );
   }, [trophies]);
 
-  // Trophées sans détenteur unique (non gagnés ou rivalités) : affichés à part en mode « par joueur ».
   const unattributed = useMemo(() => trophies.filter((t) => !t.winner), [trophies]);
+
+  // Trophées regroupés par catégorie (vue "par catégorie").
+  const byCategory = useMemo(() => {
+    const map = new Map<TrophyCategoryKey, TrophyResult[]>();
+    for (const cat of TROPHY_CATEGORIES) map.set(cat.key, []);
+    for (const t of trophies) {
+      const key = categoryOf(t.title);
+      map.get(key)?.push(t);
+    }
+    return map;
+  }, [trophies]);
 
   if (trophies.length === 0) {
     return (
@@ -224,7 +335,8 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
 
   return (
     <section className="mt-8 pt-6 border-t border-gold/15">
-      <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-3 flex items-center gap-2">
+      {/* Titre */}
+      <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-4 flex items-center gap-2">
         <span className="text-base">🏆</span>
         <span>{title}</span>
         <span className="text-[10px] text-muted font-semibold normal-case tracking-[0.12em]">
@@ -234,7 +346,7 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
       </div>
 
       {/* Bascule mode actuel / mix inter-jeux */}
-      <div className="flex gap-1 p-1 rounded-lg bg-bg-2/60 border border-border/40 mb-4 w-fit">
+      <div className="flex gap-1 p-1 rounded-lg bg-bg-2/60 mb-5 w-fit">
         {(['mode', 'mix'] as const).map((v) => (
           <button
             key={v}
@@ -254,45 +366,56 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
           <div className="text-center text-muted-2 py-8 text-sm">Chargement des classements…</div>
         ) : (
           <>
-            <p className="text-[11px] text-muted-2 mb-3 leading-relaxed">
-              Trophées qui combinent les performances sur plusieurs disciplines (babyfoot, smash, échecs).
+            <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">
+              Trophées combinant les performances sur plusieurs disciplines (babyfoot, smash, échecs).
             </p>
             <TrophyGrid trophies={mixTrophies} leaderboard={mergedBoard} />
           </>
         )
       ) : (
         <>
-      {/* Classement des joueurs les plus titrés */}
-      {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
+          {/* Classement des plus titrés */}
+          {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
 
-      {/* Sélecteur de tri */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-2 font-bold">Trier</span>
-        <SortToggle mode={sortMode} onChange={setSortMode} />
-      </div>
+          {/* Sélecteur de tri */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-2 font-bold">Affichage</span>
+            <SortToggle mode={sortMode} onChange={setSortMode} />
+          </div>
 
-      {sortMode === 'category' ? (
-        <TrophyGrid trophies={trophies} leaderboard={leaderboard} />
-      ) : (
-        <div className="space-y-6">
-          {holders.map((h, i) => (
-            <div key={h.login}>
-              <PlayerGroupHeader holder={h} rank={i + 1} leaderboard={leaderboard} />
-              <TrophyGrid trophies={h.trophies} leaderboard={leaderboard} />
+          {sortMode === 'category' ? (
+            /* ── Vue par catégorie : accordéons ── */
+            <div className="space-y-1 divide-y divide-border/20">
+              {TROPHY_CATEGORIES.map((cat) => (
+                <CategoryAccordion
+                  key={cat.key}
+                  category={cat}
+                  trophies={byCategory.get(cat.key) ?? []}
+                  leaderboard={leaderboard}
+                />
+              ))}
             </div>
-          ))}
-          {unattributed.length > 0 && (
-            <div>
-              <div className="font-gaming text-[10px] uppercase tracking-[0.16em] text-muted-2 font-extrabold mb-3 flex items-center gap-2">
-                <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-muted to-muted/40 rounded-sm" />
-                Non attribués
-                <span className="font-mono normal-case text-muted-2">· {unattributed.length}</span>
-              </div>
-              <TrophyGrid trophies={unattributed} leaderboard={leaderboard} />
+          ) : (
+            /* ── Vue par joueur ── */
+            <div className="space-y-6">
+              {holders.map((h, i) => (
+                <div key={h.login}>
+                  <PlayerGroupHeader holder={h} rank={i + 1} leaderboard={leaderboard} />
+                  <TrophyGrid trophies={h.trophies} leaderboard={leaderboard} />
+                </div>
+              ))}
+              {unattributed.length > 0 && (
+                <div>
+                  <div className="font-gaming text-[10px] uppercase tracking-[0.16em] text-muted-2 font-extrabold mb-3 flex items-center gap-2">
+                    <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-muted to-muted/40 rounded-sm" />
+                    Non attribués
+                    <span className="font-mono normal-case text-muted-2">· {unattributed.length}</span>
+                  </div>
+                  <TrophyGrid trophies={unattributed} leaderboard={leaderboard} />
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
         </>
       )}
     </section>
@@ -309,34 +432,31 @@ function TrophyGrid({
   leaderboard: LeaderboardEntry[];
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
       {trophies.map((t) => {
         const winnerEntry = t.winner ? leaderboard.find((u) => u.login === t.winner?.login) : null;
-
         return (
           <TiltCard
             key={t.title}
             color={t.color}
-            className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-4 flex flex-col gap-2 ${
-              t.earned ? '' : 'opacity-45 grayscale'
+            className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-3.5 flex flex-col gap-2 ${
+              t.earned ? '' : 'opacity-40 grayscale'
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className="text-3xl leading-none">{t.emoji}</div>
+              <div className="text-2xl leading-none">{t.emoji}</div>
               <div className="min-w-0">
-                <div className={`text-xs font-extrabold uppercase tracking-wider ${COLOR_TEXT[t.color]}`}>
+                <div className={`text-[11px] font-extrabold uppercase tracking-wider ${COLOR_TEXT[t.color]}`}>
                   {t.title}
                 </div>
-                <div className="text-[10px] text-muted-2">{t.subtitle}</div>
+                <div className="text-[10px] text-muted-2 leading-tight">{t.subtitle}</div>
               </div>
             </div>
 
             {!t.earned ? (
-              <div className="mt-1 text-xs text-muted-2 italic">
-                Personne ne l'a encore 🔒
-              </div>
+              <div className="text-[11px] text-muted-2 italic">Personne ne l'a encore 🔒</div>
             ) : t.winner ? (
-              <PlayerLink login={t.winner.login} className="mt-1">
+              <PlayerLink login={t.winner.login} className="mt-0.5">
                 <UserBadge
                   login={t.winner.login}
                   imageUrl={t.winner.imageUrl}
@@ -349,7 +469,7 @@ function TrophyGrid({
               renderRivalryOrValue(t.value, leaderboard)
             )}
 
-            <div className="flex items-center gap-2 mt-auto pt-1">
+            <div className="flex items-center gap-2 mt-auto pt-0.5">
               {t.winner && (
                 <span className={`text-sm font-extrabold ${COLOR_TEXT[t.color]}`}>
                   {t.value}
@@ -368,7 +488,7 @@ function TrophyGrid({
 
 function SortToggle({ mode, onChange }: { mode: SortMode; onChange: (m: SortMode) => void }) {
   return (
-    <div className="inline-flex gap-1 p-1 rounded-lg bg-bg-2/60 border border-border/40">
+    <div className="inline-flex gap-1 p-1 rounded-lg bg-bg-2/60">
       {(['category', 'player'] as const).map((m) => (
         <button
           key={m}
@@ -425,7 +545,6 @@ function MostTitled({
   const [showAll, setShowAll] = useState(false);
   const top3 = holders.slice(0, 3);
   const rest = holders.slice(3);
-  // Ordre visuel classique : 2e à gauche, 1er au centre, 3e à droite.
   const podium = [
     top3[1] ? { holder: top3[1], rank: 2 } : null,
     top3[0] ? { holder: top3[0], rank: 1 } : null,
@@ -433,7 +552,8 @@ function MostTitled({
   ].filter(Boolean) as { holder: TrophyHolder; rank: number }[];
 
   return (
-    <div className="card-hud rounded-xl p-4 sm:p-5 mb-5">
+    /* Fond très subtil sans border (évite card-hud dans card-hud) */
+    <div className="rounded-xl bg-white/[0.025] px-4 py-4 mb-5">
       <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-4 flex items-center gap-2">
         <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
         Les plus titrés
@@ -520,7 +640,6 @@ function MostTitledSpot({
 
   return (
     <div className="group flex flex-col items-center w-20 sm:w-24">
-      {/* Figure : seule la partie haute se soulève au hover, la marche reste au sol. */}
       <div className="flex flex-col items-center gap-1.5 mb-2 transition-transform duration-300 ease-out group-hover:-translate-y-1">
         {isFirst && (
           <Crown className="w-5 h-5 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.5)]" fill="currentColor" />
@@ -541,7 +660,6 @@ function MostTitledSpot({
         </div>
       </div>
 
-      {/* Marche du podium */}
       <div
         className={`w-full ${SPOT_STEP_H[rank]} rounded-t-lg border-t border-l border-r bg-gradient-to-b ${SPOT_BAR[rank]} flex items-start justify-center pt-1 transition-all duration-300 group-hover:brightness-110`}
       >
