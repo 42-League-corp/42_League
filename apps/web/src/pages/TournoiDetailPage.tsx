@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
 import { AbacusSlider } from '../components/AbacusSlider';
 import { OutcomeButton } from '../components/OutcomeButton';
-import { api, type Tournament, type TournamentMatch, type LeaderboardEntry } from '../lib/api';
+import { api, type Game, type Tournament, type TournamentMatch, type LeaderboardEntry } from '../lib/api';
 import { PlayerSearch } from './defis/shared/PlayerSearch';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
@@ -609,6 +609,7 @@ function BracketMatch({
       {canRecord && recording && (
         <RecordBracketForm
           match={match}
+          game={tournament.game ?? 'babyfoot'}
           onSubmit={handleRecordSubmit}
           onCancel={() => setRecording(false)}
         />
@@ -667,38 +668,43 @@ function PlayerRow({
 
 function RecordBracketForm({
   match,
+  game,
   onSubmit,
   onCancel,
 }: {
   match: TournamentMatch;
+  game: Game;
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
   const [winner, setWinner] = useState<'a' | 'b' | null>(null);
   const [loserScore, setLoserScore] = useState(0);
+  const [winnerGames, setWinnerGames] = useState(2); // smash : games du vainqueur (2 ou 3)
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    if (!winner) return;
+  const send = async (scoreA: number, scoreB: number) => {
     setBusy(true);
     try {
-      const scoreA = winner === 'a' ? WINNING_SCORE : loserScore;
-      const scoreB = winner === 'b' ? WINNING_SCORE : loserScore;
       await onSubmit(scoreA, scoreB);
     } finally {
       setBusy(false);
     }
   };
 
+  // Étape 1 — vainqueur. Aux échecs, le résultat est binaire : un clic suffit.
   if (!winner) {
+    const pick = (w: 'a' | 'b') => {
+      if (game === 'chess') void send(w === 'a' ? 1 : 0, w === 'a' ? 0 : 1);
+      else setWinner(w);
+    };
     return (
       <div className="mt-2 space-y-2">
         <div className="text-xs text-muted text-center">Qui a gagné ?</div>
         <div className="grid grid-cols-2 gap-2">
-          <OutcomeButton kind="win" onClick={() => setWinner('a')}>
+          <OutcomeButton kind="win" onClick={() => pick('a')}>
             {match.playerALogin ?? 'Joueur A'}
           </OutcomeButton>
-          <OutcomeButton kind="win" onClick={() => setWinner('b')}>
+          <OutcomeButton kind="win" onClick={() => pick('b')}>
             {match.playerBLogin ?? 'Joueur B'}
           </OutcomeButton>
         </div>
@@ -710,6 +716,49 @@ function RecordBracketForm({
   const loserLabel =
     winner === 'a' ? (match.playerBLogin ?? 'Joueur B') : (match.playerALogin ?? 'Joueur A');
 
+  // Smash : score du set en games (vainqueur 2 ou 3, perdant strictement moins).
+  if (game === 'smash') {
+    const loserGames = Math.min(loserScore, winnerGames - 1);
+    const chip = (active: boolean) =>
+      `w-8 h-8 rounded-lg font-mono font-extrabold tabular-nums transition-all ${
+        active ? 'bg-gold/15 text-gold ring-1 ring-gold/50' : 'bg-bg-2/50 text-muted-2'
+      }`;
+    return (
+      <div className="mt-2 space-y-2">
+        <div className="text-xs text-muted text-center">Score du set (games)</div>
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-2">
+          <span className="w-20 text-right">Vainqueur</span>
+          {[2, 3].map((g) => (
+            <button key={g} type="button" onClick={() => setWinnerGames(g)} className={chip(winnerGames === g)}>
+              {g}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-2">
+          <span className="w-20 text-right truncate">{loserLabel}</span>
+          {Array.from({ length: winnerGames }, (_, i) => i).map((g) => (
+            <button key={g} type="button" onClick={() => setLoserScore(g)} className={chip(loserGames === g)}>
+              {g}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5 pt-1">
+          <Button size="sm" variant="ghost" onClick={() => setWinner(null)} className="flex-none">←</Button>
+          <Button
+            size="sm"
+            loading={busy}
+            onClick={() => send(winner === 'a' ? winnerGames : loserGames, winner === 'a' ? loserGames : winnerGames)}
+            className="flex-1"
+          >
+            OK
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} className="flex-none">×</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Babyfoot : abaque du score du perdant (le vainqueur marque 10).
   return (
     <div className="mt-2 space-y-2">
       <div className="text-xs text-muted text-center">
@@ -723,7 +772,14 @@ function RecordBracketForm({
       />
       <div className="flex gap-1.5 pt-1">
         <Button size="sm" variant="ghost" onClick={() => setWinner(null)} className="flex-none">←</Button>
-        <Button size="sm" loading={busy} onClick={submit} className="flex-1">OK</Button>
+        <Button
+          size="sm"
+          loading={busy}
+          onClick={() => send(winner === 'a' ? WINNING_SCORE : loserScore, winner === 'a' ? loserScore : WINNING_SCORE)}
+          className="flex-1"
+        >
+          OK
+        </Button>
         <Button size="sm" variant="ghost" onClick={onCancel} className="flex-none">×</Button>
       </div>
     </div>

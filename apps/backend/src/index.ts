@@ -35,6 +35,7 @@ import {
   ratingUpdate,
   readElo,
   tournamentsWonDelta,
+  validateTournamentScore,
 } from './games.js';
 import { prisma } from './db.js';
 import type { Prisma } from '@prisma/client';
@@ -2346,6 +2347,11 @@ app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
     if (m.playerALogin !== me && m.playerBLogin !== me) {
       throw new HTTPException(403, { message: 'not a participant' });
     }
+    // Validation du score selon la discipline du tournoi (échecs 1-0, smash set,
+    // babyfoot 10-x) — empêche le « 10-0 » sur une finale d'échecs/smash.
+    const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    if (scoreErr) throw new HTTPException(400, { message: scoreErr });
     await tx.tournamentMatch.update({
       where: { id: matchId },
       data: {

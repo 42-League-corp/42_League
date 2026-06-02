@@ -1,8 +1,14 @@
 import type { Prisma, User } from '@prisma/client';
-import { GAME_IDS, applyGameElo, parseGameId, type GameId } from '@42-league/shared';
+import {
+  GAME_IDS,
+  applyGameElo,
+  parseGameId,
+  validateTournamentScore,
+  type GameId,
+} from '@42-league/shared';
 
 // Ré-exports : `index.ts` n'importe la « connaissance jeu » que d'ici.
-export { GAME_IDS, applyGameElo, parseGameId };
+export { GAME_IDS, applyGameElo, parseGameId, validateTournamentScore };
 export type { GameId };
 
 /**

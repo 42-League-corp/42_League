@@ -122,3 +122,31 @@ export function applyGameElo(
 ): EloUpdate {
   return getGameDef(game).elo(ratingA, ratingB, winner, outcome);
 }
+
+/**
+ * Valide la forme d'un score de match de TOURNOI selon la discipline. Les
+ * tournois ne stockent pas bestOf/persos : on valide uniquement la cohérence du
+ * score. Renvoie un message d'erreur, ou `null` si valide. Le bracket impose un
+ * vainqueur (pas de nul).
+ */
+export function validateTournamentScore(
+  game: GameId,
+  scoreA: number,
+  scoreB: number,
+): string | null {
+  if (scoreA === scoreB) return 'il faut un vainqueur (pas de match nul en tournoi)';
+  const hi = Math.max(scoreA, scoreB);
+  const lo = Math.min(scoreA, scoreB);
+  switch (getGameDef(game).scoring) {
+    case 'goals':
+      // Babyfoot : le vainqueur atteint 10 (le perdant est déjà borné -10..9).
+      return hi === 10 ? null : 'un camp doit atteindre 10 buts';
+    case 'binary':
+      // Échecs : 1-0.
+      return hi === 1 && lo === 0 ? null : 'résultat binaire attendu (1-0)';
+    case 'sets':
+      // Smash : vainqueur 1 à 3 games gagnés, perdant strictement moins.
+      if (lo < 0) return 'score de set invalide';
+      return hi >= 1 && hi <= 3 ? null : 'score de set invalide (1 à 3 games gagnés)';
+  }
+}
