@@ -10,7 +10,14 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
 import { AbacusSlider } from '../../components/AbacusSlider';
 import { ContestModal } from '../../components/ContestModal';
-import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '../../lib/api';
+import {
+  api,
+  type Challenge,
+  type Game,
+  type LeaderboardEntry,
+  type MatchResultInput,
+  type PendingMatch,
+} from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
@@ -468,7 +475,8 @@ function PendingConfirmRow({
   // sans attendre le refresh réseau.
   const [resolved, setResolved] = useState(false);
 
-  const iWon = match.scoreOpponent === WINNING_SCORE;
+  // Vainqueur par comparaison de scores (toutes disciplines : 10-x, 1-0, 2-1).
+  const iWon = match.scoreOpponent > match.scoreDeclarer;
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -648,6 +656,7 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
       {kind === 'accepted' && recording && (
         <RecordResultForm
           challengeId={challenge.id}
+          game={challenge.game ?? 'babyfoot'}
           oppLogin={opponent}
           onDone={() => setRecording(false)}
         />
@@ -658,10 +667,12 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
 
 function RecordResultForm({
   challengeId,
+  game,
   oppLogin,
   onDone,
 }: {
   challengeId: string;
+  game: Game;
   oppLogin: string;
   onDone: () => void;
 }) {
@@ -671,23 +682,48 @@ function RecordResultForm({
   const [loserScore, setLoserScore] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    if (iWon === null) return;
-    const scoreSelf = iWon ? WINNING_SCORE : loserScore;
-    const scoreOpp = iWon ? loserScore : WINNING_SCORE;
+  const send = async (result: MatchResultInput) => {
     setBusy(true);
     try {
-      await api.recordChallengeResult(challengeId, { scoreSelf, scoreOpponent: scoreOpp });
+      await api.recordChallengeResult(challengeId, result);
       flash.show('Score envoyé — en attente de confirmation');
       await refresh();
       onDone();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
       setBusy(false);
     }
   };
 
+  // ── Échecs : résultat binaire, en un seul geste. ──
+  if (game === 'chess') {
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <OutcomeButton kind="win" onClick={() => send({ scoreSelf: 1, scoreOpponent: 0, game: 'chess' })}>
+          J'ai gagné
+        </OutcomeButton>
+        <OutcomeButton kind="loss" onClick={() => send({ scoreSelf: 0, scoreOpponent: 1, game: 'chess' })}>
+          J'ai perdu
+        </OutcomeButton>
+      </div>
+    );
+  }
+
+  // ── Smash : un set demande les persos + les vies → on renvoie vers
+  //    « Déclarer une partie », plus complet (et déjà rodé). ──
+  if (game === 'smash') {
+    return (
+      <div className="mt-3 space-y-2 text-center">
+        <p className="text-xs text-muted-2 leading-relaxed">
+          Pour un set Smash (persos, vies restantes), saisis le résultat via
+          <span className="text-text font-semibold"> « Déclarer une partie »</span>.
+        </p>
+        <Button size="sm" variant="ghost" onClick={onDone} className="w-full">OK</Button>
+      </div>
+    );
+  }
+
+  // ── Babyfoot : abaque du score du perdant. ──
   if (iWon === null) {
     return (
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -711,7 +747,20 @@ function RecordResultForm({
       />
       <div className="flex gap-2 pt-1">
         <Button size="sm" variant="ghost" onClick={() => setIWon(null)} className="flex-none">←</Button>
-        <Button size="sm" loading={busy} onClick={submit} className="flex-1">Envoyer</Button>
+        <Button
+          size="sm"
+          loading={busy}
+          onClick={() =>
+            send({
+              scoreSelf: iWon ? WINNING_SCORE : loserScore,
+              scoreOpponent: iWon ? loserScore : WINNING_SCORE,
+              game: 'babyfoot',
+            })
+          }
+          className="flex-1"
+        >
+          Envoyer
+        </Button>
         <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">Annuler</Button>
       </div>
     </div>
