@@ -20,14 +20,22 @@ import {
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
   calculateBabyfootElo,
-  calculateSmashElo,
-  calculateChessElo,
   shouldCountForElo,
   estimatedEloLoss,
   OPS_DURATION_MS,
   OPS_FORCED_MATCHES,
   OPS_REFUSE_MULTIPLIER,
 } from '@42-league/shared';
+import {
+  GAME_IDS,
+  applyGameElo,
+  eloOrderBy,
+  parseGameId,
+  projectStats,
+  ratingUpdate,
+  readElo,
+  tournamentsWonDelta,
+} from './games.js';
 import { prisma } from './db.js';
 import type { Prisma } from '@prisma/client';
 import {
@@ -922,10 +930,8 @@ app.get('/users/:login', async (c) => {
   });
 });
 
-// Normalise le paramètre de jeu (babyfoot par défaut).
-function parseGame(q: string | undefined): 'babyfoot' | 'smash' | 'chess' {
-  return q === 'smash' || q === 'chess' ? q : 'babyfoot';
-}
+// Normalise le paramètre de jeu (babyfoot par défaut). Délègue au registry partagé.
+const parseGame = parseGameId;
 
 app.get('/leaderboard', async (c) => {
   await getCurrentLogin(c);
@@ -935,25 +941,9 @@ app.get('/leaderboard', async (c) => {
   // N'apparaissent au classement d'un mode que les joueurs qui y adhèrent (games).
   const users = await prisma.user.findMany({
     where: { ...VISIBLE_USER_WHERE, games: { has: game } },
-    orderBy:
-      game === 'smash'
-        ? { eloSmash: 'desc' }
-        : game === 'chess'
-          ? { eloChess: 'desc' }
-          : { elo: 'desc' },
+    orderBy: eloOrderBy(game),
   });
-  return c.json(
-    users.map((u, i) => {
-      const base = { rank: i + 1, ...u };
-      if (game === 'smash') {
-        return { ...base, elo: u.eloSmash, matchesPlayed: u.matchesPlayedSmash, tournamentsWon: u.tournamentsWonSmash };
-      }
-      if (game === 'chess') {
-        return { ...base, elo: u.eloChess, matchesPlayed: u.matchesPlayedChess, tournamentsWon: u.tournamentsWonChess };
-      }
-      return base;
-    }),
-  );
+  return c.json(users.map((u, i) => ({ rank: i + 1, ...u, ...projectStats(u, game) })));
 });
 
 // ── Notifications in-app ──────────────────────────────────────────────────
@@ -1042,16 +1032,13 @@ app.post('/seasons/close', async (c) => {
 
     // Snapshot par discipline : on fige un classement distinct pour chaque jeu
     // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
-    const GAMES = ['babyfoot', 'smash', 'chess'] as const;
-    const eloOf = (u: (typeof allUsers)[number], g: string) =>
-      g === 'smash' ? u.eloSmash : g === 'chess' ? u.eloChess : u.elo;
     const champions = new Set<string>();
     let totalPlayers = 0;
 
-    for (const g of GAMES) {
+    for (const g of GAME_IDS) {
       const users = allUsers
         .filter((u) => (u.games ?? ['babyfoot']).includes(g))
-        .sort((a, b) => eloOf(b, g) - eloOf(a, g));
+        .sort((a, b) => readElo(b, g) - readElo(a, g));
       if (users.length === 0) continue;
       totalPlayers += users.length;
       const wl = new Map<string, { w: number; l: number }>();
@@ -1078,7 +1065,7 @@ app.post('/seasons/close', async (c) => {
             game: g,
             login: u.login,
             rank,
-            elo: eloOf(u, g),
+            elo: readElo(u, g),
             wins: s.w,
             losses: s.l,
           },
@@ -1270,9 +1257,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const scoreA = declarerIsA ? p.scoreDeclarer : p.scoreOpponent;
   const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
   const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
-  const game = p.game === 'smash' ? 'smash' : p.game === 'chess' ? 'chess' : 'babyfoot';
+  const game = parseGameId(p.game);
   const isSmash = game === 'smash';
-  const isChess = game === 'chess';
 
   // Champs Smash mappés sur les côtés A/B.
   const charA = declarerIsA ? p.charDeclarer ?? null : p.charOpponent ?? null;
@@ -1293,28 +1279,23 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
     tx.user.findUniqueOrThrow({ where: { login: b } }),
   ]);
 
-  // Rating courant + colonnes à incrémenter selon la discipline.
-  const ratingA = isSmash ? userA.eloSmash : isChess ? userA.eloChess : userA.elo;
-  const ratingB = isSmash ? userB.eloSmash : isChess ? userB.eloChess : userB.elo;
+  // Rating courant de la discipline (mapping des colonnes : cf. games.ts).
+  const ratingA = readElo(userA, game);
+  const ratingB = readElo(userB, game);
 
   let deltaA = 0;
   let deltaB = 0;
   if (countsForElo) {
-    const update = isSmash
-      ? calculateSmashElo(ratingA, ratingB, winner, scoreA, scoreB, p.bestOf ?? 3, winnerStocks)
-      : isChess
-        ? calculateChessElo(ratingA, ratingB, winner)
-        : calculateBabyfootElo(ratingA, ratingB, winner, scoreA, scoreB);
+    const update = applyGameElo(game, ratingA, ratingB, winner, {
+      scoreA,
+      scoreB,
+      bestOf: p.bestOf,
+      winnerStocks,
+    });
     deltaA = update.deltaA;
     deltaB = update.deltaB;
-    const dataFor = (newElo: number) =>
-      isSmash
-        ? { eloSmash: newElo, matchesPlayedSmash: { increment: 1 } }
-        : isChess
-          ? { eloChess: newElo, matchesPlayedChess: { increment: 1 } }
-          : { elo: newElo, matchesPlayed: { increment: 1 } };
-    await tx.user.update({ where: { login: a }, data: dataFor(update.newA) });
-    await tx.user.update({ where: { login: b }, data: dataFor(update.newB) });
+    await tx.user.update({ where: { login: a }, data: ratingUpdate(game, update.newA) });
+    await tx.user.update({ where: { login: b }, data: ratingUpdate(game, update.newB) });
   }
 
   await tx.pendingMatch.delete({ where: { id: p.id } });
@@ -2469,12 +2450,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       // Crédite le bon compteur de titres selon la discipline du tournoi.
       await tx.user.update({
         where: { login: winnerLogin },
-        data:
-          tour.game === 'smash'
-            ? { tournamentsWonSmash: { increment: 1 } }
-            : tour.game === 'chess'
-              ? { tournamentsWonChess: { increment: 1 } }
-              : { tournamentsWon: { increment: 1 } },
+        data: tournamentsWonDelta(parseGameId(tour.game), 1),
       });
       finished = true;
     }
@@ -3158,12 +3134,7 @@ app.delete('/admin/tournaments/:id', async (c) => {
     if (row.status === 'finished' && row.winnerLogin) {
       await tx.user.update({
         where: { login: row.winnerLogin },
-        data:
-          row.game === 'smash'
-            ? { tournamentsWonSmash: { decrement: 1 } }
-            : row.game === 'chess'
-              ? { tournamentsWonChess: { decrement: 1 } }
-              : { tournamentsWon: { decrement: 1 } },
+        data: tournamentsWonDelta(parseGameId(row.game), -1),
       });
     }
     await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs
