@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
-import { Award, History, Info, LogOut, Settings } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import { pickRating } from '../../lib/gameStats';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
@@ -27,17 +27,37 @@ export function ProfilMobile() {
     );
   }
 
+  const user = me?.user;
+  // Autres disciplines actives (avec au moins 1 match joué)
+  const crossGames = (['babyfoot', 'smash', 'chess'] as const)
+    .filter((g) => g !== game && user && (user.games ?? ['babyfoot']).includes(g))
+    .map((g) => {
+      const r = user ? pickRating(user, g) : { elo: 1000, matchesPlayed: 0, tournamentsWon: 0 };
+      return { g, elo: r.elo, played: r.matchesPlayed };
+    });
+
+  const GAME_LABEL: Record<string, string> = { babyfoot: '⚽ Babyfoot', smash: '🎮 Smash', chess: '♟ Échecs' };
+
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
         <ProfileHeroCard stats={stats} />
 
-        {/* Quick actions row */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <QuickAction to="/about" Icon={Info} label="Règles" tone="gold" />
-          <QuickAction to="/history" Icon={History} label="Historique" tone="teal" />
-          <QuickAction to="/settings" Icon={Settings} label="Réglages" tone="muted" />
-        </div>
+        {/* Stats cross-jeux : autres disciplines du joueur */}
+        {crossGames.length > 0 && (
+          <div className="rounded-2xl bg-white/[0.025] px-4 py-3 space-y-2">
+            <div className="text-[9px] uppercase tracking-[0.18em] font-extrabold text-muted-2 mb-1">Autres disciplines</div>
+            {crossGames.map(({ g, elo, played }) => (
+              <div key={g} className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-text-strong">{GAME_LABEL[g]}</span>
+                <div className="flex items-center gap-3 text-muted-2 font-mono">
+                  <span className="text-gold font-extrabold tabular-nums">{elo} ELO</span>
+                  <span className="text-[10px]">{played} match{played !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ELO evolution chart */}
         {myLogin && (
@@ -87,35 +107,6 @@ export function ProfilMobile() {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-interface QuickActionProps {
-  to: string;
-  Icon: typeof Award;
-  label: string;
-  tone: 'gold' | 'teal' | 'red' | 'muted';
-}
-
-const TONE_BG: Record<QuickActionProps['tone'], string> = {
-  gold: 'bg-gradient-to-b from-gold/15 to-gold/5 text-gold border-gold/40 active:bg-gold/20 shadow-[inset_0_1px_0_rgba(255,215,120,0.18)]',
-  teal: 'bg-gradient-to-b from-gold/12 to-gold/4 text-gold border-gold/30 active:bg-gold/15',
-  red: 'bg-red/10 text-red border-red/30 active:bg-red/15',
-  muted: 'metal-plate text-muted-2 active:bg-bg-3',
-};
-
-function QuickAction({ to, Icon, label, tone }: QuickActionProps) {
-  return (
-    <Link
-      to={to}
-      onClick={() => haptic('selection')}
-      className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl border tap-transparent transition-colors ${TONE_BG[tone]}`}
-    >
-      <Icon className="w-5 h-5" strokeWidth={2.5} />
-      <span className="text-[10px] font-extrabold uppercase tracking-wider leading-none">
-        {label}
-      </span>
-    </Link>
-  );
-}
 
 function SectionHeader({ title, badge }: { title: string; badge?: number }) {
   return (

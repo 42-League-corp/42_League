@@ -97,13 +97,22 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             <span className="text-muted-2">a déclaré :</span>
           </div>
 
+          {/* Discipline du match */}
+          {match.game && match.game !== 'babyfoot' && (
+            <div className="flex justify-center mb-2">
+              <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-accent/15 text-accent border border-accent/30">
+                {match.game === 'smash' ? '🎮 Smash' : '♟ Échecs'}
+              </span>
+            </div>
+          )}
+
           <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
             <span
               className={`text-4xl font-black tabular-nums ${
                 match.scoreDeclarer > match.scoreOpponent ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
-              {match.scoreDeclarer}
+              {match.game === 'chess' && match.scoreDeclarer > match.scoreOpponent ? 'V' : match.scoreDeclarer}
             </span>
             <span className="text-2xl text-muted">–</span>
             <span
@@ -111,7 +120,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
                 match.scoreOpponent > match.scoreDeclarer ? 'text-gold text-gold-emboss' : 'text-text-strong'
               }`}
             >
-              {match.scoreOpponent}
+              {match.game === 'chess' && match.scoreOpponent > match.scoreDeclarer ? 'V' : match.scoreOpponent}
             </span>
           </div>
           <div className="text-center text-[10px] text-muted uppercase tracking-wider font-bold mb-4">

@@ -250,29 +250,60 @@ export function DeclareGameFlow({
       )}
 
       {opponent && iWon !== null && game === 'babyfoot' && (
-        <div className="relative mt-8 animate-slide-down">
-          <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-4 text-center">
-            Score de {iWon ? opponent.login : (myLogin ?? 'moi')}
-          </label>
+        <div className="relative mt-6 animate-slide-down">
 
+          {/* ── Affichage du score en direct ───────────────────────────────── */}
+          {/* Les deux camps côte à côte : le gagnant (10 verrouillé en or) et
+              le perdant (valeur live du slider). Rend immédiatement lisible QUI
+              marque quoi — plus de confusion "je glisse mon score ou le sien". */}
+          <div className="flex items-stretch gap-2 mb-6">
+            {/* Gagnant (côté gauche si iWon, droite sinon) */}
+            {[
+              { login: winnerLogin, score: WINNING_SCORE, isWinner: true },
+              { login: loserLogin, score: loserScore, isWinner: false },
+            ].map(({ login, score, isWinner }) => (
+              <div
+                key={login}
+                className={`flex-1 rounded-2xl flex flex-col items-center justify-center py-4 gap-1 ${
+                  isWinner
+                    ? 'bg-gradient-to-b from-gold/15 to-gold/5 border border-gold/40'
+                    : loserScore < 0
+                      ? 'bg-red/[0.07] border border-red/30'
+                      : 'bg-bg-2/60 border border-border/60'
+                }`}
+              >
+                <span className="text-[10px] uppercase tracking-[0.18em] font-extrabold text-muted truncate max-w-full px-2">
+                  {login === (myLogin ?? 'Moi') ? 'Toi' : login}
+                </span>
+                <span
+                  className={`font-display text-5xl font-black tabular-nums leading-none ${
+                    isWinner
+                      ? 'text-gold'
+                      : loserScore < 0
+                        ? 'text-red'
+                        : 'text-text-strong'
+                  }`}
+                  style={isWinner ? { textShadow: '0 0 24px rgba(255,201,74,0.45)' } : undefined}
+                >
+                  {score}
+                </span>
+                {isWinner && (
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">🔒 Verrouillé</span>
+                )}
+                {!isWinner && (
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-2">← Fais glisser</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Abaque */}
           <AbacusSlider
             value={loserScore}
             onChange={setLoserScore}
             min={LOSER_SCORE_MIN}
             max={LOSER_SCORE_MAX}
           />
-
-          <div className="mt-8 px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
-            <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-            {' a gagné '}
-            <span className="font-extrabold text-text-strong text-base font-mono tabular-nums">{WINNING_SCORE}</span>
-            <span className="text-muted mx-2 opacity-50">/</span>
-            <span className={`font-extrabold text-base font-mono tabular-nums ${loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>
-              {loserScore}
-            </span>
-            {' face à '}
-            <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
-          </div>
 
           <div className="mt-5">
             <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">
