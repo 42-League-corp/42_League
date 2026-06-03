@@ -38,6 +38,7 @@ import {
   validateTournamentScore,
 } from './games.js';
 import { prisma } from './db.js';
+import { seedStaging } from './staging-seed.js';
 import type { Prisma } from '@prisma/client';
 import {
   createAuthRouter,
@@ -470,13 +471,17 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // =========================================================================
-// STAGING GATE — accès réservé aux superadmins (APP_ENV=staging)
+// STAGING GATE — accès réservé à une liste blanche (APP_ENV=staging)
 // =========================================================================
-// Sur l'environnement de staging UNIQUEMENT, toute l'API est réservée aux
-// superadmins. On exempte la santé, tout le flux d'auth/OAuth (sinon impossible
-// de se connecter) et /me (le front le lit pour afficher l'écran « réservé aux
-// superadmins » côté non-superadmin). Défense en profondeur : même un appel API
-// direct par un non-superadmin est refusé ici, pas seulement masqué côté front.
+// Sur l'environnement de staging UNIQUEMENT, toute l'API est réservée aux logins
+// de STAGING_ALLOWED. On exempte la santé, tout le flux d'auth/OAuth (sinon
+// impossible de se connecter) et /me (le front le lit pour afficher l'écran
+// « accès réservé » côté non-autorisé). Défense en profondeur : même un appel API
+// direct par un login non autorisé est refusé ici, pas seulement masqué côté front.
+//
+// throbert & abidaux sont superadmins ; jagharra est invité pour les tests
+// (rôle ADMIN, jamais superadmin — cf. staging-seed.ts).
+const STAGING_ALLOWED = new Set([...SUPERADMINS, 'jagharra']);
 if (process.env.APP_ENV === 'staging') {
   app.use('*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
@@ -486,10 +491,7 @@ if (process.env.APP_ENV === 'staging') {
     }
     const login = await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
-    // getUserRole vérifie d'abord le set hardcodé (abidaux/throbert), puis le
-    // rôle DB — ce qui inclut les accès staging accordés via le panel GOD.
-    const role = await getUserRole(login);
-    if (role !== 'SUPERADMIN') {
+    if (!STAGING_ALLOWED.has(login.toLowerCase())) {
       throw new HTTPException(403, { message: 'staging: accès réservé' });
     }
     return next();
@@ -655,6 +657,9 @@ app.get('/me', async (c) => {
     user,
     role,
     isAdmin: isAdmin(login),
+    // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
+    // pour la barrière staging sans dupliquer la liste blanche.
+    stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()),
     badges,
     palmares,
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
@@ -3872,6 +3877,12 @@ const port = Number(process.env.PORT ?? 3000);
 if (process.env.NODE_ENV !== 'test') {
   serve({ fetch: app.fetch, port }, (info) => {
     console.log(`42 League backend listening on http://localhost:${info.port}`);
+    // Seed de données de test — staging uniquement, jamais en prod.
+    if (process.env.APP_ENV === 'staging') {
+      seedStaging().catch((err) => {
+        console.error('failed to seed staging test data', err);
+      });
+    }
     rescheduleOpsTimers().catch((err) => {
       console.error('failed to reschedule ops timers', err);
     });
