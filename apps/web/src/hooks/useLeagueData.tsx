@@ -200,12 +200,15 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     [authenticated, signOut],
   );
 
-  // Changement de mode (babyfoot ↔ smash) : le classement dépend du jeu, on le
-  // re-fetch immédiatement pour refléter le bon ranking.
+  // Changement de mode (babyfoot ↔ smash ↔ échecs) : classement ET tournois
+  // dépendent du jeu → re-fetch. On rafraîchit aussi `me` : les stats du haut de
+  // la page Défis (ELO/V-D/rang du joueur) sont cloisonnées par discipline et
+  // lues sur l'objet `me` ; sans ce refresh elles restaient figées sur le snapshot
+  // chargé à l'arrivée, là où le reste de l'app (thème, classement) réagissait.
   useEffect(() => {
     if (!authenticated) return;
     return subscribeGame(() => {
-      void refreshDomains(['leaderboard', 'tournaments']);
+      void refreshDomains(['me', 'leaderboard', 'tournaments']);
     });
   }, [authenticated, refreshDomains]);
 
