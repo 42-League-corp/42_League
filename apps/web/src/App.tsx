@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from './shell/AppShell';
 import { Toast } from './components/Toast';
 import { PageSkeleton } from './mobile/primitives/Skeleton';
@@ -79,27 +79,36 @@ export function App() {
 
   return (
     <>
-      <Routes>
-        <Route path="/auth/return" element={<AuthReturnPage />} />
-        {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
-            Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
-            pour conserver la tab bar en continuité des autres pages. */}
-        {!authenticated && <Route path="/about" element={<AboutPage />} />}
-        <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
-        <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
-        <Route
-          path="*"
-          element={
-            authenticated ? (
-              <LeagueDataProvider>
-                <AuthenticatedShell />
-              </LeagueDataProvider>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-      </Routes>
+      {/* Cross-dissolve : l'app est invisible pendant le splash, puis fade-in en même
+          temps que le splash fade-out → pas de "page jaune qui clignote" */}
+      <motion.div
+        className="h-full"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: showSplash ? 0 : 1 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+      >
+        <Routes>
+          <Route path="/auth/return" element={<AuthReturnPage />} />
+          {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
+              Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
+              pour conserver la tab bar en continuité des autres pages. */}
+          {!authenticated && <Route path="/about" element={<AboutPage />} />}
+          <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
+          <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
+          <Route
+            path="*"
+            element={
+              authenticated ? (
+                <LeagueDataProvider>
+                  <AuthenticatedShell />
+                </LeagueDataProvider>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+        </Routes>
+      </motion.div>
       <AnimatePresence>
         {showSplash && (
           <SplashScreen onComplete={() => setShowSplash(false)} />
