@@ -1,11 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGameMode } from '../hooks/useGameMode';
 import type { Game } from '../lib/gameMode';
 
-const ORDER: Game[] = ['babyfoot', 'smash', 'chess'];
-const LABEL: Record<Game, string> = { babyfoot: 'Babyfoot', smash: 'Smash', chess: 'Échecs' };
-
-/** Applique `data-game` sur <html> pour le thème conditionnel (or / rouge / vert). */
+/** Applique `data-game` sur <html> pour le thème conditionnel. */
 export function useGameModeTheme(): void {
   const { game } = useGameMode();
   useEffect(() => {
@@ -13,106 +11,195 @@ export function useGameModeTheme(): void {
   }, [game]);
 }
 
-/** Glyphe représentant le jeu : babyfoot, Smash Ball, ou pièce d'échecs. */
-function ModeGlyph({ game, size = 30 }: { game: Game; size?: number }) {
-  if (game === 'smash') {
-    return (
-      <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
+// ─── Métadonnées visuelles par univers ────────────────────────────────────────
+
+const GAMES: Game[] = ['babyfoot', 'smash', 'chess'];
+
+const META: Record<Game, {
+  label: string;
+  shortLabel: string;
+  color: string;      // CSS color string (Tailwind ne passe pas en CSS inline)
+  borderColor: string;
+  bgColor: string;
+  glowColor: string;
+  icon: React.ReactElement;
+}> = {
+  babyfoot: {
+    label: 'Babyfoot',
+    shortLabel: 'Baby',
+    color: '#ffc94a',
+    borderColor: 'rgba(255,201,74,0.6)',
+    bgColor: 'rgba(255,201,74,0.10)',
+    glowColor: 'rgba(255,201,74,0.45)',
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+        <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
+        <rect x="10.8" y="5" width="2.4" height="10" rx="1" fill="currentColor" />
+        <circle cx="12" cy="9.5" r="2.8" fill="currentColor" />
+        <rect x="8.5" y="12" width="7" height="4.5" rx="1.2" fill="currentColor" />
+        <circle cx="12" cy="20" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+  smash: {
+    label: 'Smash',
+    shortLabel: 'Smash',
+    color: '#ff3d50',
+    borderColor: 'rgba(255,61,80,0.6)',
+    bgColor: 'rgba(255,61,80,0.10)',
+    glowColor: 'rgba(255,61,80,0.45)',
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
         <defs>
-          <radialGradient id="smashball" cx="38%" cy="32%" r="70%">
+          <radialGradient id="gsb" cx="38%" cy="32%" r="70%">
             <stop offset="0%" stopColor="#fff" />
             <stop offset="45%" stopColor="#ff8a3a" />
             <stop offset="100%" stopColor="#d11f2f" />
           </radialGradient>
         </defs>
-        <circle cx="16" cy="16" r="14" fill="url(#smashball)" stroke="#fff" strokeWidth="1.5" />
-        <path
-          d="M16 3 C12 12 12 20 16 29 M3 16 C12 12 20 12 29 16"
-          fill="none"
-          stroke="#7a0d15"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          opacity="0.85"
-        />
+        <circle cx="12" cy="12" r="10" fill="url(#gsb)" stroke="#fff" strokeWidth="1" />
+        <path d="M12 2 C9 8 9 16 12 22 M2 12 C8 9 16 9 22 12"
+          fill="none" stroke="#7a0d15" strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
       </svg>
-    );
-  }
-  if (game === 'chess') {
-    // Roi d'échecs stylisé.
-    return (
-      <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-        <rect x="9" y="4" width="2.2" height="0" />
-        <path d="M16 3 v5 M13.5 5.5 h5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M16 9 C12 9 11 13 14 16 L12 24 h8 l-2 -8 C21 13 20 9 16 9 Z" fill="currentColor" />
-        <rect x="10" y="24" width="12" height="3.5" rx="1.4" fill="currentColor" />
-        <rect x="8.5" y="27" width="15" height="3" rx="1.4" fill="currentColor" />
-      </svg>
-    );
-  }
-  // Babyfoot : barre + figurine + ballon.
-  return (
-    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-      <rect x="3" y="6" width="26" height="2.4" rx="1.2" fill="currentColor" opacity="0.65" />
-      <rect x="14.6" y="6" width="2.8" height="14" rx="1.2" fill="currentColor" />
-      <circle cx="16" cy="13" r="3.4" fill="currentColor" />
-      <rect x="11.5" y="16" width="9" height="6" rx="1.6" fill="currentColor" />
-      <circle cx="16" cy="26" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
-
-const STYLE: Record<Game, { ring: string; glow: string; badge: string }> = {
-  babyfoot: {
-    ring: 'bg-bg-2/90 border-gold text-gold',
-    glow: '0 8px 26px -6px rgba(255,201,74,0.6)',
-    badge: 'bg-gold text-[#1a1100] border-bg-1',
-  },
-  smash: {
-    ring: 'bg-[#1a0c0e]/90 border-red text-red',
-    glow: '0 8px 26px -6px rgba(255,77,92,0.7)',
-    badge: 'bg-red text-white border-[#1a0c0e]',
+    ),
   },
   chess: {
-    ring: 'bg-[#0c1a10]/90 border-[#56c46e] text-[#56c46e]',
-    glow: '0 8px 26px -6px rgba(86,196,110,0.6)',
-    badge: 'bg-[#56c46e] text-[#06160c] border-[#0c1a10]',
+    label: 'Échecs',
+    shortLabel: 'Échecs',
+    color: '#56c46e',
+    borderColor: 'rgba(86,196,110,0.6)',
+    bgColor: 'rgba(86,196,110,0.10)',
+    glowColor: 'rgba(86,196,110,0.45)',
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+        <path d="M12 2 v4 M10 4 h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M12 7 C8.5 7 8 11 10.5 13 L9 19 h6 l-1.5 -6 C16 11 15.5 7 12 7 Z" fill="currentColor" />
+        <rect x="7.5" y="19" width="9" height="2.5" rx="1" fill="currentColor" />
+        <rect x="6" y="21" width="12" height="2" rx="1" fill="currentColor" />
+      </svg>
+    ),
   },
 };
 
+// ─── Composant principal ──────────────────────────────────────────────────────
+
 /**
- * Bouton rond flottant (bas droite) : affiche le glyphe du mode ACTUEL et, au
- * clic, passe au mode suivant (babyfoot → smash → échecs → …). Une pastille
- * « actuel » + le nom lèvent l'ambiguïté. Or / rouge / vert selon le mode.
+ * Sélecteur d'univers flottant (bas droite).
+ * Affiche les 3 jeux côte à côte ; un tap sur n'importe lequel bascule
+ * directement vers cet univers — plus intuitif que le cycling aveugle.
+ *
+ * État fermé  : pill compacte avec le jeu actif + hint "→ suivant".
+ * État ouvert : plateau de 3 cartes avec art par univers.
  */
 export function GameModeSwitch() {
   const { game, setGame } = useGameMode();
   useGameModeTheme();
-
-  const next = ORDER[(ORDER.indexOf(game) + 1) % ORDER.length]!;
-  const s = STYLE[game];
+  const [open, setOpen] = useState(false);
+  const m = META[game];
 
   return (
-    <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90] flex flex-col items-center gap-1">
-      <button
+    <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90] flex flex-col items-end gap-1.5">
+
+      {/* ── Plateau de sélection (visible quand open) ────────────────── */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85, y: 12 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+            className="flex flex-col gap-1.5 items-end"
+          >
+            {GAMES.map((g) => {
+              const gm = META[g];
+              const isActive = g === game;
+              return (
+                <motion.button
+                  key={g}
+                  type="button"
+                  onClick={() => { setGame(g); setOpen(false); }}
+                  whileTap={{ scale: 0.93 }}
+                  className="flex items-center gap-2.5 pr-3 pl-2.5 py-2 rounded-full backdrop-blur-md transition-all"
+                  style={{
+                    background: isActive ? gm.bgColor : 'rgba(14,12,9,0.80)',
+                    border: `1.5px solid ${isActive ? gm.borderColor : 'rgba(255,255,255,0.07)'}`,
+                    boxShadow: isActive ? `0 0 18px -4px ${gm.glowColor}` : 'none',
+                  }}
+                >
+                  <span style={{ color: isActive ? gm.color : 'rgba(255,255,255,0.45)' }}>
+                    {gm.icon}
+                  </span>
+                  <span
+                    className="text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap"
+                    style={{ color: isActive ? gm.color : 'rgba(255,255,255,0.5)' }}
+                  >
+                    {gm.label}
+                  </span>
+                  {isActive && (
+                    <span
+                      className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ml-1"
+                      style={{ background: gm.color, color: '#0a0806' }}
+                    >
+                      actuel
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Bouton principal (toujours visible) ──────────────────────── */}
+      <motion.button
         type="button"
-        onClick={() => setGame(next)}
-        aria-label={`Mode actuel : ${LABEL[game]}. Cliquer pour passer en ${LABEL[next]}.`}
-        title={`Mode ${LABEL[game]} (actuel) · cliquer pour passer en ${LABEL[next]}`}
-        className={`relative grid place-items-center w-14 h-14 rounded-full border-2 shadow-xl backdrop-blur-md transition-all active:scale-95 ${s.ring}`}
-        style={{ boxShadow: s.glow }}
+        onClick={() => setOpen((o) => !o)}
+        whileTap={{ scale: 0.93 }}
+        aria-label={`Univers actuel : ${m.label}. Cliquer pour changer.`}
+        className="relative flex items-center gap-2 pl-2.5 pr-3 h-12 rounded-full backdrop-blur-md transition-all"
+        style={{
+          background: m.bgColor,
+          border: `1.5px solid ${m.borderColor}`,
+          boxShadow: open
+            ? `0 0 0 3px rgba(255,255,255,0.06), 0 0 24px -4px ${m.glowColor}`
+            : `0 0 20px -6px ${m.glowColor}`,
+        }}
+        animate={{ borderColor: m.borderColor }}
+        transition={{ duration: 0.3 }}
       >
-        <ModeGlyph game={game} />
-        <span
-          className={`absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase tracking-wider border ${s.badge}`}
+        {/* Icône du jeu actif */}
+        <motion.span
+          key={game}
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 600, damping: 24 }}
+          style={{ color: m.color }}
         >
-          actuel
-        </span>
-      </button>
-      <span
-        className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] border backdrop-blur-md ${s.ring}`}
-      >
-        {LABEL[game]}
-      </span>
+          {m.icon}
+        </motion.span>
+
+        {/* Nom du jeu */}
+        <motion.span
+          key={`label-${game}`}
+          initial={{ opacity: 0, x: -4 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.2 }}
+          className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
+          style={{ color: m.color }}
+        >
+          {m.shortLabel}
+        </motion.span>
+
+        {/* Indicateur ouvert/fermé */}
+        <motion.span
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="text-[10px] ml-0.5"
+          style={{ color: m.color, opacity: 0.6 }}
+        >
+          ▲
+        </motion.span>
+      </motion.button>
     </div>
   );
 }
