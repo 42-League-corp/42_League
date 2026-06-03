@@ -1,18 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, Users, X, Zap } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
+import { ChallengeRecordSheet } from './mobile/ChallengeRecordSheet';
 import { BigActionButton } from './mobile/BigActionButton';
 import { OpponentBubble } from './mobile/OpponentBubble';
 import { PendingMatchCard } from './mobile/PendingMatchCard';
 import { ChallengeMobileCard } from './mobile/ChallengeMobileCard';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import type { Challenge } from '../../lib/api';
 
 type Filter = 'all' | 'received' | 'scheduled' | 'sent';
 
@@ -33,10 +35,20 @@ export function DefisMobile() {
   } = useDefisLogic();
   const { leaderboard, locations } = useLeagueData();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [declareOpen, setDeclareOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [recordChallenge, setRecordChallenge] = useState<Challenge | null>(null);
+
+  // Ouvre le sheet d'enregistrement si ?record=<id> est dans l'URL.
+  useEffect(() => {
+    const id = searchParams.get('record');
+    if (!id) return;
+    const ch = accepted.find((c) => c.id === id);
+    if (ch) setRecordChallenge(ch);
+  }, [searchParams, accepted]);
 
   // Map login → imageUrl pour les cartes de défis
   const imgByLogin = new Map(leaderboard.map((u) => [u.login, u.imageUrl] as const));
@@ -209,7 +221,7 @@ export function DefisMobile() {
                       imageUrl={imgByLogin.get(
                         c.challengerLogin === myLogin ? c.opponentLogin : c.challengerLogin,
                       )}
-                      onAccept={() => navigate(`/challenges?record=${c.id}`)}
+                      onAccept={() => setRecordChallenge(c)}
                       onDecline={() => handleAction(c.id, 'decline')}
                     />
                   ))}
@@ -267,6 +279,17 @@ export function DefisMobile() {
         opponentCounts={opponentCounts}
         myLogin={myLogin}
         locations={locations}
+        onDone={refresh}
+      />
+
+      {/* Sheet d'enregistrement d'un défi accepté — utilise le jeu DU défi */}
+      <ChallengeRecordSheet
+        challenge={recordChallenge}
+        myLogin={myLogin}
+        onClose={() => {
+          setRecordChallenge(null);
+          navigate('/challenges', { replace: true });
+        }}
         onDone={refresh}
       />
     </PullToRefresh>
