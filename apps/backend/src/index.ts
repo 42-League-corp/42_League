@@ -57,9 +57,9 @@ import {
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
-import { issueStreamToken, verifyStreamToken } from './tokens.js';
+import { issueStreamToken, verifyStreamToken, verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
-import { rateLimit } from './rate-limit.js';
+import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
@@ -414,8 +414,20 @@ if (process.env.NODE_ENV !== 'test') {
   const isMutation = (c: Context) =>
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-  // Backstop global réduit (120/min — fluide pour un humain, bloque les bots).
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120 }));
+  // Les superadmins (devs) contournent le rate-limit global : leur IP peut
+  // légitimement générer beaucoup de requêtes (onglets dev, SSE, reconnexions…).
+  // On vérifie la signature du token pour ne pas ouvrir un trou de sécurité.
+  const isSuperadminRequest = (c: Context): boolean => {
+    const auth = c.req.header('authorization');
+    if (!auth?.startsWith('Bearer ')) return false;
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) return false;
+    const login = verifyToken(auth.slice(7), secret);
+    return !!login && SUPERADMINS.has(login.toLowerCase());
+  };
+
+  // Backstop global (120/min). Les superadmins sont exemptés.
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, skip: isSuperadminRequest }));
 
   // Auth : protège l'échange OAuth contre le brute-force.
   app.use('/auth/*', rateLimit({
@@ -3017,6 +3029,28 @@ app.get('/ops/user/:login', async (c) => {
 });
 
 /* ============ ADMIN — USERS ============ */
+
+// ─── Rate-limit : déblocage manuel (SUPERADMIN uniquement) ───────────────────
+
+// Renvoie l'état de la pénalité de l'IP appelante — utile pour diagnostiquer.
+app.get('/admin/rate-limit/me', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const ip = clientIp(c);
+  const info = getPenaltyInfo(ip);
+  return c.json({ ip, penalty: info });
+});
+
+// Efface la pénalité de l'IP appelante — à utiliser quand on est bloqué.
+// Le bypass superadmin dans le rate-limiter global permet d'atteindre cet
+// endpoint même quand l'IP est punie, à condition de présenter son Bearer.
+app.delete('/admin/rate-limit/me', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const ip = clientIp(c);
+  clearPenalty(ip);
+  return c.json({ cleared: true, ip });
+});
 
 app.get('/admin/users', async (c) => {
   const me = await getCurrentLogin(c);
