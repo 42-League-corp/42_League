@@ -61,17 +61,8 @@ const UNIVERSE: Record<Game, {
     label: 'SMASH',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        {/* Éclats d'impact */}
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-          const r = deg * Math.PI / 180;
-          const x1 = 60 + Math.cos(r) * 52;
-          const y1 = 60 + Math.sin(r) * 52;
-          const x2 = 60 + Math.cos(r) * 34;
-          const y2 = 60 + Math.sin(r) * 34;
-          return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff3d50" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
-        })}
-        {/* Logo Smash */}
-        <image href="/smash-color.png" x="22" y="22" width="76" height="76" preserveAspectRatio="xMidYMid meet" />
+        {/* Logo Smash seul, centré */}
+        <image href="/smash-color.png" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
@@ -82,17 +73,8 @@ const UNIVERSE: Record<Game, {
     label: 'STREET FIGHTER',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        {/* Éclats d'impact (comme Smash) */}
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-          const r = deg * Math.PI / 180;
-          const x1 = 60 + Math.cos(r) * 52;
-          const y1 = 60 + Math.sin(r) * 52;
-          const x2 = 60 + Math.cos(r) * 34;
-          const y2 = 60 + Math.sin(r) * 34;
-          return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff7a18" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
-        })}
-        {/* Logo Street Fighter */}
-        <image href="/sf-color.png" x="18" y="30" width="84" height="60" preserveAspectRatio="xMidYMid meet" />
+        {/* Logo Street Fighter seul, centré */}
+        <image href="/sf-color.png" x="6" y="18" width="108" height="84" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
