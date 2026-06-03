@@ -200,12 +200,14 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     [authenticated, signOut],
   );
 
-  // Changement de mode (babyfoot ↔ smash) : le classement dépend du jeu, on le
-  // re-fetch immédiatement pour refléter le bon ranking.
+  // Changement de mode (babyfoot ↔ smash ↔ chess) : le classement, les tournois
+  // ET le profil utilisateur (ELO par jeu, matchesPlayed par jeu) dépendent du jeu
+  // courant — on re-fetch ces 3 domaines pour que TOUTES les stats (rang, ELO, V/D,
+  // WR, série) reflètent immédiatement la discipline sélectionnée.
   useEffect(() => {
     if (!authenticated) return;
     return subscribeGame(() => {
-      void refreshDomains(['leaderboard', 'tournaments']);
+      void refreshDomains(['me', 'leaderboard', 'tournaments']);
     });
   }, [authenticated, refreshDomains]);
 
