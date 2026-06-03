@@ -71,7 +71,7 @@ const UNIVERSE: Record<Game, {
           return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff3d50" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
         })}
         {/* Logo Smash */}
-        <image href="/smash-logo.png" x="22" y="22" width="76" height="76" preserveAspectRatio="xMidYMid meet" />
+        <image href="/smash-color.png" x="22" y="22" width="76" height="76" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
@@ -92,7 +92,7 @@ const UNIVERSE: Record<Game, {
           return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff7a18" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
         })}
         {/* Logo Street Fighter */}
-        <image href="/Street_Fighter_Logo.png" x="18" y="30" width="84" height="60" preserveAspectRatio="xMidYMid meet" />
+        <image href="/sf-color.png" x="18" y="30" width="84" height="60" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
