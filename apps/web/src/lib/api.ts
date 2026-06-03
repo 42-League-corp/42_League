@@ -694,10 +694,13 @@ export const api = {
     request<{ id: string; deleted: true }>(`/admin/matches/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
-  adminEditMatch: (id: string, scoreA: number, scoreB: number) =>
+  adminEditMatch: (
+    id: string,
+    input: { scoreA: number; scoreB: number; playerALogin?: string; playerBLogin?: string },
+  ) =>
     request<PlayedMatch>(`/admin/matches/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ scoreA, scoreB }),
+      body: JSON.stringify(input),
     }),
   // SUPERADMIN : créer un faux joueur, supprimer un faux joueur, forcer un résultat.
   adminCreateUser: (login: string, opts?: { campus?: string; elo?: number }) =>

@@ -3202,15 +3202,88 @@ app.patch('/admin/matches/:id', async (c) => {
   const schema = z.object({
     scoreA: z.number().int().min(0),
     scoreB: z.number().int().min(0),
+    playerALogin: z.string().trim().min(1).optional(),
+    playerBLogin: z.string().trim().min(1).optional(),
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { scoreA, scoreB, playerALogin: nextPlayerA, playerBLogin: nextPlayerB } = parsed.data;
+  if (nextPlayerA && nextPlayerB && nextPlayerA === nextPlayerB) {
+    throw new HTTPException(400, { message: 'players must be different' });
+  }
   const match = await prisma.playedMatch.findUnique({ where: { id } });
   if (!match) throw new HTTPException(404, { message: 'match not found' });
-  const winner: 'A' | 'B' = parsed.data.scoreA > parsed.data.scoreB ? 'A' : 'B';
-  const updated = await prisma.playedMatch.update({
-    where: { id },
-    data: { scoreA: parsed.data.scoreA, scoreB: parsed.data.scoreB, winner },
+
+  const nextA = nextPlayerA ?? match.playerALogin;
+  const nextB = nextPlayerB ?? match.playerBLogin;
+  if (nextA === nextB) {
+    throw new HTTPException(400, { message: 'players must be different' });
+  }
+
+  const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
+  const game = parseGameId(match.game);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (match.countedForElo) {
+      await tx.user.update({
+        where: { login: match.playerALogin },
+        data: { elo: { decrement: match.deltaA }, matchesPlayed: { decrement: 1 } },
+      });
+      await tx.user.update({
+        where: { login: match.playerBLogin },
+        data: { elo: { decrement: match.deltaB }, matchesPlayed: { decrement: 1 } },
+      });
+    }
+
+    const priors = await tx.playedMatch.findMany({
+      where: {
+        id: { not: id },
+        playerALogin: nextA,
+        playerBLogin: nextB,
+        game: match.game,
+      },
+      select: { playedAt: true, countedForElo: true },
+    });
+    const countsForElo = shouldCountForElo(priors, match.playedAt);
+
+    const [userA, userB] = await Promise.all([
+      tx.user.findUniqueOrThrow({ where: { login: nextA } }),
+      tx.user.findUniqueOrThrow({ where: { login: nextB } }),
+    ]);
+
+    let deltaA = 0;
+    let deltaB = 0;
+    if (countsForElo) {
+      const ratingA = readElo(userA, game);
+      const ratingB = readElo(userB, game);
+      const outcome = game === 'smash'
+        ? {
+            scoreA,
+            scoreB,
+            bestOf: match.bestOf ?? 3,
+            winnerStocks: winner === 'A' ? (match.stocksA ?? 1) : (match.stocksB ?? 1),
+          }
+        : { scoreA, scoreB };
+      const update = applyGameElo(game, ratingA, ratingB, winner, outcome);
+      deltaA = update.deltaA;
+      deltaB = update.deltaB;
+      await tx.user.update({ where: { login: nextA }, data: ratingUpdate(game, update.newA) });
+      await tx.user.update({ where: { login: nextB }, data: ratingUpdate(game, update.newB) });
+    }
+
+    return tx.playedMatch.update({
+      where: { id },
+      data: {
+        playerALogin: nextA,
+        playerBLogin: nextB,
+        scoreA,
+        scoreB,
+        winner,
+        countedForElo: countsForElo,
+        deltaA,
+        deltaB,
+      },
+    });
   });
   await logAdminAction(c, {
     actor: me,
@@ -3218,8 +3291,20 @@ app.patch('/admin/matches/:id', async (c) => {
     action: 'EDIT_MATCH',
     payload: {
       matchId: id,
-      before: { scoreA: match.scoreA, scoreB: match.scoreB, winner: match.winner },
-      after: { scoreA: parsed.data.scoreA, scoreB: parsed.data.scoreB, winner },
+      before: {
+        playerA: match.playerALogin,
+        playerB: match.playerBLogin,
+        scoreA: match.scoreA,
+        scoreB: match.scoreB,
+        winner: match.winner,
+      },
+      after: {
+        playerA: nextA,
+        playerB: nextB,
+        scoreA,
+        scoreB,
+        winner,
+      },
     },
   });
   return c.json(updated);
