@@ -56,7 +56,7 @@ export interface RateLimitOptions {
   name: string;
   windowMs: number;
   max: number;
-  skip?: (c: Context) => boolean;
+  skip?: (c: Context) => boolean | Promise<boolean>;
   /** Activer les pénalités progressives (défaut : true). */
   progressive?: boolean;
 }
@@ -69,7 +69,7 @@ export function rateLimit(opts: RateLimitOptions) {
   const store = bucketStores.get(opts.name)!;
 
   return async (c: Context, next: Next) => {
-    if (opts.skip?.(c)) { await next(); return; }
+    if (opts.skip && (await opts.skip(c))) { await next(); return; }
 
     const ip = clientIp(c);
     const now = Date.now();
