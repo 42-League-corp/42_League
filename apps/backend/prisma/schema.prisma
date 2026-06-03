@@ -36,6 +36,8 @@ model User {
   eloSf               Int   @default(1000) @map("elo_sf")
   matchesPlayedSf     Int   @default(0)    @map("matches_played_sf")
   tournamentsWonSf    Int   @default(0)    @map("tournaments_won_sf")
+  // Porte-monnaie « League Coin » — solde dépensable dans la boutique (cf. ShopItem).
+  leagueCoins         Int   @default(0) @map("league_coins")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[] @default(["babyfoot"])
   onboardedAt         DateTime? @map("onboarded_at") // a choisi ses modes (1er login)
@@ -82,6 +84,8 @@ model User {
   // BabyfootTeam — duos 2v2 dont ce joueur fait partie.
   babyfootTeamsAsP1   BabyfootTeam[]     @relation("babyfootTeamPlayer1")
   babyfootTeamsAsP2   BabyfootTeam[]     @relation("babyfootTeamPlayer2")
+  // Boutique — cosmétiques possédés par le joueur (titres, bannières…).
+  inventory           ShopInventory[]    @relation("userInventory")
 
   @@map("users")
 }
@@ -457,4 +461,39 @@ model AdminAuditLog {
   @@index([actorLogin])
   @@index([targetLogin])
   @@map("admin_audit_log")
+}
+
+// ─── Boutique « League Coin » ──────────────────────────────────────────────────
+//
+// Catalogue d'objets cosmétiques achetables avec des League Coins. Le `payload`
+// JSON porte les données spécifiques à la catégorie (titre → {"title":"…"} ;
+// bannière → {"gradient":"…"}). Un objet inactif disparaît de la boutique mais
+// reste possédé par ceux qui l'ont déjà acheté.
+model ShopItem {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String?
+  category    String   // 'title' | 'banner' | 'cosmetic'
+  price       Int      // en League Coins
+  payload     Json?    // title -> {"title":"Pionnier"} ; banner -> {"gradient":"..."}
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  inventory   ShopInventory[]
+  @@map("shop_items")
+}
+
+// Inventaire : objets possédés par un joueur. `equipped` = objet actuellement
+// porté (au plus un équipé par catégorie, cf. logique d'équipement dans index.ts).
+model ShopInventory {
+  userLogin  String   @map("user_login")
+  itemId     String   @map("item_id")
+  equipped   Boolean  @default(false)
+  acquiredAt DateTime @default(now()) @map("acquired_at")
+  user User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+  item ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  @@id([userLogin, itemId])
+  @@index([userLogin])
+  @@map("shop_inventory")
 }

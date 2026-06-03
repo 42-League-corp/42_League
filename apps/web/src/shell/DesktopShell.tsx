@@ -12,6 +12,8 @@ import {
   Cog,
   Shield,
   Info,
+  ShoppingBag,
+  Store,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { NotificationBell } from '../components/NotificationBell';
@@ -32,6 +34,7 @@ const NAV: NavDef[] = [
   { to: '/tournaments', labelKey: 'nav.tournois', Icon: Trophy },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', Icon: BarChart3 },
   { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
+  { to: '/shop', labelKey: 'nav.shop', Icon: ShoppingBag },
   { to: '/profile', labelKey: 'nav.profil', Icon: User },
 ];
 
@@ -41,7 +44,10 @@ const NAV_SECONDARY: NavDef[] = [
   { to: '/about', labelKey: 'nav.about', Icon: Info },
 ];
 
-const NAV_ADMIN: NavDef = { to: '/GOD', labelKey: 'nav.god', Icon: Shield };
+const NAV_ADMIN: NavDef[] = [
+  { to: '/GOD', labelKey: 'nav.god', Icon: Shield },
+  { to: '/shop-god', labelKey: 'nav.shopgod', Icon: Store },
+];
 
 interface DesktopShellProps {
   children: ReactNode;
@@ -112,11 +118,9 @@ export function DesktopShell({ children }: DesktopShellProps) {
           {(me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') && (
             <>
               <div className="my-2 h-px bg-gradient-to-r from-transparent via-red/30 to-transparent" />
-              <NavItem
-                to={NAV_ADMIN.to}
-                label={t(NAV_ADMIN.labelKey)}
-                Icon={NAV_ADMIN.Icon}
-              />
+              {NAV_ADMIN.map((n) => (
+                <NavItem key={n.to} to={n.to} label={t(n.labelKey)} Icon={n.Icon} />
+              ))}
             </>
           )}
         </nav>
@@ -139,6 +143,10 @@ export function DesktopShell({ children }: DesktopShellProps) {
                   </div>
                   <div className="text-[10px] text-gold uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
                     {pickRating(me.user, game).elo} ELO
+                  </div>
+                  <div className="text-[10px] text-violet-300 uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
+                    <img src="/league-coin.svg" alt="" className="w-3.5 h-3.5" />
+                    {me.coins ?? 0}
                   </div>
                 </div>
               </NavLink>

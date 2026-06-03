@@ -40,6 +40,9 @@ import {
 import { prisma } from './db.js';
 import { seedStaging } from './staging-seed.js';
 import type { Prisma } from '@prisma/client';
+// Valeur runtime (Prisma.DbNull) pour stocker un JSON NULL en base — distinct du
+// `import type` ci-dessus qui, lui, ne sert qu'aux annotations de type.
+import { Prisma as PrismaRuntime } from '@prisma/client';
 import {
   createAuthRouter,
   getAllowedWebOrigins,
@@ -656,6 +659,8 @@ app.get('/me', async (c) => {
     login,
     user,
     role,
+    // Solde « League Coin » du joueur (porte-monnaie boutique).
+    coins: user?.leagueCoins ?? 0,
     isAdmin: isAdmin(login),
     // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
     // pour la barrière staging sans dupliquer la liste blanche.
@@ -3813,6 +3818,284 @@ app.get('/admin/all-history', async (c) => {
 
   events.sort((a, b) => b.at.localeCompare(a.at));
   return c.json(events.slice(0, limit));
+});
+
+// ─── Boutique « League Coin » ──────────────────────────────────────────────────
+//
+// Économie cosmétique : les joueurs dépensent des League Coins (porte-monnaie
+// `user.leagueCoins`) pour acquérir des objets (titres, bannières…) puis les
+// équipent (au plus un équipé par catégorie). L'attribution de coins est réservée
+// aux admins via /admin/shop/grant.
+
+// Sérialise un ShopItem Prisma vers la forme `ShopItemData` attendue par le front.
+// Le `payload` JSON est transmis tel quel.
+function serializeShopItem(item: {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string;
+  price: number;
+  payload: Prisma.JsonValue | null;
+  active: boolean;
+  sortOrder: number;
+}) {
+  return {
+    id: item.id,
+    slug: item.slug,
+    name: item.name,
+    description: item.description,
+    category: item.category,
+    price: item.price,
+    payload: item.payload ?? null,
+    active: item.active,
+    sortOrder: item.sortOrder,
+  };
+}
+
+// GET /shop — catalogue actif + solde + objets possédés par le joueur courant.
+app.get('/shop', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const [user, items, owned] = await Promise.all([
+    prisma.user.findUnique({ where: { login }, select: { leagueCoins: true } }),
+    prisma.shopItem.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    }),
+    prisma.shopInventory.findMany({ where: { userLogin: login }, select: { itemId: true } }),
+  ]);
+  return c.json({
+    coins: user?.leagueCoins ?? 0,
+    items: items.map(serializeShopItem),
+    owned: owned.map((o) => o.itemId),
+  });
+});
+
+// POST /shop/:id/buy — achète un objet. Re-vérifie solde & possession dans une
+// transaction pour éviter les doubles achats / soldes négatifs.
+app.post('/shop/:id/buy', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const itemId = c.req.param('id');
+
+  const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
+  if (!item || !item.active) {
+    throw new HTTPException(404, { message: 'objet introuvable' });
+  }
+
+  const coins = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
+    if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+    const already = await tx.shopInventory.findUnique({
+      where: { userLogin_itemId: { userLogin: login, itemId } },
+    });
+    if (already) throw new HTTPException(409, { message: 'objet déjà possédé' });
+    if (user.leagueCoins < item.price) {
+      throw new HTTPException(400, { message: 'solde insuffisant' });
+    }
+    const updated = await tx.user.update({
+      where: { login },
+      data: { leagueCoins: { decrement: item.price } },
+      select: { leagueCoins: true },
+    });
+    await tx.shopInventory.create({ data: { userLogin: login, itemId } });
+    return updated.leagueCoins;
+  });
+
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, coins });
+});
+
+// GET /me/inventory — inventaire détaillé du joueur courant (objet + état équipé).
+app.get('/me/inventory', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const rows = await prisma.shopInventory.findMany({
+    where: { userLogin: login },
+    include: { item: true },
+    orderBy: { acquiredAt: 'asc' },
+  });
+  return c.json(
+    rows.map((r) => ({
+      itemId: r.itemId,
+      item: serializeShopItem(r.item),
+      equipped: r.equipped,
+      acquiredAt: r.acquiredAt.toISOString(),
+    })),
+  );
+});
+
+// POST /me/inventory/:id/equip — (dé)équipe un objet possédé. Au plus un objet
+// équipé par catégorie. Un titre équipé est reflété dans `user.title`.
+const EquipSchema = z.object({ equipped: z.boolean() });
+app.post('/me/inventory/:id/equip', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const itemId = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = EquipSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { equipped } = parsed.data;
+
+  const row = await prisma.shopInventory.findUnique({
+    where: { userLogin_itemId: { userLogin: login, itemId } },
+    include: { item: true },
+  });
+  if (!row) throw new HTTPException(404, { message: 'objet non possédé' });
+
+  const category = row.item.category;
+  // Le payload titre porte la chaîne à appliquer sur user.title.
+  const titlePayload =
+    category === 'title' &&
+    row.item.payload &&
+    typeof row.item.payload === 'object' &&
+    !Array.isArray(row.item.payload)
+      ? (row.item.payload as Record<string, unknown>).title
+      : undefined;
+  const titleStr = typeof titlePayload === 'string' ? titlePayload : null;
+
+  await prisma.$transaction(async (tx) => {
+    if (equipped) {
+      // Un seul objet équipé par catégorie : on déséquipe les autres de la même catégorie.
+      await tx.shopInventory.updateMany({
+        where: { userLogin: login, equipped: true, item: { category } },
+        data: { equipped: false },
+      });
+      await tx.shopInventory.update({
+        where: { userLogin_itemId: { userLogin: login, itemId } },
+        data: { equipped: true },
+      });
+      if (category === 'title' && titleStr) {
+        await tx.user.update({ where: { login }, data: { title: titleStr } });
+      }
+    } else {
+      await tx.shopInventory.update({
+        where: { userLogin_itemId: { userLogin: login, itemId } },
+        data: { equipped: false },
+      });
+      if (category === 'title' && titleStr) {
+        const u = await tx.user.findUnique({ where: { login }, select: { title: true } });
+        if (u?.title === titleStr) {
+          await tx.user.update({ where: { login }, data: { title: null } });
+        }
+      }
+    }
+  });
+
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true });
+});
+
+// ── Boutique : administration du catalogue ──────────────────────────────────
+const ShopItemCreateSchema = z.object({
+  slug: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  description: z.string().nullish(),
+  category: z.enum(['title', 'banner', 'cosmetic']),
+  price: z.number().int().min(0),
+  payload: z.record(z.any()).nullish(),
+  active: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+const ShopItemUpdateSchema = ShopItemCreateSchema.partial();
+
+// GET /admin/shop/items — catalogue complet (objets inactifs inclus).
+app.get('/admin/shop/items', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const items = await prisma.shopItem.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+  });
+  return c.json(items.map(serializeShopItem));
+});
+
+// POST /admin/shop/items — crée un objet de boutique.
+app.post('/admin/shop/items', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = ShopItemCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const d = parsed.data;
+  const item = await prisma.shopItem.create({
+    data: {
+      slug: d.slug,
+      name: d.name,
+      description: d.description ?? null,
+      category: d.category,
+      price: d.price,
+      payload: (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull,
+      ...(d.active !== undefined ? { active: d.active } : {}),
+      ...(d.sortOrder !== undefined ? { sortOrder: d.sortOrder } : {}),
+    },
+  });
+  return c.json(serializeShopItem(item));
+});
+
+// PATCH /admin/shop/items/:id — met à jour partiellement un objet.
+app.patch('/admin/shop/items/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = ShopItemUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const d = parsed.data;
+  const data: Prisma.ShopItemUpdateInput = {};
+  if (d.slug !== undefined) data.slug = d.slug;
+  if (d.name !== undefined) data.name = d.name;
+  if (d.description !== undefined) data.description = d.description ?? null;
+  if (d.category !== undefined) data.category = d.category;
+  if (d.price !== undefined) data.price = d.price;
+  if (d.payload !== undefined) {
+    data.payload = (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull;
+  }
+  if (d.active !== undefined) data.active = d.active;
+  if (d.sortOrder !== undefined) data.sortOrder = d.sortOrder;
+  const item = await prisma.shopItem.update({ where: { id }, data });
+  return c.json(serializeShopItem(item));
+});
+
+// DELETE /admin/shop/items/:id — supprime un objet (cascade sur l'inventaire).
+app.delete('/admin/shop/items/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  await prisma.shopItem.delete({ where: { id } });
+  return c.json({ ok: true });
+});
+
+// POST /admin/shop/grant — crédite (ou débite) des League Coins à un joueur.
+// `amount` peut être négatif ; le solde résultant est borné à >= 0.
+const ShopGrantSchema = z.object({
+  login: z.string().trim().min(1),
+  amount: z.number().int(),
+});
+app.post('/admin/shop/grant', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = ShopGrantSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { login, amount } = parsed.data;
+  const target = await prisma.user.findUnique({
+    where: { login },
+    select: { leagueCoins: true },
+  });
+  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  const next = Math.max(0, target.leagueCoins + amount);
+  await prisma.user.update({ where: { login }, data: { leagueCoins: next } });
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, login, coins: next });
 });
 
 // ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──

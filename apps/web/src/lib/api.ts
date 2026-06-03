@@ -123,10 +123,52 @@ export interface TeamProfile extends BabyfootTeamEntry {
   eloHistory: TeamEloPoint[];
 }
 
+// ─── League Coin · Boutique ───────────────────────────────────────────────────
+
+export type ShopCategory = 'title' | 'banner' | 'cosmetic';
+
+export interface ShopItemData {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: ShopCategory;
+  price: number;
+  payload: Record<string, unknown> | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface ShopItemInput {
+  slug: string;
+  name: string;
+  description?: string | null;
+  category: ShopCategory;
+  price: number;
+  payload?: Record<string, unknown> | null;
+  active?: boolean;
+  sortOrder?: number;
+}
+
+export interface InventoryEntry {
+  itemId: string;
+  item: ShopItemData;
+  equipped: boolean;
+  acquiredAt: string;
+}
+
+export interface ShopResponse {
+  coins: number;
+  items: ShopItemData[];
+  owned: string[];
+}
+
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  /** Solde de League Coins de l'utilisateur (défaut 0). */
+  coins?: number;
   /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
   consentRequired?: boolean;
   /** True si le login est autorisé sur l'env staging (cf. STAGING_ALLOWED backend). */
@@ -878,4 +920,39 @@ export const api = {
   /** Toutes les équipes auxquelles appartient un joueur donné. */
   myTeams: (login: string) =>
     request<BabyfootTeamEntry[]>(`/teams?login=${encodeURIComponent(login)}`),
+
+  // ─── League Coin · Boutique ────────────────────────────────────────────────
+
+  shop: () => request<ShopResponse>('/shop'),
+  buyShopItem: (id: string) =>
+    request<{ ok: true; coins: number }>(`/shop/${encodeURIComponent(id)}/buy`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  inventory: () => request<InventoryEntry[]>('/me/inventory'),
+  equipItem: (id: string, equipped: boolean) =>
+    request<{ ok: true }>(`/me/inventory/${encodeURIComponent(id)}/equip`, {
+      method: 'POST',
+      body: JSON.stringify({ equipped }),
+    }),
+  adminShopItems: () => request<ShopItemData[]>('/admin/shop/items'),
+  adminCreateShopItem: (input: ShopItemInput) =>
+    request<ShopItemData>('/admin/shop/items', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  adminUpdateShopItem: (id: string, patch: Partial<ShopItemInput>) =>
+    request<ShopItemData>(`/admin/shop/items/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  adminDeleteShopItem: (id: string) =>
+    request<{ ok: true }>(`/admin/shop/items/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  adminGrantCoins: (login: string, amount: number) =>
+    request<{ ok: true; login: string; coins: number }>('/admin/shop/grant', {
+      method: 'POST',
+      body: JSON.stringify({ login, amount }),
+    }),
 };

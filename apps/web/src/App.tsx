@@ -76,6 +76,12 @@ const H2HPage = lazy(() =>
 const TeamProfilePage = lazy(() =>
   import('./pages/team/TeamProfilePage').then((m) => ({ default: m.TeamProfilePage })),
 );
+const ShopPage = lazy(() =>
+  import('./pages/ShopPage').then((m) => ({ default: m.ShopPage })),
+);
+const ShopGODPage = lazy(() =>
+  import('./pages/ShopGODPage').then((m) => ({ default: m.ShopGODPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
@@ -172,6 +178,8 @@ function AuthenticatedShell() {
               <Route path="/player/:login" element={<PlayerPage />} />
               <Route path="/team/:teamId" element={<TeamProfilePage />} />
               <Route path="/h2h" element={<H2HPage />} />
+              <Route path="/shop" element={<ShopPage />} />
+              <Route path="/shop-god" element={<ShopGODPage />} />
               <Route path="/history" element={<HistoriquePage />} />
               <Route path="/settings" element={<ReglagesPage />} />
               <Route path="*" element={<Navigate to="/challenges" replace />} />

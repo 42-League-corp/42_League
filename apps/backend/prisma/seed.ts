@@ -307,6 +307,23 @@ async function seed() {
     console.log(u?.imageUrl ? '✓' : '✗ (not found)');
   }
 
+  // ── Boutique « League Coin » : objet de démonstration ──────────────────────
+  console.log('🛒 Upserting demo shop item...');
+  await prisma.shopItem.upsert({
+    where: { slug: 'title_pioneer' },
+    update: {},
+    create: {
+      slug: 'title_pioneer',
+      name: 'Pionnier',
+      description: 'Titre de démonstration — premier cosmétique de la boutique.',
+      category: 'title',
+      price: 100,
+      payload: { title: 'Pionnier' },
+      active: true,
+      sortOrder: 0,
+    },
+  });
+
   console.log('\n✅ Done!');
   process.exit(0);
 }

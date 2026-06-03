@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Swords, Trophy, BarChart3, Award, User } from 'lucide-react';
+import { Swords, Trophy, BarChart3, Award, User, ShoppingBag } from 'lucide-react';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 import { haptic } from '../feedback/useHaptic';
@@ -17,6 +17,7 @@ const TABS: TabDef[] = [
   { to: '/tournaments', labelKey: 'nav.tournois', Icon: Trophy },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', Icon: BarChart3 },
   { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
+  { to: '/shop', labelKey: 'nav.shop', Icon: ShoppingBag },
   { to: '/profile', labelKey: 'nav.profil', Icon: User },
 ];
 
