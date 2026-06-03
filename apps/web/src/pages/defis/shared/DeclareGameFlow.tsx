@@ -4,10 +4,12 @@ import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
+import { SfCharIcon } from '../../../components/SfCharIcon';
 import { api, type LeaderboardEntry, type Game } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { SMASH_ROSTER } from '../../../lib/smash';
+import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { PlayerSearch } from './PlayerSearch';
 
@@ -17,21 +19,25 @@ export const LOSER_SCORE_MAX = WINNING_SCORE - 1;
 
 const smashTargetOf = (bestOf: number) => Math.ceil(bestOf / 2);
 
-/** Grille de sélection d'un personnage Smash. */
-function SmashCharPicker({
+/** Grille de sélection d'un personnage (Smash ou Street Fighter selon le roster). */
+function CharPicker({
   label,
   value,
   onChange,
+  roster,
+  Icon,
 }: {
   label: string;
   value: string | null;
   onChange: (id: string) => void;
+  roster: { id: string; name: string }[];
+  Icon: typeof SmashCharIcon;
 }) {
   return (
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{label}</label>
       <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-        {SMASH_ROSTER.map((c) => (
+        {roster.map((c) => (
           <button
             key={c.id}
             type="button"
@@ -43,7 +49,7 @@ function SmashCharPicker({
                 : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
             }`}
           >
-            <SmashCharIcon id={c.id} size={40} className="w-full aspect-square" />
+            <Icon id={c.id} size={40} className="w-full aspect-square" />
           </button>
         ))}
       </div>
@@ -91,6 +97,11 @@ export function DeclareGameFlow({
   const { game: globalGame } = useGameMode();
   const game = gameOverride ?? globalGame;
   const isSmash = game === 'smash';
+  const isSf = game === 'streetfighter';
+  // Street Fighter == Smash pour la saisie (set Bo3/Bo5 + 2 persos), mais sans stocks.
+  const isSetGame = isSmash || isSf;
+  const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
+  const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
   const isChess = game === 'chess';
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(null);
   const [iWon, setIWon] = useState<boolean | null>(null);
@@ -113,13 +124,13 @@ export function DeclareGameFlow({
     setLoserGames(0);
   };
 
-  const smashReady = !isSmash || (!!charSelf && !!charOpp);
+  const smashReady = !isSetGame || (!!charSelf && !!charOpp);
 
   const handleSubmit = useCallback(async () => {
     if (!opponent || iWon === null) return;
     setBusy(true);
     try {
-      if (isSmash) {
+      if (isSetGame) {
         if (!charSelf || !charOpp) {
           flash.show('Choisis les deux personnages', 'error');
           setBusy(false);
@@ -132,11 +143,12 @@ export function DeclareGameFlow({
           opponentLogin: opponent.login,
           scoreSelf: myGames,
           scoreOpponent: oppGames,
-          game: 'smash',
+          game: isSf ? 'streetfighter' : 'smash',
           bestOf,
           charSelf,
           charOpponent: charOpp,
-          stocks: winnerStocks,
+          // Les stocks (vies) sont spécifiques au Smash ; SF n'en a pas.
+          ...(isSmash ? { stocks: winnerStocks } : {}),
         });
       } else if (isChess) {
         // Échecs : résultat binaire 1-0.
@@ -161,7 +173,7 @@ export function DeclareGameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, iWon, loserScore, isSmash, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted]);
+  }, [opponent, iWon, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted]);
 
   const triggerSend = () => {
     setSending(true);
@@ -325,8 +337,8 @@ export function DeclareGameFlow({
         </div>
       )}
 
-      {/* ─── Variante SMASH : format, score en games, persos, vies ─────────── */}
-      {opponent && iWon !== null && isSmash && (
+      {/* ─── Variante SET (Smash / Street Fighter) : format, games, persos ──── */}
+      {opponent && iWon !== null && isSetGame && (
         <div className="relative mt-6 animate-slide-down space-y-5">
           {/* Format */}
           <div>
@@ -375,32 +387,34 @@ export function DeclareGameFlow({
             </div>
           </div>
 
-          {/* Vies (stocks) restantes du gagnant au game décisif */}
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-              Vies restantes du gagnant (game décisif)
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setWinnerStocks(s)}
-                  className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${
-                    winnerStocks === s
-                      ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]'
-                      : 'border-border bg-bg-2/40 text-muted-2'
-                  }`}
-                >
-                  {'❤'.repeat(s)}
-                </button>
-              ))}
+          {/* Vies (stocks) restantes du gagnant au game décisif — Smash uniquement */}
+          {isSmash && (
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
+                Vies restantes du gagnant (game décisif)
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setWinnerStocks(s)}
+                    className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${
+                      winnerStocks === s
+                        ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]'
+                        : 'border-border bg-bg-2/40 text-muted-2'
+                    }`}
+                  >
+                    {'❤'.repeat(s)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Persos */}
-          <SmashCharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} />
-          <SmashCharPicker label={`Perso de ${opponent.login}`} value={charOpp} onChange={setCharOpp} />
+          <CharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
+          <CharPicker label={`Perso de ${opponent.login}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
 
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
             <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>

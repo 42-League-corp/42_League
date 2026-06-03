@@ -152,6 +152,9 @@ export interface MeResponse {
     eloChess?: number;
     matchesPlayedChess?: number;
     tournamentsWonChess?: number;
+    eloSf?: number;
+    matchesPlayedSf?: number;
+    tournamentsWonSf?: number;
     games?: Game[];
     onboardedAt?: string | null;
   } | null;
@@ -172,6 +175,9 @@ export interface AdminUser {
   eloChess?: number;
   matchesPlayedChess?: number;
   tournamentsWonChess?: number;
+  eloSf?: number;
+  matchesPlayedSf?: number;
+  tournamentsWonSf?: number;
   games?: Game[];
   title: string | null;
   imageUrl: string | null;
@@ -301,6 +307,9 @@ export interface UserProfile {
     eloChess?: number;
     matchesPlayedChess?: number;
     tournamentsWonChess?: number;
+    eloSf?: number;
+    matchesPlayedSf?: number;
+    tournamentsWonSf?: number;
     createdAt: string;
   };
   rank: number | null;
@@ -720,6 +729,9 @@ export const api = {
       eloChess?: number;
       matchesPlayedChess?: number;
       tournamentsWonChess?: number;
+      eloSf?: number;
+      matchesPlayedSf?: number;
+      tournamentsWonSf?: number;
       games?: Game[];
     },
   ) =>

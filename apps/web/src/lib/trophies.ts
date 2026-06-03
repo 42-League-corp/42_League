@@ -123,11 +123,14 @@ export function computeTrophies(
     const winnerScore = m.winner === 'A' ? m.scoreA : m.scoreB;
     const loserScore = m.winner === 'A' ? m.scoreB : m.scoreA;
 
-    // Smash : sweep (set gagné sans concéder de game) + game décisif à 3 vies.
-    if (game === 'smash') {
+    // Set games (Smash / Street Fighter) : sweep = set gagné sans concéder de game.
+    // Les « vies » (stockPerfect) sont propres au Smash.
+    if (game === 'smash' || game === 'streetfighter') {
       if (loserScore === 0) winner.sweeps++;
-      const winnerStocks = m.winner === 'A' ? m.stocksA : m.stocksB;
-      if ((winnerStocks ?? 0) >= 3) winner.stockPerfect++;
+      if (game === 'smash') {
+        const winnerStocks = m.winner === 'A' ? m.stocksA : m.stocksB;
+        if ((winnerStocks ?? 0) >= 3) winner.stockPerfect++;
+      }
     }
 
     const gap = Math.abs(m.scoreA - m.scoreB);
@@ -240,15 +243,19 @@ export function computeTrophies(
   const winsFlavor =
     game === 'smash'
       ? { emoji: '🎮', title: 'Smash God' }
-      : game === 'chess'
-        ? { emoji: '♛', title: 'Maître du jeu' }
-        : { emoji: '🏆', title: 'G.O.A.T' };
+      : game === 'streetfighter'
+        ? { emoji: '🥊', title: 'World Warrior' }
+        : game === 'chess'
+          ? { emoji: '♛', title: 'Maître du jeu' }
+          : { emoji: '🏆', title: 'G.O.A.T' };
   const streakFlavor =
     game === 'smash'
       ? { emoji: '🔥', title: 'Combo King' }
-      : game === 'chess'
-        ? { emoji: '♟️', title: 'Série gagnante' }
-        : { emoji: '🔥', title: 'En feu' };
+      : game === 'streetfighter'
+        ? { emoji: '🔥', title: 'Perfect' }
+        : game === 'chess'
+          ? { emoji: '♟️', title: 'Série gagnante' }
+          : { emoji: '🔥', title: 'En feu' };
 
   // ─── Classement / ELO ──────────────────────────────────────────────
   const champion = leaderboard[0];
@@ -350,8 +357,8 @@ export function computeTrophies(
     );
   }
 
-  // ─── Trophées spécifiques SMASH (sets / vies) ───────────────────────
-  if (game === 'smash') {
+  // ─── Trophées spécifiques aux jeux de set (Smash / Street Fighter) ──────
+  if (game === 'smash' || game === 'streetfighter') {
     out.push(
       metricTrophy({
         emoji: '🧹',
@@ -362,16 +369,19 @@ export function computeTrophies(
         format: (v) => `${v} sweeps`,
       }),
     );
-    out.push(
-      metricTrophy({
-        emoji: '💢',
-        title: 'Sans Pitié',
-        subtitle: 'Le plus de games décisifs gagnés avec 3 vies',
-        color: 'crimson',
-        pick: (a) => a.stockPerfect,
-        format: (v) => `${v}× 3 vies`,
-      }),
-    );
+    // Les « vies » (3 stocks) sont propres au Smash.
+    if (game === 'smash') {
+      out.push(
+        metricTrophy({
+          emoji: '💢',
+          title: 'Sans Pitié',
+          subtitle: 'Le plus de games décisifs gagnés avec 3 vies',
+          color: 'crimson',
+          pick: (a) => a.stockPerfect,
+          format: (v) => `${v}× 3 vies`,
+        }),
+      );
+    }
   }
 
   out.push(
@@ -554,7 +564,7 @@ export function computeTrophies(
 
 export type GameBoards = Partial<Record<Game, LeaderboardEntry[]>>;
 
-const MIX_GAMES: Game[] = ['babyfoot', 'smash', 'chess'];
+const MIX_GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
 
 export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): TrophyResult[] {
   // Avatars + ELO cumulé depuis les 3 classements.
@@ -655,7 +665,7 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
     leader({
       emoji: '💎',
       title: 'Roi multi-jeux',
-      subtitle: 'Plus haut ELO cumulé (babyfoot + smash + échecs)',
+      subtitle: 'Plus haut ELO cumulé (babyfoot + smash + échecs + Street Fighter)',
       color: 'violet',
       value: (l) => sumElo.get(l) ?? 0,
       format: (v) => `${v} ELO`,

@@ -694,7 +694,7 @@ app.patch('/me/games', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const raw = Array.isArray(body.games) ? body.games : [];
   const games = [
-    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess')),
+    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess' || g === 'streetfighter')),
   ] as string[];
   if (games.length === 0) {
     throw new HTTPException(400, { message: 'choisis au moins un mode de jeu' });
@@ -1088,6 +1088,8 @@ app.post('/seasons/close', async (c) => {
         matchesPlayedSmash: 0,
         eloChess: 1000,
         matchesPlayedChess: 0,
+        eloSf: 1000,
+        matchesPlayedSf: 0,
       },
     });
     await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
@@ -1257,6 +1259,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
   const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
   const game = parseGameId(p.game);
+  // Smash uniquement : les « stocks » (vies) sont spécifiques au Smash. Street
+  // Fighter partage la mécanique de set mais n'a pas de stocks.
   const isSmash = game === 'smash';
 
   // Champs Smash mappés sur les côtés A/B.
@@ -3081,8 +3085,11 @@ app.patch('/admin/users/:login/stats', async (c) => {
     eloChess: z.number().int().min(0).optional(),
     matchesPlayedChess: z.number().int().min(0).optional(),
     tournamentsWonChess: z.number().int().min(0).optional(),
+    eloSf: z.number().int().min(0).optional(),
+    matchesPlayedSf: z.number().int().min(0).optional(),
+    tournamentsWonSf: z.number().int().min(0).optional(),
     // Modes auxquels le joueur adhère.
-    games: z.array(z.enum(['babyfoot', 'smash', 'chess'])).min(1).optional(),
+    games: z.array(z.enum(['babyfoot', 'smash', 'chess', 'streetfighter'])).min(1).optional(),
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -3099,6 +3106,9 @@ app.patch('/admin/users/:login/stats', async (c) => {
       eloChess: true,
       matchesPlayedChess: true,
       tournamentsWonChess: true,
+      eloSf: true,
+      matchesPlayedSf: true,
+      tournamentsWonSf: true,
       games: true,
     },
   });
@@ -3290,7 +3300,7 @@ app.patch('/admin/matches/:id', async (c) => {
     if (countsForElo) {
       const ratingA = readElo(userA, game);
       const ratingB = readElo(userB, game);
-      const outcome = game === 'smash'
+      const outcome = (game === 'smash' || game === 'streetfighter')
         ? {
             scoreA,
             scoreB,
@@ -3657,7 +3667,7 @@ app.get('/admin/all-history', async (c) => {
   // Filtre par discipline. challenge/pending/played portent `game` ; rejected/ops
   // sont antérieurs au multi-jeu (babyfoot) → exclus dès qu'on cible smash/échecs.
   const gq = url.searchParams.get('game');
-  const gameFilter = gq === 'smash' || gq === 'chess' || gq === 'babyfoot' ? gq : null;
+  const gameFilter = gq === 'smash' || gq === 'chess' || gq === 'streetfighter' || gq === 'babyfoot' ? gq : null;
   const gameWhere = gameFilter ? { game: gameFilter } : {};
   const includeLegacy = !gameFilter || gameFilter === 'babyfoot';
 

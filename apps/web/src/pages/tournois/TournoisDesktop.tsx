@@ -216,7 +216,7 @@ function OfficialSealed() {
 // ─── Empty state visuel ───────────────────────────────────────────────────────
 
 function EmptyTournois({ onCreateClick, game }: { onCreateClick: () => void; game: string }) {
-  const gameEmoji = game === 'smash' ? '🎮' : game === 'chess' ? '♟' : '⚽';
+  const gameEmoji = game === 'smash' ? '🎮' : game === 'streetfighter' ? '🥊' : game === 'chess' ? '♟' : '⚽';
   return (
     <div className="flex flex-col items-center text-center py-16">
       <div className="relative mb-6 w-24 h-24">
@@ -306,7 +306,7 @@ function TournoiCard({ t }: { t: Tournament }) {
         ) : (
           <>
             <div className="absolute inset-0" style={{ background: art.background }} />
-            {t.game === 'smash'
+            {t.game === 'smash' || t.game === 'streetfighter'
               ? <SmashTrophy accent={art.accent} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 opacity-80" />
               : t.game === 'chess'
               ? <ChessTrophy accent={art.accent} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 opacity-80" />
@@ -321,7 +321,7 @@ function TournoiCard({ t }: { t: Tournament }) {
           </span>
           {t.game && t.game !== 'babyfoot' && (
             <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-sm border border-accent/30 text-accent">
-              {t.game === 'smash' ? '🎮' : '♟'}
+              {t.game === 'smash' ? '🎮' : t.game === 'streetfighter' ? '🥊' : '♟'}
             </span>
           )}
         </div>
@@ -426,6 +426,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
       >
         <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40">
           {game === 'smash' ? <SmashTrophy accent="#ff4d5c" className="w-10 h-10 shrink-0" />
+            : game === 'streetfighter' ? <SmashTrophy accent="#ff7a18" className="w-10 h-10 shrink-0" />
             : game === 'chess' ? <ChessTrophy accent="#56c46e" className="w-10 h-10 shrink-0" />
             : <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />}
           <div className="min-w-0">

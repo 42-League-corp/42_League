@@ -101,7 +101,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
           {match.game && match.game !== 'babyfoot' && (
             <div className="flex justify-center mb-2">
               <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-accent/15 text-accent border border-accent/30">
-                {match.game === 'smash' ? '🎮 Smash' : '♟ Échecs'}
+                {match.game === 'smash' ? '🎮 Smash' : match.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs'}
               </span>
             </div>
           )}

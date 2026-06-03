@@ -32,6 +32,10 @@ model User {
   eloChess            Int   @default(1000) @map("elo_chess")
   matchesPlayedChess  Int   @default(0)    @map("matches_played_chess")
   tournamentsWonChess Int   @default(0)    @map("tournaments_won_chess")
+  // Classement Street Fighter (4e discipline, mécaniquement identique au Smash).
+  eloSf               Int   @default(1000) @map("elo_sf")
+  matchesPlayedSf     Int   @default(0)    @map("matches_played_sf")
+  tournamentsWonSf    Int   @default(0)    @map("tournaments_won_sf")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[] @default(["babyfoot"])
   onboardedAt         DateTime? @map("onboarded_at") // a choisi ses modes (1er login)
