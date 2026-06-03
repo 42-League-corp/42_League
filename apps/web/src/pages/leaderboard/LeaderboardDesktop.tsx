@@ -255,10 +255,11 @@ export function LeaderboardDesktop() {
 
   return (
     <div>
+      {!viewingPast && <LeaderboardBanner />}
+
       {!viewingPast && top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
-        {!viewingPast && <LeaderboardBanner />}
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
           <div className="flex items-center gap-2">

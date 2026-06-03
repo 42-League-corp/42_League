@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { api } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
