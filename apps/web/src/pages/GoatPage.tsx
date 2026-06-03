@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Crown, ChevronLeft, Flame } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
@@ -26,6 +27,8 @@ function displayName(e: LeaderboardEntry): string {
 export function GoatPage() {
   const { leaderboard, matches, tournaments, me } = useLeagueData();
   const { game } = useGameMode();
+  const navigate = useNavigate();
+  const [showIntro, setShowIntro] = useState(true);
   const ranking = useMemo(
     () => computeGoat(leaderboard, matches.filter((m) => (m.game ?? 'babyfoot') === game), tournaments),
     [leaderboard, matches, tournaments, game],
@@ -36,6 +39,27 @@ export function GoatPage() {
 
   return (
     <Panel title="G.O.A.T" sub="Greatest Of All Time" accent="crown">
+      {/* ── Bouton retour ── */}
+      <button
+        type="button"
+        onClick={() => navigate('/leaderboard')}
+        className="group inline-flex items-center gap-1 mb-4 rounded-lg px-2.5 py-1.5 text-[11px] uppercase tracking-wider font-semibold text-muted-2 hover:text-gold hover:bg-white/[0.03] border border-transparent hover:border-border/50 transition-colors"
+      >
+        <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
+        Retour
+      </button>
+
+      {/* ── Contenu (grisé tant que l'intro est affichée) ── */}
+      <motion.div
+        animate={{
+          opacity: showIntro ? 0.35 : 1,
+          filter: showIntro ? 'blur(3px)' : 'blur(0px)',
+        }}
+        initial={false}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        className={showIntro ? 'pointer-events-none select-none' : ''}
+        aria-hidden={showIntro}
+      >
       <div className="flex items-center justify-between mb-5">
         <Link to="/leaderboard" className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold transition-colors">
           <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -77,6 +101,68 @@ export function GoatPage() {
           )}
         </>
       )}
+      </motion.div>
+
+      {/* ── Overlay d'explication (premier affichage) ── */}
+      <AnimatePresence>
+        {showIntro && (
+          <motion.div
+            key="goat-intro"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6"
+            style={{ background: 'rgba(8,6,3,0.55)', backdropFilter: 'blur(2px)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="relative w-full max-w-md rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(155deg, rgba(50,38,12,0.96) 0%, rgba(20,16,7,0.98) 100%)',
+                border: '1.5px solid rgba(255,201,74,0.45)',
+                boxShadow: '0 0 50px rgba(255,201,74,0.18), inset 0 1px 0 rgba(255,215,120,0.12)',
+              }}
+            >
+              <div className="absolute -right-6 -top-6 opacity-[0.07] pointer-events-none">
+                <Crown className="w-40 h-40 text-gold" fill="currentColor" strokeWidth={0.5} />
+              </div>
+              <div className="relative p-6 sm:p-7">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <Crown className="w-6 h-6 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.6)]" fill="currentColor" strokeWidth={1.5} />
+                  <span className="font-display text-xl font-black text-text-strong leading-none">
+                    Le G.O.A.T
+                  </span>
+                </div>
+                <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-4">
+                  🐐 Greatest Of All Time
+                </div>
+                <p className="text-sm text-muted leading-relaxed">
+                  Bienvenue dans le panthéon de la 42 League. Cette page met à l'honneur les meilleurs
+                  joueurs de tous les temps, classés par un <span className="text-gold/90 font-semibold">Score G.O.A.T</span> qui
+                  synthétise toute leur carrière.
+                </p>
+                <p className="text-sm text-muted leading-relaxed mt-3">
+                  Le classement combine trois mesures : l'<span className="text-gold/90 font-semibold">ELO</span> (50 %),
+                  le <span className="text-[#f5b942]/90 font-semibold">taux de victoire</span> (30 %) et
+                  les <span className="text-[#cd7f32]/90 font-semibold">titres remportés</span> en tournoi (20 %).
+                  Le joueur en tête trône en couronne, ses prétendants le suivent juste en dessous.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowIntro(false)}
+                  className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Panel>
   );
 }

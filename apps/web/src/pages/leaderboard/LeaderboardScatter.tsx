@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGesture } from '@use-gesture/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
 
-/** Marges réservées aux axes (ELO à gauche, Win % en bas) et padding (px). */
-const M = { l: 46, r: 16, t: 16, b: 34 };
+/** Marges réservées aux axes (ELO à gauche, Win % en bas) et titres d'axes (px). */
+const M = { l: 58, r: 16, t: 16, b: 50 };
 /** Marge intérieure pour ne pas coller les têtes aux bords (px). */
 const PAD = 30;
-/** Rayon « d'occupation » d'une tête (px, base) — espace mini entre deux têtes. */
+/** Rayon « d'occupation » d'une tête (px, base). */
 const NODE_R = 24;
+/** Côté d'une cellule de regroupement (px, base) — points dans la même cellule = 1 amas. */
+const CELL = NODE_R * 1.6;
+/** Rayon du déploiement circulaire des membres d'un amas (px, base). */
+const FAN_R = NODE_R * 1.9;
 const SCALE_MIN = 0.5;
 const SCALE_MAX = 8;
 
@@ -20,10 +25,12 @@ interface View {
   ty: number;
 }
 
-interface Node {
-  entry: LeaderboardEntry;
+/** Un amas = un ou plusieurs joueurs regroupés sur un même point du nuage. */
+interface Cluster {
+  id: string;
   bx: number; // position horizontale de base (px) — dérivée du win rate
   by: number; // position verticale de base (px) — dérivée de l'ELO
+  members: LeaderboardEntry[];
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -33,6 +40,18 @@ function ticks(min: number, max: number, count = 5): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [min];
   const step = (max - min) / (count - 1);
   return Array.from({ length: count }, (_, i) => min + step * i);
+}
+
+/**
+ * Décalage (base px) du i-ème membre déployé en cercle autour du centre d'un amas.
+ * Le rayon grandit légèrement quand l'amas est dense pour éviter les recouvrements.
+ */
+function fanOffset(i: number, total: number): { x: number; y: number } {
+  if (total <= 1) return { x: 0, y: 0 };
+  const r = FAN_R * (total > 6 ? 1 + (total - 6) * 0.12 : 1);
+  // On démarre en haut (-90°) et on tourne dans le sens horaire.
+  const a = -Math.PI / 2 + (i / total) * Math.PI * 2;
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r };
 }
 
 /**
@@ -61,7 +80,10 @@ export function LeaderboardScatter({
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>({ scale: 1, tx: 0, ty: 0 });
+  /** Login de la tête survolée (pour l'infobulle). */
   const [hovered, setHovered] = useState<string | null>(null);
+  /** Amas actuellement « déployé » en cercle (par hover ou clic). */
+  const [openCluster, setOpenCluster] = useState<string | null>(null);
 
   // Mesure du conteneur (responsive).
   useEffect(() => {
@@ -104,37 +126,31 @@ export function LeaderboardScatter({
   const rateOf = (login: string) => clamp(winRates?.get(login) ?? 50, 0, 100);
   const xOfRate = (rate: number) => PAD + (rate / 100) * (plotW - 2 * PAD);
 
-  // Placement 2D : (win rate, ELO). Pour chaque joueur (ELO décroissant) on part de
-  // sa position réelle puis on l'écarte horizontalement par petits pas si une tête
-  // déjà posée la chevauche — la position reste fidèle aux deux axes.
-  const nodes = useMemo<Node[]>(() => {
-    const D = NODE_R * 2; // distance mini entre deux centres
-    const step = D * 0.6;
+  // Regroupement (bucketing) : chaque joueur tombe dans une cellule de la grille
+  // selon sa position réelle (win rate, ELO). Tous ceux d'une même cellule forment
+  // UN amas affiché comme un seul point — au lieu de les étaler le long d'une ligne.
+  const clusters = useMemo<Cluster[]>(() => {
     const sorted = [...entries].sort((a, b) => b.elo - a.elo || a.login.localeCompare(b.login));
-    const placed: Node[] = [];
+    const buckets = new Map<string, { sx: number; sy: number; members: LeaderboardEntry[] }>();
     for (const e of sorted) {
-      const by = yOfElo(e.elo);
-      const tx = xOfRate(rateOf(e.login));
-      let bx = tx;
-      for (let k = 0; k < 200; k++) {
-        // 0, +1, -1, +2, -2 … × step, autour de la position réelle.
-        const rank = Math.ceil(k / 2);
-        const dir = k % 2 === 1 ? 1 : -1;
-        const candX = clamp(tx + rank * step * dir, PAD, plotW - PAD);
-        const collides = placed.some((n) => {
-          const dy = n.by - by;
-          if (Math.abs(dy) >= D) return false; // assez loin verticalement
-          const dx = n.bx - candX;
-          return dx * dx + dy * dy < D * D;
-        });
-        if (!collides) {
-          bx = candX;
-          break;
-        }
+      const bx = clamp(xOfRate(rateOf(e.login)), PAD, plotW - PAD);
+      const by = clamp(yOfElo(e.elo), PAD, plotH - PAD);
+      const key = `${Math.round(bx / CELL)},${Math.round(by / CELL)}`;
+      const b = buckets.get(key);
+      if (b) {
+        b.sx += bx;
+        b.sy += by;
+        b.members.push(e);
+      } else {
+        buckets.set(key, { sx: bx, sy: by, members: [e] });
       }
-      placed.push({ entry: e, bx, by });
     }
-    return placed;
+    return Array.from(buckets.entries()).map(([id, b]) => ({
+      id,
+      bx: b.sx / b.members.length,
+      by: b.sy / b.members.length,
+      members: b.members,
+    }));
     // yOfElo / xOfRate dépendent de plotW/plotH/domain/winRates → déps explicites
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, plotW, plotH, domain.eMin, domain.eMax, winRates]);
@@ -158,9 +174,14 @@ export function LeaderboardScatter({
 
   useGesture(
     {
-      onDrag: ({ offset: [ox, oy] }) => setView((v) => ({ ...v, tx: ox, ty: oy })),
+      onDrag: ({ offset: [ox, oy], tap }) => {
+        // Un vrai glissement (pas un tap sur une tête) referme l'amas déployé.
+        if (!tap) setOpenCluster(null);
+        setView((v) => ({ ...v, tx: ox, ty: oy }));
+      },
       onWheel: ({ event, delta: [, dy] }) => {
         event.preventDefault();
+        setOpenCluster(null);
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         zoomAt(Math.exp(-dy * 0.0015), event.clientX - rect.left, event.clientY - rect.top);
@@ -184,7 +205,21 @@ export function LeaderboardScatter({
   const reset = () => setView({ scale: 1, tx: 0, ty: 0 });
   const eloTicks = ticks(domain.eMin, domain.eMax, 5);
   const rateTicks = [0, 25, 50, 75, 100];
-  const hoveredNode = hovered ? nodes.find((n) => n.entry.login === hovered) : null;
+
+  // Position écran (base) de la tête survolée, pour l'infobulle — qu'elle soit
+  // dans un amas replié ou déployée en cercle.
+  const hoveredPos = useMemo(() => {
+    if (!hovered) return null;
+    for (const c of clusters) {
+      const idx = c.members.findIndex((m) => m.login === hovered);
+      if (idx < 0) continue;
+      const entry = c.members[idx];
+      if (c.members.length === 1 || openCluster !== c.id) return { entry, bx: c.bx, by: c.by };
+      const off = fanOffset(idx, c.members.length);
+      return { entry, bx: c.bx + off.x, by: c.by + off.y };
+    }
+    return null;
+  }, [hovered, openCluster, clusters]);
 
   return (
     <div className={`relative ${className}`}>
@@ -210,7 +245,7 @@ export function LeaderboardScatter({
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold/70" />
           Haut-droite = meilleur
           <span className="opacity-40">·</span>
-          <span>Tap = profil</span>
+          <span>×N = amas, tap pour déployer</span>
         </div>
       </div>
 
@@ -218,20 +253,37 @@ export function LeaderboardScatter({
         ref={containerRef}
         className="relative w-full h-full overflow-hidden rounded-xl card-hud cursor-grab active:cursor-grabbing select-none touch-none"
       >
-        {/* Graduations ELO (axe Y) */}
+        {/* Axe Y — ELO (ordonnée). Ligne, graduations chiffrées + traits. */}
         <div
           className="absolute left-0 overflow-hidden pointer-events-none"
           style={{ width: M.l, top: M.t, height: plotH }}
         >
+          {/* Ligne d'axe verticale */}
+          <div className="absolute top-0 bottom-0 right-0 w-px bg-border" />
           {eloTicks.map((v, i) => (
-            <span
+            <div
               key={i}
-              className="absolute right-1.5 -translate-y-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
+              className="absolute right-0 -translate-y-1/2 flex items-center gap-1"
               style={{ top: view.ty + yOfElo(v) * view.scale }}
             >
-              {Math.round(v)}
-            </span>
+              <span className="font-mono text-[9px] text-muted-2 tabular-nums">{Math.round(v)}</span>
+              {/* Trait de graduation */}
+              <span className="w-1.5 h-px bg-border" />
+            </div>
           ))}
+        </div>
+
+        {/* Titre de l'axe Y — « ELO », vertical le long du bord gauche */}
+        <div
+          className="absolute left-0 top-0 pointer-events-none flex items-center justify-center"
+          style={{ width: 14, height: M.t + plotH }}
+        >
+          <span
+            className="font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            ELO (ordonnée) ↑
+          </span>
         </div>
 
         {/* Zone du nuage (clippée) */}
@@ -257,61 +309,136 @@ export function LeaderboardScatter({
             />
           ))}
 
-          {/* Têtes des joueurs */}
-          {nodes.map(({ entry: e, bx, by }) => {
-            const { lx, ly } = toLocal(bx, by);
-            const isMe = e.login === myLogin;
-            const isHover = e.login === hovered;
+          {/* Amas de joueurs — un point par cellule, déployé en cercle si plusieurs */}
+          {clusters.map((c) => {
+            const { lx, ly } = toLocal(c.bx, c.by);
+            const open = openCluster === c.id;
+            const multi = c.members.length > 1;
+            const meIdx = myLogin != null ? c.members.findIndex((m) => m.login === myLogin) : -1;
+            const containsMe = meIdx >= 0;
+            // Tête visible quand l'amas est replié : « moi » si présent, sinon le plus fort.
+            const repIdx = meIdx >= 0 ? meIdx : 0;
+
+            const openFan = () => multi && setOpenCluster(c.id);
+            const closeFan = () => setOpenCluster((o) => (o === c.id ? null : o));
+
             return (
-              <button
-                key={e.login}
-                type="button"
-                onMouseEnter={() => setHovered(e.login)}
-                onMouseLeave={() => setHovered((h) => (h === e.login ? null : h))}
-                onClick={() => navigate(`/player/${encodeURIComponent(e.login)}`)}
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-shadow"
-                style={{ left: lx, top: ly, zIndex: isHover ? 40 : isMe ? 20 : 10 }}
-                aria-label={`${e.login} · ${e.elo} ELO`}
+              <div
+                key={c.id}
+                className="absolute"
+                style={{ left: lx, top: ly, zIndex: open ? 45 : containsMe ? 20 : 10 }}
+                onMouseEnter={openFan}
+                onMouseLeave={() => {
+                  closeFan();
+                  setHovered((h) => (c.members.some((m) => m.login === h) ? null : h));
+                }}
               >
-                <Avatar
-                  login={e.login}
-                  imageUrl={e.imageUrl}
-                  size={isMe || isHover ? 'md' : 'sm'}
-                  className={
-                    isMe
-                      ? 'ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow'
-                      : isHover
-                        ? 'ring-2 ring-gold/70 ring-offset-2 ring-offset-bg-1'
-                        : 'ring-1 ring-border'
-                  }
-                />
-              </button>
+                {/* Déploiement circulaire des membres (ou tête unique au centre) */}
+                <AnimatePresence>
+                  {c.members.map((e, i) => {
+                    // Replié : tout le monde au centre. Déployé : en cercle.
+                    const spread = open && multi;
+                    const off = spread ? fanOffset(i, c.members.length) : { x: 0, y: 0 };
+                    // Au repli, seule la tête « représentante » reste visible.
+                    if (!spread && i !== repIdx) return null;
+                    const isMe = e.login === myLogin;
+                    const isHover = e.login === hovered;
+                    return (
+                      // motion.div : porte le déploiement (x/y) + apparition (opacity/scale).
+                      // L'enfant (button) gère le centrage via translate CSS — non animé,
+                      // donc sans conflit avec les transforms de framer-motion.
+                      <motion.div
+                        key={e.login}
+                        className="absolute"
+                        style={{ left: 0, top: 0 }}
+                        initial={spread ? { x: 0, y: 0, opacity: 0, scale: 0.6 } : false}
+                        animate={{
+                          x: off.x * view.scale,
+                          y: off.y * view.scale,
+                          opacity: 1,
+                          scale: 1,
+                        }}
+                        exit={{ x: 0, y: 0, opacity: 0, scale: 0.6 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
+                      >
+                        <button
+                          type="button"
+                          onMouseEnter={() => setHovered(e.login)}
+                          onMouseLeave={() => setHovered((h) => (h === e.login ? null : h))}
+                          onClick={(ev) => {
+                            // Amas replié à plusieurs : 1er clic = déploie, ne navigue pas.
+                            if (multi && !open) {
+                              ev.stopPropagation();
+                              openFan();
+                              return;
+                            }
+                            navigate(`/player/${encodeURIComponent(e.login)}`);
+                          }}
+                          className="block -translate-x-1/2 -translate-y-1/2 rounded-full transition-shadow"
+                          aria-label={`${e.login} · ${e.elo} ELO`}
+                        >
+                          <Avatar
+                            login={e.login}
+                            imageUrl={e.imageUrl}
+                            size={isMe || isHover ? 'md' : 'sm'}
+                            className={
+                              isMe
+                                ? 'ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow'
+                                : isHover
+                                  ? 'ring-2 ring-gold/70 ring-offset-2 ring-offset-bg-1'
+                                  : 'ring-1 ring-border'
+                            }
+                          />
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+
+                {/* Badge de comptage sur un amas replié (×N) — collé en haut-droite de la tête */}
+                {multi && !open && (
+                  <span
+                    className="absolute z-20 pointer-events-none flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gold text-bg-1 text-[9px] font-extrabold tabular-nums shadow-md ring-1 ring-bg-1"
+                    style={{ left: 10, top: -10, transform: 'translate(-50%, -50%)' }}
+                  >
+                    ×{c.members.length}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
 
-        {/* Graduations Win % (axe X, en bas) */}
+        {/* Axe X — Win rate (abscisse). Ligne, graduations + traits, en bas. */}
         <div
           className="absolute overflow-hidden pointer-events-none"
           style={{ left: M.l, width: plotW, top: M.t + plotH, height: M.b }}
         >
+          {/* Ligne d'axe horizontale */}
+          <div className="absolute left-0 right-0 top-0 h-px bg-border" />
           {rateTicks.map((r, i) => (
-            <span
+            <div
               key={i}
-              className="absolute top-1 -translate-x-1/2 font-mono text-[9px] text-muted-2 tabular-nums"
+              className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
               style={{ left: view.tx + xOfRate(r) * view.scale }}
             >
-              {r}%
-            </span>
+              {/* Trait de graduation */}
+              <span className="w-px h-1.5 bg-border" />
+              <span className="mt-0.5 font-mono text-[9px] text-muted-2 tabular-nums">{r}%</span>
+            </div>
           ))}
+          {/* Titre de l'axe X — « Win rate % » centré sous les graduations */}
+          <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2">
+            Taux de victoire % (abscisse) →
+          </span>
         </div>
 
         {/* Infobulle (hors zone clippée pour ne pas être coupée) */}
-        {hoveredNode && (
+        {hoveredPos && hoveredPos.entry && (
           <ScatterTooltip
-            entry={hoveredNode.entry}
-            left={M.l + toLocal(hoveredNode.bx, hoveredNode.by).lx}
-            top={M.t + toLocal(hoveredNode.bx, hoveredNode.by).ly - 26}
+            entry={hoveredPos.entry}
+            left={M.l + toLocal(hoveredPos.bx, hoveredPos.by).lx}
+            top={M.t + toLocal(hoveredPos.bx, hoveredPos.by).ly - 26}
           />
         )}
       </div>

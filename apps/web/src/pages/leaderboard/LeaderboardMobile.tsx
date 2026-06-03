@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Crown } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
-import { SegmentedControl } from '../../mobile/primitives/SegmentedControl';
+import { RankingScopeToggle } from './RankingScopeToggle';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
@@ -37,8 +37,8 @@ export function LeaderboardMobile() {
   }, [game]);
 
   const tabChoices = [
-    { value: 'personal' as LeaderboardTab, label: 'Personnel' },
-    ...(showTeamsTab ? [{ value: 'teams' as LeaderboardTab, label: 'Équipes' }] : []),
+    { value: 'personal' as LeaderboardTab, label: 'Solo' },
+    ...(showTeamsTab ? [{ value: 'teams' as LeaderboardTab, label: '2v2' }] : []),
   ];
 
   // Saison affichée : '' = en cours (live), sinon snapshot d'une saison passée.
@@ -138,7 +138,7 @@ export function LeaderboardMobile() {
       <div className="space-y-5">
         {/* Onglets Personnel / Équipes */}
         {showTeamsTab && (
-          <SegmentedControl
+          <RankingScopeToggle
             value={activeTab}
             onChange={setActiveTab}
             choices={tabChoices}

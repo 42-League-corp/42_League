@@ -13,7 +13,7 @@ import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { TeamLeaderboard } from './TeamLeaderboard';
-import { SegmentedControl } from '../../mobile/primitives/SegmentedControl';
+import { RankingScopeToggle } from './RankingScopeToggle';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
@@ -274,12 +274,12 @@ export function LeaderboardDesktop() {
         {/* Onglets Personnel / Équipes — Babyfoot uniquement */}
         {showTeamsTab && (
           <div className="mb-4 max-w-xs">
-            <SegmentedControl
+            <RankingScopeToggle
               value={activeTab}
               onChange={setActiveTab}
               choices={[
-                { value: 'personal' as LeaderboardTab, label: 'Personnel' },
-                { value: 'teams' as LeaderboardTab, label: 'Équipes 2v2' },
+                { value: 'personal' as LeaderboardTab, label: 'Solo' },
+                { value: 'teams' as LeaderboardTab, label: '2v2' },
               ]}
             />
           </div>
