@@ -2,73 +2,89 @@ import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 // =========================================================================
-// RATE-LIMITING — fenêtre fixe en mémoire, par IP
+// RATE-LIMITING — fenêtre fixe + pénalités progressives par IP
 // =========================================================================
-// Suffisant pour une bêta mono-instance derrière Caddy : c'est un garde-fou
-// anti-abus / anti-spam, pas un quota fin. Pour scaler horizontalement il
-// faudra un store partagé (Redis), mais le backend tourne en single replica.
-//
-// Chaque limiteur isole ses compteurs via `name`, ce qui permet d'avoir
-// plusieurs budgets indépendants (global vs auth vs écriture) sur une même IP.
+// Deux niveaux :
+//  1. Fenêtre fixe (bucket counter) — bloque les floods de base.
+//  2. Pénalités exponentielles — plus on spam, plus le blocage dure longtemps :
+//       30 s → 2 min → 8 min → 30 min → 2 h → 8 h
+//     Le compteur de violations est remis à zéro après 24 h sans incident.
 
 type Bucket = { count: number; resetAt: number };
+type Penalty = { violations: number; blockedUntil: number; lastViolationAt: number };
 
-export interface RateLimitOptions {
-  /** Identifiant du limiteur — isole ses compteurs des autres. */
-  name: string;
-  /** Largeur de la fenêtre en millisecondes. */
-  windowMs: number;
-  /** Nombre maximum de requêtes comptées autorisées par fenêtre. */
-  max: number;
-  /**
-   * Renvoie `true` pour ne PAS compter ni bloquer la requête (ex. ignorer les
-   * méthodes non mutantes sur un limiteur d'écriture).
-   */
-  skip?: (c: Context) => boolean;
+const bucketStores = new Map<string, Map<string, Bucket>>();
+const penaltyStore = new Map<string, Penalty>();
+
+const VIOLATION_TTL_MS = 24 * 3600_000;
+
+// Durées croissantes : 30 s, 2 min, 8 min, 30 min, 2 h, 8 h.
+const PENALTY_STEPS_MS = [30_000, 120_000, 480_000, 1_800_000, 7_200_000, 28_800_000];
+
+function getPenaltyDuration(violations: number): number {
+  const idx = Math.min(violations - 1, PENALTY_STEPS_MS.length - 1);
+  return PENALTY_STEPS_MS[idx] ?? PENALTY_STEPS_MS[PENALTY_STEPS_MS.length - 1]!;
 }
 
-const store = new Map<string, Bucket>();
-
-// Balayage périodique : sans ça les clés expirées mais jamais relues
-// resteraient en mémoire indéfiniment (fuite lente sur des IP éphémères).
 let sweeper: ReturnType<typeof setInterval> | null = null;
 function ensureSweeper(): void {
   if (sweeper) return;
   sweeper = setInterval(() => {
     const now = Date.now();
-    for (const [key, bucket] of store) {
-      if (bucket.resetAt <= now) store.delete(key);
+    for (const store of bucketStores.values()) {
+      for (const [k, b] of store) {
+        if (b.resetAt <= now) store.delete(k);
+      }
+    }
+    for (const [ip, p] of penaltyStore) {
+      if (now - p.lastViolationAt > VIOLATION_TTL_MS) penaltyStore.delete(ip);
     }
   }, 60_000);
-  // Ne pas maintenir le process en vie juste pour ce timer (tests, arrêt propre).
   sweeper.unref?.();
 }
 
-/**
- * Extrait l'IP cliente. Derrière Caddy/nginx la vraie IP est dans
- * `X-Forwarded-For` (premier maillon de la chaîne).
- */
+/** Extrait l'IP cliente derrière Caddy/nginx. */
 export function clientIp(c: Context): string {
   const xff = c.req.header('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
+  if (xff) { const first = xff.split(',')[0]?.trim(); if (first) return first; }
   const real = c.req.header('x-real-ip');
   if (real) return real.trim();
   return c.req.header('cf-connecting-ip')?.trim() ?? 'unknown';
 }
 
+export interface RateLimitOptions {
+  name: string;
+  windowMs: number;
+  max: number;
+  skip?: (c: Context) => boolean;
+  /** Activer les pénalités progressives (défaut : true). */
+  progressive?: boolean;
+}
+
 export function rateLimit(opts: RateLimitOptions) {
   ensureSweeper();
+  const progressive = opts.progressive ?? true;
+
+  if (!bucketStores.has(opts.name)) bucketStores.set(opts.name, new Map());
+  const store = bucketStores.get(opts.name)!;
+
   return async (c: Context, next: Next) => {
-    if (opts.skip?.(c)) {
-      await next();
-      return;
+    if (opts.skip?.(c)) { await next(); return; }
+
+    const ip = clientIp(c);
+    const now = Date.now();
+
+    // Vérification de la pénalité avant tout.
+    if (progressive) {
+      const penalty = penaltyStore.get(ip);
+      if (penalty && penalty.blockedUntil > now) {
+        const retryAfter = Math.ceil((penalty.blockedUntil - now) / 1000);
+        c.header('Retry-After', String(retryAfter));
+        throw new HTTPException(429, { message: `too many requests — blocked for ${retryAfter}s` });
+      }
     }
 
-    const key = `${opts.name}:${clientIp(c)}`;
-    const now = Date.now();
+    const key = `${opts.name}:${ip}`;
     let bucket = store.get(key);
     if (!bucket || bucket.resetAt <= now) {
       bucket = { count: 0, resetAt: now + opts.windowMs };
@@ -82,6 +98,15 @@ export function rateLimit(opts: RateLimitOptions) {
     c.header('X-RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
 
     if (bucket.count > opts.max) {
+      if (progressive) {
+        const existing = penaltyStore.get(ip);
+        const violations = (existing?.violations ?? 0) + 1;
+        const duration = getPenaltyDuration(violations);
+        penaltyStore.set(ip, { violations, blockedUntil: now + duration, lastViolationAt: now });
+        const retryAfter = Math.ceil(duration / 1000);
+        c.header('Retry-After', String(retryAfter));
+        throw new HTTPException(429, { message: `too many requests — blocked for ${retryAfter}s (violation #${violations})` });
+      }
       const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
       c.header('Retry-After', String(retryAfter));
       throw new HTTPException(429, { message: 'too many requests — slow down' });
@@ -93,5 +118,6 @@ export function rateLimit(opts: RateLimitOptions) {
 
 /** Réinitialise tous les compteurs — réservé aux tests. */
 export function __resetRateLimitStore(): void {
-  store.clear();
+  for (const s of bucketStores.values()) s.clear();
+  penaltyStore.clear();
 }

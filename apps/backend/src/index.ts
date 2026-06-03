@@ -414,42 +414,23 @@ if (process.env.NODE_ENV !== 'test') {
   const isMutation = (c: Context) =>
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-  // Backstop global : plafond large par IP, juste pour absorber un flood / scan.
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600 }));
+  // Backstop global réduit (120/min — fluide pour un humain, bloque les bots).
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120 }));
 
-  // Auth : protège l'échange OAuth contre le brute-force / spam de state.
-  // On exclut /auth/stream-token : il exige déjà un Bearer valide (pas une cible
-  // de brute-force) et le front l'appelle plusieurs fois par page (un EventSource
-  // par panneau + reconnexions). Le backstop global (600/min/IP) le couvre.
-  app.use(
-    '/auth/*',
-    rateLimit({
-      name: 'auth',
-      windowMs: 15 * 60_000,
-      max: 50,
-      skip: (c) => c.req.path === '/auth/stream-token',
-    }),
-  );
+  // Auth : protège l'échange OAuth contre le brute-force.
+  app.use('/auth/*', rateLimit({
+    name: 'auth', windowMs: 15 * 60_000, max: 50,
+    skip: (c) => c.req.path === '/auth/stream-token',
+  }));
 
-  // Écriture : ne compte que les mutations (déclarations de matchs, défis, ops,
-  // tournois, feature-requests). Généreux pour un humain, bloque les floods.
-  const writeLimiter = rateLimit({
-    name: 'write',
-    windowMs: 60_000,
-    max: 120,
-    skip: (c) => !isMutation(c),
-  });
-  for (const path of [
-    '/matches',
-    '/matches/*',
-    '/challenges',
-    '/challenges/*',
-    '/tournaments',
-    '/tournaments/*',
-    '/ops',
-    '/feature-requests',
-    '/bug-reports',
-  ]) {
+  // Quotas par action (24 h) — pénalités progressives en cas de spam.
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: (c) => !isMutation(c) }));
+
+  // Écriture générale (mutations restantes).
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: (c) => !isMutation(c) });
+  for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
 }
@@ -1211,7 +1192,11 @@ app.post('/matches', async (c) => {
   }
   await assertNotBanned(me);
   await getOrCreateUser(me);
-  await getOrCreateUser(opponentLogin);
+  // Sécurité : l'adversaire doit exister, être un vrai utilisateur 42 et disponible.
+  const opponent = await prisma.user.findUnique({ where: { login: opponentLogin } });
+  if (!opponent) throw new HTTPException(404, { message: 'opponent must login first before being declared' });
+  if (!opponent.ftId) throw new HTTPException(403, { message: 'opponent must be a real 42 user' });
+  if (opponent.bannedAt || opponent.anonymizedAt || opponent.deletionScheduledAt) throw new HTTPException(403, { message: "ce joueur n'est plus disponible" });
   const pending = await prisma.pendingMatch.create({
     data: {
       id: randomUUID(),
@@ -1810,7 +1795,6 @@ app.post('/challenges', async (c) => {
   // Un adversaire banni / désactivé / anonymisé est hors-jeu : pas de défi.
   await assertTargetable(opponentLogin);
   await getOrCreateUser(me);
-  await getOrCreateUser(opponentLogin);
   const challenge = await prisma.challenge.create({
     data: {
       id: randomUUID(),
@@ -3047,6 +3031,9 @@ app.patch('/admin/users/:login/stats', async (c) => {
   const me = await getCurrentLogin(c);
   await requireAdmin(me);
   const login = c.req.param('login');
+  if (SUPERADMINS.has(login.toLowerCase()) && !SUPERADMINS.has(me.toLowerCase())) {
+    throw new HTTPException(403, { message: "cannot modify a superadmin's stats" });
+  }
   const body = await c.req.json().catch(() => null);
   const schema = z.object({
     elo: z.number().int().min(0).optional(),
