@@ -414,20 +414,42 @@ if (process.env.NODE_ENV !== 'test') {
   const isMutation = (c: Context) =>
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-  // Les superadmins (devs) contournent le rate-limit global : leur IP peut
-  // légitimement générer beaucoup de requêtes (onglets dev, SSE, reconnexions…).
-  // On vérifie la signature du token pour ne pas ouvrir un trou de sécurité.
-  const isSuperadminRequest = (c: Context): boolean => {
+  // Les admins (rôle ADMIN ou SUPERADMIN) contournent le rate-limit : leur IP
+  // peut légitimement générer beaucoup de requêtes (onglets dev, SSE, modération,
+  // reconnexions…). On vérifie la signature du token pour ne pas ouvrir un trou
+  // de sécurité, puis le rôle. Les rôles ADMIN vivant en DB, on met en cache les
+  // logins admin (TTL 30 s) pour ne pas taper la base à chaque requête.
+  let adminLoginCache: Set<string> | null = null;
+  let adminCacheExpiry = 0;
+  const getAdminLogins = async (): Promise<Set<string>> => {
+    const now = Date.now();
+    if (adminLoginCache && now < adminCacheExpiry) return adminLoginCache;
+    const rows = await prisma.user.findMany({
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+      select: { login: true },
+    });
+    const set = new Set(rows.map((r) => r.login.toLowerCase()));
+    for (const s of SUPERADMINS) set.add(s.toLowerCase());
+    adminLoginCache = set;
+    adminCacheExpiry = now + 30_000;
+    return set;
+  };
+  const isAdminRequest = async (c: Context): Promise<boolean> => {
     const auth = c.req.header('authorization');
     if (!auth?.startsWith('Bearer ')) return false;
     const secret = process.env.SESSION_SECRET;
     if (!secret) return false;
     const login = verifyToken(auth.slice(7), secret);
-    return !!login && SUPERADMINS.has(login.toLowerCase());
+    if (!login) return false;
+    if (SUPERADMINS.has(login.toLowerCase())) return true;
+    return (await getAdminLogins()).has(login.toLowerCase());
   };
+  // Combine l'exemption admin avec une condition de skip de base (ex. non-mutation).
+  const orAdmin = (base?: (c: Context) => boolean) => async (c: Context) =>
+    (await isAdminRequest(c)) || (base ? base(c) : false);
 
-  // Backstop global (120/min). Les superadmins sont exemptés.
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, skip: isSuperadminRequest }));
+  // Backstop global (120/min). Les admins sont exemptés.
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, skip: orAdmin() }));
 
   // Auth : protège l'échange OAuth contre le brute-force.
   app.use('/auth/*', rateLimit({
@@ -435,13 +457,13 @@ if (process.env.NODE_ENV !== 'test') {
     skip: (c) => c.req.path === '/auth/stream-token',
   }));
 
-  // Quotas par action (24 h) — pénalités progressives en cas de spam.
-  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
-  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
-  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: (c) => !isMutation(c) }));
+  // Quotas par action (24 h) — pénalités progressives en cas de spam. Admins exemptés.
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: orAdmin((c) => !isMutation(c)) }));
 
-  // Écriture générale (mutations restantes).
-  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: (c) => !isMutation(c) });
+  // Écriture générale (mutations restantes). Admins exemptés.
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: orAdmin((c) => !isMutation(c)) });
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
