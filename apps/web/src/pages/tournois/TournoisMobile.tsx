@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trophy, Swords, Crown, ChevronRight, Info } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useFAB } from '../../mobile/primitives/FAB';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { TournamentCard } from './mobile/TournamentCard';
-import { CreateTournamentSheet } from './mobile/CreateTournamentSheet';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import type { Tournament } from '../../lib/api';
@@ -15,7 +14,7 @@ type Filter = 'all' | 'live' | 'open' | 'done';
 export function TournoisMobile() {
   const { tournaments, refresh } = useLeagueData();
   const { game } = useGameMode();
-  const [createOpen, setCreateOpen] = useState(false);
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
 
   const counts = useMemo(() => {
@@ -41,7 +40,7 @@ export function TournoisMobile() {
   useFAB({
     Icon: Plus,
     label: 'Nouveau tournoi',
-    onClick: () => setCreateOpen(true),
+    onClick: () => navigate('/tournaments/create'),
     pulse: tournaments.length === 0,
   });
 
@@ -56,7 +55,7 @@ export function TournoisMobile() {
 
         {/* ── 1. Onboarding inline si aucun tournoi (explique + incite) ── */}
         {tournaments.length === 0 && (
-          <OnboardingHero onCreateClick={() => setCreateOpen(true)} game={game} />
+          <OnboardingHero onCreateClick={() => navigate('/tournaments/create')} game={game} />
         )}
 
         {/* ── 2. Filtres pill (seulement s'il y a des tournois) ──── */}
@@ -95,8 +94,6 @@ export function TournoisMobile() {
         {tournaments.length > 0 && <QuickHelp />}
 
       </div>
-
-      <CreateTournamentSheet open={createOpen} onClose={() => setCreateOpen(false)} onDone={refresh} />
     </PullToRefresh>
   );
 }

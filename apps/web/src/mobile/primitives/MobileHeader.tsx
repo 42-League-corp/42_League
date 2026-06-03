@@ -17,6 +17,7 @@ import { haptic } from '../feedback/useHaptic';
 const ROUTE_TITLE: Record<string, string> = {
   '/challenges': 'Défis',
   '/tournaments': 'Tournois',
+  '/tournaments/create': 'Nouveau tournoi',
   '/leaderboard': 'Classement',
   '/trophies': 'Trophées',
   '/profile': 'Profil',
