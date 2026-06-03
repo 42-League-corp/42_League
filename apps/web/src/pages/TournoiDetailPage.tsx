@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
 import { AbacusSlider } from '../components/AbacusSlider';
 import { OutcomeButton } from '../components/OutcomeButton';
-import { api, type Tournament, type TournamentMatch, type TournamentInvite, type LeaderboardEntry } from '../lib/api';
+import { api, type Game, type Tournament, type TournamentMatch, type TournamentInvite, type LeaderboardEntry } from '../lib/api';
 import { PlayerSearch } from './defis/shared/PlayerSearch';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
