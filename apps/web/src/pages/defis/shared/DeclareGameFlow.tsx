@@ -4,7 +4,7 @@ import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
-import { api, type LeaderboardEntry } from '../../../lib/api';
+import { api, type LeaderboardEntry, type Game } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { SMASH_ROSTER } from '../../../lib/smash';
@@ -63,6 +63,11 @@ interface DeclareGameFlowProps {
   onSubmitted: () => Promise<void> | void;
   /** Mode visuel — change l'autofocus + la taille des inputs. */
   variant?: 'desktop' | 'mobile';
+  /**
+   * Force un mode de jeu (override le mode global). Utilisé quand on enregistre
+   * le résultat d'un défi : le jeu est celui du défi, pas le mode sélectionné.
+   */
+  gameOverride?: Game;
 }
 
 /**
@@ -80,9 +85,12 @@ export function DeclareGameFlow({
   locations,
   onSubmitted,
   variant = 'desktop',
+  gameOverride,
 }: DeclareGameFlowProps) {
   const flash = useFlash();
-  const { game, isSmash } = useGameMode();
+  const { game: globalGame } = useGameMode();
+  const game = gameOverride ?? globalGame;
+  const isSmash = game === 'smash';
   const isChess = game === 'chess';
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(null);
   const [iWon, setIWon] = useState<boolean | null>(null);
