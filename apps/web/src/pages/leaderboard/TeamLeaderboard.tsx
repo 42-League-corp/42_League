@@ -46,7 +46,6 @@ const RANK_STYLES: Record<number, string> = {
 
 function TeamCard({ entry, isTop }: TeamCardProps) {
   const rankLabel = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`;
-  const teamName = entry.name ?? `${entry.player1Login} & ${entry.player2Login}`;
   const games = entry.wins + entry.losses;
   const winRate = games === 0 ? 0 : Math.round((entry.wins / games) * 100);
 
