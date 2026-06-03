@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
+import type { Game } from '../lib/gameMode';
 
 type Tab = 'rules' | 'privacy' | 'tech' | 'team';
 
@@ -96,62 +98,188 @@ function TabBtn({
   );
 }
 
-// ─── Règles du jeu ────────────────────────────────────────────────────────────
+// ─── Règles du jeu (adaptées à la discipline courante) ───────────────────────
+
+/**
+ * Contenu des règles propre à chaque discipline. Pour ajouter un jeu, il suffit
+ * d'ajouter une entrée à ce `Record<Game, GameRules>` — la `RulesSection` lit
+ * automatiquement la discipline active via `useGameMode()`.
+ */
+type GameRules = {
+  /** Nom de la discipline, employé dans les phrases (ex. « babyfoot 1 contre 1 »). */
+  label: string;
+  /** Panneau « règles sur le terrain » : intro + puces. */
+  terrain: { intro: React.ReactNode; bullets: React.ReactNode[] };
+  /** Panneau « format du match » : intro + puces. */
+  format: { intro: React.ReactNode; bullets: React.ReactNode[] };
+};
+
+const RULES: Record<Game, GameRules> = {
+  babyfoot: {
+    label: 'babyfoot 1 contre 1',
+    terrain: {
+      intro: (
+        <>
+          Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés
+          proprement :
+        </>
+      ),
+      bullets: [
+        <>
+          Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
+          être <span className="text-gold font-semibold">touchée au moins deux fois</span> avant qu'un but
+          ne compte.
+        </>,
+        <>
+          Le joueur qui <span className="text-text font-semibold">vient d'encaisser un but</span> a le droit
+          de remettre la balle <span className="text-gold font-semibold">au pied de sa barre du milieu</span> (demis)
+          pour relancer.
+        </>,
+        <>
+          Les <span className="text-gold font-semibold">buts marqués depuis la barre du milieu</span> (demis)
+          sont valables.
+        </>,
+        <>
+          La <span className="text-gold font-semibold">gamelle</span> (balle qui ressort du but) : tu peux
+          soit <span className="text-text font-semibold">prendre le point</span>, soit
+          <span className="text-text font-semibold"> retirer un point à l'adversaire</span> — mais on ne peut
+          <span className="text-text font-semibold"> pas conclure le match sur une gamelle</span>.
+        </>,
+        <>
+          Les <span className="text-gold font-semibold">roulettes</span> doivent être
+          <span className="text-text font-semibold"> contrôlées</span> (pas de moulinets incontrôlés).
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League est un classement ELO de <span className="text-text font-semibold">babyfoot 1 contre 1</span>.
+          Chaque joueur inscrit peut défier n'importe quel autre membre de sa league.
+        </>
+      ),
+      bullets: [
+        <>Match en <span className="text-gold font-semibold">10 buts</span> — premier arrivé à 10 gagne.</>,
+        <>Un match ne peut être déclaré qu'<span className="text-text font-semibold">après avoir été joué</span>.</>,
+        <>Les deux joueurs déclarent leur score indépendamment. En cas de désaccord, le match est annulé.</>,
+      ],
+    },
+  },
+  smash: {
+    label: 'Super Smash Bros. 1 contre 1',
+    terrain: {
+      intro: (
+        <>
+          Conventions de set pour que la victoire soit nette et les matchs équitables :
+        </>
+      ),
+      bullets: [
+        <>
+          Chaque match se joue en <span className="text-gold font-semibold">stocks (vies)</span> — le joueur
+          qui épuise tous ses stocks adverses remporte la manche.
+        </>,
+        <>
+          Sélection de <span className="text-gold font-semibold">personnage</span> avant chaque manche ; après
+          une manche perdue, le perdant peut <span className="text-text font-semibold">changer de personnage</span>.
+        </>,
+        <>
+          Les sets se disputent au <span className="text-gold font-semibold">meilleur des 3 (Bo3)</span> ou{' '}
+          <span className="text-gold font-semibold">des 5 (Bo5)</span> selon le contexte (officiel, tournoi).
+        </>,
+        <>
+          Les <span className="text-text font-semibold">items</span> et stages contestés sont désactivés par
+          défaut, sauf accord explicite des deux joueurs.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League classe ici le <span className="text-text font-semibold">Super Smash Bros. 1 contre 1</span> en
+          stocks. Chaque joueur inscrit peut défier n'importe quel autre membre de sa league.
+        </>
+      ),
+      bullets: [
+        <>Set au <span className="text-gold font-semibold">meilleur des 3 ou des 5</span> manches (Bo3 / Bo5).</>,
+        <>Le vainqueur est celui qui remporte la <span className="text-text font-semibold">majorité des manches</span>.</>,
+        <>L'<span className="text-text font-semibold">ELO est propre à la discipline</span> : ton rating Smash est distinct du babyfoot.</>,
+        <>Les deux joueurs déclarent leur résultat indépendamment. En cas de désaccord, le match est annulé.</>,
+      ],
+    },
+  },
+  chess: {
+    label: 'échecs 1 contre 1',
+    terrain: {
+      intro: (
+        <>
+          Conventions de partie pour que le résultat soit incontestable :
+        </>
+      ),
+      bullets: [
+        <>
+          Partie en <span className="text-gold font-semibold">1 contre 1</span> aux règles classiques des échecs
+          (pièce touchée, pièce jouée).
+        </>,
+        <>
+          Le résultat est <span className="text-gold font-semibold">binaire</span> : victoire ou défaite. Une
+          nulle se rejoue ou se tranche selon l'accord des joueurs.
+        </>,
+        <>
+          La victoire est acquise par <span className="text-text font-semibold">échec et mat</span> ou par
+          <span className="text-text font-semibold"> abandon</span> de l'adversaire.
+        </>,
+        <>
+          Si une <span className="text-text font-semibold">cadence</span> (pendule) est utilisée, la chute du
+          drapeau vaut défaite.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League classe ici les <span className="text-text font-semibold">échecs 1 contre 1</span>. Chaque
+          joueur inscrit peut défier n'importe quel autre membre de sa league.
+        </>
+      ),
+      bullets: [
+        <>Résultat <span className="text-gold font-semibold">binaire</span> — victoire ou défaite, pas de score chiffré.</>,
+        <>Un match ne peut être déclaré qu'<span className="text-text font-semibold">après avoir été joué</span>.</>,
+        <>L'<span className="text-text font-semibold">ELO est dédié aux échecs</span>, distinct des autres disciplines.</>,
+        <>Les deux joueurs déclarent leur résultat indépendamment. En cas de désaccord, le match est annulé.</>,
+      ],
+    },
+  },
+};
 
 function RulesSection() {
+  const { game } = useGameMode();
+  const rules = RULES[game];
   return (
     <div className="flex flex-col gap-4">
-      {/* En tête, pleine largeur : les règles de jeu sur le terrain. */}
+      {/* En tête, pleine largeur : les règles propres à la discipline active. */}
       <Panel title="Règles sur le terrain" accent="book">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Conventions de jeu pour qu'un but soit valable et que les matchs restent disputés
-            proprement :
-          </p>
+          <p>{rules.terrain.intro}</p>
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-            <li>
-              Après l'engagement (<span className="text-text font-semibold">kick-off</span>), la balle doit
-              être <span className="text-gold font-semibold">touchée au moins deux fois</span> avant qu'un but
-              ne compte.
-            </li>
-            <li>
-              Le joueur qui <span className="text-text font-semibold">vient d'encaisser un but</span> a le droit
-              de remettre la balle <span className="text-gold font-semibold">au pied de sa barre du milieu</span> (demis)
-              pour relancer.
-            </li>
-            <li>
-              Les <span className="text-gold font-semibold">buts marqués depuis la barre du milieu</span> (demis)
-              sont valables.
-            </li>
-            <li>
-              La <span className="text-gold font-semibold">gamelle</span> (balle qui ressort du but) : tu peux
-              soit <span className="text-text font-semibold">prendre le point</span>, soit
-              <span className="text-text font-semibold"> retirer un point à l'adversaire</span> — mais on ne peut
-              <span className="text-text font-semibold"> pas conclure le match sur une gamelle</span>.
-            </li>
-            <li>
-              Les <span className="text-gold font-semibold">roulettes</span> doivent être
-              <span className="text-text font-semibold"> contrôlées</span> (pas de moulinets incontrôlés).
-            </li>
+            {rules.terrain.bullets.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
           </ul>
         </div>
       </Panel>
 
       {/* Le système ELO en pleine largeur : la formule détaillée mérite l'espace. */}
-      <EloSection />
+      <EloSection game={game} />
 
       {/* Rangée régulière de 3 panneaux « méta », hauteurs égales. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
       <Panel title="Format du match">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            42 League est un classement ELO de <span className="text-text font-semibold">babyfoot 1 contre 1</span>.
-            Chaque joueur inscrit peut défier n'importe quel autre membre de sa league.
-          </p>
+          <p>{rules.format.intro}</p>
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-            <li>Match en <span className="text-gold font-semibold">10 buts</span> — premier arrivé à 10 gagne.</li>
-            <li>Un match ne peut être déclaré qu'<span className="text-text font-semibold">après avoir été joué</span>.</li>
-            <li>Les deux joueurs déclarent leur score indépendamment. En cas de désaccord, le match est annulé.</li>
+            {rules.format.bullets.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
           </ul>
         </div>
       </Panel>
@@ -204,18 +332,27 @@ function RulesSection() {
 /**
  * Détail de la formule ELO réellement appliquée côté serveur
  * (cf. packages/shared/src/elo.ts). Présentation pédagogique, en pleine largeur.
+ * L'ELO est calculé indépendamment par discipline : ne change que la phrase
+ * d'introduction (et la mention de l'écart de buts, propre aux jeux scorés).
  */
-function EloSection() {
+function EloSection({ game }: { game: Game }) {
+  // L'écart de buts (multiplicateur M) n'a de sens que pour le babyfoot, qui se
+  // joue en score chiffré. Smash et échecs ont un résultat sans écart de buts.
+  const scored = game === 'babyfoot';
   return (
     <Panel title="Système ELO" sub="comment les points sont calculés">
       <div className="space-y-5 text-sm text-muted leading-relaxed">
         <p>
           Le classement repose sur un système <span className="text-gold font-semibold">ELO dérivé des échecs</span>,
-          adapté au babyfoot 1 contre 1. Chaque joueur démarre à{' '}
+          appliqué <span className="text-text font-semibold">par discipline</span> ({RULES[game].label}).
+          Chaque joueur démarre à{' '}
           <span className="text-text font-semibold">1000 points</span>. À chaque match, des points sont
           transférés du perdant vers le gagnant — d'autant plus que le résultat était{' '}
-          <span className="text-text font-semibold">inattendu</span> et la victoire{' '}
-          <span className="text-text font-semibold">large</span>.
+          <span className="text-text font-semibold">inattendu</span>
+          {scored ? (
+            <> et la victoire <span className="text-text font-semibold">large</span></>
+          ) : null}
+          .
         </p>
 
         {/* La formule mise en avant */}
@@ -224,7 +361,12 @@ function EloSection() {
             Points transférés
           </div>
           <div className="font-gaming text-center text-base sm:text-lg text-text-strong tracking-wide">
-            <span className="text-gold">K</span> × <span className="text-gold">M</span> ×{' '}
+            <span className="text-gold">K</span> ×{' '}
+            {scored ? (
+              <>
+                <span className="text-gold">M</span> ×{' '}
+              </>
+            ) : null}
             <span className="text-text">(1 − E)</span>
             <span className="text-muted"> + </span>
             <span className="text-gold">bonus d'upset</span>
@@ -242,11 +384,13 @@ function EloSection() {
             La quantité maximale de points en jeu sur un match « neutre ». Plus il est élevé, plus le
             classement réagit vite.
           </EloTerm>
-          <EloTerm symbol="M" label="Multiplicateur d'écart de buts">
-            <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − score_perdant) × 0,1</code> :
-            gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
-            <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
-          </EloTerm>
+          {scored ? (
+            <EloTerm symbol="M" label="Multiplicateur d'écart de buts">
+              <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − score_perdant) × 0,1</code> :
+              gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
+              <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
+            </EloTerm>
+          ) : null}
           <EloTerm symbol="Bonus d'upset" label="Récompense l'exploit">
             En clair :{' '}
             <span className="text-text font-semibold">
@@ -260,7 +404,7 @@ function EloSection() {
         {/* Exemple chiffré : à score égal, seul l'écart de classement change le gain. */}
         <div className="rounded-xl border border-gold/20 bg-bg-2/40 overflow-hidden">
           <div className="px-4 py-2.5 bg-bg-2/60 border-b border-gold/15 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2">
-            Exemple — tu es à 1000 ELO et tu gagnes 10–5
+            {scored ? 'Exemple — tu es à 1000 ELO et tu gagnes 10–5' : 'Exemple — tu es à 1000 ELO et tu gagnes'}
           </div>
           <div className="divide-y divide-border/20">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -287,8 +431,8 @@ function EloSection() {
             </div>
           </div>
           <div className="px-4 py-2.5 text-xs text-muted leading-relaxed border-t border-gold/15">
-            Même score, même victoire : l'exploit face au joueur à +400 d'écart rapporte{' '}
-            <span className="text-text font-semibold">deux fois plus de points</span>.
+            {scored ? 'Même score, même victoire' : 'Même victoire'} : l'exploit face au joueur à +400 d'écart
+            rapporte <span className="text-text font-semibold">deux fois plus de points</span>.
           </div>
         </div>
 

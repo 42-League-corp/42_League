@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
@@ -679,9 +680,29 @@ function BracketMatch({
       <PlayerRow login={match.playerBLogin} score={match.scoreB} winner={winnerB} />
 
       {canRecord && !recorded && !recording && (
-        <Button size="sm" full className="mt-2" onClick={() => setRecording(true)}>
-          Saisir le score
-        </Button>
+        // Clignote / pulse quelques fois à l'arrivée sur la page pour attirer
+        // l'attention sur la saisie du résultat, puis se stabilise.
+        <motion.div
+          className="mt-2 rounded-lg"
+          initial={{ boxShadow: '0 0 0 0 rgba(255,201,74,0)' }}
+          animate={{
+            scale: [1, 1.04, 1, 1.04, 1, 1.04, 1],
+            boxShadow: [
+              '0 0 0 0 rgba(255,201,74,0)',
+              '0 0 18px 2px rgba(255,201,74,0.65)',
+              '0 0 0 0 rgba(255,201,74,0)',
+              '0 0 18px 2px rgba(255,201,74,0.65)',
+              '0 0 0 0 rgba(255,201,74,0)',
+              '0 0 18px 2px rgba(255,201,74,0.65)',
+              '0 0 0 0 rgba(255,201,74,0)',
+            ],
+          }}
+          transition={{ duration: 1.8, ease: 'easeInOut', times: [0, 0.14, 0.28, 0.42, 0.56, 0.7, 1] }}
+        >
+          <Button size="sm" full onClick={() => setRecording(true)}>
+            Saisir le score
+          </Button>
+        </motion.div>
       )}
 
       {canRecord && recording && (
