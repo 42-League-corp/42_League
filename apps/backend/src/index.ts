@@ -2080,21 +2080,47 @@ app.get('/tournaments/:id', async (c) => {
         orderBy: [{ round: 'asc' }, { slot: 'asc' }],
       },
       winner: { select: { login: true, imageUrl: true } },
+      // Invitations : l'organisateur voit toutes les invitations en attente ;
+      // un joueur invité voit uniquement la sienne.
+      invites: {
+        where: {
+          OR: [
+            { status: 'pending' },
+            { inviteeLogin: me },
+          ],
+        },
+        select: {
+          id: true,
+          inviteeLogin: true,
+          inviterLogin: true,
+          status: true,
+          createdAt: true,
+        },
+      },
     },
   });
   if (!tournament) {
     throw new HTTPException(404, { message: 'tournament not found' });
   }
-  // Tournoi privé : accessible uniquement au créateur, aux invités ou à un admin.
+  // Tournoi privé : accessible si créateur, inscrit, invité en attente, ou admin.
+  const hasInvite = tournament.invites.some((inv) => inv.inviteeLogin === me);
   if (
     tournament.isPrivate &&
     tournament.createdByLogin !== me &&
     !isAdmin(me) &&
-    !tournament.entries.some((e) => e.login === me)
+    !tournament.entries.some((e) => e.login === me) &&
+    !hasInvite
   ) {
     throw new HTTPException(404, { message: 'tournament not found' });
   }
-  return c.json(tournament);
+  // Filtrer les invites visibles selon le rôle :
+  // l'organisateur et les admins voient tout ; les autres ne voient que leur propre invite.
+  const isOrganizer = tournament.createdByLogin === me;
+  const visibleInvites =
+    isOrganizer || isAdmin(me)
+      ? tournament.invites
+      : tournament.invites.filter((inv) => inv.inviteeLogin === me);
+  return c.json({ ...tournament, invites: visibleInvites });
 });
 
 app.post('/tournaments', async (c) => {
@@ -2245,6 +2271,155 @@ app.post('/tournaments/:id/add-player', async (c) => {
     link: `/tournaments/${id}`,
   });
   return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
+});
+
+/* ─── Invitations tournoi ─────────────────────────────────────────────────── */
+
+// Envoie une invitation à un joueur (organisateur ou admin uniquement).
+// La cible recevra une notification et pourra accepter / refuser.
+app.post('/tournaments/:id/invite', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const { login: inviteeLogin } = z.object({ login: z.string().trim().min(1) }).parse(body);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: "seul l'organisateur ou un admin peut inviter" });
+    }
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    const target = await tx.user.findUnique({ where: { login: inviteeLogin } });
+    if (!target || target.bannedAt || target.anonymizedAt || target.deletionScheduledAt) {
+      throw new HTTPException(404, { message: `joueur introuvable : ${inviteeLogin}` });
+    }
+    if (t.entries.some((e) => e.login === inviteeLogin)) {
+      throw new HTTPException(409, { message: 'joueur déjà inscrit' });
+    }
+    if (t.entries.length >= t.capacity) {
+      throw new HTTPException(409, { message: 'tournoi complet' });
+    }
+    // Idempotent : si une invitation est déjà en attente, on la renvoie.
+    const existing = await tx.tournamentInvite.findUnique({
+      where: { tournamentId_inviteeLogin: { tournamentId: id, inviteeLogin } },
+    });
+    if (existing) {
+      if (existing.status === 'pending') return existing;
+      // Re-inviter après un refus : on remet en pending.
+      return tx.tournamentInvite.update({
+        where: { id: existing.id },
+        data: { status: 'pending', decidedAt: null },
+      });
+    }
+    return tx.tournamentInvite.create({
+      data: { id: randomUUID(), tournamentId: id, inviterLogin: me, inviteeLogin },
+    });
+  });
+
+  void notify(inviteeLogin, {
+    type: 'tournament_invite',
+    title: `Invitation au tournoi "${(await prisma.tournament.findUnique({ where: { id }, select: { name: true } }))?.name}"`,
+    body: `@${me} t'invite à rejoindre le tournoi`,
+    link: `/tournaments/${id}`,
+  });
+  emit([inviteeLogin], { type: 'tournament:invite', payload: { tournamentId: id, inviteId: result.id } });
+  return c.json(result, 201);
+});
+
+// Le joueur invité accepte → il est ajouté comme participant (auto-start si plein).
+app.post('/tournaments/:id/invites/:inviteId/accept', async (c) => {
+  const me = await getCurrentLogin(c);
+  const { id, inviteId } = c.req.param();
+
+  const { autoStarted } = await prisma.$transaction(async (tx) => {
+    const invite = await tx.tournamentInvite.findUnique({ where: { id: inviteId } });
+    if (!invite || invite.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'invitation introuvable' });
+    }
+    if (invite.inviteeLogin !== me) {
+      throw new HTTPException(403, { message: 'cette invitation ne te concerne pas' });
+    }
+    if (invite.status !== 'pending') {
+      throw new HTTPException(409, { message: `invitation déjà ${invite.status}` });
+    }
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    if (t.entries.length >= t.capacity) {
+      throw new HTTPException(409, { message: 'tournoi complet' });
+    }
+    if (t.entries.some((e) => e.login === me)) {
+      // Déjà inscrit (ex. re-invite) — marquer comme accepté quand même.
+      await tx.tournamentInvite.update({
+        where: { id: inviteId },
+        data: { status: 'accepted', decidedAt: new Date() },
+      });
+      return { autoStarted: false };
+    }
+
+    await tx.tournamentInvite.update({
+      where: { id: inviteId },
+      data: { status: 'accepted', decidedAt: new Date() },
+    });
+    await tx.tournamentEntry.create({ data: { tournamentId: id, login: me } });
+
+    const newCount = t.entries.length + 1;
+    if (newCount === t.capacity) {
+      const logins = [...t.entries.map((e) => e.login), me];
+      await launchTournamentMatches(id, t.format, logins);
+      await tx.tournament.update({
+        where: { id },
+        data: { status: 'in_progress', startedAt: new Date() },
+      });
+      void notifyMany(logins, {
+        type: 'tournament',
+        title: `Tournoi "${t.name}" lancé`,
+        body: 'Le bracket est généré — à toi de jouer !',
+        link: `/tournaments/${id}`,
+      });
+      return { autoStarted: true };
+    }
+    return { autoStarted: false };
+  });
+
+  broadcast({ type: 'tournament:update', payload: {} });
+  void notifyFollowers(me, 'notifyTournament', {
+    type: 'follow_tournament',
+    title: `@${me} a rejoint un tournoi`,
+    link: `/tournaments/${id}`,
+  });
+  return c.json({ id, inviteId, status: autoStarted ? 'in_progress' : 'registration' });
+});
+
+// Le joueur invité refuse l'invitation.
+app.post('/tournaments/:id/invites/:inviteId/decline', async (c) => {
+  const me = await getCurrentLogin(c);
+  const { id, inviteId } = c.req.param();
+
+  const invite = await prisma.$transaction(async (tx) => {
+    const inv = await tx.tournamentInvite.findUnique({ where: { id: inviteId } });
+    if (!inv || inv.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'invitation introuvable' });
+    }
+    if (inv.inviteeLogin !== me) {
+      throw new HTTPException(403, { message: 'cette invitation ne te concerne pas' });
+    }
+    if (inv.status !== 'pending') {
+      throw new HTTPException(409, { message: `invitation déjà ${inv.status}` });
+    }
+    return tx.tournamentInvite.update({
+      where: { id: inviteId },
+      data: { status: 'declined', decidedAt: new Date() },
+    });
+  });
+
+  emit([invite.inviterLogin], { type: 'tournament:invite_declined', payload: { tournamentId: id, inviteeLogin: me } });
+  return c.json({ id, inviteId, status: 'declined' });
 });
 
 app.post('/tournaments/:id/leave', async (c) => {
