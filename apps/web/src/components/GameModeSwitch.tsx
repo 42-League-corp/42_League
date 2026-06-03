@@ -22,7 +22,9 @@ const META: Record<Game, {
   borderColor: string;
   bgColor: string;
   glowColor: string;
-  icon: React.ReactElement;
+  // Reçoit `sel` (univers sélectionné) : les logos PNG basculent gris↔couleur ;
+  // les SVG l'ignorent et se colorent via `currentColor` sur le parent.
+  icon: (sel: boolean) => React.ReactElement;
 }> = {
   babyfoot: {
     label: 'Babyfoot',
@@ -31,7 +33,7 @@ const META: Record<Game, {
     borderColor: 'rgba(255,201,74,0.6)',
     bgColor: 'rgba(255,201,74,0.10)',
     glowColor: 'rgba(255,201,74,0.45)',
-    icon: (
+    icon: () => (
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
         <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
         <rect x="10.8" y="5" width="2.4" height="10" rx="1" fill="currentColor" />
@@ -48,8 +50,8 @@ const META: Record<Game, {
     borderColor: 'rgba(255,61,80,0.6)',
     bgColor: 'rgba(255,61,80,0.10)',
     glowColor: 'rgba(255,61,80,0.45)',
-    icon: (
-      <img src="/smash-logo.png" alt="" width={20} height={20} className="object-contain" aria-hidden />
+    icon: (sel) => (
+      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={20} height={20} className="object-contain" aria-hidden />
     ),
   },
   chess: {
@@ -59,7 +61,7 @@ const META: Record<Game, {
     borderColor: 'rgba(86,196,110,0.6)',
     bgColor: 'rgba(86,196,110,0.10)',
     glowColor: 'rgba(86,196,110,0.45)',
-    icon: (
+    icon: () => (
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
         <path d="M12 2 v4 M10 4 h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         <path d="M12 7 C8.5 7 8 11 10.5 13 L9 19 h6 l-1.5 -6 C16 11 15.5 7 12 7 Z" fill="currentColor" />
@@ -75,8 +77,8 @@ const META: Record<Game, {
     borderColor: 'rgba(255,122,24,0.6)',
     bgColor: 'rgba(255,122,24,0.10)',
     glowColor: 'rgba(255,122,24,0.45)',
-    icon: (
-      <img src="/Street_Fighter_Logo.png" alt="" width={20} height={20} className="object-contain" aria-hidden />
+    icon: (sel) => (
+      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} className="object-contain" aria-hidden />
     ),
   },
 };
@@ -173,7 +175,7 @@ export function GameModeSwitch() {
                         boxShadow: sel ? `0 0 16px -5px ${gm.glowColor}` : 'none',
                       }}
                     >
-                      <span style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon}</span>
+                      <span style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
                       <span
                         className="text-[10px] font-extrabold uppercase tracking-wider"
                         style={{ color: sel ? gm.color : 'rgba(255,255,255,0.5)' }}
@@ -218,7 +220,7 @@ export function GameModeSwitch() {
               transition={{ type: 'spring', stiffness: 600, damping: 24 }}
               style={{ color: m.color }}
             >
-              {m.icon}
+              {m.icon(true)}
             </motion.span>
           </motion.button>
         )}
