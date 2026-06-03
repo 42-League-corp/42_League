@@ -7,6 +7,7 @@ import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { pickRating } from '../../../lib/gameStats';
+import { displayTitle } from '../../../lib/cosmeticTitles';
 import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
@@ -117,9 +118,9 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               {fullName}
             </h2>
             <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
-            {user.title && (
+            {displayTitle(user.login, user.title) && (
               <div className="text-sm text-gold italic font-semibold mt-0.5 truncate">
-                « {user.title} »
+                « {displayTitle(user.login, user.title)} »
               </div>
             )}
             {user.campus && (

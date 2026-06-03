@@ -546,9 +546,13 @@ const TEAM: Member[] = [
     accent: 'gold',
     blurb: (
       <>
-        Celui qui a transformé l'idée en vrai projet : un{' '}
-        <span className="text-text font-semibold">classement ELO de babyfoot 1v1</span> du campus,
-        avec défis programmés, OPS, tournois et trophées.
+        Celui qui a transformé l'idée en vrai projet. La{' '}
+        <span className="text-text font-semibold">vision d'origine</span> : un{' '}
+        <span className="text-text font-semibold">classement ELO 1v1</span> du campus, juste et
+        vivant. Aujourd'hui il pousse les{' '}
+        <span className="text-gold font-semibold">features principales</span> — étendre les jeux
+        (babyfoot, Smash, échecs…), les <span className="text-text font-semibold">tournois</span>,
+        défis programmés, OPS et trophées.
       </>
     ),
   },
@@ -603,12 +607,15 @@ const TEAM: Member[] = [
   },
   {
     login: 'sbonneau',
-    role: 'Conseiller · Infra',
+    role: 'Pen tester · Abuser',
     accent: 'red',
     blurb: (
       <>
-        Un <span className="text-text font-semibold">coup de main sur l'infrastructure et l'hébergement</span> :
-        ses conseils ont aidé à poser un déploiement propre et solide.
+        Le <span className="text-text font-semibold">pen tester</span> de service : il cherche la
+        faille, <span className="text-text font-semibold">abuse</span> de chaque fonctionnalité pour
+        la pousser dans ses retranchements — et{' '}
+        <span className="text-[#ff5366] font-semibold">casse ce qui doit l'être</span> avant les
+        autres.
       </>
     ),
   },
@@ -668,8 +675,9 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
   const touchX = useRef<number | null>(null);
   const wheelLock = useRef(false);
 
-  const clamp = (i: number) => Math.max(0, Math.min(members.length - 1, i));
-  const go = (dir: number) => setActive((i) => clamp(i + dir));
+  const n = members.length;
+  // Carrousel infini : on boucle modulo n (pas de butée aux extrémités).
+  const go = (dir: number) => setActive((i) => (i + dir + n) % n);
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchX.current = e.touches[0]?.clientX ?? null;
@@ -709,7 +717,11 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
         onWheel={onWheel}
       >
         {members.map((m, i) => {
-          const offset = i - active;
+          // Décalage circulaire : une carte « au bout » réapparaît de l'autre
+          // côté (effet coverflow infini).
+          let offset = i - active;
+          if (offset > n / 2) offset -= n;
+          else if (offset < -n / 2) offset += n;
           const abs = Math.abs(offset);
           const hidden = abs > 2;
           return (
@@ -737,18 +749,16 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
         <button
           type="button"
           onClick={() => go(-1)}
-          disabled={active === 0}
           aria-label="Précédent"
-          className="absolute left-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 disabled:opacity-0 transition-all"
+          className="absolute left-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 transition-all"
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
         </button>
         <button
           type="button"
           onClick={() => go(1)}
-          disabled={active === members.length - 1}
           aria-label="Suivant"
-          className="absolute right-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 disabled:opacity-0 transition-all"
+          className="absolute right-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 transition-all"
         >
           <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
         </button>
