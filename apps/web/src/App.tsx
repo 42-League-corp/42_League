@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { AppShell } from './shell/AppShell';
 import { Toast } from './components/Toast';
 import { PageSkeleton } from './mobile/primitives/Skeleton';
@@ -13,6 +14,7 @@ import { AboutPage } from './pages/AboutPage';
 import { ConsentGate } from './components/ConsentGate';
 import { StagingGate } from './components/StagingGate';
 import { IS_STAGING } from './lib/config';
+import { SplashScreen } from './components/SplashScreen';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -73,29 +75,37 @@ const H2HPage = lazy(() =>
 
 export function App() {
   const { authenticated } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
 
   return (
-    <Routes>
-      <Route path="/auth/return" element={<AuthReturnPage />} />
-      {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
-          Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
-          pour conserver la tab bar en continuité des autres pages. */}
-      {!authenticated && <Route path="/about" element={<AboutPage />} />}
-      <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
-      <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
-      <Route
-        path="*"
-        element={
-          authenticated ? (
-            <LeagueDataProvider>
-              <AuthenticatedShell />
-            </LeagueDataProvider>
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/auth/return" element={<AuthReturnPage />} />
+        {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
+            Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
+            pour conserver la tab bar en continuité des autres pages. */}
+        {!authenticated && <Route path="/about" element={<AboutPage />} />}
+        <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
+        <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
+        <Route
+          path="*"
+          element={
+            authenticated ? (
+              <LeagueDataProvider>
+                <AuthenticatedShell />
+              </LeagueDataProvider>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+      </Routes>
+      <AnimatePresence>
+        {showSplash && (
+          <SplashScreen onComplete={() => setShowSplash(false)} />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
