@@ -116,6 +116,32 @@ export function rateLimit(opts: RateLimitOptions) {
   };
 }
 
+/**
+ * Efface la pénalité d'une IP (et ses buckets fenêtre-fixe) — pour débloquer
+ * un admin via `DELETE /admin/rate-limit/me`.
+ */
+export function clearPenalty(ip: string): void {
+  penaltyStore.delete(ip);
+  for (const store of bucketStores.values()) {
+    for (const key of store.keys()) {
+      if (key.endsWith(`:${ip}`)) store.delete(key);
+    }
+  }
+}
+
+/** Renvoie l'état de la pénalité active pour une IP, ou null si aucune. */
+export function getPenaltyInfo(
+  ip: string,
+): { blockedUntil: number; remainingSec: number; violations: number } | null {
+  const p = penaltyStore.get(ip);
+  if (!p || p.blockedUntil <= Date.now()) return null;
+  return {
+    blockedUntil: p.blockedUntil,
+    remainingSec: Math.ceil((p.blockedUntil - Date.now()) / 1000),
+    violations: p.violations,
+  };
+}
+
 /** Réinitialise tous les compteurs — réservé aux tests. */
 export function __resetRateLimitStore(): void {
   for (const s of bucketStores.values()) s.clear();
