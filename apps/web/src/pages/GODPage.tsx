@@ -1096,6 +1096,8 @@ function MatchesTab() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
+  const [editPlayerA, setEditPlayerA] = useState('');
+  const [editPlayerB, setEditPlayerB] = useState('');
   const [editA, setEditA] = useState('');
   const [editB, setEditB] = useState('');
   const [pending, setPending] = useState<string | null>(null);
@@ -1121,15 +1123,32 @@ function MatchesTab() {
 
   function startEdit(m: PlayedMatch) {
     setEditId(m.id);
+    setEditPlayerA(m.playerALogin);
+    setEditPlayerB(m.playerBLogin);
     setEditA(String(m.scoreA));
     setEditB(String(m.scoreB));
   }
 
   async function saveEdit(id: string) {
+    const playerALogin = editPlayerA.trim();
+    const playerBLogin = editPlayerB.trim();
+    if (!playerALogin || !playerBLogin) {
+      setError('Les deux joueurs sont obligatoires.');
+      return;
+    }
+    if (playerALogin === playerBLogin) {
+      setError('Les deux joueurs doivent être différents.');
+      return;
+    }
     setPending(id);
     setError('');
     try {
-      await api.adminEditMatch(id, Number(editA), Number(editB));
+      await api.adminEditMatch(id, {
+        scoreA: Number(editA),
+        scoreB: Number(editB),
+        playerALogin,
+        playerBLogin,
+      });
       setEditId(null);
       load();
     } catch (e) {
@@ -1221,7 +1240,9 @@ function MatchesTab() {
                     <Check checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
                   </td>
                   <td className="py-1.5 px-2 text-zinc-500">{fmtDate(m.playedAt)}</td>
-                  <td className={`py-1.5 px-2 ${m.winner === 'A' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerALogin}</td>
+                  <td className={`py-1.5 px-2 ${m.winner === 'A' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                    {editId === m.id ? <Input value={editPlayerA} onChange={setEditPlayerA} className="w-28" /> : m.playerALogin}
+                  </td>
                   <td className="py-1.5 px-2 text-center">
                     {editId === m.id ? (
                       <span className="flex items-center gap-1 justify-center">
@@ -1243,7 +1264,9 @@ function MatchesTab() {
                       <span className="tabular-nums text-zinc-100">{m.scoreA}–{m.scoreB}</span>
                     )}
                   </td>
-                  <td className={`py-1.5 px-2 ${m.winner === 'B' ? 'text-emerald-400' : 'text-zinc-300'}`}>{m.playerBLogin}</td>
+                  <td className={`py-1.5 px-2 ${m.winner === 'B' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                    {editId === m.id ? <Input value={editPlayerB} onChange={setEditPlayerB} className="w-28" /> : m.playerBLogin}
+                  </td>
                   <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaA >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaA > 0 ? '+' : ''}{m.deltaA}</td>
                   <td className={`py-1.5 px-2 text-right tabular-nums ${m.deltaB >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{m.deltaB > 0 ? '+' : ''}{m.deltaB}</td>
                   <td className="py-1.5 px-2 text-center">{m.countedForElo ? <span className="text-emerald-400">✓</span> : <span className="text-zinc-600">—</span>}</td>
@@ -1941,7 +1964,12 @@ function HistoryRowActions({
     setPending(true);
     setErr('');
     try {
-      await api.adminEditMatch(ev.id, Number(editA), Number(editB));
+      await api.adminEditMatch(ev.id, {
+        scoreA: Number(editA),
+        scoreB: Number(editB),
+        playerALogin: ev.playerA,
+        playerBLogin: ev.playerB,
+      });
       setEditMode(false);
       onEditSaved();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
