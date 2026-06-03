@@ -9,10 +9,12 @@ import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
+import { displayTitle } from '../../lib/cosmeticTitles';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
+import { MyTeamsDesktop } from './shared/MyTeamsDesktop';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
@@ -83,10 +85,10 @@ export function ProfilDesktop() {
   const myEntry = leaderboard.find((x) => x.login === u.login);
   const myRank = myEntry?.rank ?? 0;
   const isTop1 = myRank === 1;
-  // Affiche prénom + nom (depuis l'intra) plutôt que le login.
+  // Affiche nom + prénom (depuis l'intra) plutôt que le login.
   const fullName =
-    [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
+    [u.lastName, u.firstName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.lastName, myEntry?.firstName].filter(Boolean).join(' ').trim() ||
     u.login;
 
   // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.
@@ -144,14 +146,21 @@ export function ProfilDesktop() {
 
           {/* Identité */}
           <div className="flex-1 min-w-0">
-            <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight">
-              {fullName}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight min-w-0">
+                {fullName}
+              </div>
+              {me.badges && me.badges.length > 0 && (
+                <div className="flex-shrink-0">
+                  <BadgesRow codes={me.badges} size="md" />
+                </div>
+              )}
             </div>
             <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>
-            {u.title && (
+            {displayTitle(u.login, u.title) && (
               <div className="mt-2 inline-flex items-center gap-1.5 max-w-full">
                 <span className="text-gold/70 text-xl leading-none">❝</span>
-                <span className="text-gold italic text-lg font-bold truncate">{u.title}</span>
+                <span className="text-gold italic text-lg font-bold truncate">{displayTitle(u.login, u.title)}</span>
                 <span className="text-gold/70 text-xl leading-none">❞</span>
               </div>
             )}
@@ -173,24 +182,19 @@ export function ProfilDesktop() {
                 </motion.span>
               )}
             </div>
-            {me.badges && me.badges.length > 0 && (
-              <div className="mt-3">
-                <BadgesRow codes={me.badges} size="md" />
-              </div>
-            )}
           </div>
 
-          {/* Bloc ELO mis en valeur — libellé aligné sur le 1er chiffre. */}
+          {/* Bloc ELO mis en valeur — libellé "ELO" au-dessus du nombre, calé à gauche. */}
           <div className="text-left flex-shrink-0 pl-2">
+            <div className="-ml-0.5 mb-1 flex items-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
+              ELO
+              <RankedBadge size="xs" />
+            </div>
             <div
               className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
               style={{ textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 18px rgba(255,201,74,0.35)' }}
             >
               {stats.elo}
-            </div>
-            <div className="mt-1.5 flex items-center justify-start gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
-              ELO
-              <RankedBadge size="xs" />
             </div>
           </div>
         </div>
@@ -227,7 +231,7 @@ export function ProfilDesktop() {
         <TitlesCard
           label="Tournois amicaux remportés"
           value={stats.friendlyTitles}
-          accent={isSmash ? '#ff4d5c' : game === 'chess' ? '#56c46e' : '#ffc94a'}
+          accent={isSmash ? '#ff4d5c' : game === 'streetfighter' ? '#ff7a18' : game === 'chess' ? '#56c46e' : '#ffc94a'}
           game={game}
         />
       </div>
@@ -236,6 +240,10 @@ export function ProfilDesktop() {
       <div className="mt-4">
         <FollowLists />
       </div>
+
+      {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
+      {game === 'babyfoot' && <MyTeamsDesktop myLogin={u.login} />}
+
       </Panel>
 
       <Panel title="Évolution & rivalité" sub="ELO · ops">
@@ -326,11 +334,11 @@ function TitlesCard({
   label: string;
   value: number;
   accent: string;
-  game: 'babyfoot' | 'smash' | 'chess';
+  game: 'babyfoot' | 'smash' | 'chess' | 'streetfighter';
 }) {
   return (
     <div className="card-hud rounded-xl px-3 py-2.5 flex items-center gap-2.5">
-      {game === 'smash' ? (
+      {game === 'smash' || game === 'streetfighter' ? (
         <SmashTrophy accent={accent} className="w-9 h-9 shrink-0" />
       ) : game === 'chess' ? (
         <ChessTrophy accent={accent} className="w-9 h-9 shrink-0" />

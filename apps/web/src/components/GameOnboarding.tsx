@@ -13,15 +13,16 @@ const GAMES: { id: Game; name: string; tagline: string }[] = [
   { id: 'babyfoot', name: 'Babyfoot', tagline: '1 contre 1 · 10 buts · gamelles' },
   { id: 'smash', name: 'Smash Bros', tagline: '1 contre 1 · Bo3/Bo5 · stocks' },
   { id: 'chess', name: 'Échecs', tagline: '1 contre 1 · victoire / défaite' },
+  { id: 'streetfighter', name: 'Street Fighter', tagline: '1 contre 1 · Bo3/Bo5 · persos' },
 ];
 
 function GameTrophy({ game, accent, className }: { game: Game; accent: string; className?: string }) {
-  if (game === 'smash') return <SmashTrophy accent={accent} className={className} />;
+  if (game === 'smash' || game === 'streetfighter') return <SmashTrophy accent={accent} className={className} />;
   if (game === 'chess') return <ChessTrophy accent={accent} className={className} />;
   return <TournamentCup accent={accent} className={className} />;
 }
 
-const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e' };
+const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e', streetfighter: '#ff7a18' };
 
 /**
  * Onboarding au 1er login : choix des modes de jeu auxquels on adhère. On
@@ -55,7 +56,7 @@ export function GameOnboarding() {
     try {
       await api.setGames(games);
       // Bascule sur le 1er mode choisi (ordre babyfoot → smash → échecs).
-      const order: Game[] = ['babyfoot', 'smash', 'chess'];
+      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
       const first = order.find((g) => sel.has(g));
       if (first) setActiveGame(first);
       await refresh();

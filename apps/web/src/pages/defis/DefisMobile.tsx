@@ -6,6 +6,7 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
+import { Declare2v2GameSheet } from './mobile/Declare2v2GameSheet';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
 import { ChallengeRecordSheet } from './mobile/ChallengeRecordSheet';
 import { BigActionButton } from './mobile/BigActionButton';
@@ -38,6 +39,7 @@ export function DefisMobile() {
   const [searchParams] = useSearchParams();
 
   const [declareOpen, setDeclareOpen] = useState(false);
+  const [declare2v2Open, setDeclare2v2Open] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [recordChallenge, setRecordChallenge] = useState<Challenge | null>(null);
@@ -73,14 +75,23 @@ export function DefisMobile() {
         {/* Hero player card */}
         <HeroPlayerCard />
 
-        {/* Double CTA — Déclarer une game (passée) puis Défier un joueur (à venir) */}
+        {/* CTAs — Déclarer 1v1, Déclarer 2v2, Défier */}
         <div className="space-y-2.5">
           <BigActionButton
             Icon={Plus}
             tone="amber"
-            title="Déclarer une game"
+            title="Déclarer une game 1 vs 1"
             subtitle="Game passée · 2 clics"
+            accessory={<Silhouettes2 />}
             onClick={() => setDeclareOpen(true)}
+          />
+          <BigActionButton
+            Icon={Users}
+            tone="red"
+            title="Déclarer une game 2 vs 2"
+            subtitle="Babyfoot · Mode équipe"
+            accessory={<Silhouettes4 />}
+            onClick={() => setDeclare2v2Open(true)}
           />
           <BigActionButton
             Icon={Swords}
@@ -258,10 +269,22 @@ export function DefisMobile() {
           )}
       </div>
 
-      {/* Sheet de déclaration (game passée) */}
+      {/* Sheet de déclaration 1v1 (game passée) */}
       <DeclareGameSheet
         open={declareOpen}
         onClose={() => setDeclareOpen(false)}
+        others={others}
+        recentOpponents={recentOpponents}
+        opponentCounts={opponentCounts}
+        myLogin={myLogin}
+        locations={locations}
+        onDone={refresh}
+      />
+
+      {/* Sheet de déclaration 2v2 Babyfoot */}
+      <Declare2v2GameSheet
+        open={declare2v2Open}
+        onClose={() => setDeclare2v2Open(false)}
         others={others}
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
@@ -297,6 +320,35 @@ export function DefisMobile() {
 }
 
 // ─── Helpers locaux ──────────────────────────────────────────────────────────
+
+/** 2 silhouettes pour le bouton 1v1. */
+function Silhouettes2() {
+  return (
+    <svg width="28" height="18" viewBox="0 0 28 18" fill="currentColor" className="text-gold/50" aria-hidden>
+      <circle cx="8" cy="5" r="3.5" />
+      <path d="M1 17c0-3.866 3.134-7 7-7s7 3.134 7 17H1z" opacity={0} />
+      <ellipse cx="8" cy="14.5" rx="6" ry="3.5" />
+      <circle cx="20" cy="5" r="3.5" />
+      <ellipse cx="20" cy="14.5" rx="6" ry="3.5" />
+    </svg>
+  );
+}
+
+/** 4 silhouettes pour le bouton 2v2. */
+function Silhouettes4() {
+  return (
+    <svg width="38" height="18" viewBox="0 0 38 18" fill="currentColor" className="text-red/50" aria-hidden>
+      <circle cx="5"  cy="5" r="2.8" />
+      <ellipse cx="5"  cy="14" rx="4.5" ry="3" />
+      <circle cx="13" cy="5" r="2.8" />
+      <ellipse cx="13" cy="14" rx="4.5" ry="3" />
+      <circle cx="25" cy="5" r="2.8" />
+      <ellipse cx="25" cy="14" rx="4.5" ry="3" />
+      <circle cx="33" cy="5" r="2.8" />
+      <ellipse cx="33" cy="14" rx="4.5" ry="3" />
+    </svg>
+  );
+}
 
 interface SectionHeaderProps {
   title: string;

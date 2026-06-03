@@ -39,7 +39,7 @@ export function GameIcon({ game, size = 'sm' }: { game?: Game; size?: 'xs' | 'sm
   if (!game || game === 'babyfoot') return null; // babyfoot = défaut, pas d'icône
   return (
     <span className={`${cls} leading-none opacity-80 flex-shrink-0`} title={game}>
-      {game === 'smash' ? '🎮' : '♟'}
+      {game === 'smash' ? '🎮' : game === 'streetfighter' ? '🥊' : '♟'}
     </span>
   );
 }
@@ -49,7 +49,7 @@ export function GameIcon({ game, size = 'sm' }: { game?: Game; size?: 'xs' | 'sm
 
 export function GamePill({ game }: { game?: Game }) {
   if (!game || game === 'babyfoot') return null;
-  const label = game === 'smash' ? '🎮 Smash' : '♟ Échecs';
+  const label = game === 'smash' ? '🎮 Smash' : game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs';
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] bg-accent/12 text-accent border border-accent/25 leading-none">
       {label}
@@ -79,8 +79,8 @@ export function MatchScore({ game, winnerScore, loserScore, myPerspective, bestO
     );
   }
 
-  // ── Smash : "W-L Bo3/Bo5" ─────────────────────────────────────────────────
-  if (game === 'smash') {
+  // ── Smash / Street Fighter : "W-L Bo3/Bo5" ────────────────────────────────
+  if (game === 'smash' || game === 'streetfighter') {
     const myGames = won ? winnerScore : loserScore;
     const oppGames = won ? loserScore : winnerScore;
     const boLabel = bestOf ? ` Bo${bestOf}` : '';

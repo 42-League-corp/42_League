@@ -138,10 +138,10 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      // Staging : réservé aux superadmins. Un non-superadmin n'appelle pas les
-      // autres endpoints (le serveur les refuse) ; AuthenticatedShell affiche
-      // <StagingGate>. On conserve `me` pour connaître le login/rôle.
-      if (IS_STAGING && me.role !== 'SUPERADMIN') {
+      // Staging : réservé à la liste blanche (me.stagingAllowed). Un login non
+      // autorisé n'appelle pas les autres endpoints (le serveur les refuse) ;
+      // AuthenticatedShell affiche <StagingGate>. On conserve `me` pour le login.
+      if (IS_STAGING && !me.stagingAllowed) {
         setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
         setLoading(false);
         return;
@@ -200,11 +200,10 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     [authenticated, signOut],
   );
 
-  // Changement de mode (babyfoot ↔ smash ↔ échecs) : classement ET tournois
-  // dépendent du jeu → re-fetch. On rafraîchit aussi `me` : les stats du haut de
-  // la page Défis (ELO/V-D/rang du joueur) sont cloisonnées par discipline et
-  // lues sur l'objet `me` ; sans ce refresh elles restaient figées sur le snapshot
-  // chargé à l'arrivée, là où le reste de l'app (thème, classement) réagissait.
+  // Changement de mode (babyfoot ↔ smash ↔ chess) : le classement, les tournois
+  // ET le profil utilisateur (ELO par jeu, matchesPlayed par jeu) dépendent du jeu
+  // courant — on re-fetch ces 3 domaines pour que TOUTES les stats (rang, ELO, V/D,
+  // WR, série) reflètent immédiatement la discipline sélectionnée.
   useEffect(() => {
     if (!authenticated) return;
     return subscribeGame(() => {

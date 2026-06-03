@@ -12,6 +12,7 @@ import {
   type TrophyResult,
 } from '../lib/trophies';
 import { api, type LeaderboardEntry } from '../lib/api';
+import { TeamTrophiesHallOfFame } from './TeamTrophiesSection';
 
 interface TrophyHolder {
   login: string;
@@ -273,7 +274,7 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const { leaderboard, matches } = useLeagueData();
   const { game } = useGameMode();
   const [sortMode, setSortMode] = useState<SortMode>('category');
-  const [view, setView] = useState<'mode' | 'mix'>('mode');
+  const [view, setView] = useState<'mode' | 'mix' | 'teams'>('mode');
   const trophies = useMemo(
     () => computeTrophies(leaderboard, matches, game),
     [leaderboard, matches, game],
@@ -360,23 +361,37 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
         <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/10 to-transparent ml-2" />
       </div>
 
-      {/* Bascule mode actuel / mix inter-jeux */}
-      <div className="flex gap-1 p-1 rounded-lg bg-bg-2/60 mb-5 w-fit">
-        {(['mode', 'mix'] as const).map((v) => (
+      {/* Bascule mode actuel / mix inter-jeux / équipes 2v2 */}
+      <div className="flex flex-wrap gap-1 p-1 rounded-lg bg-bg-2/60 mb-5 w-fit">
+        {(
+          [
+            { v: 'mode',  label: 'Ce mode' },
+            { v: 'mix',   label: '🌐 Mix inter-jeux' },
+            // Onglet Équipes uniquement en Babyfoot — les équipes 2v2 n'existent que dans ce jeu.
+            ...(game === 'babyfoot' ? [{ v: 'teams', label: '⚽ Équipes 2v2' }] : []),
+          ] as { v: 'mode' | 'mix' | 'teams'; label: string }[]
+        ).map(({ v, label }) => (
           <button
             key={v}
             type="button"
             onClick={() => setView(v)}
             className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.12em] transition-all ${
-              view === v ? 'bg-gold/10 border border-gold/30 text-gold' : 'border border-transparent text-muted-2 hover:text-text'
+              view === v
+                ? v === 'teams'
+                  ? 'bg-red/10 border border-red/30 text-red'
+                  : 'bg-gold/10 border border-gold/30 text-gold'
+                : 'border border-transparent text-muted-2 hover:text-text'
             }`}
           >
-            {v === 'mode' ? 'Ce mode' : '🌐 Mix inter-jeux'}
+            {label}
           </button>
         ))}
       </div>
 
-      {view === 'mix' ? (
+      {view === 'teams' ? (
+        /* ── Trophées d'équipe 2v2 Babyfoot ── */
+        <TeamTrophiesHallOfFame />
+      ) : view === 'mix' ? (
         boards === null ? (
           <div className="text-center text-muted-2 py-8 text-sm">Chargement des classements…</div>
         ) : (

@@ -7,6 +7,7 @@ import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { pickRating } from '../../../lib/gameStats';
+import { displayTitle } from '../../../lib/cosmeticTitles';
 import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
@@ -28,7 +29,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const titlesWon = pickRating(user, game).tournamentsWon;
 
   // Badges cross-jeux : autres disciplines où ce joueur est actif.
-  const crossGameBadges = (['babyfoot', 'smash', 'chess'] as const)
+  const crossGameBadges = (['babyfoot', 'smash', 'chess', 'streetfighter'] as const)
     .filter((g) => g !== game && (user.games ?? ['babyfoot']).includes(g))
     .map((g) => {
       const r = pickRating(user, g);
@@ -39,8 +40,8 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
   const fullName =
-    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
+    [user.lastName, user.firstName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.lastName, myEntry?.firstName].filter(Boolean).join(' ').trim() ||
     user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
@@ -113,24 +114,26 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate">
-              {fullName}
-            </h2>
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
+                {fullName}
+              </h2>
+              {me?.badges && me.badges.length > 0 && (
+                <div className="flex-shrink-0">
+                  <BadgesRow codes={me.badges} size="md" />
+                </div>
+              )}
+            </div>
             <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
-            {user.title && (
+            {displayTitle(user.login, user.title) && (
               <div className="text-sm text-gold italic font-semibold mt-0.5 truncate">
-                « {user.title} »
+                « {displayTitle(user.login, user.title)} »
               </div>
             )}
             {user.campus && (
               <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
                 <MapPin className="w-3 h-3" strokeWidth={2.5} />
                 <span>{user.campus}</span>
-              </div>
-            )}
-            {me?.badges && me.badges.length > 0 && (
-              <div className="mt-2">
-                <BadgesRow codes={me.badges} size="md" />
               </div>
             )}
           </div>
@@ -157,14 +160,14 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
         </div>
 
         {/* ELO bloc */}
-        <div className="flex items-baseline justify-between gap-4 mb-2 px-1">
+        <div className="flex items-end justify-between gap-4 mb-2 px-1">
           <div>
-            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
-              <AnimatedCounter value={stats.elo} duration={1.4} />
-            </div>
-            <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5 flex items-center gap-1.5">
+            <div className="-ml-0.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
               ELO
               <RankedBadge size="xs" />
+            </div>
+            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
+              <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
           </div>
 
@@ -218,7 +221,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
                   <span className="text-base leading-none">
-                    {g === 'smash' ? '🎮' : g === 'chess' ? '♟' : '⚽'}
+                    {g === 'smash' ? '🎮' : g === 'streetfighter' ? '🥊' : g === 'chess' ? '♟' : '⚽'}
                   </span>
                   <span className="font-mono font-extrabold tabular-nums text-[11px] text-gold/90">{elo}</span>
                   <span className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO</span>

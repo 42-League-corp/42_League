@@ -11,8 +11,8 @@ export const LoginSchema = z
 // gagnant n'atteigne 10. Borne supérieure 10 = victoire stricte d'un seul camp.
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
-// ─── Multi-jeu (babyfoot | smash) ──────────────────────────────────────────
-export const GameSchema = z.enum(['babyfoot', 'smash', 'chess']);
+// ─── Multi-jeu (babyfoot | smash | chess | streetfighter) ────────────────────
+export const GameSchema = z.enum(['babyfoot', 'smash', 'chess', 'streetfighter']);
 export type Game = z.infer<typeof GameSchema>;
 export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
@@ -59,9 +59,10 @@ function makeRefiner(requireChars: boolean) {
       }
       return;
     }
-    if (m.game === 'smash') {
+    if (m.game === 'smash' || m.game === 'streetfighter') {
+      // Street Fighter == Smash mécaniquement : set Bo3/Bo5, persos requis.
       if (!m.bestOf) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for smash (3 or 5)' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for set games (3 or 5)' });
         return;
       }
       const target = Math.ceil(m.bestOf / 2);
@@ -74,7 +75,7 @@ function makeRefiner(requireChars: boolean) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'loser games must be between 0 and target-1' });
       }
       if (requireChars && (!m.charSelf || !m.charOpponent)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'both characters are required for smash' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'both characters are required' });
       }
     } else {
       if (!(m.scoreSelf === 10 || m.scoreOpponent === 10)) {
@@ -201,3 +202,46 @@ export const SetFeatureRequestStatusSchema = z.object({
 });
 
 export type SetFeatureRequestStatusInput = z.infer<typeof SetFeatureRequestStatusSchema>;
+
+// ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
+// Ces schémas sont EXCLUSIFS au Babyfoot (le jeu est implicitement 'babyfoot').
+// Les règles de score sont identiques au 1v1 : un camp doit atteindre 10 buts.
+
+const babyfootScoreRefiner = (
+  m: { scoreSelf: number; scoreOpponent: number },
+  ctx: z.RefinementCtx,
+) => {
+  if (!(m.scoreSelf === 10 || m.scoreOpponent === 10)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'one side must reach 10 goals' });
+  }
+  if (m.scoreSelf === 10 && m.scoreOpponent === 10) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'only one side can reach 10 goals' });
+  }
+};
+
+export const Declare2v2MatchSchema = z
+  .object({
+    partnerLogin:   LoginSchema, // coéquipier du déclarant (équipe 1)
+    opponentLogin:  LoginSchema, // premier joueur de l'équipe adverse
+    opponent2Login: LoginSchema, // coéquipier de l'adversaire (équipe 2)
+    scoreSelf:      MatchScoreSchema,
+    scoreOpponent:  MatchScoreSchema,
+  })
+  .superRefine((m, ctx) => {
+    const logins = [m.partnerLogin, m.opponentLogin, m.opponent2Login];
+    if (new Set(logins).size !== logins.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'all four players must be different' });
+    }
+    babyfootScoreRefiner(m, ctx);
+  });
+
+export type Declare2v2MatchInput = z.infer<typeof Declare2v2MatchSchema>;
+
+export const Confirm2v2MatchSchema = z
+  .object({
+    scoreSelf:     MatchScoreSchema,
+    scoreOpponent: MatchScoreSchema,
+  })
+  .superRefine(babyfootScoreRefiner);
+
+export type Confirm2v2MatchInput = z.infer<typeof Confirm2v2MatchSchema>;

@@ -61,13 +61,6 @@ const UNIVERSE: Record<Game, {
     label: 'SMASH',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        <defs>
-          <radialGradient id="ts-ball" cx="38%" cy="32%" r="70%">
-            <stop offset="0%" stopColor="#fff" />
-            <stop offset="40%" stopColor="#ff8a3a" />
-            <stop offset="100%" stopColor="#d11f2f" />
-          </radialGradient>
-        </defs>
         {/* Éclats d'impact */}
         {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
           const r = deg * Math.PI / 180;
@@ -77,12 +70,29 @@ const UNIVERSE: Record<Game, {
           const y2 = 60 + Math.sin(r) * 34;
           return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff3d50" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
         })}
-        {/* Smash Ball */}
-        <circle cx="60" cy="60" r="28" fill="url(#ts-ball)" stroke="#fff" strokeWidth="1.5" />
-        <path d="M60 34 C52 44 52 76 60 86 M34 60 C44 52 76 52 86 60"
-          fill="none" stroke="#7a0d15" strokeWidth="4.5" strokeLinecap="round" opacity="0.9" />
-        {/* Highlight */}
-        <circle cx="52" cy="50" r="7" fill="white" opacity="0.28" />
+        {/* Logo Smash */}
+        <image href="/smash-color.png" x="22" y="22" width="76" height="76" preserveAspectRatio="xMidYMid meet" />
+      </svg>
+    ),
+  },
+  streetfighter: {
+    bg: 'rgba(28, 12, 2, 0.94)',
+    glow: 'rgba(255, 122, 24, 0.75)',
+    accent: '#ff7a18',
+    label: 'STREET FIGHTER',
+    symbol: (s) => (
+      <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
+        {/* Éclats d'impact (comme Smash) */}
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+          const r = deg * Math.PI / 180;
+          const x1 = 60 + Math.cos(r) * 52;
+          const y1 = 60 + Math.sin(r) * 52;
+          const x2 = 60 + Math.cos(r) * 34;
+          const y2 = 60 + Math.sin(r) * 34;
+          return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff7a18" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
+        })}
+        {/* Logo Street Fighter */}
+        <image href="/sf-color.png" x="18" y="30" width="84" height="60" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },

@@ -56,7 +56,7 @@ export interface RateLimitOptions {
   name: string;
   windowMs: number;
   max: number;
-  skip?: (c: Context) => boolean;
+  skip?: (c: Context) => boolean | Promise<boolean>;
   /** Activer les pénalités progressives (défaut : true). */
   progressive?: boolean;
 }
@@ -69,7 +69,7 @@ export function rateLimit(opts: RateLimitOptions) {
   const store = bucketStores.get(opts.name)!;
 
   return async (c: Context, next: Next) => {
-    if (opts.skip?.(c)) { await next(); return; }
+    if (opts.skip && (await opts.skip(c))) { await next(); return; }
 
     const ip = clientIp(c);
     const now = Date.now();
@@ -113,6 +113,32 @@ export function rateLimit(opts: RateLimitOptions) {
     }
 
     await next();
+  };
+}
+
+/**
+ * Efface la pénalité d'une IP (et ses buckets fenêtre-fixe) — pour débloquer
+ * un admin via `DELETE /admin/rate-limit/me`.
+ */
+export function clearPenalty(ip: string): void {
+  penaltyStore.delete(ip);
+  for (const store of bucketStores.values()) {
+    for (const key of store.keys()) {
+      if (key.endsWith(`:${ip}`)) store.delete(key);
+    }
+  }
+}
+
+/** Renvoie l'état de la pénalité active pour une IP, ou null si aucune. */
+export function getPenaltyInfo(
+  ip: string,
+): { blockedUntil: number; remainingSec: number; violations: number } | null {
+  const p = penaltyStore.get(ip);
+  if (!p || p.blockedUntil <= Date.now()) return null;
+  return {
+    blockedUntil: p.blockedUntil,
+    remainingSec: Math.ceil((p.blockedUntil - Date.now()) / 1000),
+    violations: p.violations,
   };
 }
 

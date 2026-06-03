@@ -38,6 +38,7 @@ import {
   validateTournamentScore,
 } from './games.js';
 import { prisma } from './db.js';
+import { seedStaging } from './staging-seed.js';
 import type { Prisma } from '@prisma/client';
 import {
   createAuthRouter,
@@ -57,9 +58,9 @@ import {
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
-import { issueStreamToken, verifyStreamToken } from './tokens.js';
+import { issueStreamToken, verifyStreamToken, verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
-import { rateLimit } from './rate-limit.js';
+import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
@@ -414,8 +415,42 @@ if (process.env.NODE_ENV !== 'test') {
   const isMutation = (c: Context) =>
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-  // Backstop global réduit (120/min — fluide pour un humain, bloque les bots).
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120 }));
+  // Les admins (rôle ADMIN ou SUPERADMIN) contournent le rate-limit : leur IP
+  // peut légitimement générer beaucoup de requêtes (onglets dev, SSE, modération,
+  // reconnexions…). On vérifie la signature du token pour ne pas ouvrir un trou
+  // de sécurité, puis le rôle. Les rôles ADMIN vivant en DB, on met en cache les
+  // logins admin (TTL 30 s) pour ne pas taper la base à chaque requête.
+  let adminLoginCache: Set<string> | null = null;
+  let adminCacheExpiry = 0;
+  const getAdminLogins = async (): Promise<Set<string>> => {
+    const now = Date.now();
+    if (adminLoginCache && now < adminCacheExpiry) return adminLoginCache;
+    const rows = await prisma.user.findMany({
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+      select: { login: true },
+    });
+    const set = new Set(rows.map((r) => r.login.toLowerCase()));
+    for (const s of SUPERADMINS) set.add(s.toLowerCase());
+    adminLoginCache = set;
+    adminCacheExpiry = now + 30_000;
+    return set;
+  };
+  const isAdminRequest = async (c: Context): Promise<boolean> => {
+    const auth = c.req.header('authorization');
+    if (!auth?.startsWith('Bearer ')) return false;
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) return false;
+    const login = verifyToken(auth.slice(7), secret);
+    if (!login) return false;
+    if (SUPERADMINS.has(login.toLowerCase())) return true;
+    return (await getAdminLogins()).has(login.toLowerCase());
+  };
+  // Combine l'exemption admin avec une condition de skip de base (ex. non-mutation).
+  const orAdmin = (base?: (c: Context) => boolean) => async (c: Context) =>
+    (await isAdminRequest(c)) || (base ? base(c) : false);
+
+  // Backstop global (120/min). Les admins sont exemptés.
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, skip: orAdmin() }));
 
   // Auth : protège l'échange OAuth contre le brute-force.
   app.use('/auth/*', rateLimit({
@@ -423,26 +458,30 @@ if (process.env.NODE_ENV !== 'test') {
     skip: (c) => c.req.path === '/auth/stream-token',
   }));
 
-  // Quotas par action (24 h) — pénalités progressives en cas de spam.
-  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
-  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: (c) => !isMutation(c) }));
-  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: (c) => !isMutation(c) }));
+  // Quotas par action (24 h) — pénalités progressives en cas de spam. Admins exemptés.
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: orAdmin((c) => !isMutation(c)) }));
 
-  // Écriture générale (mutations restantes).
-  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: (c) => !isMutation(c) });
+  // Écriture générale (mutations restantes). Admins exemptés.
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: orAdmin((c) => !isMutation(c)) });
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
 }
 
 // =========================================================================
-// STAGING GATE — accès réservé aux superadmins (APP_ENV=staging)
+// STAGING GATE — accès réservé à une liste blanche (APP_ENV=staging)
 // =========================================================================
-// Sur l'environnement de staging UNIQUEMENT, toute l'API est réservée aux
-// superadmins. On exempte la santé, tout le flux d'auth/OAuth (sinon impossible
-// de se connecter) et /me (le front le lit pour afficher l'écran « réservé aux
-// superadmins » côté non-superadmin). Défense en profondeur : même un appel API
-// direct par un non-superadmin est refusé ici, pas seulement masqué côté front.
+// Sur l'environnement de staging UNIQUEMENT, toute l'API est réservée aux logins
+// de STAGING_ALLOWED. On exempte la santé, tout le flux d'auth/OAuth (sinon
+// impossible de se connecter) et /me (le front le lit pour afficher l'écran
+// « accès réservé » côté non-autorisé). Défense en profondeur : même un appel API
+// direct par un login non autorisé est refusé ici, pas seulement masqué côté front.
+//
+// throbert & abidaux sont superadmins ; jagharra est invité pour les tests
+// (rôle ADMIN, jamais superadmin — cf. staging-seed.ts).
+const STAGING_ALLOWED = new Set([...SUPERADMINS, 'jagharra']);
 if (process.env.APP_ENV === 'staging') {
   app.use('*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
@@ -452,10 +491,7 @@ if (process.env.APP_ENV === 'staging') {
     }
     const login = await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
-    // getUserRole vérifie d'abord le set hardcodé (abidaux/throbert), puis le
-    // rôle DB — ce qui inclut les accès staging accordés via le panel GOD.
-    const role = await getUserRole(login);
-    if (role !== 'SUPERADMIN') {
+    if (!STAGING_ALLOWED.has(login.toLowerCase())) {
       throw new HTTPException(403, { message: 'staging: accès réservé' });
     }
     return next();
@@ -621,6 +657,9 @@ app.get('/me', async (c) => {
     user,
     role,
     isAdmin: isAdmin(login),
+    // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
+    // pour la barrière staging sans dupliquer la liste blanche.
+    stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()),
     badges,
     palmares,
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
@@ -682,7 +721,7 @@ app.patch('/me/games', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const raw = Array.isArray(body.games) ? body.games : [];
   const games = [
-    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess')),
+    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess' || g === 'streetfighter')),
   ] as string[];
   if (games.length === 0) {
     throw new HTTPException(400, { message: 'choisis au moins un mode de jeu' });
@@ -1076,6 +1115,8 @@ app.post('/seasons/close', async (c) => {
         matchesPlayedSmash: 0,
         eloChess: 1000,
         matchesPlayedChess: 0,
+        eloSf: 1000,
+        matchesPlayedSf: 0,
       },
     });
     await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
@@ -1245,6 +1286,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
   const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
   const game = parseGameId(p.game);
+  // Smash uniquement : les « stocks » (vies) sont spécifiques au Smash. Street
+  // Fighter partage la mécanique de set mais n'a pas de stocks.
   const isSmash = game === 'smash';
 
   // Champs Smash mappés sur les côtés A/B.
@@ -3018,6 +3061,28 @@ app.get('/ops/user/:login', async (c) => {
 
 /* ============ ADMIN — USERS ============ */
 
+// ─── Rate-limit : déblocage manuel (SUPERADMIN uniquement) ───────────────────
+
+// Renvoie l'état de la pénalité de l'IP appelante — utile pour diagnostiquer.
+app.get('/admin/rate-limit/me', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const ip = clientIp(c);
+  const info = getPenaltyInfo(ip);
+  return c.json({ ip, penalty: info });
+});
+
+// Efface la pénalité de l'IP appelante — à utiliser quand on est bloqué.
+// Le bypass superadmin dans le rate-limiter global permet d'atteindre cet
+// endpoint même quand l'IP est punie, à condition de présenter son Bearer.
+app.delete('/admin/rate-limit/me', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const ip = clientIp(c);
+  clearPenalty(ip);
+  return c.json({ cleared: true, ip });
+});
+
 app.get('/admin/users', async (c) => {
   const me = await getCurrentLogin(c);
   await requireAdmin(me);
@@ -3047,8 +3112,11 @@ app.patch('/admin/users/:login/stats', async (c) => {
     eloChess: z.number().int().min(0).optional(),
     matchesPlayedChess: z.number().int().min(0).optional(),
     tournamentsWonChess: z.number().int().min(0).optional(),
+    eloSf: z.number().int().min(0).optional(),
+    matchesPlayedSf: z.number().int().min(0).optional(),
+    tournamentsWonSf: z.number().int().min(0).optional(),
     // Modes auxquels le joueur adhère.
-    games: z.array(z.enum(['babyfoot', 'smash', 'chess'])).min(1).optional(),
+    games: z.array(z.enum(['babyfoot', 'smash', 'chess', 'streetfighter'])).min(1).optional(),
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -3065,6 +3133,9 @@ app.patch('/admin/users/:login/stats', async (c) => {
       eloChess: true,
       matchesPlayedChess: true,
       tournamentsWonChess: true,
+      eloSf: true,
+      matchesPlayedSf: true,
+      tournamentsWonSf: true,
       games: true,
     },
   });
@@ -3256,7 +3327,7 @@ app.patch('/admin/matches/:id', async (c) => {
     if (countsForElo) {
       const ratingA = readElo(userA, game);
       const ratingB = readElo(userB, game);
-      const outcome = game === 'smash'
+      const outcome = (game === 'smash' || game === 'streetfighter')
         ? {
             scoreA,
             scoreB,
@@ -3623,7 +3694,7 @@ app.get('/admin/all-history', async (c) => {
   // Filtre par discipline. challenge/pending/played portent `game` ; rejected/ops
   // sont antérieurs au multi-jeu (babyfoot) → exclus dès qu'on cible smash/échecs.
   const gq = url.searchParams.get('game');
-  const gameFilter = gq === 'smash' || gq === 'chess' || gq === 'babyfoot' ? gq : null;
+  const gameFilter = gq === 'smash' || gq === 'chess' || gq === 'streetfighter' || gq === 'babyfoot' ? gq : null;
   const gameWhere = gameFilter ? { game: gameFilter } : {};
   const includeLegacy = !gameFilter || gameFilter === 'babyfoot';
 
@@ -3806,6 +3877,12 @@ const port = Number(process.env.PORT ?? 3000);
 if (process.env.NODE_ENV !== 'test') {
   serve({ fetch: app.fetch, port }, (info) => {
     console.log(`42 League backend listening on http://localhost:${info.port}`);
+    // Seed de données de test — staging uniquement, jamais en prod.
+    if (process.env.APP_ENV === 'staging') {
+      seedStaging().catch((err) => {
+        console.error('failed to seed staging test data', err);
+      });
+    }
     rescheduleOpsTimers().catch((err) => {
       console.error('failed to reschedule ops timers', err);
     });
