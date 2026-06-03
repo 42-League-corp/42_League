@@ -49,18 +49,7 @@ const META: Record<Game, {
     bgColor: 'rgba(255,61,80,0.10)',
     glowColor: 'rgba(255,61,80,0.45)',
     icon: (
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-        <defs>
-          <radialGradient id="gsb" cx="38%" cy="32%" r="70%">
-            <stop offset="0%" stopColor="#fff" />
-            <stop offset="45%" stopColor="#ff8a3a" />
-            <stop offset="100%" stopColor="#d11f2f" />
-          </radialGradient>
-        </defs>
-        <circle cx="12" cy="12" r="10" fill="url(#gsb)" stroke="#fff" strokeWidth="1" />
-        <path d="M12 2 C9 8 9 16 12 22 M2 12 C8 9 16 9 22 12"
-          fill="none" stroke="#7a0d15" strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
-      </svg>
+      <img src="/smash-logo.png" alt="" width={20} height={20} className="object-contain" aria-hidden />
     ),
   },
   chess: {

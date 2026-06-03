@@ -79,22 +79,13 @@ function SmashField() {
           <stop offset="0%" stopColor="#200408" />
           <stop offset="100%" stopColor="#0d0204" />
         </linearGradient>
-        <radialGradient id="lb-ball" cx="38%" cy="33%" r="70%">
-          <stop offset="0%" stopColor="#fff" />
-          <stop offset="40%" stopColor="#ff8a3a" />
-          <stop offset="100%" stopColor="#c01824" />
-        </radialGradient>
       </defs>
       <rect width="400" height="120" fill="url(#lb-smash)" />
       {[40, 130, 280, 370].map((x, i) => (
         <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
           fill="#ff3d50" opacity="0.12" />
       ))}
-      <g transform="translate(354,58)">
-        <circle r="26" fill="url(#lb-ball)" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" opacity="0.7" />
-        <path d="M0 -24 C-7 -8 -7 10 0 24 M-24 0 C-8 -7 10 -7 24 0"
-          fill="none" stroke="#6a0810" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
-      </g>
+      <image href="/smash-logo.png" x="318" y="22" width="72" height="72" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
     </svg>
   );
 }
