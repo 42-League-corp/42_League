@@ -16,12 +16,47 @@ import {
 /** Catégories pour lesquelles « équiper » a du sens (un titre / une bannière actifs). */
 const EQUIPPABLE: ShopCategory[] = ['title', 'banner'];
 
+/** Nombre minimum de cases affichées : la grille est comblée par des cartes
+ *  placeholder « Bientôt » pour qu'elle paraisse toujours pleine, même quand le
+ *  catalogue réel est vide ou peu fourni. */
+const MIN_TILES = 6;
+const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'cosmetic'];
+
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 tabular-nums ${className}`}>
       <img src="/league-coin.svg" alt="" className="w-4 h-4" />
       {value}
     </span>
+  );
+}
+
+/** Carte « à venir » : emplacement vide et verrouillé, juste pour montrer la
+ *  mise en page tant qu'aucun cosmétique réel n'est en boutique. */
+function PlaceholderCard({ category, label, soon }: { category: ShopCategory; label: string; soon: string }) {
+  return (
+    <div className="relative card-hud overflow-hidden rounded-2xl p-4 flex flex-col gap-3 opacity-60 select-none">
+      <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3.5 w-2/3 rounded bg-muted/15" />
+          <div className="h-2.5 w-full rounded bg-muted/10" />
+          <div className="h-2.5 w-1/2 rounded bg-muted/10" />
+        </div>
+        <span className="shrink-0 px-2 py-0.5 rounded-full bg-muted/10 border border-border/50 text-[9px] font-extrabold uppercase tracking-[0.12em] text-muted-2">
+          {label}
+        </span>
+      </div>
+      <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
+        <CoinAmount value={0} className="font-gaming text-base font-extrabold text-muted-2 blur-[1.5px]" />
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide bg-bg-1 border border-border/60 text-muted-2">
+          <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />
+          {soon}
+        </span>
+      </div>
+      {/* Catégorie cachée mais conservée pour clarté du code / futurs styles. */}
+      <span className="sr-only">{category}</span>
+    </div>
   );
 }
 
@@ -155,10 +190,6 @@ export function ShopPage() {
             <Skeleton key={i} className="h-44" />
           ))}
         </div>
-      ) : items.length === 0 ? (
-        <div className="card-hud rounded-2xl p-10 text-center text-muted text-sm">
-          {t('shop.empty')}
-        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((item) => {
@@ -240,6 +271,17 @@ export function ShopPage() {
                   )}
                 </div>
               </motion.div>
+            );
+          })}
+          {Array.from({ length: Math.max(0, MIN_TILES - items.length) }).map((_, i) => {
+            const cat = PLACEHOLDER_CATS[i % PLACEHOLDER_CATS.length]!;
+            return (
+              <PlaceholderCard
+                key={`ph-${i}`}
+                category={cat}
+                label={catLabel(cat)}
+                soon={t('shop.howToEarn.soon')}
+              />
             );
           })}
         </div>
