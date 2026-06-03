@@ -60,6 +60,8 @@ model User {
   tournamentMatchesB  TournamentMatch[]  @relation("tournPlayerB")
   opsAsOwner          Ops[]              @relation("opsOwner")
   opsAsTarget         Ops[]              @relation("opsTarget")
+  tournamentInvitesSent     TournamentInvite[] @relation("tournamentInvitesSent")
+  tournamentInvitesReceived TournamentInvite[] @relation("tournamentInvitesReceived")
   featureRequests     FeatureRequest[]
   bugReports          BugReport[]
   rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
@@ -202,13 +204,33 @@ model Tournament {
   startedAt     DateTime? @map("started_at")
   finishedAt    DateTime? @map("finished_at")
 
-  createdBy User              @relation("tournamentCreator", fields: [createdByLogin], references: [login])
-  winner    User?             @relation("tournamentWinner", fields: [winnerLogin], references: [login])
+  createdBy User               @relation("tournamentCreator", fields: [createdByLogin], references: [login])
+  winner    User?              @relation("tournamentWinner", fields: [winnerLogin], references: [login])
   entries   TournamentEntry[]
   matches   TournamentMatch[]
+  invites   TournamentInvite[]
 
   @@index([status])
   @@map("tournaments")
+}
+
+model TournamentInvite {
+  id           String    @id @default(uuid())
+  tournamentId String    @map("tournament_id")
+  inviterLogin String    @map("inviter_login")
+  inviteeLogin String    @map("invitee_login")
+  status       String    @default("pending") // 'pending' | 'accepted' | 'declined'
+  createdAt    DateTime  @default(now()) @map("created_at")
+  decidedAt    DateTime? @map("decided_at")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  inviter    User       @relation("tournamentInvitesSent",     fields: [inviterLogin], references: [login], onDelete: Cascade)
+  invitee    User       @relation("tournamentInvitesReceived", fields: [inviteeLogin], references: [login], onDelete: Cascade)
+
+  @@unique([tournamentId, inviteeLogin])
+  @@index([inviteeLogin, status])
+  @@index([tournamentId])
+  @@map("tournament_invites")
 }
 
 model TournamentEntry {

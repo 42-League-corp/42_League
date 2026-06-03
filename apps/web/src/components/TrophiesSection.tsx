@@ -198,52 +198,67 @@ function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
   return <div className="text-text-strong font-semibold text-sm">{value}</div>;
 }
 
-// ─── Accordéon de catégorie ───────────────────────────────────────────────────
+// ─── Séparateur de catégorie (toujours ouvert) ────────────────────────────────
 
-function CategoryAccordion({
+const CATEGORY_ACCENT: Record<TrophyCategoryKey, string> = {
+  perfs:    'from-gold to-gold/30',
+  exploits: 'from-[#a259ff] to-[#a259ff]/30',
+  activite: 'from-[#3b82f6] to-[#3b82f6]/30',
+  honte:    'from-[#dc143c] to-[#dc143c]/30',
+};
+
+const CATEGORY_LINE: Record<TrophyCategoryKey, string> = {
+  perfs:    'from-gold/20',
+  exploits: 'from-[#a259ff]/20',
+  activite: 'from-[#3b82f6]/20',
+  honte:    'from-[#dc143c]/20',
+};
+
+const CATEGORY_LABEL_COLOR: Record<TrophyCategoryKey, string> = {
+  perfs:    'text-gold/70',
+  exploits: 'text-[#c97bff]/80',
+  activite: 'text-[#7aa8ff]/80',
+  honte:    'text-[#dc143c]/80',
+};
+
+const CATEGORY_BADGE: Record<TrophyCategoryKey, string> = {
+  perfs:    'text-gold',
+  exploits: 'text-[#c97bff]',
+  activite: 'text-[#7aa8ff]',
+  honte:    'text-[#dc143c]',
+};
+
+function CategorySection({
   category,
   trophies,
   leaderboard,
+  isFirst,
 }: {
   category: TrophyCategory;
   trophies: TrophyResult[];
   leaderboard: LeaderboardEntry[];
+  isFirst: boolean;
 }) {
-  const [open, setOpen] = useState(category.defaultOpen);
   const earned = trophies.filter((t) => t.earned).length;
-
   if (trophies.length === 0) return null;
+  const allEarned = earned === trophies.length;
 
   return (
-    <div className="rounded-xl overflow-hidden">
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 py-3 px-1 hover:bg-white/[0.02] transition-colors tap-transparent"
-      >
-        <span className="text-base w-6 text-center leading-none">{category.emoji}</span>
-        <span className="font-gaming text-[11px] uppercase tracking-[0.16em] font-extrabold text-text-strong flex-1 text-left">
+    <div className={isFirst ? '' : 'mt-8'}>
+      {/* Séparateur catégorie */}
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className={`w-0.5 h-4 rounded-full bg-gradient-to-b ${CATEGORY_ACCENT[category.key]} flex-shrink-0`} />
+        <span className="text-sm leading-none">{category.emoji}</span>
+        <span className={`font-gaming text-[10px] uppercase tracking-[0.2em] font-extrabold ${CATEGORY_LABEL_COLOR[category.key]}`}>
           {category.label}
         </span>
-        {/* Compteur earned/total */}
-        <span className="text-[10px] font-mono tabular-nums text-muted-2 font-bold">
-          <span className={earned === trophies.length ? 'text-gold' : 'text-muted-2'}>{earned}</span>
-          <span className="text-muted mx-0.5">/</span>
-          <span>{trophies.length}</span>
+        <div className={`flex-1 h-px bg-gradient-to-r ${CATEGORY_LINE[category.key]} to-transparent`} />
+        <span className={`text-[9px] font-mono font-bold tabular-nums px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06] ${allEarned ? CATEGORY_BADGE[category.key] : 'text-muted-2'}`}>
+          {earned}/{trophies.length}
         </span>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-2 transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2.5}
-        />
-      </button>
+      </div>
 
-      {/* Contenu */}
-      {open && (
-        <div className="pt-1 pb-2">
-          <TrophyGrid trophies={trophies} leaderboard={leaderboard} />
-        </div>
-      )}
+      <TrophyGrid trophies={trophies} leaderboard={leaderboard} />
     </div>
   );
 }
@@ -378,20 +393,21 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
           {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
 
           {/* Sélecteur de tri */}
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-5">
             <span className="text-[10px] uppercase tracking-[0.14em] text-muted-2 font-bold">Affichage</span>
             <SortToggle mode={sortMode} onChange={setSortMode} />
           </div>
 
           {sortMode === 'category' ? (
-            /* ── Vue par catégorie : accordéons ── */
-            <div className="space-y-1 divide-y divide-border/20">
-              {TROPHY_CATEGORIES.map((cat) => (
-                <CategoryAccordion
+            /* ── Vue par catégorie : sections toujours ouvertes ── */
+            <div>
+              {TROPHY_CATEGORIES.map((cat, i) => (
+                <CategorySection
                   key={cat.key}
                   category={cat}
                   trophies={byCategory.get(cat.key) ?? []}
                   leaderboard={leaderboard}
+                  isFirst={i === 0}
                 />
               ))}
             </div>

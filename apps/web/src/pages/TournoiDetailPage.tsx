@@ -6,11 +6,12 @@ import { Button } from '../components/Button';
 import { PlayerLink } from '../components/PlayerLink';
 import { AbacusSlider } from '../components/AbacusSlider';
 import { OutcomeButton } from '../components/OutcomeButton';
-import { api, type Game, type Tournament, type TournamentMatch, type LeaderboardEntry } from '../lib/api';
+import { api, type Tournament, type TournamentMatch, type TournamentInvite, type LeaderboardEntry } from '../lib/api';
 import { PlayerSearch } from './defis/shared/PlayerSearch';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
+import { useServerEvents } from '../hooks/useServerEvents';
 
 const STATUS_LABEL: Record<Tournament['status'], string> = {
   registration: 'INSCRIPTIONS',
@@ -58,6 +59,10 @@ export function TournoiDetailPage() {
     void load();
   }, [load]);
 
+  // Rafraîchit la page en temps réel quand une mise à jour de tournoi ou une
+  // invitation est reçue (accept, decline, nouveau joueur, démarrage…).
+  useServerEvents(load, ['tournament:update', 'tournament:invite', 'tournament:invite_declined']);
+
   if (loading) {
     return (
       <Panel title="Tournoi" sub="…">
@@ -80,24 +85,6 @@ export function TournoiDetailPage() {
   const isAdmin = !!me?.isAdmin;
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
-  const entryLogins = new Set((tournament.entries ?? []).map((e) => e.login));
-  const invitable = leaderboard
-    .filter((u) => !entryLogins.has(u.login))
-    .sort((a, b) => a.login.localeCompare(b.login));
-  // Réutilise le compteur de la combobox pour afficher le total de matchs joués de chaque joueur.
-  const invitableCounts = Object.fromEntries(invitable.map((u) => [u.login, u.matchesPlayed]));
-
-  const handleInvite = async () => {
-    if (!invitee) return;
-    const login = invitee.login;
-    setInvitee(null);
-    await runAction(() => api.addTournamentPlayer(tournament.id, login), `${login} ajouté au tournoi`);
-  };
-  const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
-  const visLabel = tournament.isPrivate ? ' · 🔒 PRIVÉ' : '';
-  const formatLabel = tournament.format === 'pools' ? ' · POULES' : '';
-  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
-
   const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
       await action();
@@ -107,6 +94,50 @@ export function TournoiDetailPage() {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     }
   };
+
+  const entryLogins = new Set((tournament.entries ?? []).map((e) => e.login));
+  // Joueurs déjà invités (invitation en attente) → on les exclut de la liste invitable.
+  const pendingInviteeLogins = new Set(
+    (tournament.invites ?? []).filter((i) => i.status === 'pending').map((i) => i.inviteeLogin),
+  );
+  const invitable = leaderboard
+    .filter((u) => !entryLogins.has(u.login) && !pendingInviteeLogins.has(u.login))
+    .sort((a, b) => a.login.localeCompare(b.login));
+  const invitableCounts = Object.fromEntries(invitable.map((u) => [u.login, u.matchesPlayed]));
+
+  // Mon invitation en attente (si j'ai été invité mais pas encore décidé).
+  const myPendingInvite = (tournament.invites ?? []).find(
+    (i) => i.inviteeLogin === myLogin && i.status === 'pending',
+  );
+
+  const handleSendInvite = async () => {
+    if (!invitee) return;
+    const login = invitee.login;
+    setInvitee(null);
+    await runAction(
+      () => api.inviteTournamentPlayer(tournament.id, login),
+      `Invitation envoyée à ${login}`,
+    );
+  };
+
+  const handleAcceptInvite = async (invite: TournamentInvite) => {
+    await runAction(
+      () => api.acceptTournamentInvite(tournament.id, invite.id),
+      'Tu as rejoint le tournoi',
+    );
+  };
+
+  const handleDeclineInvite = async (invite: TournamentInvite) => {
+    await runAction(
+      () => api.declineTournamentInvite(tournament.id, invite.id),
+      'Invitation déclinée',
+    );
+  };
+
+  const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
+  const visLabel = tournament.isPrivate ? ' · 🔒 PRIVÉ' : '';
+  const formatLabel = tournament.format === 'pools' ? ' · POULES' : '';
+  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
 
   const handleLeave = async () => {
     const ok = await confirm({
@@ -170,28 +201,75 @@ export function TournoiDetailPage() {
             )}
           </div>
 
-          {(isOrganizer || isAdmin) && entriesCount < tournament.capacity && invitable.length > 0 && (
+          {/* Bannière : invitation reçue en attente de décision */}
+          {myPendingInvite && !iAmIn && (
+            <div className="mb-4 p-4 rounded-xl border border-gold/40 bg-gold/[0.06]">
+              <div className="text-sm font-extrabold text-gold mb-1">
+                Tu as été invité à ce tournoi
+              </div>
+              <div className="text-xs text-muted-2 mb-3">
+                Par <span className="font-semibold text-text-strong">{myPendingInvite.inviterLogin}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={() => handleAcceptInvite(myPendingInvite)} className="flex-1">
+                  Rejoindre
+                </Button>
+                <Button variant="ghost" onClick={() => handleDeclineInvite(myPendingInvite)} className="flex-1 text-red border-red/30">
+                  Décliner
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Section invitation (organisateur / admin) */}
+          {(isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
             <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
               <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
                 Inviter un joueur
               </div>
-              <div className="flex flex-col gap-2">
-                <PlayerSearch
-                  players={invitable}
-                  recentPlayers={[]}
-                  opponentCounts={invitableCounts}
-                  selected={invitee}
-                  onSelect={setInvitee}
-                  onClear={() => setInvitee(null)}
-                  locations={locations}
-                />
-                <Button onClick={handleInvite} disabled={!invitee} full>
-                  {invitee ? `Ajouter ${invitee.login} au tournoi` : 'Ajouter au tournoi'}
-                </Button>
-              </div>
+              {invitable.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <PlayerSearch
+                    players={invitable}
+                    recentPlayers={[]}
+                    opponentCounts={invitableCounts}
+                    selected={invitee}
+                    onSelect={setInvitee}
+                    onClear={() => setInvitee(null)}
+                    locations={locations}
+                  />
+                  <Button onClick={handleSendInvite} disabled={!invitee}>
+                    {invitee ? `Envoyer l'invitation à ${invitee.login}` : 'Envoyer une invitation'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-2">Tous les joueurs disponibles ont déjà été invités.</p>
+              )}
               <p className="text-[10px] text-muted mt-1.5">
-                En tant qu'{isOrganizer ? 'organisateur' : 'admin'}, tu peux inscrire directement un joueur.
+                Le joueur recevra une notification et devra accepter pour rejoindre.
               </p>
+
+              {/* Invitations en attente (vue organisateur) */}
+              {(tournament.invites ?? []).filter((i) => i.status === 'pending').length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/50">
+                  <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
+                    En attente de réponse
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(tournament.invites ?? [])
+                      .filter((i) => i.status === 'pending')
+                      .map((inv) => (
+                        <span
+                          key={inv.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-bg-1 border border-border text-[11px] text-muted-2"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-gold/70 animate-pulse" />
+                          {inv.inviteeLogin}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
