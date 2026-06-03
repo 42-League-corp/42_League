@@ -51,6 +51,11 @@ model User {
   awaitingPending     PendingMatch[]     @relation("opponent")
   matchesAsA          PlayedMatch[]      @relation("playerA")
   matchesAsB          PlayedMatch[]      @relation("playerB")
+  // 2v2 Babyfoot — second player of each team side.
+  matchesAsA2         PlayedMatch[]      @relation("playerA2")
+  matchesAsB2         PlayedMatch[]      @relation("playerB2")
+  pendingAsPartner1   PendingMatch[]     @relation("pendingPartner1")
+  pendingAsPartner2   PendingMatch[]     @relation("pendingPartner2")
   challengesSent      Challenge[]        @relation("challenger")
   challengesReceived  Challenge[]        @relation("opponentChallenge")
   tournamentsCreated  Tournament[]       @relation("tournamentCreator")
@@ -70,6 +75,9 @@ model User {
   badges              UserBadge[]        @relation("userBadges")
   following           Follow[]           @relation("following")
   followers           Follow[]           @relation("followers")
+  // BabyfootTeam — duos 2v2 dont ce joueur fait partie.
+  babyfootTeamsAsP1   BabyfootTeam[]     @relation("babyfootTeamPlayer1")
+  babyfootTeamsAsP2   BabyfootTeam[]     @relation("babyfootTeamPlayer2")
 
   @@map("users")
 }
@@ -301,9 +309,16 @@ model PendingMatch {
   charDeclarer    String?  @map("char_declarer")
   charOpponent    String?  @map("char_opponent")
   stocks          Int?     // vies restantes du gagnant au game décisif
+  // 2v2 Babyfoot — présent uniquement quand mode = '2v2'.
+  // partner1Login = coéquipier du déclarant ; partner2Login = coéquipier de l'adversaire.
+  mode            String?  // null | '2v2'
+  partner1Login   String?  @map("partner_1_login")
+  partner2Login   String?  @map("partner_2_login")
 
-  declarer User @relation("declarer", fields: [declarerLogin], references: [login])
-  opponent User @relation("opponent", fields: [opponentLogin], references: [login])
+  declarer User  @relation("declarer",        fields: [declarerLogin], references: [login])
+  opponent User  @relation("opponent",        fields: [opponentLogin], references: [login])
+  partner1 User? @relation("pendingPartner1", fields: [partner1Login], references: [login])
+  partner2 User? @relation("pendingPartner2", fields: [partner2Login], references: [login])
 
   @@index([opponentLogin])
   @@map("pending_matches")
@@ -328,13 +343,56 @@ model PlayedMatch {
   charB         String?  @map("char_b")
   stocksA       Int?     @map("stocks_a")
   stocksB       Int?     @map("stocks_b")
+  // 2v2 Babyfoot — présent uniquement quand mode = '2v2'.
+  // playerA/B restent les « premiers » joueurs (déclarant canonique et adversaire canonique).
+  // playerA2/B2 sont leurs coéquipiers. teamA/B sont les entités duo.
+  mode          String?  // null | '2v2'
+  playerA2Login String?  @map("player_a2_login")
+  playerB2Login String?  @map("player_b2_login")
+  deltaA2       Int?     @map("delta_a2")
+  deltaB2       Int?     @map("delta_b2")
+  teamAId       String?  @map("team_a_id")
+  teamBId       String?  @map("team_b_id")
 
-  playerA User @relation("playerA", fields: [playerALogin], references: [login])
-  playerB User @relation("playerB", fields: [playerBLogin], references: [login])
+  playerA User          @relation("playerA",  fields: [playerALogin],  references: [login])
+  playerB User          @relation("playerB",  fields: [playerBLogin],  references: [login])
+  playerA2 User?        @relation("playerA2", fields: [playerA2Login], references: [login])
+  playerB2 User?        @relation("playerB2", fields: [playerB2Login], references: [login])
+  teamA    BabyfootTeam? @relation("playedMatchTeamA", fields: [teamAId], references: [id])
+  teamB    BabyfootTeam? @relation("playedMatchTeamB", fields: [teamBId], references: [id])
 
   @@index([playerALogin, playerBLogin, playedAt])
   @@index([seasonId])
   @@map("played_matches")
+}
+
+// ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
+//
+// Un BabyfootTeam représente un duo de joueurs stable dans le mode 2v2 du Babyfoot.
+// Les duos sont créés silencieusement lors de la validation du premier match 2v2.
+// player1Login < player2Login (tri lexicographique) — clé canonique qui garantit
+// l'unicité : les duos (A, B) et (B, A) pointent toujours sur la même ligne.
+//
+// L'ELO initial est pondéré (65 % / 35 %) pour refléter l'influence du joueur fort
+// (cf. `initTeamElo` dans packages/shared/src/elo2v2.ts).
+model BabyfootTeam {
+  id            String   @id @default(uuid())
+  player1Login  String   @map("player_1_login") // login canoniquement "inférieur"
+  player2Login  String   @map("player_2_login") // login canoniquement "supérieur"
+  elo           Int      @default(1000)
+  name          String?  // surnom optionnel du duo, défini par les joueurs
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  player1        User          @relation("babyfootTeamPlayer1", fields: [player1Login], references: [login])
+  player2        User          @relation("babyfootTeamPlayer2", fields: [player2Login], references: [login])
+  matchesAsTeamA PlayedMatch[] @relation("playedMatchTeamA")
+  matchesAsTeamB PlayedMatch[] @relation("playedMatchTeamB")
+
+  // La paire (player1, player2) est la clé métier : unique et toujours triée.
+  @@unique([player1Login, player2Login])
+  @@index([player1Login])
+  @@index([player2Login])
+  @@map("babyfoot_teams")
 }
 
 model Season {

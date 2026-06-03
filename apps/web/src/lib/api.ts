@@ -72,6 +72,55 @@ export interface PlayedMatch {
   charB?: string | null;
   stocksA?: number | null;
   stocksB?: number | null;
+  /** '2v2' pour les matchs en mode équipe Babyfoot, null/absent pour les 1v1. */
+  mode?: '2v2' | null;
+}
+
+// ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
+
+export interface BabyfootTeam {
+  id: string;
+  player1Login: string;
+  player2Login: string;
+  elo: number;
+  name: string | null;
+  createdAt: string;
+}
+
+export interface BabyfootTeamEntry extends BabyfootTeam {
+  rank: number;
+  wins: number;
+  losses: number;
+  /** Avatar du joueur 1 (dénormalisé depuis users pour affichage). */
+  player1ImageUrl?: string | null;
+  player2ImageUrl?: string | null;
+}
+
+export interface Declare2v2Response {
+  id: string;
+  status: 'pending';
+  /** True si le duo déclarant est créé pour la première fois. */
+  myTeamIsNew: boolean;
+  myTeamId: string;
+}
+
+/** Un point de l'historique ELO d'une équipe. */
+export interface TeamEloPoint {
+  elo: number;
+  delta: number;
+  playedAt: string;
+  won: boolean;
+  scoreTeam: number;
+  scoreOpponent: number;
+  opponentPlayer1Login: string;
+  opponentPlayer2Login: string;
+}
+
+/** Profil complet d'une BabyfootTeam avec historique ELO et avatars. */
+export interface TeamProfile extends BabyfootTeamEntry {
+  player1ImageUrl: string | null;
+  player2ImageUrl: string | null;
+  eloHistory: TeamEloPoint[];
 }
 
 export interface MeResponse {
@@ -783,4 +832,33 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
+
+  // ─── Babyfoot 2v2 ───────────────────────────────────────────────────────────
+
+  declare2v2Match: (input: {
+    partnerLogin: string;
+    opponentLogin: string;
+    opponent2Login: string;
+    scoreSelf: number;
+    scoreOpponent: number;
+  }) =>
+    request<Declare2v2Response>('/matches/2v2', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  nameTeam: (teamId: string, name: string) =>
+    request<BabyfootTeam>(`/teams/${encodeURIComponent(teamId)}/name`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  teamLeaderboard: () => request<BabyfootTeamEntry[]>('/teams/leaderboard'),
+
+  teamProfile: (teamId: string) =>
+    request<TeamProfile>(`/teams/${encodeURIComponent(teamId)}`),
+
+  /** Toutes les équipes auxquelles appartient un joueur donné. */
+  myTeams: (login: string) =>
+    request<BabyfootTeamEntry[]>(`/teams?login=${encodeURIComponent(login)}`),
 };
