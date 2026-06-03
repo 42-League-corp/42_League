@@ -40,8 +40,8 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
   const fullName =
-    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
+    [user.lastName, user.firstName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.lastName, myEntry?.firstName].filter(Boolean).join(' ').trim() ||
     user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
@@ -114,9 +114,16 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate">
-              {fullName}
-            </h2>
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
+                {fullName}
+              </h2>
+              {me?.badges && me.badges.length > 0 && (
+                <div className="flex-shrink-0">
+                  <BadgesRow codes={me.badges} size="md" />
+                </div>
+              )}
+            </div>
             <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
             {displayTitle(user.login, user.title) && (
               <div className="text-sm text-gold italic font-semibold mt-0.5 truncate">
@@ -127,11 +134,6 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
                 <MapPin className="w-3 h-3" strokeWidth={2.5} />
                 <span>{user.campus}</span>
-              </div>
-            )}
-            {me?.badges && me.badges.length > 0 && (
-              <div className="mt-2">
-                <BadgesRow codes={me.badges} size="md" />
               </div>
             )}
           </div>
@@ -158,14 +160,14 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
         </div>
 
         {/* ELO bloc */}
-        <div className="flex items-baseline justify-between gap-4 mb-2 px-1">
+        <div className="flex items-end justify-between gap-4 mb-2 px-1">
           <div>
-            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
-              <AnimatedCounter value={stats.elo} duration={1.4} />
-            </div>
-            <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5 flex items-center gap-1.5">
+            <div className="-ml-0.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
               ELO
               <RankedBadge size="xs" />
+            </div>
+            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
+              <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
           </div>
 
