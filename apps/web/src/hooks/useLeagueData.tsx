@@ -138,10 +138,10 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      // Staging : réservé aux superadmins. Un non-superadmin n'appelle pas les
-      // autres endpoints (le serveur les refuse) ; AuthenticatedShell affiche
-      // <StagingGate>. On conserve `me` pour connaître le login/rôle.
-      if (IS_STAGING && me.role !== 'SUPERADMIN') {
+      // Staging : réservé à la liste blanche (me.stagingAllowed). Un login non
+      // autorisé n'appelle pas les autres endpoints (le serveur les refuse) ;
+      // AuthenticatedShell affiche <StagingGate>. On conserve `me` pour le login.
+      if (IS_STAGING && !me.stagingAllowed) {
         setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
         setLoading(false);
         return;

@@ -129,6 +129,8 @@ export interface MeResponse {
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
   consentRequired?: boolean;
+  /** True si le login est autorisé sur l'env staging (cf. STAGING_ALLOWED backend). */
+  stagingAllowed?: boolean;
   /** Version de la politique de confidentialité en vigueur côté serveur. */
   termsVersion?: string;
   /** Codes de badges (cf. catalogue front lib/badges.ts). */

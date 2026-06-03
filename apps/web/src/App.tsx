@@ -139,9 +139,10 @@ function AuthenticatedShell() {
     return <ConsentGate login={me.login} onAccepted={() => void refresh()} />;
   }
 
-  // Staging : accès réservé aux superadmins. Un utilisateur connecté non-superadmin
-  // voit un écran dédié plutôt que l'app (le backend refuse de toute façon ses données).
-  if (!loading && IS_STAGING && me && me.role !== 'SUPERADMIN') {
+  // Staging : accès réservé à la liste blanche (cf. STAGING_ALLOWED backend, exposée
+  // via me.stagingAllowed). Un login non autorisé voit un écran dédié plutôt que
+  // l'app (le backend refuse de toute façon ses données).
+  if (!loading && IS_STAGING && me && !me.stagingAllowed) {
     return <StagingGate login={me.login} />;
   }
 
