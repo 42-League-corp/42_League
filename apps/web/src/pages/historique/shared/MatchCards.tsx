@@ -12,6 +12,7 @@ const GAME_BADGE: Record<string, string> = {
   babyfoot: '⚽',
   smash: '🎮',
   chess: '♟',
+  streetfighter: '🥊',
 };
 /** Petite pastille indiquant la discipline d'un match. */
 export function GamePill({ game }: { game?: Game }) {

@@ -231,7 +231,7 @@ export function ProfilDesktop() {
         <TitlesCard
           label="Tournois amicaux remportés"
           value={stats.friendlyTitles}
-          accent={isSmash ? '#ff4d5c' : game === 'chess' ? '#56c46e' : '#ffc94a'}
+          accent={isSmash ? '#ff4d5c' : game === 'streetfighter' ? '#ff7a18' : game === 'chess' ? '#56c46e' : '#ffc94a'}
           game={game}
         />
       </div>
@@ -334,11 +334,11 @@ function TitlesCard({
   label: string;
   value: number;
   accent: string;
-  game: 'babyfoot' | 'smash' | 'chess';
+  game: 'babyfoot' | 'smash' | 'chess' | 'streetfighter';
 }) {
   return (
     <div className="card-hud rounded-xl px-3 py-2.5 flex items-center gap-2.5">
-      {game === 'smash' ? (
+      {game === 'smash' || game === 'streetfighter' ? (
         <SmashTrophy accent={accent} className="w-9 h-9 shrink-0" />
       ) : game === 'chess' ? (
         <ChessTrophy accent={accent} className="w-9 h-9 shrink-0" />
