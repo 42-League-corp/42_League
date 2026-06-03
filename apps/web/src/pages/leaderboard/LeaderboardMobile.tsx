@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Crown } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
+import { SegmentedControl } from '../../mobile/primitives/SegmentedControl';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { PlayerLink } from '../../components/PlayerLink';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
+import { TeamLeaderboard } from './TeamLeaderboard';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
+
+type LeaderboardTab = 'personal' | 'teams';
 
 export function LeaderboardMobile() {
   const { leaderboard, matches: allMatches, me, allOps, locations, refresh } = useLeagueData();
@@ -23,6 +27,19 @@ export function LeaderboardMobile() {
   const myLogin = me?.login;
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<RankingView>('list');
+
+  // Onglets — le classement Équipes n'est disponible qu'en Babyfoot.
+  const showTeamsTab = game === 'babyfoot';
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>('personal');
+  // Réinitialise sur l'onglet personnel si on change de jeu.
+  useEffect(() => {
+    if (game !== 'babyfoot') setActiveTab('personal');
+  }, [game]);
+
+  const tabChoices = [
+    { value: 'personal' as LeaderboardTab, label: 'Personnel' },
+    ...(showTeamsTab ? [{ value: 'teams' as LeaderboardTab, label: 'Équipes' }] : []),
+  ];
 
   // Saison affichée : '' = en cours (live), sinon snapshot d'une saison passée.
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -119,6 +136,37 @@ export function LeaderboardMobile() {
   return (
     <PullToRefresh onRefresh={refresh}>
       <div className="space-y-5">
+        {/* Onglets Personnel / Équipes */}
+        {showTeamsTab && (
+          <SegmentedControl
+            value={activeTab}
+            onChange={setActiveTab}
+            choices={tabChoices}
+          />
+        )}
+
+        {/* ── Transition entre onglets ────────────────────────────────────── */}
+        <AnimatePresence mode="wait" initial={false}>
+          {activeTab === 'teams' ? (
+            <motion.div
+              key="teams"
+              initial={{ opacity: 0, x: 18 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -18 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <TeamLeaderboard />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="personal"
+              initial={{ opacity: 0, x: -18 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 18 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-5"
+            >
+
         {/* Sélecteur de saison (si des saisons passées existent) */}
         {pastSeasons.length > 0 && (
           <div className="flex justify-center pt-1">
@@ -266,6 +314,10 @@ export function LeaderboardMobile() {
         )}
         </>
         )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       </div>
     </PullToRefresh>
   );

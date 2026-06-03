@@ -30,6 +30,7 @@ function prefetchRouteChunks() {
   void import('./pages/ReglagesPage');
   void import('./pages/PlayerPage');
   void import('./pages/TournoiDetailPage');
+  void import('./pages/team/TeamProfilePage');
 }
 
 // ─── Routes paresseuses ──────────────────────────────────────────────────────
@@ -71,6 +72,9 @@ const TropheesPage = lazy(() =>
 );
 const H2HPage = lazy(() =>
   import('./pages/H2HPage').then((m) => ({ default: m.H2HPage })),
+);
+const TeamProfilePage = lazy(() =>
+  import('./pages/team/TeamProfilePage').then((m) => ({ default: m.TeamProfilePage })),
 );
 
 export function App() {
@@ -165,6 +169,7 @@ function AuthenticatedShell() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/profile" element={<ProfilPage />} />
               <Route path="/player/:login" element={<PlayerPage />} />
+              <Route path="/team/:teamId" element={<TeamProfilePage />} />
               <Route path="/h2h" element={<H2HPage />} />
               <Route path="/history" element={<HistoriquePage />} />
               <Route path="/settings" element={<ReglagesPage />} />

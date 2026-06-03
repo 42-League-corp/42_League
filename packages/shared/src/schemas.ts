@@ -201,3 +201,46 @@ export const SetFeatureRequestStatusSchema = z.object({
 });
 
 export type SetFeatureRequestStatusInput = z.infer<typeof SetFeatureRequestStatusSchema>;
+
+// ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
+// Ces schémas sont EXCLUSIFS au Babyfoot (le jeu est implicitement 'babyfoot').
+// Les règles de score sont identiques au 1v1 : un camp doit atteindre 10 buts.
+
+const babyfootScoreRefiner = (
+  m: { scoreSelf: number; scoreOpponent: number },
+  ctx: z.RefinementCtx,
+) => {
+  if (!(m.scoreSelf === 10 || m.scoreOpponent === 10)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'one side must reach 10 goals' });
+  }
+  if (m.scoreSelf === 10 && m.scoreOpponent === 10) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'only one side can reach 10 goals' });
+  }
+};
+
+export const Declare2v2MatchSchema = z
+  .object({
+    partnerLogin:   LoginSchema, // coéquipier du déclarant (équipe 1)
+    opponentLogin:  LoginSchema, // premier joueur de l'équipe adverse
+    opponent2Login: LoginSchema, // coéquipier de l'adversaire (équipe 2)
+    scoreSelf:      MatchScoreSchema,
+    scoreOpponent:  MatchScoreSchema,
+  })
+  .superRefine((m, ctx) => {
+    const logins = [m.partnerLogin, m.opponentLogin, m.opponent2Login];
+    if (new Set(logins).size !== logins.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'all four players must be different' });
+    }
+    babyfootScoreRefiner(m, ctx);
+  });
+
+export type Declare2v2MatchInput = z.infer<typeof Declare2v2MatchSchema>;
+
+export const Confirm2v2MatchSchema = z
+  .object({
+    scoreSelf:     MatchScoreSchema,
+    scoreOpponent: MatchScoreSchema,
+  })
+  .superRefine(babyfootScoreRefiner);
+
+export type Confirm2v2MatchInput = z.infer<typeof Confirm2v2MatchSchema>;

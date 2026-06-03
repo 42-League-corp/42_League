@@ -13,6 +13,7 @@ import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
+import { MyTeamsDesktop } from './shared/MyTeamsDesktop';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
@@ -236,6 +237,10 @@ export function ProfilDesktop() {
       <div className="mt-4">
         <FollowLists />
       </div>
+
+      {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
+      {game === 'babyfoot' && <MyTeamsDesktop myLogin={u.login} />}
+
       </Panel>
 
       <Panel title="Évolution & rivalité" sub="ELO · ops">

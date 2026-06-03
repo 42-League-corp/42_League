@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, Crown } from 'lucide-react';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { Panel } from '../../components/Panel';
@@ -11,9 +12,13 @@ import { WinRateBar } from '../../components/WinRateBar';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { TeamLeaderboard } from './TeamLeaderboard';
+import { SegmentedControl } from '../../mobile/primitives/SegmentedControl';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
+
+type LeaderboardTab = 'personal' | 'teams';
 
 // ─── Stats dérivées par joueur ───────────────────────────────────────────────
 interface PlayerStats {
@@ -63,6 +68,12 @@ export function LeaderboardDesktop() {
   const { leaderboard, matches: allMatches, me, allOps, locations } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
+
+  const showTeamsTab = game === 'babyfoot';
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>('personal');
+  useEffect(() => {
+    if (game !== 'babyfoot') setActiveTab('personal');
+  }, [game]);
   // Le classement courant est celui du mode (babyfoot|smash) → on ne calcule les
   // stats dérivées que sur les matchs de ce jeu.
   const matches = useMemo(
@@ -260,6 +271,40 @@ export function LeaderboardDesktop() {
       {!viewingPast && top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
 
       <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
+        {/* Onglets Personnel / Équipes — Babyfoot uniquement */}
+        {showTeamsTab && (
+          <div className="mb-4 max-w-xs">
+            <SegmentedControl
+              value={activeTab}
+              onChange={setActiveTab}
+              choices={[
+                { value: 'personal' as LeaderboardTab, label: 'Personnel' },
+                { value: 'teams' as LeaderboardTab, label: 'Équipes 2v2' },
+              ]}
+            />
+          </div>
+        )}
+
+        <AnimatePresence mode="wait" initial={false}>
+          {activeTab === 'teams' ? (
+            <motion.div
+              key="teams"
+              initial={{ opacity: 0, x: 14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -14 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <TeamLeaderboard />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="personal"
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 14 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            >
+
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
           <div className="flex items-center gap-2">
@@ -389,6 +434,10 @@ export function LeaderboardDesktop() {
             </table>
           </div>
         )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       </Panel>
     </div>
   );
