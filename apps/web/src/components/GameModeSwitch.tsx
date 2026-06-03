@@ -83,13 +83,16 @@ const META: Record<Game, {
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
+/** Morph sans overshoot (évite tout rollback à la fermeture). */
+const MORPH = { type: 'tween' as const, duration: 0.42, ease: [0.33, 1, 0.68, 1] };
+
 /**
  * Sélecteur d'univers flottant (bas droite).
- * Affiche les 3 jeux côte à côte ; un tap sur n'importe lequel bascule
- * directement vers cet univers — plus intuitif que le cycling aveugle.
+ * Un bouton rond montre l'univers actif ; au clic il se déploie — en restant
+ * ancré dans le coin — en un panneau des 3 jeux. Tap sur un jeu = bascule.
  *
- * État fermé  : pill compacte avec le jeu actif + hint "→ suivant".
- * État ouvert : plateau de 3 cartes avec art par univers.
+ * Le morph FAB ↔ panneau s'appuie sur `layoutId` (shared layout) ; le hover
+ * est découplé du layout pour rester fluide malgré le morph en tween.
  */
 export function GameModeSwitch() {
   const { game, setGame } = useGameMode();
@@ -97,109 +100,129 @@ export function GameModeSwitch() {
   const [open, setOpen] = useState(false);
   const m = META[game];
 
-  return (
-    <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90] flex flex-col items-end gap-1.5">
+  const pick = (g: Game) => {
+    setGame(g);
+    window.setTimeout(() => setOpen(false), 180);
+  };
 
-      {/* ── Plateau de sélection (visible quand open) ────────────────── */}
+  return (
+    <>
+      {/* Voile de fermeture (clic extérieur) */}
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.85, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, y: 12 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-            className="flex flex-col gap-1.5 items-end"
-          >
-            {GAMES.map((g) => {
-              const gm = META[g];
-              const isActive = g === game;
-              return (
-                <motion.button
-                  key={g}
-                  type="button"
-                  onClick={() => { setGame(g); setOpen(false); }}
-                  whileTap={{ scale: 0.93 }}
-                  className="flex items-center gap-2.5 pr-3 pl-2.5 py-2 rounded-full backdrop-blur-md transition-all"
-                  style={{
-                    background: isActive ? gm.bgColor : 'rgba(14,12,9,0.80)',
-                    border: `1.5px solid ${isActive ? gm.borderColor : 'rgba(255,255,255,0.07)'}`,
-                    boxShadow: isActive ? `0 0 18px -4px ${gm.glowColor}` : 'none',
-                  }}
-                >
-                  <span style={{ color: isActive ? gm.color : 'rgba(255,255,255,0.45)' }}>
-                    {gm.icon}
-                  </span>
-                  <span
-                    className="text-[11px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap"
-                    style={{ color: isActive ? gm.color : 'rgba(255,255,255,0.5)' }}
-                  >
-                    {gm.label}
-                  </span>
-                  {isActive && (
-                    <span
-                      className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ml-1"
-                      style={{ background: gm.color, color: '#0a0806' }}
-                    >
-                      actuel
-                    </span>
-                  )}
-                </motion.button>
-              );
-            })}
-          </motion.div>
+            key="gm-backdrop"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[89] bg-black/50 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          />
         )}
       </AnimatePresence>
 
-      {/* ── Bouton principal (toujours visible) ──────────────────────── */}
-      <motion.button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        whileTap={{ scale: 0.93 }}
-        aria-label={`Univers actuel : ${m.label}. Cliquer pour changer.`}
-        className="relative flex items-center gap-2 pl-2.5 pr-3 h-12 rounded-full backdrop-blur-md transition-all"
-        style={{
-          background: m.bgColor,
-          border: `1.5px solid ${m.borderColor}`,
-          boxShadow: open
-            ? `0 0 0 3px rgba(255,255,255,0.06), 0 0 24px -4px ${m.glowColor}`
-            : `0 0 20px -6px ${m.glowColor}`,
-        }}
-        animate={{ borderColor: m.borderColor }}
-        transition={{ duration: 0.3 }}
-      >
-        {/* Icône du jeu actif */}
-        <motion.span
-          key={game}
-          initial={{ scale: 0.6, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 600, damping: 24 }}
-          style={{ color: m.color }}
-        >
-          {m.icon}
-        </motion.span>
-
-        {/* Nom du jeu */}
-        <motion.span
-          key={`label-${game}`}
-          initial={{ opacity: 0, x: -4 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
-          style={{ color: m.color }}
-        >
-          {m.shortLabel}
-        </motion.span>
-
-        {/* Indicateur ouvert/fermé */}
-        <motion.span
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-[10px] ml-0.5"
-          style={{ color: m.color, opacity: 0.6 }}
-        >
-          ▲
-        </motion.span>
-      </motion.button>
-    </div>
+      <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90]">
+        {open ? (
+          // ── Panneau (morph depuis le FAB, reste ancré dans le coin) ──
+          <motion.div
+            layoutId="gm-switch"
+            transition={{ layout: MORPH }}
+            style={{ borderRadius: 22, background: '#14110b', border: `1.5px solid ${m.borderColor}` }}
+            className="w-[248px] max-w-[calc(100vw-1.5rem)] overflow-hidden shadow-2xl backdrop-blur-md"
+          >
+            <motion.div
+              className="p-3.5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.18, delay: 0.05 }}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-2">Univers</span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Fermer"
+                  className="grid h-6 w-6 place-items-center rounded-lg text-muted-2 transition-colors hover:bg-white/10 hover:text-text-strong"
+                >
+                  ✕
+                </button>
+              </div>
+              <motion.div
+                className="grid grid-cols-3 gap-2"
+                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05, delayChildren: 0.04 } } }}
+                initial="hidden"
+                animate="show"
+              >
+                {GAMES.map((g) => {
+                  const gm = META[g];
+                  const sel = g === game;
+                  return (
+                    <motion.button
+                      key={g}
+                      type="button"
+                      onClick={() => pick(g)}
+                      variants={{ hidden: { opacity: 0, y: 12, scale: 0.9 }, show: { opacity: 1, y: 0, scale: 1 } }}
+                      transition={{ type: 'spring', stiffness: 440, damping: 26 }}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.94 }}
+                      className="relative flex flex-col items-center gap-1.5 rounded-xl py-2.5"
+                      style={{
+                        background: sel ? gm.bgColor : 'rgba(255,255,255,0.03)',
+                        border: `1.5px solid ${sel ? gm.borderColor : 'rgba(255,255,255,0.07)'}`,
+                        boxShadow: sel ? `0 0 16px -5px ${gm.glowColor}` : 'none',
+                      }}
+                    >
+                      <span style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon}</span>
+                      <span
+                        className="text-[10px] font-extrabold uppercase tracking-wider"
+                        style={{ color: sel ? gm.color : 'rgba(255,255,255,0.5)' }}
+                      >
+                        {gm.shortLabel}
+                      </span>
+                      {sel && (
+                        <motion.span
+                          layoutId="gm-switch-dot"
+                          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full"
+                          style={{ background: gm.color }}
+                        />
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        ) : (
+          // ── FAB rond (univers actif) ──
+          <motion.button
+            layoutId="gm-switch"
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label={`Univers actuel : ${m.label}. Changer de jeu.`}
+            transition={{ layout: MORPH, default: { type: 'spring', stiffness: 500, damping: 28 } }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.92 }}
+            style={{
+              borderRadius: 26,
+              background: '#14110b',
+              border: `1.5px solid ${m.borderColor}`,
+              boxShadow: `0 0 20px -6px ${m.glowColor}`,
+            }}
+            className="grid h-[52px] w-[52px] place-items-center backdrop-blur-md"
+          >
+            <motion.span
+              key={game}
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 600, damping: 24 }}
+              style={{ color: m.color }}
+            >
+              {m.icon}
+            </motion.span>
+          </motion.button>
+        )}
+      </div>
+    </>
   );
 }
