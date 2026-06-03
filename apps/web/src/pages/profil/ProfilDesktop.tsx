@@ -9,6 +9,7 @@ import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
+import { displayTitle } from '../../lib/cosmeticTitles';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
@@ -149,10 +150,10 @@ export function ProfilDesktop() {
               {fullName}
             </div>
             <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>
-            {u.title && (
+            {displayTitle(u.login, u.title) && (
               <div className="mt-2 inline-flex items-center gap-1.5 max-w-full">
                 <span className="text-gold/70 text-xl leading-none">❝</span>
-                <span className="text-gold italic text-lg font-bold truncate">{u.title}</span>
+                <span className="text-gold italic text-lg font-bold truncate">{displayTitle(u.login, u.title)}</span>
                 <span className="text-gold/70 text-xl leading-none">❞</span>
               </div>
             )}
