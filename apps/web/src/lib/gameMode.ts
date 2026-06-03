@@ -3,14 +3,14 @@
  * que la couche data (fetchers statiques de useLeagueData) puisse le lire sans
  * prop-drilling. Le hook `useGameMode` l'expose à React via useSyncExternalStore.
  */
-export type Game = 'babyfoot' | 'smash' | 'chess' | 'streetfighter';
+export type Game = 'babyfoot' | 'smash' | 'chess';
 
 const KEY = 'league.game';
 
 function readInitial(): Game {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'smash' || v === 'chess' || v === 'streetfighter' ? v : 'babyfoot';
+    return v === 'smash' || v === 'chess' ? v : 'babyfoot';
   } catch {
     return 'babyfoot';
   }

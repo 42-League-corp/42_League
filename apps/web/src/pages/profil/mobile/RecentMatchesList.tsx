@@ -5,7 +5,6 @@ import type { PlayedMatch } from '../../../lib/api';
 import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
-import { SfCharIcon } from '../../../components/SfCharIcon';
 import { GamePill, MatchScore } from '../../../components/MatchScore';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
@@ -60,7 +59,6 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const isSmash = match.game === 'smash';
-  const isSf = match.game === 'streetfighter';
   const oppChar = youAreA ? match.charB : match.charA;
   const winnerScore = youWon ? (youAreA ? match.scoreA : match.scoreB) : (youAreA ? match.scoreB : match.scoreA);
   const loserScore = youWon ? (youAreA ? match.scoreB : match.scoreA) : (youAreA ? match.scoreA : match.scoreB);
@@ -96,7 +94,6 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
             <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
           </PlayerLink>
           {isSmash && oppChar && <SmashCharIcon id={oppChar} size={18} className="shrink-0" />}
-          {isSf && oppChar && <SfCharIcon id={oppChar} size={18} className="shrink-0" />}
           <GamePill game={match.game} />
         </div>
         <div className="text-[10px] text-muted font-medium">

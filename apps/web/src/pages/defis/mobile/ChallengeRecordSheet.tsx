@@ -4,13 +4,11 @@ import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
-import { SfCharIcon } from '../../../components/SfCharIcon';
 import { Button } from '../../../components/Button';
 import { api, type Challenge } from '../../../lib/api';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useFlash } from '../../../hooks/useFlash';
 import { SMASH_ROSTER } from '../../../lib/smash';
-import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
 const WINNING_SCORE = 10;
@@ -21,19 +19,18 @@ function smashTarget(bestOf: 3 | 5) {
   return Math.ceil(bestOf / 2);
 }
 
-function CharPicker({ label, value, onChange, roster, Icon }: {
+function SmashCharPicker({ label, value, onChange }: {
   label: string; value: string | null; onChange: (id: string) => void;
-  roster: { id: string; name: string }[]; Icon: typeof SmashCharIcon;
 }) {
   return (
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{label}</label>
       <div className="grid grid-cols-6 gap-1.5 max-h-40 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-        {roster.map((c) => (
+        {SMASH_ROSTER.map((c) => (
           <button key={c.id} type="button" onClick={() => onChange(c.id)} title={c.name}
             className={`rounded-lg transition-all ${value === c.id ? 'ring-2 ring-[#c97bff] scale-105' : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'}`}
           >
-            <Icon id={c.id} size={38} className="w-full aspect-square" />
+            <SmashCharIcon id={c.id} size={38} className="w-full aspect-square" />
           </button>
         ))}
       </div>
@@ -77,11 +74,6 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
 
   const game = challenge.game ?? 'babyfoot';
   const isSmash = game === 'smash';
-  const isSf = game === 'streetfighter';
-  // Street Fighter == Smash pour la saisie (set Bo3/Bo5 + 2 persos), mais sans stocks.
-  const isSetGame = isSmash || isSf;
-  const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
-  const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
   const isChess = game === 'chess';
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
 
@@ -101,14 +93,12 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
     if (iWon === null) return;
     setBusy(true);
     try {
-      if (isSetGame) {
+      if (isSmash) {
         if (!charSelf || !charOpp) { flash.show('Choisis les deux personnages', 'error'); setBusy(false); setSending(false); return; }
         await api.recordChallengeResult(challenge.id, {
           scoreSelf: iWon ? target : loserGames,
           scoreOpponent: iWon ? loserGames : target,
-          game: isSf ? 'streetfighter' : 'smash', bestOf, charSelf, charOpponent: charOpp,
-          // Les stocks (vies) sont spécifiques au Smash ; SF n'en a pas.
-          ...(isSmash ? { stocks: winnerStocks } : {}),
+          game: 'smash', bestOf, charSelf, charOpponent: charOpp, stocks: winnerStocks,
         });
       } else if (isChess) {
         await api.recordChallengeResult(challenge.id, { scoreSelf: iWon ? 1 : 0, scoreOpponent: iWon ? 0 : 1, game: 'chess' });
@@ -127,7 +117,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
       haptic('error');
     } finally { setBusy(false); setSending(false); }
-  }, [iWon, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, loserScore, challenge.id, opponent, flash, refresh, onDone, onClose]);
+  }, [iWon, isSmash, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, loserScore, challenge.id, opponent, flash, refresh, onDone, onClose]);
 
   const triggerSend = () => { setSending(true); haptic('medium'); window.setTimeout(handleSubmit, 140); };
 
@@ -156,7 +146,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
           Match contre <span className="font-extrabold text-text-strong">{opponent}</span>
           {game !== 'babyfoot' && (
             <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-bg-2 border border-border">
-              {game === 'smash' ? 'Smash' : game === 'streetfighter' ? 'Street Fighter' : 'Échecs'}
+              {game === 'smash' ? 'Smash' : 'Échecs'}
             </span>
           )}
         </div>
@@ -180,7 +170,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
         )}
 
         {/* Babyfoot */}
-        {iWon !== null && !isSetGame && !isChess && (
+        {iWon !== null && !isSmash && !isChess && (
           <div className="space-y-4">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold text-center">
               Score de {iWon ? opponent : (myLogin ?? 'moi')}
@@ -199,8 +189,8 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
           </div>
         )}
 
-        {/* Set (Smash / Street Fighter) */}
-        {iWon !== null && isSetGame && (
+        {/* Smash */}
+        {iWon !== null && isSmash && (
           <div className="space-y-4">
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Format</label>
@@ -225,20 +215,18 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
                 ))}
               </div>
             </div>
-            {isSmash && (
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Vies restantes du gagnant</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3].map((s) => (
-                    <button key={s} type="button" onClick={() => setWinnerStocks(s)}
-                      className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${winnerStocks === s ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
-                    >{'❤'.repeat(s)}</button>
-                  ))}
-                </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Vies restantes du gagnant</label>
+              <div className="flex gap-2">
+                {[1, 2, 3].map((s) => (
+                  <button key={s} type="button" onClick={() => setWinnerStocks(s)}
+                    className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${winnerStocks === s ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
+                  >{'❤'.repeat(s)}</button>
+                ))}
               </div>
-            )}
-            <CharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
-            <CharPicker label={`Perso de ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+            </div>
+            <SmashCharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} />
+            <SmashCharPicker label={`Perso de ${opponent}`} value={charOpp} onChange={setCharOpp} />
             <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
               <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
               {' gagne '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>

@@ -14,14 +14,14 @@ export function LeaderboardBanner() {
   const { game } = useGameMode();
   return (
     <div className="relative -mx-4 sm:mx-0 h-16 sm:h-20 sm:rounded-xl overflow-hidden mb-5">
-      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : game === 'streetfighter' ? <SfField /> : <FoosField />}
+      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : <FoosField />}
       {/* Fondu vers le bas — le contenu de la page apparaît proprement */}
       <div className="absolute inset-0 bg-gradient-to-t from-bg-1 via-bg-1/50 to-transparent" />
       {/* Petit label discret */}
       <div className="absolute left-4 bottom-2 flex items-center gap-2 opacity-50">
         <div className="w-1 h-3 bg-gradient-to-b from-accent to-accent-dim rounded-full" />
         <span className="text-[9px] uppercase tracking-[0.22em] font-extrabold text-muted-2">
-          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : game === 'streetfighter' ? 'Street Fighter' : 'Babyfoot'} · classement
+          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : 'Babyfoot'} · classement
         </span>
       </div>
     </div>
@@ -71,25 +71,6 @@ function FoosField() {
   );
 }
 
-function SfField() {
-  return (
-    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
-      <defs>
-        <linearGradient id="lb-sf" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#2a1404" />
-          <stop offset="100%" stopColor="#0d0602" />
-        </linearGradient>
-      </defs>
-      <rect width="400" height="120" fill="url(#lb-sf)" />
-      {[40, 130, 280, 370].map((x, i) => (
-        <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
-          fill="#ff7a18" opacity="0.12" />
-      ))}
-      <image href="/sf-color.png" x="248" y="16" width="140" height="88" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
-    </svg>
-  );
-}
-
 function SmashField() {
   return (
     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
@@ -98,13 +79,22 @@ function SmashField() {
           <stop offset="0%" stopColor="#200408" />
           <stop offset="100%" stopColor="#0d0204" />
         </linearGradient>
+        <radialGradient id="lb-ball" cx="38%" cy="33%" r="70%">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="40%" stopColor="#ff8a3a" />
+          <stop offset="100%" stopColor="#c01824" />
+        </radialGradient>
       </defs>
       <rect width="400" height="120" fill="url(#lb-smash)" />
       {[40, 130, 280, 370].map((x, i) => (
         <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
           fill="#ff3d50" opacity="0.12" />
       ))}
-      <image href="/smash-color.png" x="288" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+      <g transform="translate(354,58)">
+        <circle r="26" fill="url(#lb-ball)" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" opacity="0.7" />
+        <path d="M0 -24 C-7 -8 -7 10 0 24 M-24 0 C-8 -7 10 -7 24 0"
+          fill="none" stroke="#6a0810" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
+      </g>
     </svg>
   );
 }

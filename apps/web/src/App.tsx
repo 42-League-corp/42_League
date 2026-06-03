@@ -1,6 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from './shell/AppShell';
 import { Toast } from './components/Toast';
 import { PageSkeleton } from './mobile/primitives/Skeleton';
@@ -14,7 +13,6 @@ import { AboutPage } from './pages/AboutPage';
 import { ConsentGate } from './components/ConsentGate';
 import { StagingGate } from './components/StagingGate';
 import { IS_STAGING } from './lib/config';
-import { SplashScreen } from './components/SplashScreen';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -30,7 +28,6 @@ function prefetchRouteChunks() {
   void import('./pages/ReglagesPage');
   void import('./pages/PlayerPage');
   void import('./pages/TournoiDetailPage');
-  void import('./pages/team/TeamProfilePage');
 }
 
 // ─── Routes paresseuses ──────────────────────────────────────────────────────
@@ -73,52 +70,32 @@ const TropheesPage = lazy(() =>
 const H2HPage = lazy(() =>
   import('./pages/H2HPage').then((m) => ({ default: m.H2HPage })),
 );
-const TeamProfilePage = lazy(() =>
-  import('./pages/team/TeamProfilePage').then((m) => ({ default: m.TeamProfilePage })),
-);
 
 export function App() {
   const { authenticated } = useAuth();
-  const [showSplash, setShowSplash] = useState(true);
 
   return (
-    <>
-      {/* Cross-dissolve : l'app est invisible pendant le splash, puis fade-in en même
-          temps que le splash fade-out → pas de "page jaune qui clignote" */}
-      <motion.div
-        className="h-full"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: showSplash ? 0 : 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-      >
-        <Routes>
-          <Route path="/auth/return" element={<AuthReturnPage />} />
-          {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
-              Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
-              pour conserver la tab bar en continuité des autres pages. */}
-          {!authenticated && <Route path="/about" element={<AboutPage />} />}
-          <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
-          <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
-          <Route
-            path="*"
-            element={
-              authenticated ? (
-                <LeagueDataProvider>
-                  <AuthenticatedShell />
-                </LeagueDataProvider>
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-        </Routes>
-      </motion.div>
-      <AnimatePresence>
-        {showSplash && (
-          <SplashScreen onComplete={() => setShowSplash(false)} />
-        )}
-      </AnimatePresence>
-    </>
+    <Routes>
+      <Route path="/auth/return" element={<AuthReturnPage />} />
+      {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
+          Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
+          pour conserver la tab bar en continuité des autres pages. */}
+      {!authenticated && <Route path="/about" element={<AboutPage />} />}
+      <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
+      <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
+      <Route
+        path="*"
+        element={
+          authenticated ? (
+            <LeagueDataProvider>
+              <AuthenticatedShell />
+            </LeagueDataProvider>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+    </Routes>
   );
 }
 
@@ -139,10 +116,9 @@ function AuthenticatedShell() {
     return <ConsentGate login={me.login} onAccepted={() => void refresh()} />;
   }
 
-  // Staging : accès réservé à la liste blanche (cf. STAGING_ALLOWED backend, exposée
-  // via me.stagingAllowed). Un login non autorisé voit un écran dédié plutôt que
-  // l'app (le backend refuse de toute façon ses données).
-  if (!loading && IS_STAGING && me && !me.stagingAllowed) {
+  // Staging : accès réservé aux superadmins. Un utilisateur connecté non-superadmin
+  // voit un écran dédié plutôt que l'app (le backend refuse de toute façon ses données).
+  if (!loading && IS_STAGING && me && me.role !== 'SUPERADMIN') {
     return <StagingGate login={me.login} />;
   }
 
@@ -170,7 +146,6 @@ function AuthenticatedShell() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/profile" element={<ProfilPage />} />
               <Route path="/player/:login" element={<PlayerPage />} />
-              <Route path="/team/:teamId" element={<TeamProfilePage />} />
               <Route path="/h2h" element={<H2HPage />} />
               <Route path="/history" element={<HistoriquePage />} />
               <Route path="/settings" element={<ReglagesPage />} />

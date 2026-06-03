@@ -10,11 +10,9 @@
  *  - Zéro label texte sur le graphe (épuré)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import type { Game, PlayedMatch } from '../lib/api';
 import { useT } from '../lib/i18n';
-import { useLeagueData } from '../hooks/useLeagueData';
-import { Avatar } from './Avatar';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -87,57 +85,6 @@ function fmtDate(iso: string): string {
 
 const GOLD = '#ffc94a';
 const RED = '#ff5366';
-const WIN = '#7fd66e';
-const LOSS = '#ff5366';
-
-// ─── Sous-composants tooltip ───────────────────────────────────────────────────
-
-/** Un chiffre qui roule verticalement (sens selon la tendance). */
-function RollDigit({ ch, up }: { ch: string; up: boolean }) {
-  return (
-    <span className="relative inline-block overflow-hidden align-baseline" style={{ height: '1em', width: ch === '1' ? '0.55em' : '0.62em' }}>
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={ch}
-          className="absolute inset-0 flex items-center justify-center"
-          initial={{ y: up ? '100%' : '-100%', opacity: 0 }}
-          animate={{ y: '0%', opacity: 1 }}
-          exit={{ y: up ? '-100%' : '100%', opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 0.8 }}
-        >
-          {ch}
-        </motion.span>
-      </AnimatePresence>
-    </span>
-  );
-}
-
-/** Compteur ELO à roulettes — seuls les chiffres qui changent s'animent. */
-function RollingNumber({ value, up }: { value: number; up: boolean }) {
-  const chars = Math.round(value).toString().split('');
-  return (
-    <span className="inline-flex tabular-nums">
-      {chars.map((c, i) => <RollDigit key={chars.length - 1 - i} ch={c} up={up} />)}
-    </span>
-  );
-}
-
-/** Flèche diagonale ↗ (victoire) / ↘ (défaite), rotation + couleur fluides. */
-function TrendArrow({ up }: { up: boolean }) {
-  const c = up ? WIN : LOSS;
-  return (
-    <motion.span
-      className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-md"
-      animate={{ rotate: up ? 0 : 90, color: c, backgroundColor: `${c}22` }}
-      transition={{ rotate: { type: 'spring', stiffness: 130, damping: 18 }, default: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } }}
-      style={{ color: c }}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7 17 L17 7 M10 7 H17 V14" />
-      </svg>
-    </motion.span>
-  );
-}
 
 // ─── Composant ────────────────────────────────────────────────────────────────
 
@@ -148,12 +95,6 @@ export function EloChart({
   maxPoints, height = 100,
 }: EloChartProps) {
   const t = useT();
-  const { leaderboard } = useLeagueData();
-  const imageByLogin = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const e of leaderboard) map.set(e.login, e.imageUrl);
-    return map;
-  }, [leaderboard]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(360);
 
@@ -304,60 +245,42 @@ export function EloChart({
           fill="transparent" style={{ cursor: 'crosshair' }} />
       </svg>
 
-      {/* Tooltip premium glass — adversaire, ELO à roulettes, résultat */}
-      {hoveredPt && !hoveredPt.isStart && (() => {
-        const won = (hoveredPt.scoreFor ?? 0) > (hoveredPt.scoreAgainst ?? 0);
-        const opp = hoveredPt.opponent ?? '?';
-        return (
-          <div
-            className="absolute z-20 pointer-events-none -translate-x-1/2 rounded-xl overflow-hidden"
-            style={{
-              left: Math.min(Math.max(hoveredPt.x, 104), W - 104),
-              top: Math.max(hoveredPt.y - 104, 0),
-              background: 'linear-gradient(145deg, rgba(24,20,12,0.97) 0%, rgba(14,12,7,0.99) 100%)',
-              border: `1px solid ${won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)'}`,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,215,120,0.06)',
-              backdropFilter: 'blur(20px)',
-              minWidth: 196,
-            }}
-          >
-            {/* Barre de couleur en haut */}
-            <div className="h-[2px]" style={{ background: won ? WIN : LOSS }} />
-            <div className="px-3 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="rounded-full p-[1.5px]" style={{ background: won ? WIN : LOSS }}>
-                  <Avatar login={opp} imageUrl={imageByLogin.get(opp) ?? null} size="sm" />
-                </div>
-                <div className="min-w-0 leading-tight">
-                  <div className="text-[8px] font-bold uppercase tracking-wider text-muted">vs</div>
-                  <div className="max-w-[84px] truncate text-xs font-extrabold text-text-strong">{opp}</div>
-                </div>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <TrendArrow up={won} />
-                  <div className="text-right leading-tight">
-                    <div className="font-display text-base font-black tabular-nums" style={{ color: won ? WIN : LOSS }}>
-                      <RollingNumber value={hoveredPt.elo} up={won} />
-                    </div>
-                    <div className="text-[8px] font-bold uppercase tracking-wider text-muted">elo</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5">
-                <span className="font-mono text-[11px] font-bold tabular-nums text-muted-2">
-                  {hoveredPt.scoreFor}–{hoveredPt.scoreAgainst}
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold" style={{ color: won ? WIN : LOSS }}>{won ? 'Victoire' : 'Défaite'}</span>
-                  <span className={`font-mono text-[10px] font-extrabold tabular-nums ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
-                    {hoveredPt.delta >= 0 ? '+' : ''}{hoveredPt.delta}
-                  </span>
-                </span>
-              </div>
-              <div className="mt-1 font-mono text-[8px] text-muted opacity-60">{fmtDate(hoveredPt.date)}</div>
+      {/* Tooltip premium glass */}
+      {hoveredPt && !hoveredPt.isStart && (
+        <div
+          className="absolute z-20 pointer-events-none -translate-x-1/2 rounded-xl overflow-hidden"
+          style={{
+            left: Math.min(Math.max(hoveredPt.x, 72), W - 72),
+            top: Math.max(hoveredPt.y - 76, 0),
+            background: 'linear-gradient(145deg, rgba(24,20,12,0.97) 0%, rgba(14,12,7,0.99) 100%)',
+            border: `1px solid ${hoveredPt.delta >= 0 ? 'rgba(255,201,74,0.4)' : 'rgba(255,83,102,0.4)'}`,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,215,120,0.06)',
+            backdropFilter: 'blur(20px)',
+            minWidth: 110,
+          }}
+        >
+          {/* Barre de couleur en haut */}
+          <div className="h-[2px]" style={{ background: hoveredPt.delta >= 0 ? GOLD : RED }} />
+          <div className="px-3 py-2">
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="font-display text-base font-black tabular-nums"
+                style={{ color: hoveredPt.delta >= 0 ? GOLD : RED }}>
+                {Math.round(hoveredPt.elo)}
+              </span>
+              <span className="text-[9px] text-muted uppercase tracking-wider">ELO</span>
+              <span className={`ml-auto text-[11px] font-mono font-extrabold tabular-nums ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
+                {hoveredPt.delta >= 0 ? '+' : ''}{hoveredPt.delta}
+              </span>
             </div>
+            {hoveredPt.opponent && (
+              <div className="text-[10px] text-muted-2 font-semibold truncate max-w-[110px]">
+                vs {hoveredPt.opponent}
+              </div>
+            )}
+            <div className="text-[9px] text-muted mt-0.5 font-mono opacity-60">{fmtDate(hoveredPt.date)}</div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }

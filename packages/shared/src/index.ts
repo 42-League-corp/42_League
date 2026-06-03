@@ -1,5 +1,4 @@
 export * from './elo.js';
-export * from './elo2v2.js';
 export * from './anti-farming.js';
 export * from './schemas.js';
 export * from './games.js';

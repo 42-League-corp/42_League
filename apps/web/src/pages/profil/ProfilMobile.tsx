@@ -4,7 +4,6 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
 import { RecentMatchesList } from './mobile/RecentMatchesList';
 import { OpsCard } from './mobile/OpsCard';
-import { MyTeamsSection } from './mobile/MyTeamsSection';
 import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
 import { useProfilLogic } from './shared/useProfilLogic';
@@ -61,14 +60,6 @@ export function ProfilMobile() {
           <SectionHeader title="Derniers matches" badge={stats.total} />
           <RecentMatchesList matches={recentMatches} myLogin={myLogin} />
         </section>
-
-        {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
-        {game === 'babyfoot' && myLogin && (
-          <section>
-            <SectionHeader title="Mes Équipes 2v2" />
-            <MyTeamsSection myLogin={myLogin} />
-          </section>
-        )}
 
         {/* Sign out button */}
         <button

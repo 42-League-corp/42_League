@@ -20,9 +20,9 @@ export type { GameId };
  * couche changera — les appelants (leaderboard, settle, tournois) restent stables.
  */
 interface RatingColumns {
-  elo: 'elo' | 'eloSmash' | 'eloChess' | 'eloSf';
-  matchesPlayed: 'matchesPlayed' | 'matchesPlayedSmash' | 'matchesPlayedChess' | 'matchesPlayedSf';
-  tournamentsWon: 'tournamentsWon' | 'tournamentsWonSmash' | 'tournamentsWonChess' | 'tournamentsWonSf';
+  elo: 'elo' | 'eloSmash' | 'eloChess';
+  matchesPlayed: 'matchesPlayed' | 'matchesPlayedSmash' | 'matchesPlayedChess';
+  tournamentsWon: 'tournamentsWon' | 'tournamentsWonSmash' | 'tournamentsWonChess';
 }
 
 const COLUMNS: Record<GameId, RatingColumns> = {
@@ -36,11 +36,6 @@ const COLUMNS: Record<GameId, RatingColumns> = {
     elo: 'eloChess',
     matchesPlayed: 'matchesPlayedChess',
     tournamentsWon: 'tournamentsWonChess',
-  },
-  streetfighter: {
-    elo: 'eloSf',
-    matchesPlayed: 'matchesPlayedSf',
-    tournamentsWon: 'tournamentsWonSf',
   },
 };
 

@@ -43,7 +43,6 @@ const NOOP = () => {};
 const GAME_BADGE: Partial<Record<Game, string>> = {
   smash: '🎮 Smash',
   chess: '♟ Échecs',
-  streetfighter: '🥊 Street Fighter',
 };
 
 function GameTag({ game }: { game?: Game }) {
@@ -798,10 +797,10 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
       </div>
     );
   }
-  if (game === 'smash' || game === 'streetfighter') {
+  if (game === 'smash') {
     return (
       <div className="mt-3 text-center space-y-2">
-        <p className="text-xs text-muted-2">Pour un set, utilise <span className="text-text font-semibold">« Déclarer une game »</span>.</p>
+        <p className="text-xs text-muted-2">Pour un set Smash, utilise <span className="text-text font-semibold">« Déclarer une game »</span>.</p>
         <Button size="sm" variant="ghost" onClick={onDone} className="w-full">OK</Button>
       </div>
     );

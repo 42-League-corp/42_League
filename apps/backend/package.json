@@ -16,8 +16,6 @@
     "db:seed-test": "dotenv -e ../../.env -- tsx prisma/seed-test.ts",
     "db:add-players": "dotenv -e ../../.env -- tsx prisma/add-test-players.ts",
     "db:add-players:prod": "tsx prisma/add-test-players.ts",
-    "db:add-throbert-matches": "dotenv -e ../../.env -- tsx prisma/add-throbert-matches.ts",
-    "db:add-throbert-matches:prod": "tsx prisma/add-throbert-matches.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:generate": "dotenv -e ../../.env -- prisma generate"
   },

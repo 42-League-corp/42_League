@@ -371,8 +371,6 @@ const es: Dict = {
   'lb.col.games': 'Partidas',
   'lb.col.winrate': 'Vict. %',
   'lb.col.streak': 'Racha',
-  'lb.col.streak.win': 'Mejor racha V',
-  'lb.col.streak.loss': 'Mejor racha D',
   'lb.col.titles': 'Títulos',
   'lb.podium.champion': 'Campeón',
   'lb.abbr.win': 'V',

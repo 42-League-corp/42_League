@@ -10,7 +10,6 @@ import { PlayerLink } from '../components/PlayerLink';
 import { BadgesRow } from '../components/Badges';
 import { Palmares } from '../components/Palmares';
 import { EloChart } from '../components/EloChart';
-import { displayTitle } from '../lib/cosmeticTitles';
 import {
   api,
   type OpsUserResponse,
@@ -139,8 +138,8 @@ export function PlayerPage() {
             </span>
             {onlineHost && <OnlineBadge host={onlineHost} />}
           </div>
-          {displayTitle(p.user.login, p.user.title) && (
-            <div className="text-gold italic text-sm mt-1.5">« {displayTitle(p.user.login, p.user.title)} »</div>
+          {p.user.title && (
+            <div className="text-gold italic text-sm mt-1.5">« {p.user.title} »</div>
           )}
           {p.badges && p.badges.length > 0 && (
             <div className="mt-2">

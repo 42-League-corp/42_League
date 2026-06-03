@@ -15,9 +15,6 @@ export interface RatingSource {
   eloChess?: number;
   matchesPlayedChess?: number;
   tournamentsWonChess?: number;
-  eloSf?: number;
-  matchesPlayedSf?: number;
-  tournamentsWonSf?: number;
 }
 
 /** Rating + compteurs du joueur pour une discipline donnée. */
@@ -37,13 +34,6 @@ export function pickRating(
       elo: user.eloChess ?? 1000,
       matchesPlayed: user.matchesPlayedChess ?? 0,
       tournamentsWon: user.tournamentsWonChess ?? 0,
-    };
-  }
-  if (game === 'streetfighter') {
-    return {
-      elo: user.eloSf ?? 1000,
-      matchesPlayed: user.matchesPlayedSf ?? 0,
-      tournamentsWon: user.tournamentsWonSf ?? 0,
     };
   }
   return {
