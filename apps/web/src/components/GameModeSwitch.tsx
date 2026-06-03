@@ -175,7 +175,7 @@ export function GameModeSwitch() {
                         boxShadow: sel ? `0 0 16px -5px ${gm.glowColor}` : 'none',
                       }}
                     >
-                      <span style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
+                      <span className="grid h-5 w-5 place-items-center" style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
                       <span
                         className="text-[10px] font-extrabold uppercase tracking-wider"
                         style={{ color: sel ? gm.color : 'rgba(255,255,255,0.5)' }}
