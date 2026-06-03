@@ -1,9 +1,8 @@
 import { motion } from 'framer-motion';
-import { ArrowLeft, Shield, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { PlayerLink } from '../../components/PlayerLink';
-import { StatCard } from '../../components/StatCard';
 import { TeamEloChart } from '../../components/TeamEloChart';
 import { TeamProfileTrophiesSection } from '../../components/TeamTrophiesSection';
 import type { TeamProfile } from '../../lib/api';
