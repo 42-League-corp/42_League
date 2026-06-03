@@ -336,6 +336,15 @@ export interface TournamentEntry {
   user?: { login: string; imageUrl: string | null; elo: number };
 }
 
+export interface TournamentInvite {
+  id: string;
+  tournamentId?: string;
+  inviterLogin: string;
+  inviteeLogin: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: string;
+}
+
 export interface Tournament {
   id: string;
   name: string;
@@ -354,6 +363,7 @@ export interface Tournament {
   entries?: TournamentEntry[];
   matches?: TournamentMatch[];
   winner?: { login: string; imageUrl: string | null } | null;
+  invites?: TournamentInvite[];
 }
 
 export type AllHistoryEventType = 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
@@ -574,6 +584,22 @@ export const api = {
   leaveTournament: (id: string) =>
     request<{ id: string; left: true }>(
       `/tournaments/${encodeURIComponent(id)}/leave`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  // Organisateur/admin : envoie une invitation (le joueur doit accepter).
+  inviteTournamentPlayer: (id: string, login: string) =>
+    request<TournamentInvite>(
+      `/tournaments/${encodeURIComponent(id)}/invite`,
+      { method: 'POST', body: JSON.stringify({ login }) },
+    ),
+  acceptTournamentInvite: (tournamentId: string, inviteId: string) =>
+    request<{ id: string; inviteId: string; status: string }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/invites/${encodeURIComponent(inviteId)}/accept`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  declineTournamentInvite: (tournamentId: string, inviteId: string) =>
+    request<{ id: string; inviteId: string; status: string }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/invites/${encodeURIComponent(inviteId)}/decline`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
   // Organisateur/admin : ajoute directement un joueur existant au tournoi.
