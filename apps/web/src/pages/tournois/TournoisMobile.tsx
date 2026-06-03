@@ -139,7 +139,7 @@ function LiveHero({ tournament }: { tournament: Tournament }) {
             </span>
             <span className="text-[10px] text-muted-2 font-bold">
               {count}/{tournament.capacity} joueurs · {tournament.game && tournament.game !== 'babyfoot'
-                ? (tournament.game === 'smash' ? '🎮 Smash' : '♟ Échecs')
+                ? (tournament.game === 'smash' ? '🎮 Smash' : tournament.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs')
                 : '⚽ Babyfoot'}
             </span>
           </div>

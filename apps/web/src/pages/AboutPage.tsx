@@ -249,6 +249,44 @@ const RULES: Record<Game, GameRules> = {
       ],
     },
   },
+  streetfighter: {
+    label: 'Street Fighter 1 contre 1',
+    terrain: {
+      intro: (
+        <>
+          Conventions de set pour que la victoire soit nette et les matchs équitables :
+        </>
+      ),
+      bullets: [
+        <>
+          Chaque match se joue en <span className="text-gold font-semibold">rounds</span> — le joueur qui
+          remporte la majorité des rounds gagne la manche.
+        </>,
+        <>
+          Sélection de <span className="text-gold font-semibold">personnage</span> avant chaque manche ; après
+          une manche perdue, le perdant peut <span className="text-text font-semibold">changer de personnage</span>.
+        </>,
+        <>
+          Les sets se disputent au <span className="text-gold font-semibold">meilleur des 3 (Bo3)</span> ou{' '}
+          <span className="text-gold font-semibold">des 5 (Bo5)</span> selon le contexte (officiel, tournoi).
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League classe ici le <span className="text-text font-semibold">Street Fighter 1 contre 1</span>.
+          Chaque joueur inscrit peut défier n'importe quel autre membre de sa league.
+        </>
+      ),
+      bullets: [
+        <>Set au <span className="text-gold font-semibold">meilleur des 3 ou des 5</span> manches (Bo3 / Bo5).</>,
+        <>Le vainqueur est celui qui remporte la <span className="text-text font-semibold">majorité des manches</span>.</>,
+        <>L'<span className="text-text font-semibold">ELO est propre à la discipline</span> : ton rating Street Fighter est distinct des autres jeux.</>,
+        <>Les deux joueurs déclarent leur résultat indépendamment. En cas de désaccord, le match est annulé.</>,
+      ],
+    },
+  },
 };
 
 function RulesSection() {

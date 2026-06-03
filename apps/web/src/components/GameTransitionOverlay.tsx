@@ -75,6 +75,27 @@ const UNIVERSE: Record<Game, {
       </svg>
     ),
   },
+  streetfighter: {
+    bg: 'rgba(28, 12, 2, 0.94)',
+    glow: 'rgba(255, 122, 24, 0.75)',
+    accent: '#ff7a18',
+    label: 'STREET FIGHTER',
+    symbol: (s) => (
+      <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
+        {/* Éclats d'impact (comme Smash) */}
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+          const r = deg * Math.PI / 180;
+          const x1 = 60 + Math.cos(r) * 52;
+          const y1 = 60 + Math.sin(r) * 52;
+          const x2 = 60 + Math.cos(r) * 34;
+          const y2 = 60 + Math.sin(r) * 34;
+          return <line key={deg} x1={x2} y1={y2} x2={x1} y2={y1} stroke="#ff7a18" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" />;
+        })}
+        {/* Logo Street Fighter */}
+        <image href="/Street_Fighter_Logo.png" x="18" y="30" width="84" height="60" preserveAspectRatio="xMidYMid meet" />
+      </svg>
+    ),
+  },
   chess: {
     bg: 'rgba(6, 14, 10, 0.94)',
     glow: 'rgba(86, 196, 110, 0.6)',

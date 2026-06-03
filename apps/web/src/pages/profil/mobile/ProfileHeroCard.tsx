@@ -29,7 +29,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
   const titlesWon = pickRating(user, game).tournamentsWon;
 
   // Badges cross-jeux : autres disciplines où ce joueur est actif.
-  const crossGameBadges = (['babyfoot', 'smash', 'chess'] as const)
+  const crossGameBadges = (['babyfoot', 'smash', 'chess', 'streetfighter'] as const)
     .filter((g) => g !== game && (user.games ?? ['babyfoot']).includes(g))
     .map((g) => {
       const r = pickRating(user, g);
@@ -221,7 +221,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
                   <span className="text-base leading-none">
-                    {g === 'smash' ? '🎮' : g === 'chess' ? '♟' : '⚽'}
+                    {g === 'smash' ? '🎮' : g === 'streetfighter' ? '🥊' : g === 'chess' ? '♟' : '⚽'}
                   </span>
                   <span className="font-mono font-extrabold tabular-nums text-[11px] text-gold/90">{elo}</span>
                   <span className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO</span>

@@ -11,8 +11,8 @@ export const LoginSchema = z
 // gagnant n'atteigne 10. Borne supérieure 10 = victoire stricte d'un seul camp.
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
-// ─── Multi-jeu (babyfoot | smash) ──────────────────────────────────────────
-export const GameSchema = z.enum(['babyfoot', 'smash', 'chess']);
+// ─── Multi-jeu (babyfoot | smash | chess | streetfighter) ────────────────────
+export const GameSchema = z.enum(['babyfoot', 'smash', 'chess', 'streetfighter']);
 export type Game = z.infer<typeof GameSchema>;
 export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
@@ -59,9 +59,10 @@ function makeRefiner(requireChars: boolean) {
       }
       return;
     }
-    if (m.game === 'smash') {
+    if (m.game === 'smash' || m.game === 'streetfighter') {
+      // Street Fighter == Smash mécaniquement : set Bo3/Bo5, persos requis.
       if (!m.bestOf) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for smash (3 or 5)' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bestOf required for set games (3 or 5)' });
         return;
       }
       const target = Math.ceil(m.bestOf / 2);
@@ -74,7 +75,7 @@ function makeRefiner(requireChars: boolean) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'loser games must be between 0 and target-1' });
       }
       if (requireChars && (!m.charSelf || !m.charOpponent)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'both characters are required for smash' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'both characters are required' });
       }
     } else {
       if (!(m.scoreSelf === 10 || m.scoreOpponent === 10)) {

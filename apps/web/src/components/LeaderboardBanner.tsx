@@ -14,14 +14,14 @@ export function LeaderboardBanner() {
   const { game } = useGameMode();
   return (
     <div className="relative -mx-4 sm:mx-0 h-16 sm:h-20 sm:rounded-xl overflow-hidden mb-5">
-      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : <FoosField />}
+      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : game === 'streetfighter' ? <SfField /> : <FoosField />}
       {/* Fondu vers le bas — le contenu de la page apparaît proprement */}
       <div className="absolute inset-0 bg-gradient-to-t from-bg-1 via-bg-1/50 to-transparent" />
       {/* Petit label discret */}
       <div className="absolute left-4 bottom-2 flex items-center gap-2 opacity-50">
         <div className="w-1 h-3 bg-gradient-to-b from-accent to-accent-dim rounded-full" />
         <span className="text-[9px] uppercase tracking-[0.22em] font-extrabold text-muted-2">
-          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : 'Babyfoot'} · classement
+          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : game === 'streetfighter' ? 'Street Fighter' : 'Babyfoot'} · classement
         </span>
       </div>
     </div>
@@ -67,6 +67,25 @@ function FoosField() {
         </g>
       ))}
       <circle cx="200" cy="60" r="6" fill="rgba(245,240,225,0.6)" />
+    </svg>
+  );
+}
+
+function SfField() {
+  return (
+    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
+      <defs>
+        <linearGradient id="lb-sf" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#2a1404" />
+          <stop offset="100%" stopColor="#0d0602" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="120" fill="url(#lb-sf)" />
+      {[40, 130, 280, 370].map((x, i) => (
+        <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
+          fill="#ff7a18" opacity="0.12" />
+      ))}
+      <image href="/Street_Fighter_Logo.png" x="300" y="34" width="90" height="56" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
     </svg>
   );
 }

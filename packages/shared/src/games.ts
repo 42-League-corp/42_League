@@ -91,6 +91,19 @@ export const GAMES: Record<GameId, GameDef> = {
     formatScore: (a, b) => (a === b ? '½-½' : a > b ? '1-0' : '0-1'),
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nulle'),
   },
+  // Street Fighter == Smash mécaniquement (set Bo3/Bo5, persos, même Elo), mais
+  // discipline distincte (rating + roster + branding propres).
+  streetfighter: {
+    id: 'streetfighter',
+    label: 'Street Fighter',
+    scoring: 'sets',
+    hasDraw: false,
+    defaultBestOf: 3,
+    elo: (a, b, w, o) =>
+      calculateSmashElo(a, b, w, o.scoreA, o.scoreB, o.bestOf ?? 3, o.winnerStocks ?? 1),
+    formatScore: (a, b) => `${a}-${b}`,
+    outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+  },
 };
 
 /** Toutes les disciplines, dans l'ordre d'affichage. */
@@ -101,7 +114,7 @@ export const DEFAULT_GAME: GameId = 'babyfoot';
 
 /** Normalise une valeur quelconque en GameId (babyfoot par défaut). */
 export function parseGameId(value: unknown): GameId {
-  return value === 'smash' || value === 'chess' ? value : 'babyfoot';
+  return value === 'smash' || value === 'chess' || value === 'streetfighter' ? value : 'babyfoot';
 }
 
 /** Récupère la définition d'une discipline (retombe sur babyfoot si inconnue). */

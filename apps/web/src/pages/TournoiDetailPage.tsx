@@ -815,8 +815,8 @@ function RecordBracketForm({
   const loserLabel =
     winner === 'a' ? (match.playerBLogin ?? 'Joueur B') : (match.playerALogin ?? 'Joueur A');
 
-  // Smash : score du set en games (vainqueur 2 ou 3, perdant strictement moins).
-  if (game === 'smash') {
+  // Set (Smash / Street Fighter) : score du set en games (vainqueur 2 ou 3, perdant strictement moins).
+  if (game === 'smash' || game === 'streetfighter') {
     const loserGames = Math.min(loserScore, winnerGames - 1);
     const chip = (active: boolean) =>
       `w-8 h-8 rounded-lg font-mono font-extrabold tabular-nums transition-all ${

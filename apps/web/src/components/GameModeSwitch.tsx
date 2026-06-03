@@ -13,7 +13,7 @@ export function useGameModeTheme(): void {
 
 // ─── Métadonnées visuelles par univers ────────────────────────────────────────
 
-const GAMES: Game[] = ['babyfoot', 'smash', 'chess'];
+const GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
 
 const META: Record<Game, {
   label: string;
@@ -66,6 +66,17 @@ const META: Record<Game, {
         <rect x="7.5" y="19" width="9" height="2.5" rx="1" fill="currentColor" />
         <rect x="6" y="21" width="12" height="2" rx="1" fill="currentColor" />
       </svg>
+    ),
+  },
+  streetfighter: {
+    label: 'Street Fighter',
+    shortLabel: 'SF',
+    color: '#ff7a18',
+    borderColor: 'rgba(255,122,24,0.6)',
+    bgColor: 'rgba(255,122,24,0.10)',
+    glowColor: 'rgba(255,122,24,0.45)',
+    icon: (
+      <img src="/Street_Fighter_Logo.png" alt="" width={20} height={20} className="object-contain" aria-hidden />
     ),
   },
 };
@@ -138,7 +149,7 @@ export function GameModeSwitch() {
                 </button>
               </div>
               <motion.div
-                className="grid grid-cols-3 gap-2"
+                className="grid grid-cols-4 gap-2"
                 variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05, delayChildren: 0.04 } } }}
                 initial="hidden"
                 animate="show"

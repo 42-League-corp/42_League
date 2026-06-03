@@ -93,7 +93,7 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
                 {/* Discipline du tournoi */}
                 {t.game && t.game !== 'babyfoot' && (
                   <span className="px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] bg-accent/10 text-accent border border-accent/25">
-                    {t.game === 'smash' ? '🎮 Smash' : '♟ Échecs'}
+                    {t.game === 'smash' ? '🎮 Smash' : t.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs'}
                   </span>
                 )}
                 <span className="opacity-60">·</span>

@@ -47,6 +47,7 @@ function GameModeBadges({ user }: { user: AdminUser }) {
     { id: 'babyfoot', label: 'B', cls: 'bg-amber-400/15 text-amber-400', elo: user.elo },
     { id: 'smash', label: 'S', cls: 'bg-red-400/15 text-red-400', elo: user.eloSmash ?? 1000 },
     { id: 'chess', label: 'É', cls: 'bg-emerald-400/15 text-emerald-400', elo: user.eloChess ?? 1000 },
+    { id: 'streetfighter', label: 'SF', cls: 'bg-orange-400/15 text-orange-400', elo: user.eloSf ?? 1000 },
   ];
   return (
     <span className="inline-flex gap-1">
@@ -315,13 +316,16 @@ function StatsEditModal({
   const [eloC, setEloC] = useState(String(user.eloChess ?? 1000));
   const [matchesC, setMatchesC] = useState(String(user.matchesPlayedChess ?? 0));
   const [trophiesC, setTrophiesC] = useState(String(user.tournamentsWonChess ?? 0));
-  const [games, setGames] = useState<Set<'babyfoot' | 'smash' | 'chess'>>(
-    new Set((user.games as ('babyfoot' | 'smash' | 'chess')[] | undefined) ?? ['babyfoot']),
+  const [eloSf, setEloSf] = useState(String(user.eloSf ?? 1000));
+  const [matchesSf, setMatchesSf] = useState(String(user.matchesPlayedSf ?? 0));
+  const [trophiesSf, setTrophiesSf] = useState(String(user.tournamentsWonSf ?? 0));
+  const [games, setGames] = useState<Set<'babyfoot' | 'smash' | 'chess' | 'streetfighter'>>(
+    new Set((user.games as ('babyfoot' | 'smash' | 'chess' | 'streetfighter')[] | undefined) ?? ['babyfoot']),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const toggleGame = (g: 'babyfoot' | 'smash' | 'chess') =>
+  const toggleGame = (g: 'babyfoot' | 'smash' | 'chess' | 'streetfighter') =>
     setGames((prev) => {
       const next = new Set(prev);
       if (next.has(g)) next.delete(g);
@@ -348,6 +352,9 @@ function StatsEditModal({
         eloChess: Number(eloC),
         matchesPlayedChess: Number(matchesC),
         tournamentsWonChess: Number(trophiesC),
+        eloSf: Number(eloSf),
+        matchesPlayedSf: Number(matchesSf),
+        tournamentsWonSf: Number(trophiesSf),
         games: [...games],
       });
       onSave();
@@ -387,6 +394,15 @@ function StatsEditModal({
         { label: 'Tournois gagnés', value: trophiesC, set: setTrophiesC },
       ],
     },
+    {
+      title: '🥊 Street Fighter',
+      accent: 'text-orange-400',
+      rows: [
+        { label: 'ELO', value: eloSf, set: setEloSf },
+        { label: 'Matches', value: matchesSf, set: setMatchesSf },
+        { label: 'Tournois gagnés', value: trophiesSf, set: setTrophiesSf },
+      ],
+    },
   ];
 
   return (
@@ -403,7 +419,7 @@ function StatsEditModal({
         <div className="mb-4">
           <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">Modes actifs</div>
           <div className="flex gap-2">
-            {(['babyfoot', 'smash', 'chess'] as const).map((g) => (
+            {(['babyfoot', 'smash', 'chess', 'streetfighter'] as const).map((g) => (
               <button
                 key={g}
                 type="button"
