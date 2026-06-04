@@ -32,7 +32,11 @@ export function ProfilMobile() {
 
   return (
     <PullToRefresh onRefresh={refresh}>
-      <div className="space-y-5">
+      {/* `key={game}` : on remonte proprement tout l'arbre du profil à chaque
+          changement d'univers. Évite toute incohérence de réconciliation React
+          (hooks/animations) entre deux disciplines dont les sous-arbres diffèrent
+          — le remount est masqué par l'overlay de transition d'univers. */}
+      <div key={game} className="space-y-5">
         {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
         <ProfileHeroCard stats={stats} />
 

@@ -19,7 +19,15 @@ import {
   SetBugReportStatusSchema,
   SetRoleSchema,
   SetFeatureRequestStatusSchema,
+  FavoritesUpdateSchema,
+  Declare2v2MatchSchema,
+  Confirm2v2MatchSchema,
+  CreateChallenge2v2Schema,
+  DeclareFfaSchema,
+  ConfirmFfaPositionSchema,
+  ContestFfaSchema,
   calculateBabyfootElo,
+  calculateFfaElo,
   shouldCountForElo,
   estimatedEloLoss,
   OPS_DURATION_MS,
@@ -40,6 +48,12 @@ import {
   validateTournamentScore,
 } from './games.js';
 import { prisma } from './db.js';
+import {
+  canonicalTeamLogins,
+  upsertBabyfootTeam,
+  applyElo2v2,
+  type Side2v2,
+} from './babyfoot2v2.js';
 import { seedStaging } from './staging-seed.js';
 import type { Prisma } from '@prisma/client';
 // Valeur runtime (Prisma.DbNull) pour stocker un JSON NULL en base — distinct du
@@ -52,7 +66,7 @@ import {
   isTrusted42Origin,
   type FtProfile,
 } from './auth.js';
-import { backfillMissingImages, fetchAndSavePublicUser } from './ft-api.js';
+import { backfillMissingProfiles, fetchAndSavePublicUser } from './ft-api.js';
 import { getCampusLocations } from './locations.js';
 import {
   advanceWinner,
@@ -73,6 +87,12 @@ const SUPERADMINS = new Set(['abidaux', 'throbert']);
 // Compte de test générique (rôle USER, cf. staging-seed.ts) sur lequel un admin
 // peut basculer pour vivre l'expérience d'un joueur lambda (POST /admin/impersonate-tester).
 const TESTER_LOGIN = 'tester';
+// Comptes tester éphémères créés à la volée (bouton « nouveau compte tester ») :
+// login unique préfixé `tester-…`. Reconnus comme comptes de test pour la staging
+// gate, afin qu'un compte fraîchement créé puisse naviguer sans liste blanche.
+const FRESH_TESTER_PREFIX = `${TESTER_LOGIN}-`;
+const isTesterLogin = (login: string) =>
+  login === TESTER_LOGIN || login.startsWith(FRESH_TESTER_PREFIX);
 
 // Backdoor de dev : le header `x-dev-login` permet de se faire passer pour
 // n'importe quel utilisateur SANS OAuth. Il est donc STRICTEMENT réservé au dev
@@ -176,6 +196,17 @@ async function cancelUserChallenges(
   return res.count > 0;
 }
 
+// Supprime les FFA Smash EN ATTENTE impliquant un compte qui sort du jeu (ban /
+// désactivation / anonymisation) — qu'il en soit le déclarant ou un participant.
+// Cascade : la suppression d'un PendingFfa retire ses participants. Renvoie true
+// si au moins un FFA en attente a été annulé.
+async function cancelUserFfas(tx: Prisma.TransactionClient, login: string): Promise<boolean> {
+  const res = await tx.pendingFfa.deleteMany({
+    where: { OR: [{ declarerLogin: login }, { participants: { some: { login } } }] },
+  });
+  return res.count > 0;
+}
+
 // Filtre Prisma des comptes VISIBLES (en jeu) : ni bannis, ni désactivés
 // (suppression RGPD programmée), ni anonymisés. Utilisé pour le classement et
 // les listes publiques de joueurs.
@@ -194,12 +225,14 @@ interface NotifInput {
   title: string;
   body?: string;
   link?: string;
+  /** Jeu d'origine (couleur/emoji + bascule de mode au clic). Absent = transverse. */
+  game?: string;
 }
 
 async function notify(to: string, n: NotifInput): Promise<void> {
   try {
     await prisma.notification.create({
-      data: { id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null },
+      data: { id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null },
     });
     emit([to], { type: 'notification', payload: {} });
   } catch {
@@ -211,12 +244,20 @@ async function notifyMany(tos: string[], n: NotifInput): Promise<void> {
   if (tos.length === 0) return;
   try {
     await prisma.notification.createMany({
-      data: tos.map((to) => ({ id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null })),
+      data: tos.map((to) => ({ id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null })),
     });
     emit(tos, { type: 'notification', payload: {} });
   } catch {
     /* noop */
   }
+}
+
+// Jeu d'un tournoi (best-effort) — pour teinter les notifs liées à un tournoi.
+async function tournamentGame(id: string): Promise<string | undefined> {
+  const t = await prisma.tournament
+    .findUnique({ where: { id }, select: { game: true } })
+    .catch(() => null);
+  return t?.game ?? undefined;
 }
 
 // Annonce un nouveau joueur à tous les membres visibles de la league.
@@ -268,6 +309,7 @@ async function maybeNotifyTop3(login: string, delta: number): Promise<void> {
         title: `@${login} entre dans le top 3`,
         body: `#${newRank} au classement`,
         link: '/leaderboard',
+        game: 'babyfoot',
       });
     }
   } catch {
@@ -351,7 +393,13 @@ async function getOrCreateUser(login: string, profile?: FtProfile) {
     where: { login },
     update: {
       ...(profile
-        ? { ftId: profile.ftId, campus: profile.campus, imageUrl: profile.imageUrl }
+        ? {
+            ftId: profile.ftId,
+            campus: profile.campus,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            imageUrl: profile.imageUrl,
+          }
         : {}),
       // Always re-enforce SUPERADMIN role on login — no one can downgrade it
       ...(forceSuperAdmin ? { role: 'SUPERADMIN' } : {}),
@@ -483,22 +531,45 @@ if (process.env.NODE_ENV !== 'test') {
   const orAdmin = (base?: (c: Context) => boolean) => async (c: Context) =>
     (await isAdminRequest(c)) || (base ? base(c) : false);
 
-  // Backstop global (120/min). Les admins sont exemptés.
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, skip: orAdmin() }));
+  // Clé de comptage : par utilisateur (login signé) quand authentifié, sinon par
+  // IP. Tout le campus 42 sort derrière une seule IP publique (NAT) ; compter par
+  // IP additionnerait les requêtes de tous les joueurs et déclencherait le
+  // backstop alors que chacun navigue normalement. Le login vient du Bearer signé,
+  // donc non falsifiable. Fallback IP pour les requêtes pré-auth (OAuth).
+  const bySubject = (c: Context): string => {
+    const auth = c.req.header('authorization');
+    const secret = process.env.SESSION_SECRET;
+    if (auth?.startsWith('Bearer ') && secret) {
+      const login = verifyToken(auth.slice(7), secret);
+      if (login) return `user:${login.toLowerCase()}`;
+    }
+    return `ip:${clientIp(c)}`;
+  };
 
-  // Auth : protège l'échange OAuth contre le brute-force.
+  // Backstop global (120/min par joueur). Les admins sont exemptés. Pas de
+  // pénalité progressive : un burst de navigation (refresh = ~10 requêtes) ne
+  // doit jamais déclencher un ban croissant — au pire un 429 qui se purge à la
+  // fin de la fenêtre de 60 s. L'escalade reste sur l'auth (brute-force) et les
+  // écritures (spam de mutations).
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, key: bySubject, progressive: false, skip: orAdmin() }));
+
+  // Auth : protège l'échange OAuth contre le brute-force. Pré-auth → clé par IP.
   app.use('/auth/*', rateLimit({
     name: 'auth', windowMs: 15 * 60_000, max: 50,
     skip: (c) => c.req.path === '/auth/stream-token',
   }));
 
-  // Quotas par action (24 h) — pénalités progressives en cas de spam. Admins exemptés.
-  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  skip: orAdmin((c) => !isMutation(c)) }));
+  // Quotas par action (24 h) — pénalités progressives en cas de spam. Par joueur
+  // (sinon le quota serait partagé par tout le campus). Admins exemptés.
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  // `/matches` est un matcher EXACT → ne couvre pas `/matches/ffa`. Quota dédié à
+  // la déclaration FFA (la liste GET est exemptée via `!isMutation`).
+  app.use('/matches/ffa', rateLimit({ name: 'ffa-declare',       windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
 
-  // Écriture générale (mutations restantes). Admins exemptés.
-  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, skip: orAdmin((c) => !isMutation(c)) });
+  // Écriture générale (mutations restantes), par joueur. Admins exemptés.
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, key: bySubject, skip: orAdmin((c) => !isMutation(c)) });
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
@@ -526,7 +597,7 @@ if (process.env.APP_ENV === 'staging') {
     }
     const login = await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
-    if (!STAGING_ALLOWED.has(login.toLowerCase())) {
+    if (!STAGING_ALLOWED.has(login.toLowerCase()) && !isTesterLogin(login.toLowerCase())) {
       throw new HTTPException(403, { message: 'staging: accès réservé' });
     }
     return next();
@@ -641,7 +712,7 @@ app.post('/admin/refresh-images', async (c) => {
   if (!isAdmin(me)) {
     throw new HTTPException(403, { message: 'admins only' });
   }
-  const n = await backfillMissingImages();
+  const n = await backfillMissingProfiles();
   return c.json({ scheduled: n });
 });
 
@@ -679,6 +750,42 @@ app.route(
   }),
 );
 
+// Cosmétiques actuellement ÉQUIPÉS par un joueur (achetés en boutique) : couleur
+// du titre, badge acheté (rendu via une def inline côté front), et image de bannière
+// (fond de la carte profil). Renvoyés par /me et /users/:login pour l'affichage profil.
+interface EquippedCosmetics {
+  titleColor: string | null;
+  equippedBadge: { code: string; label: string; icon: string; color: string | null } | null;
+  equippedBanner: string | null;
+}
+async function equippedCosmetics(login: string): Promise<EquippedCosmetics> {
+  const rows = await prisma.shopInventory.findMany({
+    where: { userLogin: login, equipped: true, item: { category: { in: ['title', 'badge', 'banner'] } } },
+    include: { item: true },
+  });
+  const out: EquippedCosmetics = { titleColor: null, equippedBadge: null, equippedBanner: null };
+  for (const r of rows) {
+    const it = r.item;
+    const payload =
+      it.payload && typeof it.payload === 'object' && !Array.isArray(it.payload)
+        ? (it.payload as Record<string, unknown>)
+        : {};
+    if (it.category === 'title') {
+      out.titleColor = it.color ?? null;
+    } else if (it.category === 'badge') {
+      out.equippedBadge = {
+        code: typeof payload.code === 'string' ? payload.code : it.id,
+        label: typeof payload.label === 'string' ? payload.label : it.name,
+        icon: typeof payload.icon === 'string' ? payload.icon : 'Award',
+        color: it.color ?? null,
+      };
+    } else if (it.category === 'banner') {
+      out.equippedBanner = typeof payload.image === 'string' ? payload.image : null;
+    }
+  }
+  return out;
+}
+
 app.get('/me', async (c) => {
   const login = await getCurrentLogin(c);
   // S'assure que le compte existe (1er login) → permet l'onboarding des modes.
@@ -688,6 +795,7 @@ app.get('/me', async (c) => {
   const badges = user ? await badgesFor(login, role) : [];
   const palmares = user ? await palmaresFor(login) : [];
   const ownedTitlesList = await ownedTitlesFor(login, role, user);
+  const cosmetics = await equippedCosmetics(login);
   return c.json({
     login,
     user,
@@ -695,12 +803,16 @@ app.get('/me', async (c) => {
     // Titres que le joueur POSSÈDE (dérivés des accomplissements) — sert au
     // sélecteur de titre côté front (cf. PUT /me/title).
     ownedTitles: ownedTitlesList,
+    // Cosmétiques équipés (boutique) : couleur titre, badge acheté, bannière de fond.
+    titleColor: cosmetics.titleColor,
+    equippedBadge: cosmetics.equippedBadge,
+    equippedBanner: cosmetics.equippedBanner,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
     isAdmin: isAdmin(login),
     // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
     // pour la barrière staging sans dupliquer la liste blanche.
-    stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()),
+    stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()) || isTesterLogin(login.toLowerCase()),
     badges,
     palmares,
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
@@ -810,6 +922,28 @@ app.patch('/me/games', async (c) => {
   return c.json({ games: user.games, onboardedAt: user.onboardedAt });
 });
 
+// Personnages favoris (« mains ») par jeu de combat (Smash / Street Fighter).
+// PATCH partiel : seules les clés fournies sont écrites. Dédup + cap de sécurité.
+app.patch('/me/favorites', async (c) => {
+  const login = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = FavoritesUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const dedup = (arr?: string[]) => (arr ? [...new Set(arr)] : undefined);
+  const data: { favSmash?: string[]; favSf?: string[] } = {};
+  const smash = dedup(parsed.data.smash);
+  const sf = dedup(parsed.data.streetfighter);
+  if (smash !== undefined) data.favSmash = smash;
+  if (sf !== undefined) data.favSf = sf;
+
+  await getOrCreateUser(login);
+  const user = await prisma.user.update({ where: { login }, data });
+  emit([login], { type: 'leaderboard:update', payload: {} });
+  return c.json({ favSmash: user.favSmash, favSf: user.favSf });
+});
+
 // ── RGPD Art. 20 — Droit à la portabilité : export de toutes les données personnelles ──
 app.get('/me/export', async (c) => {
   const login = await getCurrentLogin(c);
@@ -876,6 +1010,7 @@ async function anonymizeAccount(login: string): Promise<void> {
     // normalement déjà fait).
     await purgeUserFromTournaments(tx, login);
     await cancelUserChallenges(tx, login);
+    await cancelUserFfas(tx, login);
     // Mise à jour du login (cascade automatique vers toutes les FK ON UPDATE CASCADE)
     await tx.user.update({
       where: { login },
@@ -912,6 +1047,7 @@ app.delete('/me/account', async (c) => {
     // libérée là où il était inscrit, et ses défis en cours sont annulés.
     const t = await purgeUserFromTournaments(tx, login);
     await cancelUserChallenges(tx, login);
+    await cancelUserFfas(tx, login);
     return t;
   });
 
@@ -1017,6 +1153,7 @@ app.get('/users/:login', async (c) => {
           where: { followerLogin_followeeLogin: { followerLogin: me, followeeLogin: login } },
         });
   const palmares = await palmaresFor(login);
+  const cosmetics = await equippedCosmetics(login);
   return c.json({
     user,
     rank: rank || null,
@@ -1025,6 +1162,10 @@ app.get('/users/:login', async (c) => {
     recent: played,
     badges,
     palmares,
+    // Cosmétiques équipés (pour afficher couleur titre / badge / bannière sur la fiche).
+    titleColor: cosmetics.titleColor,
+    equippedBadge: cosmetics.equippedBadge,
+    equippedBanner: cosmetics.equippedBanner,
     followingList: followingRows,
     followersList: followersRows,
     following: !!follow,
@@ -1176,12 +1317,14 @@ app.post('/queue/join', async (c) => {
     title: 'Adversaire trouvé !',
     body: `@${me} t'affronte en ${game}`,
     link: `/challenges?vs=${encodeURIComponent(me)}&game=${encodeURIComponent(game)}`,
+    game,
   });
   await notify(me, {
     type: 'matchmaking',
     title: 'Adversaire trouvé !',
     body: `@${opponentLogin} t'affronte en ${game}`,
     link: `/challenges?vs=${encodeURIComponent(opponentLogin)}&game=${encodeURIComponent(game)}`,
+    game,
   });
   emit([me, opponentLogin], { type: 'challenge:received', payload: {} });
 
@@ -1363,6 +1506,7 @@ app.post('/seasons/close', async (c) => {
       title: '🏆 Champion de saison !',
       body: `Tu remportes ${result.seasonName} — badge débloqué.`,
       link: '/profile',
+      game: 'babyfoot',
     });
   }
   broadcast({ type: 'data:update', payload: {} });
@@ -1495,6 +1639,69 @@ app.post('/matches', async (c) => {
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
 
+// ── Déclaration d'un match 2v2 (Babyfoot uniquement) ─────────────────────────
+// Le déclarant nomme les 4 joueurs (lui + son coéquipier vs 2 adversaires). Un
+// PendingMatch `mode:'2v2'` est créé ; il est validé par l'un des 2 adversaires
+// (cf. /matches/:id/confirm) puis réglé par settle2v2PendingAsPlayed.
+app.post('/matches/2v2', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = Declare2v2MatchSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { partnerLogin, opponentLogin, opponent2Login, scoreSelf, scoreOpponent } = parsed.data;
+  if ([partnerLogin, opponentLogin, opponent2Login].includes(me)) {
+    throw new HTTPException(400, { message: 'cannot declare a 2v2 match involving yourself twice' });
+  }
+  await assertNotBanned(me);
+  await getOrCreateUser(me);
+  // Les 3 autres joueurs doivent être de vrais utilisateurs 42 disponibles.
+  for (const login of [partnerLogin, opponentLogin, opponent2Login]) {
+    const u = await prisma.user.findUnique({ where: { login } });
+    if (!u) throw new HTTPException(404, { message: `${login} must login first before being declared` });
+    if (!u.ftId) throw new HTTPException(403, { message: `${login} must be a real 42 user` });
+    if (u.bannedAt || u.anonymizedAt || u.deletionScheduledAt)
+      throw new HTTPException(403, { message: `${login} n'est plus disponible` });
+  }
+
+  const pending = await prisma.pendingMatch.create({
+    data: {
+      id: randomUUID(),
+      declarerLogin: me,
+      opponentLogin,
+      scoreDeclarer: scoreSelf,
+      scoreOpponent,
+      game: 'babyfoot',
+      mode: '2v2',
+      partner1Login: partnerLogin,
+      partner2Login: opponent2Login,
+    },
+  });
+
+  // Tous les autres participants sont notifiés (le score à valider apparaît dans Défis).
+  emit([partnerLogin, opponentLogin, opponent2Login], {
+    type: 'match:pending',
+    payload: { id: pending.id, mode: '2v2', declarerLogin: me },
+  });
+
+  // Aperçu de l'équipe du déclarant (le duo n'est créé qu'à la validation).
+  const [tp1, tp2] = canonicalTeamLogins(me, partnerLogin);
+  const existingTeam = await prisma.babyfootTeam.findUnique({
+    where: { player1Login_player2Login: { player1Login: tp1, player2Login: tp2 } },
+    select: { id: true },
+  });
+  return c.json(
+    {
+      id: pending.id,
+      status: 'pending',
+      myTeamId: existingTeam?.id ?? '',
+      myTeamIsNew: !existingTeam,
+    },
+    201,
+  );
+});
+
 // Applique un match en attente comme match joué (calcul ELO + anti-farming +
 // création du PlayedMatch + suppression du pending). Partagé entre la confirmation
 // normale (par l'adversaire) et la force-validation SUPERADMIN.
@@ -1510,9 +1717,99 @@ type PendingForSettle = {
   charDeclarer?: string | null;
   charOpponent?: string | null;
   stocks?: number | null;
+  // 2v2 Babyfoot — présents uniquement quand mode = '2v2'.
+  mode?: string | null;
+  partner1Login?: string | null;
+  partner2Login?: string | null;
 };
 
+// Règlement d'un match 2v2 Babyfoot : crée/maj les BabyfootTeam, applique l'ELO
+// (équipe + individuel via babyfoot2v2), supprime le pending et crée le PlayedMatch
+// avec les colonnes 2v2. Anti-farming basé sur la paire de teams (indépendant de l'ordre).
+async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: PendingForSettle) {
+  const partner1 = p.partner1Login as string; // coéquipier du déclarant
+  const partner2 = p.partner2Login as string; // coéquipier de l'adversaire
+  // Côté A = équipe du déclarant ; côté B = équipe adverse. On canonicalise chaque duo.
+  const [a1, a2] = canonicalTeamLogins(p.declarerLogin, partner1);
+  const [b1, b2] = canonicalTeamLogins(p.opponentLogin, partner2);
+
+  const [uA1, uA2, uB1, uB2] = await Promise.all([
+    tx.user.findUniqueOrThrow({ where: { login: a1 } }),
+    tx.user.findUniqueOrThrow({ where: { login: a2 } }),
+    tx.user.findUniqueOrThrow({ where: { login: b1 } }),
+    tx.user.findUniqueOrThrow({ where: { login: b2 } }),
+  ]);
+  const eA1 = readElo(uA1, 'babyfoot');
+  const eA2 = readElo(uA2, 'babyfoot');
+  const eB1 = readElo(uB1, 'babyfoot');
+  const eB2 = readElo(uB2, 'babyfoot');
+
+  const teamA = await upsertBabyfootTeam(tx, a1, eA1, a2, eA2);
+  const teamB = await upsertBabyfootTeam(tx, b1, eB1, b2, eB2);
+
+  const sideA: Side2v2 = { p1Login: a1, p2Login: a2, teamId: teamA.id, teamElo: teamA.elo, p1Elo: eA1, p2Elo: eA2 };
+  const sideB: Side2v2 = { p1Login: b1, p2Login: b2, teamId: teamB.id, teamElo: teamB.elo, p1Elo: eB1, p2Elo: eB2 };
+
+  // scoreA/scoreB orientés côté déclarant (équipe A).
+  const scoreA = p.scoreDeclarer;
+  const scoreB = p.scoreOpponent;
+  const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
+
+  // Anti-farming par paire de teams (les 2 sens), indépendant du jeu (toujours babyfoot).
+  const priors = await tx.playedMatch.findMany({
+    where: {
+      mode: '2v2',
+      OR: [
+        { teamAId: teamA.id, teamBId: teamB.id },
+        { teamAId: teamB.id, teamBId: teamA.id },
+      ],
+    },
+    select: { playedAt: true, countedForElo: true },
+  });
+  const countsForElo = shouldCountForElo(priors, p.declaredAt);
+
+  let dA1 = 0, dA2 = 0, dB1 = 0, dB2 = 0;
+  if (countsForElo) {
+    const r = await applyElo2v2(tx, { winner, sideA, sideB });
+    dA1 = r.individual.deltaA1;
+    dA2 = r.individual.deltaA2;
+    dB1 = r.individual.deltaB1;
+    dB2 = r.individual.deltaB2;
+  }
+
+  await tx.pendingMatch.delete({ where: { id: p.id } });
+  const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
+
+  return tx.playedMatch.create({
+    data: {
+      id: p.id,
+      playerALogin: a1,
+      playerBLogin: b1,
+      playerA2Login: a2,
+      playerB2Login: b2,
+      scoreA,
+      scoreB,
+      winner,
+      playedAt: p.declaredAt,
+      countedForElo: countsForElo,
+      deltaA: dA1,
+      deltaB: dB1,
+      deltaA2: dA2,
+      deltaB2: dB2,
+      teamAId: teamA.id,
+      teamBId: teamB.id,
+      seasonId: activeSeason?.id ?? null,
+      game: 'babyfoot',
+      mode: '2v2',
+    },
+  });
+}
+
 async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingForSettle) {
+  // 2v2 Babyfoot : chemin de règlement dédié (teams + ELO 2v2).
+  if (p.mode === '2v2' && p.partner1Login && p.partner2Login) {
+    return settle2v2PendingAsPlayed(tx, p);
+  }
   const [a, b] = pairKey(p.declarerLogin, p.opponentLogin);
   const declarerIsA = p.declarerLogin === a;
   const scoreA = declarerIsA ? p.scoreDeclarer : p.scoreOpponent;
@@ -1603,7 +1900,12 @@ app.post('/matches/:id/confirm', async (c) => {
     if (!p) {
       throw new HTTPException(404, { message: 'pending match not found' });
     }
-    if (p.opponentLogin !== me) {
+    // 1v1 : seul l'adversaire confirme. 2v2 : l'un des joueurs de l'équipe ADVERSE
+    // (opponent ou son coéquipier) confirme — leur point de vue « self » = score
+    // de l'équipe adverse, ce qui garde la vérif miroir valide.
+    const canConfirm =
+      p.mode === '2v2' ? me === p.opponentLogin || me === p.partner2Login : me === p.opponentLogin;
+    if (!canConfirm) {
       throw new HTTPException(403, {
         message: 'only the opponent can confirm this match',
       });
@@ -1626,16 +1928,20 @@ app.post('/matches/:id/confirm', async (c) => {
 
     const created = await settlePendingAsPlayed(tx, p);
 
-    const opsBetween = await tx.ops.findFirst({
-      where: {
-        expiresAt: { gt: new Date() },
-        forcedUsed: { lt: OPS_FORCED_MATCHES },
-        OR: [
-          { ownerLogin: created.playerALogin, targetLogin: created.playerBLogin },
-          { ownerLogin: created.playerBLogin, targetLogin: created.playerALogin },
-        ],
-      },
-    });
+    // OPS = mécanique strictement 1v1 → ignorée pour les matchs 2v2.
+    const opsBetween =
+      created.mode === '2v2'
+        ? null
+        : await tx.ops.findFirst({
+            where: {
+              expiresAt: { gt: new Date() },
+              forcedUsed: { lt: OPS_FORCED_MATCHES },
+              OR: [
+                { ownerLogin: created.playerALogin, targetLogin: created.playerBLogin },
+                { ownerLogin: created.playerBLogin, targetLogin: created.playerALogin },
+              ],
+            },
+          });
     if (opsBetween) {
       await tx.ops.update({
         where: { id: opsBetween.id },
@@ -1651,9 +1957,17 @@ app.post('/matches/:id/confirm', async (c) => {
   }
   const match = result.match;
 
+  // Destinataires temps réel : 2 joueurs en 1v1, 4 en 2v2 (avec les coéquipiers).
+  const matchRecipients =
+    match.mode === '2v2'
+      ? ([match.playerALogin, match.playerBLogin, match.playerA2Login, match.playerB2Login].filter(
+          Boolean,
+        ) as string[])
+      : [match.playerALogin, match.playerBLogin];
+
   // Résultat poussé en temps réel (section Défis + bannière) via cet event.
   // Pas de notif cloche pour les matchs.
-  emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  emit(matchRecipients, { type: 'match:confirmed', payload: match });
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
   // Abonnés notifiés si un joueur entre dans le top 3.
@@ -1686,18 +2000,22 @@ app.post('/matches/:id/reject', async (c) => {
 
   const { contestReason, contestMessage } = parsed.data;
 
-  let declarerLogin: string | undefined;
+  let rejectRecipients: string[] = [];
   await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
       throw new HTTPException(404, { message: 'pending match not found' });
     }
-    if (p.opponentLogin !== me) {
+    // 1v1 : seul l'adversaire rejette. 2v2 : l'équipe adverse (opponent ou son coéquipier).
+    const canReject =
+      p.mode === '2v2' ? me === p.opponentLogin || me === p.partner2Login : me === p.opponentLogin;
+    if (!canReject) {
       throw new HTTPException(403, {
         message: 'only the opponent can reject this match',
       });
     }
-    declarerLogin = p.declarerLogin;
+    // Le déclarant + son coéquipier (en 2v2) sont prévenus de la contestation.
+    rejectRecipients = [p.declarerLogin, p.partner1Login].filter(Boolean) as string[];
     await tx.rejectedMatch.create({
       data: {
         id: randomUUID(),
@@ -1712,10 +2030,10 @@ app.post('/matches/:id/reject', async (c) => {
     await tx.pendingMatch.delete({ where: { id } });
   });
 
-  if (declarerLogin) {
+  if (rejectRecipients.length > 0) {
     // Contestation poussée en temps réel via l'event `match:rejected`
     // (section Défis + bannière). Pas de notif cloche pour les matchs.
-    emit([declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
+    emit(rejectRecipients, { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
   }
   return c.json({ id, status: 'rejected', contestReason });
 });
@@ -1742,6 +2060,286 @@ app.post('/matches/:id/cancel', async (c) => {
 
   if (opponentLogin) {
     emit([opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
+// =========================================================================
+// SMASH FFA (Free-For-All, 3+ joueurs)
+// =========================================================================
+// Le déclarant propose le classement final complet (position 1..N). Le déclarant
+// est auto-confirmé ; chaque AUTRE participant confirme UNIQUEMENT sa propre
+// position. Quand toutes les positions sont confirmées, le FFA est réglé : l'ELO
+// Smash de chacun bouge selon son rang (round-robin sensible au rating, cf.
+// calculateFfaElo) et `matchesPlayedSmash` +1. Une contestation annule le FFA.
+
+type PendingFfaForSettle = {
+  id: string;
+  declaredAt: Date;
+  participants: { login: string; position: number }[];
+};
+
+// Règle un FFA confirmé : applique l'ELO par rang, supprime le pending et crée le
+// PlayedFfa + ses participants. Suppose les participants disponibles (vérifié en
+// amont par le handler de confirmation). Renvoie le PlayedFfa créé (avec participants).
+async function settleFfaAsPlayed(tx: Prisma.TransactionClient, p: PendingFfaForSettle) {
+  // Ordre du classement final : position 1 = 1er … N = dernier.
+  const ordered = [...p.participants].sort((a, b) => a.position - b.position);
+  const users = await Promise.all(
+    ordered.map((pp) => tx.user.findUniqueOrThrow({ where: { login: pp.login } })),
+  );
+  const ratings = users.map((u) => readElo(u, 'smash'));
+  const deltas = calculateFfaElo(ratings);
+
+  for (let i = 0; i < ordered.length; i++) {
+    // ratingUpdate('smash', …) pose le nouvel ELO ET incrémente matchesPlayedSmash.
+    await tx.user.update({
+      where: { login: ordered[i]!.login },
+      data: ratingUpdate('smash', ratings[i]! + deltas[i]!),
+    });
+  }
+
+  await tx.pendingFfa.delete({ where: { id: p.id } });
+  const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
+
+  return tx.playedFfa.create({
+    data: {
+      id: p.id,
+      game: 'smash',
+      playedAt: p.declaredAt,
+      seasonId: activeSeason?.id ?? null,
+      countedForElo: true,
+      participants: {
+        create: ordered.map((pp, i) => ({
+          id: randomUUID(),
+          login: pp.login,
+          position: pp.position,
+          ratingBefore: ratings[i]!,
+          delta: deltas[i]!,
+          ratingAfter: ratings[i]! + deltas[i]!,
+        })),
+      },
+    },
+    include: { participants: true },
+  });
+}
+
+app.get('/matches/ffa/pending', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(
+    await prisma.pendingFfa.findMany({
+      orderBy: { declaredAt: 'desc' },
+      include: { participants: true },
+    }),
+  );
+});
+
+app.get('/matches/ffa', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(
+    await prisma.playedFfa.findMany({
+      orderBy: { playedAt: 'desc' },
+      include: { participants: true },
+    }),
+  );
+});
+
+// Déclaration d'un FFA Smash : `ranking` est le classement final proposé
+// (ranking[0] = 1er). Les positions sont dérivées de l'ordre (position = index+1).
+app.post('/matches/ffa', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = DeclareFfaSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { ranking } = parsed.data;
+  if (!ranking.includes(me)) {
+    throw new HTTPException(400, { message: 'tu dois faire partie du FFA' });
+  }
+  await assertNotBanned(me);
+  await getOrCreateUser(me);
+  // Tous les autres participants doivent être de vrais utilisateurs 42 disponibles.
+  for (const login of ranking) {
+    if (login === me) continue;
+    const u = await prisma.user.findUnique({ where: { login } });
+    if (!u) throw new HTTPException(404, { message: `${login} must login first before being declared` });
+    if (!u.ftId) throw new HTTPException(403, { message: `${login} must be a real 42 user` });
+    if (u.bannedAt || u.anonymizedAt || u.deletionScheduledAt)
+      throw new HTTPException(403, { message: `${login} n'est plus disponible` });
+  }
+
+  const pending = await prisma.pendingFfa.create({
+    data: {
+      id: randomUUID(),
+      declarerLogin: me,
+      game: 'smash',
+      participants: {
+        create: ranking.map((login, i) => ({
+          id: randomUUID(),
+          login,
+          position: i + 1,
+          // Le déclarant valide d'emblée sa propre position.
+          confirmed: login === me,
+        })),
+      },
+    },
+    include: { participants: true },
+  });
+
+  const others = ranking.filter((l) => l !== me);
+  emit(others, { type: 'ffa:pending', payload: { id: pending.id, declarerLogin: me } });
+  // FFA = résultat « officiel » à valider par chacun → notif cloche (contrairement
+  // au 1v1 qui vit seulement dans la section Défis).
+  await notifyMany(others, {
+    type: 'ffa_pending',
+    title: `@${me} t'a placé dans un FFA Smash`,
+    body: 'Confirme ta position dans le classement.',
+    link: '/defis',
+    game: 'smash',
+  });
+  return c.json({ id: pending.id, status: 'pending' }, 201);
+});
+
+// Confirmation de SA propre position. Quand toutes les positions sont confirmées,
+// le FFA est réglé dans la foulée.
+app.post('/matches/ffa/:id/confirm', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ConfirmFfaPositionSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { position } = parsed.data;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Verrou de ligne : sérialise les confirmations concurrentes (le dernier
+    // confirmant déclenche le règlement, on évite un double-règlement).
+    await tx.$executeRaw`SELECT 1 FROM pending_ffas WHERE id = ${id} FOR UPDATE`;
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending) {
+      // Déjà réglé ou annulé entre-temps.
+      throw new HTTPException(404, { message: 'FFA introuvable (déjà réglé ou annulé)' });
+    }
+    const mine = pending.participants.find((pp) => pp.login === me);
+    if (!mine) {
+      throw new HTTPException(403, { message: 'tu ne fais pas partie de ce FFA' });
+    }
+    if (mine.position !== position) {
+      throw new HTTPException(409, {
+        message: 'le classement a changé — recharge le FFA avant de confirmer ta place',
+      });
+    }
+    if (!mine.confirmed) {
+      await tx.pendingFfaParticipant.update({ where: { id: mine.id }, data: { confirmed: true } });
+    }
+    const confirmedCount = pending.participants.filter((pp) => pp.confirmed || pp.login === me).length;
+    const total = pending.participants.length;
+    if (confirmedCount < total) {
+      return { settled: false as const, id, confirmed: confirmedCount, total, recipients: pending.participants.map((pp) => pp.login) };
+    }
+
+    // Tous confirmés → règlement. Filet de sécurité : un participant devenu
+    // indisponible (devrait être déjà nettoyé par l'offboarding) annule le FFA.
+    const unavailable = await tx.user.findMany({
+      where: {
+        login: { in: pending.participants.map((pp) => pp.login) },
+        OR: [{ bannedAt: { not: null } }, { anonymizedAt: { not: null } }, { deletionScheduledAt: { not: null } }],
+      },
+      select: { login: true },
+    });
+    if (unavailable.length > 0) {
+      await tx.pendingFfa.delete({ where: { id } });
+      return { settled: false as const, aborted: true as const, id, recipients: pending.participants.map((pp) => pp.login), unavailable: unavailable.map((u) => u.login) };
+    }
+
+    const played = await settleFfaAsPlayed(tx, pending);
+    return { settled: true as const, played };
+  });
+
+  if (result.settled) {
+    const played = result.played;
+    const logins = played.participants.map((pp) => pp.login);
+    emit(logins, { type: 'ffa:confirmed', payload: played });
+    // L'ELO Smash de plusieurs joueurs a changé → le classement bouge pour tous.
+    broadcast({ type: 'leaderboard:update', payload: {} });
+    for (const pp of played.participants) void maybeNotifyTop3(pp.login, pp.delta);
+    return c.json(played);
+  }
+  if ('aborted' in result && result.aborted) {
+    emit(result.recipients, { type: 'ffa:cancelled', payload: { id: result.id, reason: 'unavailable' } });
+    throw new HTTPException(409, { message: 'un participant n\'est plus disponible — FFA annulé, à redéclarer' });
+  }
+  // Confirmation enregistrée, en attente des autres.
+  emit(result.recipients, { type: 'ffa:progress', payload: { id: result.id, confirmed: result.confirmed, total: result.total } });
+  return c.json({ id: result.id, status: 'pending', confirmed: result.confirmed, total: result.total });
+});
+
+// Contestation de SA position → annule tout le FFA (le déclarant est notifié).
+app.post('/matches/ffa/:id/contest', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ContestFfaSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { claimedPosition, message } = parsed.data;
+
+  let info: { declarerLogin: string; others: string[]; proposedPosition: number } | undefined;
+  await prisma.$transaction(async (tx) => {
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending) throw new HTTPException(404, { message: 'FFA introuvable' });
+    const mine = pending.participants.find((pp) => pp.login === me);
+    if (!mine) throw new HTTPException(403, { message: 'tu ne fais pas partie de ce FFA' });
+    if (me === pending.declarerLogin) {
+      throw new HTTPException(400, { message: 'le déclarant annule son FFA, il ne le conteste pas' });
+    }
+    info = {
+      declarerLogin: pending.declarerLogin,
+      others: pending.participants.map((pp) => pp.login).filter((l) => l !== me),
+      proposedPosition: mine.position,
+    };
+    await tx.pendingFfa.delete({ where: { id } });
+  });
+
+  if (info) {
+    emit([info.declarerLogin], {
+      type: 'ffa:contested',
+      payload: { id, contestedBy: me, claimedPosition, proposedPosition: info.proposedPosition },
+    });
+    await notify(info.declarerLogin, {
+      type: 'ffa_contested',
+      title: `@${me} conteste le FFA Smash`,
+      body: `Position revendiquée : ${claimedPosition}${message ? ` — « ${message} »` : ''}. FFA annulé.`,
+      link: '/defis',
+      game: 'smash',
+    });
+    // Les autres participants voient le FFA disparaître.
+    emit(info.others.filter((l) => l !== info!.declarerLogin), { type: 'ffa:cancelled', payload: { id, cancelledBy: me, reason: 'contested' } });
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
+// Annulation par le déclarant lui-même.
+app.post('/matches/ffa/:id/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+
+  let others: string[] = [];
+  await prisma.$transaction(async (tx) => {
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending) throw new HTTPException(404, { message: 'FFA introuvable' });
+    if (pending.declarerLogin !== me) {
+      throw new HTTPException(403, { message: 'seul le déclarant peut annuler ce FFA' });
+    }
+    others = pending.participants.map((pp) => pp.login).filter((l) => l !== me);
+    await tx.pendingFfa.delete({ where: { id } });
+  });
+
+  if (others.length > 0) {
+    emit(others, { type: 'ffa:cancelled', payload: { id, cancelledBy: me } });
   }
   return c.json({ id, status: 'cancelled' });
 });
@@ -2049,12 +2647,65 @@ app.get('/challenges', async (c) => {
   const me = await getCurrentLogin(c);
   const list = await prisma.challenge.findMany({
     where: {
-      OR: [{ challengerLogin: me }, { opponentLogin: me }],
+      // 2v2 : un défi concerne aussi les coéquipiers (partner / opponentPartner).
+      OR: [
+        { challengerLogin: me },
+        { opponentLogin: me },
+        { partnerLogin: me },
+        { opponentPartnerLogin: me },
+      ],
       status: { in: ['pending', 'accepted'] },
     },
     orderBy: { scheduledAt: 'asc' },
   });
   return c.json(list);
+});
+
+// POST /challenges/2v2 — défi 2v2 Babyfoot. Le challenger nomme les 4 joueurs ;
+// seuls les 2 adversaires doivent accepter (cf. /challenges/:id/accept).
+app.post('/challenges/2v2', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = CreateChallenge2v2Schema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { partnerLogin, opponentLogin, opponentPartnerLogin, scheduledAt } = parsed.data;
+  if ([partnerLogin, opponentLogin, opponentPartnerLogin].includes(me)) {
+    throw new HTTPException(400, { message: 'cannot challenge yourself' });
+  }
+  for (const login of [partnerLogin, opponentLogin, opponentPartnerLogin]) {
+    await assertTargetable(login);
+  }
+  await getOrCreateUser(me);
+  const challenge = await prisma.challenge.create({
+    data: {
+      id: randomUUID(),
+      challengerLogin: me,
+      opponentLogin,
+      status: 'pending',
+      scheduledAt: new Date(scheduledAt),
+      game: 'babyfoot',
+      mode: '2v2',
+      partnerLogin,
+      opponentPartnerLogin,
+    },
+  });
+  // Les 3 autres joueurs sont notifiés (les 2 adversaires devront accepter).
+  emit([opponentLogin, opponentPartnerLogin, partnerLogin], {
+    type: 'challenge:received',
+    payload: challenge,
+  });
+  for (const login of [opponentLogin, opponentPartnerLogin]) {
+    void notify(login, {
+      type: 'challenge_received',
+      title: `@${me} t'a défié en 2v2`,
+      body: 'Un nouveau défi en équipe t\'attend',
+      link: `/challenges?game=babyfoot`,
+      game: 'babyfoot',
+    });
+  }
+  return c.json(challenge, 201);
 });
 
 app.post('/challenges', async (c) => {
@@ -2086,7 +2737,8 @@ app.post('/challenges', async (c) => {
     type: 'challenge_received',
     title: `@${me} t'a défié`,
     body: 'Un nouveau défi t\'attend',
-    link: '/challenges',
+    link: `/challenges?game=${encodeURIComponent(game)}`,
+    game,
   });
   return c.json(challenge, 201);
 });
@@ -2097,6 +2749,30 @@ app.post('/challenges/:id/accept', async (c) => {
   const challenge = await prisma.$transaction(async (tx) => {
     const ch = await tx.challenge.findUnique({ where: { id } });
     if (!ch) throw new HTTPException(404, { message: 'challenge not found' });
+
+    // ── 2v2 : seuls les DEUX adversaires acceptent ; 'accepted' quand les deux. ──
+    if (ch.mode === '2v2') {
+      if (me !== ch.opponentLogin && me !== ch.opponentPartnerLogin) {
+        throw new HTTPException(403, { message: 'only the opponents can accept' });
+      }
+      if (ch.status === 'accepted') return ch; // idempotent
+      if (ch.status !== 'pending') {
+        throw new HTTPException(409, { message: `challenge is ${ch.status}` });
+      }
+      const oppAccepted = me === ch.opponentLogin ? new Date() : ch.opponentAcceptedAt;
+      const oppPartnerAccepted =
+        me === ch.opponentPartnerLogin ? new Date() : ch.opponentPartnerAcceptedAt;
+      const bothAccepted = !!oppAccepted && !!oppPartnerAccepted;
+      return tx.challenge.update({
+        where: { id },
+        data: {
+          opponentAcceptedAt: oppAccepted,
+          opponentPartnerAcceptedAt: oppPartnerAccepted,
+          ...(bothAccepted ? { status: 'accepted', decidedAt: new Date() } : {}),
+        },
+      });
+    }
+
     if (ch.opponentLogin !== me) {
       throw new HTTPException(403, { message: 'only the opponent can accept' });
     }
@@ -2112,10 +2788,17 @@ app.post('/challenges/:id/accept', async (c) => {
       data: { status: 'accepted', decidedAt: new Date() },
     });
   });
-  // Les DEUX joueurs doivent rafraîchir leur liste de défis : le challenger
-  // (son défi passe en "accepté") et l'opponent qui vient d'accepter (sinon, sur
-  // mobile sans refresh manuel, l'accepteur ne voit pas le défi bouger).
-  emit([challenge.challengerLogin, challenge.opponentLogin], {
+  // Tous les participants doivent rafraîchir leur liste de défis (4 en 2v2).
+  const acceptRecipients =
+    challenge.mode === '2v2'
+      ? ([
+          challenge.challengerLogin,
+          challenge.opponentLogin,
+          challenge.partnerLogin,
+          challenge.opponentPartnerLogin,
+        ].filter(Boolean) as string[])
+      : [challenge.challengerLogin, challenge.opponentLogin];
+  emit(acceptRecipients, {
     type: 'challenge:accepted',
     payload: challenge,
   });
@@ -2130,7 +2813,14 @@ app.post('/challenges/:id/decline', async (c) => {
   const result = await prisma.$transaction(async (tx) => {
     const ch = await tx.challenge.findUnique({ where: { id } });
     if (!ch) throw new HTTPException(404, { message: 'challenge not found' });
-    if (ch.opponentLogin !== me && ch.challengerLogin !== me) {
+    // 2v2 : les 4 participants peuvent refuser/annuler. 1v1 : challenger ou opponent.
+    const participants =
+      ch.mode === '2v2'
+        ? [ch.challengerLogin, ch.opponentLogin, ch.partnerLogin, ch.opponentPartnerLogin].filter(
+            Boolean,
+          )
+        : [ch.challengerLogin, ch.opponentLogin];
+    if (!participants.includes(me)) {
       throw new HTTPException(403, {
         message: 'only challenger (cancel) or opponent (decline) can do this',
       });
@@ -2139,8 +2829,11 @@ app.post('/challenges/:id/decline', async (c) => {
       throw new HTTPException(409, { message: `challenge is ${ch.status}` });
     }
     const wasAccepted = ch.status === 'accepted';
-    const isOpponentDeclining = ch.opponentLogin === me;
-    const newStatus = ch.challengerLogin === me ? 'cancelled' : 'declined';
+    // Équipe du challenger (lui + son coéquipier) qui se retire → 'cancelled' ;
+    // l'équipe adverse qui refuse → 'declined'. OPS = 1v1 uniquement.
+    const isChallengerSide = me === ch.challengerLogin || me === ch.partnerLogin;
+    const isOpponentDeclining = ch.mode !== '2v2' && ch.opponentLogin === me;
+    const newStatus = isChallengerSide ? 'cancelled' : 'declined';
     await tx.challenge.update({
       where: { id },
       data: { status: newStatus, decidedAt: new Date() },
@@ -2199,10 +2892,12 @@ app.post('/challenges/:id/decline', async (c) => {
       isOps: opsPenalty > 0,
       challengerLogin: ch.challengerLogin,
       opponentLogin: ch.opponentLogin,
+      // Tous les participants (4 en 2v2) à prévenir, hormis celui qui refuse.
+      participants: participants as string[],
     };
   });
-  const otherParty = result.challengerLogin === me ? result.opponentLogin : result.challengerLogin;
-  emit([otherParty], {
+  const declineRecipients = result.participants.filter((p) => p !== me);
+  emit(declineRecipients, {
     type: 'challenge:declined',
     payload: { id, status: result.status, eloPenalty: result.penalty, declinedBy: me },
   });
@@ -2210,9 +2905,11 @@ app.post('/challenges/:id/decline', async (c) => {
   if (result.penalty > 0) {
     broadcast({ type: 'leaderboard:update', payload: {} });
   }
-  // Refus d'un match forcé en OPS : le compteur forcedUsed a bougé → les deux
-  // joueurs concernés doivent rafraîchir leur état OPS.
+  // Refus d'un match forcé en OPS (1v1 uniquement) : le compteur forcedUsed a
+  // bougé → les deux joueurs concernés doivent rafraîchir leur état OPS.
   if (result.isOps) {
+    const otherParty =
+      result.challengerLogin === me ? result.opponentLogin : result.challengerLogin;
     emit([me, otherParty], { type: 'ops:update', payload: { reason: 'forced_refused' } });
   }
   return c.json({ id, status: result.status, eloPenalty: result.penalty, isOps: result.isOps });
@@ -2236,6 +2933,39 @@ app.post('/challenges/:id/record', async (c) => {
         message: 'challenge must be accepted before recording a result',
       });
     }
+
+    // ── 2v2 : on crée un PendingMatch équipe orienté côté du recordeur. ──
+    if (ch.mode === '2v2') {
+      const challengerTeam = [ch.challengerLogin, ch.partnerLogin as string];
+      const opponentTeam = [ch.opponentLogin, ch.opponentPartnerLogin as string];
+      const iAmChallengerSide = challengerTeam.includes(me);
+      if (!iAmChallengerSide && !opponentTeam.includes(me)) {
+        throw new HTTPException(403, { message: 'not a participant' });
+      }
+      const myTeam = iAmChallengerSide ? challengerTeam : opponentTeam;
+      const oppTeam = iAmChallengerSide ? opponentTeam : challengerTeam;
+      const myTeammate = myTeam.find((l) => l !== me) as string;
+      // Score babyfoot validé (un camp atteint 10) via RecordResultSchema babyfoot.
+      const checked2v2 = RecordResultSchema.safeParse({ ...parsed.data, game: 'babyfoot' });
+      if (!checked2v2.success) {
+        throw new HTTPException(400, { message: `Score 2v2 invalide : ${checked2v2.error.message}` });
+      }
+      await tx.challenge.update({ where: { id }, data: { status: 'recorded' } });
+      return tx.pendingMatch.create({
+        data: {
+          id: randomUUID(),
+          declarerLogin: me,
+          opponentLogin: oppTeam[0] as string,
+          partner1Login: myTeammate,
+          partner2Login: oppTeam[1] as string,
+          scoreDeclarer: scoreSelf,
+          scoreOpponent,
+          game: 'babyfoot',
+          mode: '2v2',
+        },
+      });
+    }
+
     if (ch.challengerLogin !== me && ch.opponentLogin !== me) {
       throw new HTTPException(403, { message: 'not a participant' });
     }
@@ -2271,9 +3001,14 @@ app.post('/challenges/:id/record', async (c) => {
       },
     });
   });
-  // Le défi passe en "recorded" et un match en attente apparaît : les deux joueurs
-  // doivent rafraîchir leurs défis ET leurs matchs.
-  emit([pending.declarerLogin, pending.opponentLogin], {
+  // Le défi passe en "recorded" et un match en attente apparaît : les participants
+  // (4 en 2v2) doivent rafraîchir leurs défis ET leurs matchs.
+  const recordRecipients = (
+    pending.mode === '2v2'
+      ? [pending.declarerLogin, pending.opponentLogin, pending.partner1Login, pending.partner2Login]
+      : [pending.declarerLogin, pending.opponentLogin]
+  ).filter(Boolean) as string[];
+  emit(recordRecipients, {
     type: 'challenge:recorded',
     payload: { pendingId: pending.id },
   });
@@ -2465,6 +3200,7 @@ app.post('/tournaments/:id/join', async (c) => {
     type: 'follow_tournament',
     title: `@${me} a rejoint un tournoi`,
     link: `/tournaments/${id}`,
+    game: await tournamentGame(id),
   });
   return c.json({ id, status: result.autoStarted ? 'in_progress' : 'registration' });
 });
@@ -2529,6 +3265,7 @@ app.post('/tournaments/:id/add-player', async (c) => {
     type: 'follow_tournament',
     title: `@${login} a rejoint un tournoi`,
     link: `/tournaments/${id}`,
+    game: await tournamentGame(id),
   });
   return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
 });
@@ -2579,11 +3316,16 @@ app.post('/tournaments/:id/invite', async (c) => {
     });
   });
 
+  const invTournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: { name: true, game: true },
+  });
   void notify(inviteeLogin, {
     type: 'tournament_invite',
-    title: `Invitation au tournoi "${(await prisma.tournament.findUnique({ where: { id }, select: { name: true } }))?.name}"`,
+    title: `Invitation au tournoi "${invTournament?.name}"`,
     body: `@${me} t'invite à rejoindre le tournoi`,
     link: `/tournaments/${id}`,
+    game: invTournament?.game ?? undefined,
   });
   emit([inviteeLogin], { type: 'tournament:invite', payload: { tournamentId: id, inviteId: result.id } });
   return c.json(result, 201);
@@ -2652,6 +3394,7 @@ app.post('/tournaments/:id/invites/:inviteId/accept', async (c) => {
     type: 'follow_tournament',
     title: `@${me} a rejoint un tournoi`,
     link: `/tournaments/${id}`,
+    game: await tournamentGame(id),
   });
   return c.json({ id, inviteId, status: autoStarted ? 'in_progress' : 'registration' });
 });
@@ -2730,6 +3473,7 @@ app.post('/tournaments/:id/start', async (c) => {
       title: `Tournoi "${t.name}" lancé`,
       body: 'Le bracket est généré — à toi de jouer !',
       link: `/tournaments/${id}`,
+      game: t.game,
     });
     return true;
   });
@@ -2918,6 +3662,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       title: 'Phase de poules terminée',
       body: 'Le bracket des qualifiés est prêt — place à l’élimination directe !',
       link: `/tournaments/${id}`,
+      game: await tournamentGame(id),
     });
   }
   return c.json({ id: matchId, ...result });
@@ -3046,6 +3791,32 @@ app.post('/admin/impersonate-tester', async (c) => {
     target: TESTER_LOGIN,
   });
   return c.json({ token, login: TESTER_LOGIN });
+});
+
+// Variante : crée un compte tester TOUT NEUF (login unique `tester-…`) puis délivre
+// son token. Permet de revivre l'arrivée d'un joueur fraîchement créé (onboarding à
+// faire, stats vierges) à chaque clic. Mêmes garde-fous : staging only + admin.
+app.post('/admin/impersonate-fresh-tester', async (c) => {
+  if (process.env.APP_ENV !== 'staging') {
+    throw new HTTPException(403, { message: 'staging only' });
+  }
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new HTTPException(500, { message: 'server misconfigured' });
+  // Login unique court (≤ 20 car.) ; `onboardedAt` laissé null → onboarding rejoué.
+  const login = `${FRESH_TESTER_PREFIX}${randomUUID().slice(0, 8)}`;
+  await prisma.user.create({
+    data: { login, role: 'USER', campus: 'Le Havre' },
+  });
+  const token = issueToken(login, secret);
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'IMPERSONATE_TESTER',
+    target: login,
+  });
+  return c.json({ token, login });
 });
 
 /* ============ FEATURE REQUESTS ============ */
@@ -3328,24 +4099,29 @@ app.get('/ops/user/:login', async (c) => {
 
 // ─── Rate-limit : déblocage manuel (SUPERADMIN uniquement) ───────────────────
 
-// Renvoie l'état de la pénalité de l'IP appelante — utile pour diagnostiquer.
+// Renvoie l'état de la pénalité de l'appelant — utile pour diagnostiquer.
+// Les pénalités sont indexées par sujet (user:login quand authentifié), avec un
+// repli sur l'IP pour les blocages pré-auth.
 app.get('/admin/rate-limit/me', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
   const ip = clientIp(c);
-  const info = getPenaltyInfo(ip);
-  return c.json({ ip, penalty: info });
+  const subject = `user:${me.toLowerCase()}`;
+  const info = getPenaltyInfo(subject) ?? getPenaltyInfo(`ip:${ip}`);
+  return c.json({ subject, ip, penalty: info });
 });
 
-// Efface la pénalité de l'IP appelante — à utiliser quand on est bloqué.
-// Le bypass superadmin dans le rate-limiter global permet d'atteindre cet
-// endpoint même quand l'IP est punie, à condition de présenter son Bearer.
+// Efface la pénalité de l'appelant (sujet user + IP) — à utiliser quand on est
+// bloqué. Le bypass superadmin dans le rate-limiter global permet d'atteindre
+// cet endpoint même puni, à condition de présenter son Bearer.
 app.delete('/admin/rate-limit/me', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
   const ip = clientIp(c);
-  clearPenalty(ip);
-  return c.json({ cleared: true, ip });
+  const subject = `user:${me.toLowerCase()}`;
+  clearPenalty(subject);
+  clearPenalty(`ip:${ip}`);
+  return c.json({ cleared: true, subject, ip });
 });
 
 app.get('/admin/users', async (c) => {
@@ -3431,6 +4207,7 @@ app.post('/admin/users/:login/ban', async (c) => {
     const changed = await purgeUserFromTournaments(tx, login);
     // Ses défis/duels en cours sont annulés (plus de duel actif pour lui).
     await cancelUserChallenges(tx, login);
+    await cancelUserFfas(tx, login);
     return { user: u, tournamentsChanged: changed };
   });
   await logAdminAction(c, {
@@ -4091,10 +4868,10 @@ app.get('/admin/all-history', async (c) => {
 // Le `payload` JSON est transmis tel quel.
 function serializeShopItem(item: {
   id: string;
-  slug: string;
   name: string;
   description: string | null;
   category: string;
+  color: string | null;
   price: number;
   payload: Prisma.JsonValue | null;
   active: boolean;
@@ -4102,10 +4879,10 @@ function serializeShopItem(item: {
 }) {
   return {
     id: item.id,
-    slug: item.slug,
     name: item.name,
     description: item.description,
     category: item.category,
+    color: item.color ?? null,
     price: item.price,
     payload: item.payload ?? null,
     active: item.active,
@@ -4250,17 +5027,54 @@ app.post('/me/inventory/:id/equip', async (c) => {
 });
 
 // ── Boutique : administration du catalogue ──────────────────────────────────
-const ShopItemCreateSchema = z.object({
-  slug: z.string().trim().min(1),
-  name: z.string().trim().min(1),
+// Cap d'octets sur l'image data-URL d'une bannière (~700 Ko) : évite de gonfler
+// la table et les réponses /shop. La validation de DIMENSIONS exacte est côté client.
+const MAX_BANNER_DATAURL_LEN = 700_000;
+const ShopItemCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    description: z.string().nullish(),
+    category: z.enum(['title', 'banner', 'badge', 'cosmetic']),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
+      .nullish(),
+    price: z.number().int().min(0),
+    payload: z.record(z.any()).nullish(),
+    active: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.category === 'banner') {
+      const img = d.payload && typeof d.payload.image === 'string' ? d.payload.image : '';
+      if (!img.startsWith('data:image/')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
+      } else if (img.length > MAX_BANNER_DATAURL_LEN) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+      }
+    }
+    if (d.category === 'badge') {
+      const code = d.payload && typeof d.payload.code === 'string' ? d.payload.code : '';
+      const label = d.payload && typeof d.payload.label === 'string' ? d.payload.label : '';
+      if (!code || !label) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
+      }
+    }
+  });
+// `.partial()` n'existe pas sur un ZodEffects → on repart de l'objet de base.
+const ShopItemUpdateSchema = z.object({
+  name: z.string().trim().min(1).optional(),
   description: z.string().nullish(),
-  category: z.enum(['title', 'banner', 'cosmetic']),
-  price: z.number().int().min(0),
+  category: z.enum(['title', 'banner', 'badge', 'cosmetic']).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
+    .nullish(),
+  price: z.number().int().min(0).optional(),
   payload: z.record(z.any()).nullish(),
   active: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
-const ShopItemUpdateSchema = ShopItemCreateSchema.partial();
 
 // GET /admin/shop/items — catalogue complet (objets inactifs inclus).
 app.get('/admin/shop/items', async (c) => {
@@ -4284,10 +5098,10 @@ app.post('/admin/shop/items', async (c) => {
   const d = parsed.data;
   const item = await prisma.shopItem.create({
     data: {
-      slug: d.slug,
       name: d.name,
       description: d.description ?? null,
       category: d.category,
+      color: d.color ?? null,
       price: d.price,
       payload: (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull,
       ...(d.active !== undefined ? { active: d.active } : {}),
@@ -4309,10 +5123,10 @@ app.patch('/admin/shop/items/:id', async (c) => {
   }
   const d = parsed.data;
   const data: Prisma.ShopItemUpdateInput = {};
-  if (d.slug !== undefined) data.slug = d.slug;
   if (d.name !== undefined) data.name = d.name;
   if (d.description !== undefined) data.description = d.description ?? null;
   if (d.category !== undefined) data.category = d.category;
+  if (d.color !== undefined) data.color = d.color ?? null;
   if (d.price !== undefined) data.price = d.price;
   if (d.payload !== undefined) {
     data.payload = (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull;
@@ -4358,6 +5172,64 @@ app.post('/admin/shop/grant', async (c) => {
   return c.json({ ok: true, login, coins: next });
 });
 
+// POST /admin/shop/grant-item — donne un cosmétique (titre/badge/bannière/cosmétique)
+// à un joueur (insertion dans son inventaire), avec auto-équipement optionnel.
+const ShopGrantItemSchema = z.object({
+  login: z.string().trim().min(1),
+  itemId: z.string().min(1),
+  equip: z.boolean().optional(),
+});
+app.post('/admin/shop/grant-item', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = ShopGrantItemSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { login, itemId, equip } = parsed.data;
+  const [target, item] = await Promise.all([
+    prisma.user.findUnique({ where: { login }, select: { login: true } }),
+    prisma.shopItem.findUnique({ where: { id: itemId } }),
+  ]);
+  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  if (!item) throw new HTTPException(404, { message: 'objet introuvable' });
+
+  // Titre éventuel à refléter sur user.title si on auto-équipe.
+  const titleStr =
+    item.category === 'title' && item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+      ? typeof (item.payload as Record<string, unknown>).title === 'string'
+        ? ((item.payload as Record<string, unknown>).title as string)
+        : null
+      : null;
+
+  await prisma.$transaction(async (tx) => {
+    // Insère dans l'inventaire (sans doublon).
+    await tx.shopInventory.upsert({
+      where: { userLogin_itemId: { userLogin: login, itemId } },
+      update: {},
+      create: { userLogin: login, itemId },
+    });
+    if (equip) {
+      // Un seul équipé par catégorie : on déséquipe les autres de la même catégorie.
+      await tx.shopInventory.updateMany({
+        where: { userLogin: login, equipped: true, item: { category: item.category } },
+        data: { equipped: false },
+      });
+      await tx.shopInventory.update({
+        where: { userLogin_itemId: { userLogin: login, itemId } },
+        data: { equipped: true },
+      });
+      if (item.category === 'title' && titleStr) {
+        await tx.user.update({ where: { login }, data: { title: titleStr } });
+      }
+    }
+  });
+
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, login, itemId, equipped: !!equip });
+});
+
 // ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──
 async function purgeOldAuditLogs(): Promise<void> {
   const cutoff = new Date();
@@ -4376,12 +5248,16 @@ async function purgeStalePendingMatches(): Promise<void> {
   const cutoff = new Date(Date.now() - PENDING_MATCH_TTL_HOURS * 60 * 60 * 1000);
   const stale = await prisma.pendingMatch.findMany({
     where: { declaredAt: { lt: cutoff } },
-    select: { id: true, declarerLogin: true, opponentLogin: true },
+    select: { id: true, declarerLogin: true, opponentLogin: true, partner1Login: true, partner2Login: true },
   });
   if (stale.length === 0) return;
   await prisma.pendingMatch.deleteMany({ where: { id: { in: stale.map((m) => m.id) } } });
   for (const m of stale) {
-    emit([m.declarerLogin, m.opponentLogin], {
+    // 2v2 : prévenir aussi les coéquipiers.
+    const recipients = [m.declarerLogin, m.opponentLogin, m.partner1Login, m.partner2Login].filter(
+      Boolean,
+    ) as string[];
+    emit(recipients, {
       type: 'match:expired',
       payload: { id: m.id },
     });

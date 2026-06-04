@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
+import { PlayerCountPicker } from '../../components/PlayerCountPicker';
 import { Trophy, Lock, X, Swords, Users, Info } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
@@ -15,15 +16,7 @@ import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
 import { useT } from '../../lib/i18n';
 
-type CapacityChoice = '6' | '8' | '16' | 'custom';
 const POOLS_MIN = 12;
-
-function resolveCapacity(choice: CapacityChoice, custom: string): number {
-  if (choice !== 'custom') return Number(choice);
-  const n = Math.floor(Number(custom));
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(6, Math.min(64, n));
-}
 
 export function TournoisDesktop() {
   const { tournaments, me, refresh } = useLeagueData();
@@ -323,24 +316,15 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const { game } = useGameMode();
   const t = useT();
   const [name, setName] = useState('');
-  const [capacityChoice, setCapacityChoice] = useState<CapacityChoice>('8');
-  const [customCapacity, setCustomCapacity] = useState('12');
+  const [capacity, setCapacity] = useState(8);
   const [kind, setKind] = useState<'friendly' | 'official'>(isAdmin ? initialKind : 'friendly');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
   const [imageUrl, setImageUrl] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const capacity = resolveCapacity(capacityChoice, customCapacity);
   const poolsAllowed = capacity >= POOLS_MIN;
   const effectiveFormat = poolsAllowed ? format : 'elimination';
-
-  const CAPACITY_OPTIONS: { value: CapacityChoice; label: string }[] = [
-    { value: '6', label: '6' },
-    { value: '8', label: '8' },
-    { value: '16', label: '16' },
-    { value: 'custom', label: '…' },
-  ];
 
   const submit = async () => {
     const n = name.trim();
@@ -402,23 +386,13 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
             />
           </Field>
           <Field label={t('tournois.field.players')}>
-            <div className="flex gap-1.5 items-center">
-              {CAPACITY_OPTIONS.map((o) => (
-                <button key={o.value} type="button" onClick={() => setCapacityChoice(o.value)}
-                  className={`px-3 py-1.5 rounded-lg border text-[11px] font-extrabold transition-all ${
-                    capacityChoice === o.value
-                      ? 'border-gold/50 bg-gold/10 text-gold'
-                      : 'border-border text-muted-2 hover:border-gold/30'
-                  }`}>
-                  {o.label}
-                </button>
-              ))}
-              {capacityChoice === 'custom' && (
-                <input type="number" min={6} max={64} value={customCapacity}
-                  onChange={(e) => setCustomCapacity(e.target.value)}
-                  className="w-16 px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none" />
-              )}
-            </div>
+            <PlayerCountPicker
+              value={capacity}
+              onChange={setCapacity}
+              min={6}
+              max={64}
+              label={t('tournois.mobile.players')}
+            />
           </Field>
           <Field label={t('tournois.field.type')} hint={isAdmin ? undefined : t('tournois.field.type.hint')}>
             {isAdmin ? (

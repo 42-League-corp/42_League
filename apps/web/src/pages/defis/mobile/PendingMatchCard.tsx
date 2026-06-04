@@ -108,6 +108,24 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             </div>
           )}
 
+          {/* Mode 2v2 : badge + composition des équipes */}
+          {match.mode === '2v2' && (
+            <div className="flex flex-col items-center gap-1.5 mb-3">
+              <span className="inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+                2 vs 2
+              </span>
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-text-strong">
+                <span className="text-gold">
+                  {match.declarerLogin} &amp; {match.partner1Login}
+                </span>
+                <span className="text-muted-2">vs</span>
+                <span>
+                  {match.opponentLogin} &amp; {match.partner2Login}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
             <span
               className={`text-4xl font-black tabular-nums ${

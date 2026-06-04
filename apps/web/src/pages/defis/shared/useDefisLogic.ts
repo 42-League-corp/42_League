@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { api, type Challenge, type LeaderboardEntry, type PendingMatch } from '../../../lib/api';
+import { api, type Challenge, type LeaderboardEntry, type PendingMatch, type PendingFfa } from '../../../lib/api';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useFlash } from '../../../hooks/useFlash';
 import { useConfirm } from '../../../hooks/useConfirm';
@@ -13,12 +13,22 @@ export interface DefisLogic {
   accepted: Challenge[];
   pendingToConfirm: PendingMatch[];
   pendingWaiting: PendingMatch[];
+  /** FFA Smash où je dois encore confirmer MA position. */
+  ffaToConfirm: PendingFfa[];
+  /** FFA Smash que j'attends (déclarés par moi, ou déjà confirmés de mon côté). */
+  ffaWaiting: PendingFfa[];
   others: LeaderboardEntry[];
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   refresh: () => Promise<void>;
   handleAction: (id: string, action: 'accept' | 'decline') => Promise<void>;
   cancelDeclaration: (match: PendingMatch) => Promise<void>;
+  /** Confirme MA position dans un FFA (position = ma place affichée). */
+  confirmFfa: (id: string, position: number) => Promise<void>;
+  /** Conteste MA position (revendique `claimedPosition`) → annule le FFA. */
+  contestFfa: (id: string, claimedPosition: number, message?: string) => Promise<void>;
+  /** Annule un FFA que j'ai déclaré. */
+  cancelFfaDeclaration: (id: string) => Promise<void>;
 }
 
 /**
@@ -26,7 +36,7 @@ export interface DefisLogic {
  * Ne contient aucune UI, juste de la donnée dérivée et des actions.
  */
 export function useDefisLogic(): DefisLogic {
-  const { challenges, leaderboard, me, pending, matches, refresh } = useLeagueData();
+  const { challenges, leaderboard, me, pending, pendingFfas, matches, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
   const t = useT();
@@ -39,9 +49,20 @@ export function useDefisLogic(): DefisLogic {
     const out: Challenge[] = [];
     const acc: Challenge[] = [];
     for (const c of challenges) {
-      if (c.status === 'accepted') acc.push(c);
-      else if (c.status === 'pending' && c.opponentLogin === myLogin) inc.push(c);
-      else if (c.status === 'pending' && c.challengerLogin === myLogin) out.push(c);
+      if (c.status === 'accepted') {
+        acc.push(c);
+      } else if (c.status === 'pending') {
+        if (c.mode === '2v2') {
+          // 2v2 : les 2 adversaires doivent accepter (reçus) ; l'équipe du
+          // challenger (lui + coéquipier) voit le défi comme envoyé.
+          if (c.opponentLogin === myLogin || c.opponentPartnerLogin === myLogin) inc.push(c);
+          else if (c.challengerLogin === myLogin || c.partnerLogin === myLogin) out.push(c);
+        } else if (c.opponentLogin === myLogin) {
+          inc.push(c);
+        } else if (c.challengerLogin === myLogin) {
+          out.push(c);
+        }
+      }
     }
     return { incoming: inc, outgoing: out, accepted: acc };
   }, [challenges, myLogin]);
@@ -50,11 +71,30 @@ export function useDefisLogic(): DefisLogic {
     const toConfirm: PendingMatch[] = [];
     const waiting: PendingMatch[] = [];
     for (const p of pending) {
-      if (p.opponentLogin === myLogin) toConfirm.push(p);
+      if (p.mode === '2v2') {
+        // 2v2 : l'équipe adverse (opponent ou son coéquipier) confirme ; le
+        // déclarant et son coéquipier sont en attente.
+        if (p.opponentLogin === myLogin || p.partner2Login === myLogin) toConfirm.push(p);
+        else if (p.declarerLogin === myLogin || p.partner1Login === myLogin) waiting.push(p);
+      } else if (p.opponentLogin === myLogin) toConfirm.push(p);
       else if (p.declarerLogin === myLogin) waiting.push(p);
     }
     return { pendingToConfirm: toConfirm, pendingWaiting: waiting };
   }, [pending, myLogin]);
+
+  // FFA Smash : je dois confirmer MA place tant que ma ligne n'est pas confirmée ;
+  // sinon (déjà confirmée, ou je suis le déclarant auto-confirmé) je suis en attente.
+  const { ffaToConfirm, ffaWaiting } = useMemo(() => {
+    const toConfirm: PendingFfa[] = [];
+    const waiting: PendingFfa[] = [];
+    for (const f of pendingFfas) {
+      const mine = f.participants.find((p) => p.login === myLogin);
+      if (!mine) continue;
+      if (mine.confirmed) waiting.push(f);
+      else toConfirm.push(f);
+    }
+    return { ffaToConfirm: toConfirm, ffaWaiting: waiting };
+  }, [pendingFfas, myLogin]);
 
   const others = useMemo(
     () => leaderboard.filter((u) => u.login !== myLogin),
@@ -176,6 +216,53 @@ export function useDefisLogic(): DefisLogic {
     [confirm, flash, refresh, t],
   );
 
+  const confirmFfa = useCallback(
+    async (id: string, position: number) => {
+      try {
+        await api.confirmFfaPosition(id, position);
+        flash.show(t('ffa.toast.confirmed'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [flash, refresh, t],
+  );
+
+  const contestFfa = useCallback(
+    async (id: string, claimedPosition: number, message?: string) => {
+      try {
+        await api.contestFfa(id, claimedPosition, message);
+        flash.show(t('ffa.toast.contested'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [flash, refresh, t],
+  );
+
+  const cancelFfaDeclaration = useCallback(
+    async (id: string) => {
+      const ok = await confirm({
+        title: t('ffa.confirm.cancel.title'),
+        message: t('ffa.confirm.cancel.message'),
+        confirmLabel: t('defis.confirm.cancel'),
+        cancelLabel: t('defis.confirm.keep'),
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api.cancelFfa(id);
+        flash.show(t('ffa.toast.cancelled'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [confirm, flash, refresh, t],
+  );
+
   return {
     myLogin,
     incoming,
@@ -183,11 +270,16 @@ export function useDefisLogic(): DefisLogic {
     accepted,
     pendingToConfirm,
     pendingWaiting,
+    ffaToConfirm,
+    ffaWaiting,
     others,
     recentOpponents,
     opponentCounts,
     refresh,
     handleAction,
     cancelDeclaration,
+    confirmFfa,
+    contestFfa,
+    cancelFfaDeclaration,
   };
 }

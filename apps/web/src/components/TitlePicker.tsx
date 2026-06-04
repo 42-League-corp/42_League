@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronDown, Tag } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { api, type OwnedTitle } from '../lib/api';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useT } from '../lib/i18n';
 
 /**
  * Sélecteur de titre cosmétique (self-service), affiché UNIQUEMENT sur son
- * propre profil. Liste `me.ownedTitles` + une option « Aucun » (null).
+ * propre profil. Réduit à une simple flèche coulissante : un clic ouvre la liste
+ * des titres possédés (`me.ownedTitles`) + l'option par défaut « sans éclat. ».
  *
- * À la sélection : mise à jour optimiste de l'affichage (state local), appel
- * `api.setMyTitle`, puis `refresh()` du contexte LeagueData pour resynchroniser
- * `me.user.title`. En cas d'erreur réseau on revient à la valeur précédente.
+ * À la sélection : mise à jour optimiste (state local), appel `api.setMyTitle`,
+ * puis `patchMyTitle` — qui ne met à jour QUE le titre dans le contexte (pas de
+ * reload de page). En cas d'erreur réseau on revient à la valeur précédente.
  */
 export function TitlePicker({ className }: { className?: string }) {
-  const { me, refresh } = useLeagueData();
+  const { me, patchMyTitle } = useLeagueData();
   const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,7 +66,9 @@ export function TitlePicker({ className }: { className?: string }) {
     setSaving(true);
     try {
       await api.setMyTitle(label);
-      await refresh();
+      // Patch local du seul titre : pas de reload global, seule la bannière de
+      // titre se met à jour. L'effet de resync efface alors l'optimiste.
+      patchMyTitle(label);
     } catch {
       setOptimistic(prev);
     } finally {
@@ -74,17 +77,16 @@ export function TitlePicker({ className }: { className?: string }) {
   }
 
   return (
-    <div ref={rootRef} className={`relative inline-block ${className ?? ''}`}>
+    <div ref={rootRef} className={`inline-block ${className ?? ''}`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         disabled={saving}
-        className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-bg-1/60 px-2.5 py-1 text-[11px] font-bold text-gold transition hover:border-gold/70 hover:bg-bg-1/80 disabled:opacity-50"
+        aria-label={t('profil.title.choose')}
+        className="inline-flex items-center justify-center rounded-full border border-gold/40 bg-bg-1/60 p-1 text-gold transition hover:border-gold/70 hover:bg-bg-1/80 disabled:opacity-50"
       >
-        <Tag className="w-3 h-3" strokeWidth={2.5} />
-        <span className="max-w-[160px] truncate">{current ?? t('profil.title.choose')}</span>
         <ChevronDown
-          className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
           strokeWidth={2.5}
         />
       </button>
@@ -96,7 +98,7 @@ export function TitlePicker({ className }: { className?: string }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute left-1/2 top-full z-50 mt-1.5 w-56 -translate-x-1/2 overflow-hidden rounded-xl border border-gold/30 shadow-2xl"
+            className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-gold/30 shadow-2xl"
             style={{ background: 'linear-gradient(180deg, #1b1d26 0%, #14151c 100%)' }}
           >
             <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider font-bold text-muted-2 border-b border-border/40">
@@ -104,7 +106,7 @@ export function TitlePicker({ className }: { className?: string }) {
             </div>
             <ul className="max-h-64 overflow-y-auto py-1">
               <TitleOption
-                label={t('profil.title.none')}
+                label={t('profil.title.tarnished')}
                 muted
                 selected={current === null}
                 onClick={() => void select(null)}

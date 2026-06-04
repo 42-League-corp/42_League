@@ -7,6 +7,10 @@ type Dict = Record<string, string>;
  */
 export const dict: Record<Lang, Dict> = {
   fr: {
+    'favorites.label': 'Persos favoris',
+    'favorites.editTitle': 'Tes persos favoris',
+    'favorites.editHint': 'Choisis tes mains — affichées sur ton profil et épinglées en haut du sélecteur lors des déclarations.',
+    'favorites.save': 'Enregistrer',
     'profil.unavailable': 'Profil indisponible.',
     'profil.officialTitlesWon': 'Tournois officiels remportés',
     'profil.friendlyTitlesWon': 'Tournois amicaux remportés',
@@ -47,10 +51,16 @@ export const dict: Record<Lang, Dict> = {
     // Sélecteur de titre
     'profil.title.choose': 'Choisir un titre',
     'profil.title.none': 'Aucun',
+    // Titre par défaut quand aucun n'est équipé.
+    'profil.title.tarnished': 'sans éclat.',
     'profil.title.earnHint': 'Gagne des titres en jouant',
     'profil.title.current': 'Titre actuel',
   },
   en: {
+    'favorites.label': 'Mains',
+    'favorites.editTitle': 'Your mains',
+    'favorites.editHint': 'Pick your mains — shown on your profile and pinned to the top of the picker when declaring matches.',
+    'favorites.save': 'Save',
     'profil.unavailable': 'Profile unavailable.',
     'profil.officialTitlesWon': 'Official tournaments won',
     'profil.friendlyTitlesWon': 'Friendly tournaments won',
@@ -91,10 +101,16 @@ export const dict: Record<Lang, Dict> = {
     // Title picker
     'profil.title.choose': 'Choose a title',
     'profil.title.none': 'None',
+    // Default title when none is equipped.
+    'profil.title.tarnished': 'Tarnished',
     'profil.title.earnHint': 'Earn titles by playing',
     'profil.title.current': 'Current title',
   },
   es: {
+    'favorites.label': 'Personajes favoritos',
+    'favorites.editTitle': 'Tus personajes favoritos',
+    'favorites.editHint': 'Elige tus mains — se muestran en tu perfil y se fijan arriba del selector al declarar partidas.',
+    'favorites.save': 'Guardar',
     'profil.unavailable': 'Perfil no disponible.',
     'profil.officialTitlesWon': 'Torneos oficiales ganados',
     'profil.friendlyTitlesWon': 'Torneos amistosos ganados',
@@ -135,6 +151,8 @@ export const dict: Record<Lang, Dict> = {
     // Selector de título
     'profil.title.choose': 'Elegir un título',
     'profil.title.none': 'Ninguno',
+    // Título por defecto cuando no hay ninguno equipado.
+    'profil.title.tarnished': 'Tarnished',
     'profil.title.earnHint': 'Gana títulos jugando',
     'profil.title.current': 'Título actual',
   },

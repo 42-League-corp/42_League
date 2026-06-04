@@ -235,7 +235,7 @@ export function LeaderboardMobile() {
             entries={sortedLeaderboard}
             myLogin={myLogin}
             winRates={winRates}
-            className="h-[70vh]"
+            className="h-[clamp(320px,70vh,560px)]"
           />
         ) : viewMode === 'goat' ? (
           <GoatView />

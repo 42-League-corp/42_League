@@ -119,6 +119,9 @@ export function useServerEvents(
     };
     window.addEventListener('online', reopen);
     window.addEventListener('focus', reopen);
+    // `pageshow` : restauration depuis le bfcache (iOS Safari surtout) où la
+    // connexion SSE a été gelée sans `onerror` → on rouvre.
+    window.addEventListener('pageshow', reopen);
     document.addEventListener('visibilitychange', onVisibility);
 
     void connect();
@@ -130,6 +133,7 @@ export function useServerEvents(
       if (reopenTimer) clearTimeout(reopenTimer);
       window.removeEventListener('online', reopen);
       window.removeEventListener('focus', reopen);
+      window.removeEventListener('pageshow', reopen);
       document.removeEventListener('visibilitychange', onVisibility);
       es?.close();
     };

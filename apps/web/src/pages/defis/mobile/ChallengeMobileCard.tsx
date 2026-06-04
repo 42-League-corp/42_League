@@ -82,6 +82,16 @@ export function ChallengeMobileCard({
         <PlayerLink login={opponent} className="font-display font-bold text-text-strong text-sm">
           {opponent}
         </PlayerLink>
+        {challenge.mode === '2v2' && (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider bg-red/15 text-red border border-red/30">
+              2 vs 2
+            </span>
+            <span className="text-[10px] text-muted-2 truncate">
+              {challenge.challengerLogin} &amp; {challenge.partnerLogin} vs {challenge.opponentLogin} &amp; {challenge.opponentPartnerLogin}
+            </span>
+          </div>
+        )}
         <div className={`text-[11px] mt-0.5 flex items-center gap-1 ${when.late ? 'text-red' : 'text-muted-2'}`}>
           <Clock className="w-3 h-3" strokeWidth={2.5} />
           <span>{when.text}</span>

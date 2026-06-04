@@ -8,6 +8,7 @@ import { SfCharIcon } from '../../../components/SfCharIcon';
 import { api, type LeaderboardEntry, type Game } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { useGameMode } from '../../../hooks/useGameMode';
+import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
@@ -27,32 +28,52 @@ function CharPicker({
   onChange,
   roster,
   Icon,
+  favorites = [],
+  favoritesLabel,
 }: {
   label: string;
   value: string | null;
   onChange: (id: string) => void;
   roster: { id: string; name: string }[];
   Icon: typeof SmashCharIcon;
+  /** Ids épinglés en haut (mes favoris / ceux de l'adversaire). */
+  favorites?: string[];
+  favoritesLabel?: string;
 }) {
+  const cell = (c: { id: string; name: string }) => (
+    <button
+      key={c.id}
+      type="button"
+      onClick={() => onChange(c.id)}
+      title={c.name}
+      className={`rounded-lg transition-all ${
+        value === c.id
+          ? 'ring-2 ring-[#c97bff] scale-105'
+          : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
+      }`}
+    >
+      <Icon id={c.id} size={40} className="w-full aspect-square" />
+    </button>
+  );
+  // Favoris connus du roster (ignore les ids obsolètes).
+  const favCells = favorites
+    .map((id) => roster.find((c) => c.id === id))
+    .filter((c): c is { id: string; name: string } => !!c);
   return (
     <div>
       <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{label}</label>
+      {favCells.length > 0 && (
+        <div className="mb-2">
+          <div className="text-[9px] uppercase tracking-wider text-[#c97bff] font-bold mb-1">
+            {favoritesLabel ?? 'Favoris'}
+          </div>
+          <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 p-1 rounded-lg bg-[#c97bff]/[0.06] border border-[#c97bff]/25">
+            {favCells.map(cell)}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-        {roster.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => onChange(c.id)}
-            title={c.name}
-            className={`rounded-lg transition-all ${
-              value === c.id
-                ? 'ring-2 ring-[#c97bff] scale-105'
-                : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
-            }`}
-          >
-            <Icon id={c.id} size={40} className="w-full aspect-square" />
-          </button>
-        ))}
+        {roster.map(cell)}
       </div>
     </div>
   );
@@ -96,10 +117,15 @@ export function DeclareGameFlow({
 }: DeclareGameFlowProps) {
   const flash = useFlash();
   const t = useT();
+  const { me } = useLeagueData();
   const { game: globalGame } = useGameMode();
   const game = gameOverride ?? globalGame;
   const isSmash = game === 'smash';
   const isSf = game === 'streetfighter';
+  // Favoris (« mains ») du jeu en cours, pour épingler en haut du picker.
+  const favOf = (u: { favSmash?: string[]; favSf?: string[] } | null | undefined) =>
+    (isSf ? u?.favSf : u?.favSmash) ?? [];
+  const myFavorites = favOf(me?.user);
   // Street Fighter == Smash pour la saisie (set Bo3/Bo5 + 2 persos), mais sans stocks.
   const isSetGame = isSmash || isSf;
   const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
@@ -415,8 +441,24 @@ export function DeclareGameFlow({
           )}
 
           {/* Persos */}
-          <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
-          <CharPicker label={`${t('defis.charOf')} ${opponent.login}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+          <CharPicker
+            label={t('defis.yourChar')}
+            value={charSelf}
+            onChange={setCharSelf}
+            roster={charRoster}
+            Icon={CharIcon}
+            favorites={myFavorites}
+            favoritesLabel={t('favorites.label')}
+          />
+          <CharPicker
+            label={`${t('defis.charOf')} ${opponent.login}`}
+            value={charOpp}
+            onChange={setCharOpp}
+            roster={charRoster}
+            Icon={CharIcon}
+            favorites={favOf(opponent)}
+            favoritesLabel={t('favorites.label')}
+          />
 
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
             <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>

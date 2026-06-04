@@ -18,6 +18,18 @@ export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
 export const SmashStockSchema = z.number().int().min(1).max(3);
 
+// Personnages favoris (« mains ») configurables par le joueur, par jeu de combat.
+// Liste libre (illimitée côté produit) ; cap de sécurité + dédup faits côté route.
+// Seules les clés fournies sont mises à jour (PATCH partiel).
+export const FAVORITES_MAX = 200;
+export const FavoritesUpdateSchema = z
+  .object({
+    smash: z.array(SmashCharSchema).max(FAVORITES_MAX).optional(),
+    streetfighter: z.array(SmashCharSchema).max(FAVORITES_MAX).optional(),
+  })
+  .strict();
+export type FavoritesUpdate = z.infer<typeof FavoritesUpdateSchema>;
+
 /** Champs communs aux déclarations/confirmations, indépendants du jeu. */
 const matchScoreShape = {
   scoreSelf: MatchScoreSchema,
@@ -260,3 +272,66 @@ export const Confirm2v2MatchSchema = z
   .superRefine(babyfootScoreRefiner);
 
 export type Confirm2v2MatchInput = z.infer<typeof Confirm2v2MatchSchema>;
+
+// Défi 2v2 (Babyfoot) : le challenger nomme les 4 joueurs (lui + son coéquipier
+// contre 2 adversaires) et programme un créneau. Seuls les 2 adversaires acceptent.
+export const CreateChallenge2v2Schema = z
+  .object({
+    partnerLogin:         LoginSchema, // coéquipier du challenger
+    opponentLogin:        LoginSchema, // premier adversaire
+    opponentPartnerLogin: LoginSchema, // coéquipier de l'adversaire
+    scheduledAt: z
+      .string()
+      .datetime({ offset: true })
+      .refine((s) => new Date(s).getTime() > Date.now() - 60_000, {
+        message: 'scheduledAt must be in the future (or within the last minute)',
+      }),
+  })
+  .superRefine((m, ctx) => {
+    const logins = [m.partnerLogin, m.opponentLogin, m.opponentPartnerLogin];
+    if (new Set(logins).size !== logins.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'all four players must be different' });
+    }
+  });
+
+export type CreateChallenge2v2Input = z.infer<typeof CreateChallenge2v2Schema>;
+
+// ─── Smash FFA (Free-For-All, 3+ joueurs) ────────────────────────────────────
+// EXCLUSIF au Smash. Le déclarant propose le classement final complet (ordre du
+// tableau `ranking` : ranking[0] = 1er … dernier élément = dernier). Les positions
+// sont DÉRIVÉES de l'ordre côté serveur (position = index + 1) → unicité et
+// contiguïté 1..N garanties par construction. Chaque AUTRE participant confirme
+// ensuite UNIQUEMENT sa propre position ; une contestation annule tout le FFA.
+
+export const FFA_MIN_PLAYERS = 3;
+// Limite d'un lobby Smash Ultimate.
+export const FFA_MAX_PLAYERS = 8;
+
+export const DeclareFfaSchema = z
+  .object({
+    game: z.literal('smash').default('smash'),
+    ranking: z.array(LoginSchema).min(FFA_MIN_PLAYERS).max(FFA_MAX_PLAYERS),
+  })
+  .superRefine((m, ctx) => {
+    if (new Set(m.ranking).size !== m.ranking.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'tous les participants doivent être différents', path: ['ranking'] });
+    }
+  });
+
+export type DeclareFfaInput = z.infer<typeof DeclareFfaSchema>;
+
+// Confirmation de SA propre place : on renvoie la position attendue pour détecter
+// une dérive (si le classement a changé entre l'affichage et le clic → mismatch).
+export const ConfirmFfaPositionSchema = z.object({
+  position: z.number().int().min(1).max(FFA_MAX_PLAYERS),
+});
+
+export type ConfirmFfaPositionInput = z.infer<typeof ConfirmFfaPositionSchema>;
+
+// Contestation : le joueur indique sa position RÉELLE revendiquée → annule le FFA.
+export const ContestFfaSchema = z.object({
+  claimedPosition: z.number().int().min(1).max(FFA_MAX_PLAYERS),
+  message: z.string().trim().max(500).optional(),
+});
+
+export type ContestFfaInput = z.infer<typeof ContestFfaSchema>;

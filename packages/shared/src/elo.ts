@@ -147,6 +147,43 @@ export function calculateSmashElo(
   return { newA: ratingA + deltaA, newB: ratingB + deltaB, deltaA, deltaB };
 }
 
+// ─── SMASH FFA (Free-For-All, N>=3) ──────────────────────────────────────────
+
+/**
+ * Variation d'Elo pour un Free-For-All Smash à N joueurs, modèle round-robin
+ * SENSIBLE AU RATING.
+ *
+ * `ratings` est fourni dans l'ORDRE DU CLASSEMENT FINAL : `ratings[0]` = 1er,
+ * … `ratings[N-1]` = dernier. On considère que chaque joueur a « battu » tous
+ * ceux classés EN DESSOUS de lui et « perdu » contre tous ceux AU-DESSUS. On
+ * somme les deltas de chaque duel (via `calculateChessElo` — résultat binaire,
+ * même bonus d'upset non saturant que les autres jeux) puis on MOYENNE sur les
+ * (N-1) adversaires pour garder l'amplitude d'un match unique.
+ *
+ * Propriétés : le 1er gagne le plus, le dernier perd le plus, le haut du milieu
+ * gagne, le bas du milieu perd, et — à ratings égaux — le milieu exact (N impair)
+ * reste à ~0. Les écarts de rating comptent (battre plus fort rapporte plus).
+ * Chaque delta de duel respecte déjà `MAX_DELTA_PER_MATCH`, donc la moyenne aussi.
+ *
+ * Retourne les deltas alignés sur `ratings` (`deltas[i]` correspond à `ratings[i]`).
+ */
+export function calculateFfaElo(ratings: number[]): number[] {
+  const n = ratings.length;
+  if (n < 2) return ratings.map(() => 0);
+  const sum = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      // i est mieux classé que j → i gagne ('A'), j perd ('B').
+      // i,j ∈ [0,n) → accès garantis (non-null sous noUncheckedIndexedAccess).
+      const { deltaA, deltaB } = calculateChessElo(ratings[i]!, ratings[j]!, 'A');
+      sum[i]! += deltaA;
+      sum[j]! += deltaB;
+    }
+  }
+  // Moyenne sur les adversaires (arrondie une seule fois pour limiter la dérive).
+  return sum.map((s) => Math.round(s / (n - 1)));
+}
+
 // ─── ÉCHECS ─────────────────────────────────────────────────────────────────
 
 /**

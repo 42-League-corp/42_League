@@ -57,6 +57,12 @@ export interface RateLimitOptions {
   windowMs: number;
   max: number;
   skip?: (c: Context) => boolean | Promise<boolean>;
+  /**
+   * Clé de comptage (bucket + pénalité). Défaut : l'IP cliente.
+   * À surcharger pour compter par utilisateur (login signé) — indispensable
+   * derrière un NAT unique (campus 42) où toutes les IP sont identiques.
+   */
+  key?: (c: Context) => string | Promise<string>;
   /** Activer les pénalités progressives (défaut : true). */
   progressive?: boolean;
 }
@@ -71,12 +77,12 @@ export function rateLimit(opts: RateLimitOptions) {
   return async (c: Context, next: Next) => {
     if (opts.skip && (await opts.skip(c))) { await next(); return; }
 
-    const ip = clientIp(c);
+    const subject = opts.key ? await opts.key(c) : clientIp(c);
     const now = Date.now();
 
     // Vérification de la pénalité avant tout.
     if (progressive) {
-      const penalty = penaltyStore.get(ip);
+      const penalty = penaltyStore.get(subject);
       if (penalty && penalty.blockedUntil > now) {
         const retryAfter = Math.ceil((penalty.blockedUntil - now) / 1000);
         c.header('Retry-After', String(retryAfter));
@@ -84,7 +90,7 @@ export function rateLimit(opts: RateLimitOptions) {
       }
     }
 
-    const key = `${opts.name}:${ip}`;
+    const key = `${opts.name}:${subject}`;
     let bucket = store.get(key);
     if (!bucket || bucket.resetAt <= now) {
       bucket = { count: 0, resetAt: now + opts.windowMs };
@@ -99,10 +105,10 @@ export function rateLimit(opts: RateLimitOptions) {
 
     if (bucket.count > opts.max) {
       if (progressive) {
-        const existing = penaltyStore.get(ip);
+        const existing = penaltyStore.get(subject);
         const violations = (existing?.violations ?? 0) + 1;
         const duration = getPenaltyDuration(violations);
-        penaltyStore.set(ip, { violations, blockedUntil: now + duration, lastViolationAt: now });
+        penaltyStore.set(subject, { violations, blockedUntil: now + duration, lastViolationAt: now });
         const retryAfter = Math.ceil(duration / 1000);
         c.header('Retry-After', String(retryAfter));
         throw new HTTPException(429, { message: `too many requests — blocked for ${retryAfter}s (violation #${violations})` });
@@ -117,23 +123,23 @@ export function rateLimit(opts: RateLimitOptions) {
 }
 
 /**
- * Efface la pénalité d'une IP (et ses buckets fenêtre-fixe) — pour débloquer
- * un admin via `DELETE /admin/rate-limit/me`.
+ * Efface la pénalité d'un sujet (user ou IP) et ses buckets fenêtre-fixe —
+ * pour débloquer via `DELETE /admin/rate-limit/me`.
  */
-export function clearPenalty(ip: string): void {
-  penaltyStore.delete(ip);
+export function clearPenalty(subject: string): void {
+  penaltyStore.delete(subject);
   for (const store of bucketStores.values()) {
     for (const key of store.keys()) {
-      if (key.endsWith(`:${ip}`)) store.delete(key);
+      if (key.endsWith(`:${subject}`)) store.delete(key);
     }
   }
 }
 
-/** Renvoie l'état de la pénalité active pour une IP, ou null si aucune. */
+/** Renvoie l'état de la pénalité active pour un sujet (user ou IP), ou null. */
 export function getPenaltyInfo(
-  ip: string,
+  subject: string,
 ): { blockedUntil: number; remainingSec: number; violations: number } | null {
-  const p = penaltyStore.get(ip);
+  const p = penaltyStore.get(subject);
   if (!p || p.blockedUntil <= Date.now()) return null;
   return {
     blockedUntil: p.blockedUntil,

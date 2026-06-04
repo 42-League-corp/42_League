@@ -28,6 +28,9 @@ export interface LeaderboardEntry {
   title?: string | null;
   dodgeCount?: number;
   tournamentsWon?: number;
+  /** Persos favoris du joueur (épinglés en haut du picker de déclaration). */
+  favSmash?: string[];
+  favSf?: string[];
 }
 
 export interface PendingMatch {
@@ -42,6 +45,12 @@ export interface PendingMatch {
   charDeclarer?: string | null;
   charOpponent?: string | null;
   stocks?: number | null;
+  /** '2v2' pour les matchs en mode équipe Babyfoot. */
+  mode?: '2v2' | null;
+  /** Coéquipier du déclarant (équipe 1) — présent uniquement en 2v2. */
+  partner1Login?: string | null;
+  /** Coéquipier de l'adversaire (équipe 2) — présent uniquement en 2v2. */
+  partner2Login?: string | null;
 }
 
 export interface Challenge {
@@ -53,6 +62,15 @@ export interface Challenge {
   createdAt: string;
   decidedAt: string | null;
   game?: Game;
+  /** '2v2' pour un défi en équipe Babyfoot. */
+  mode?: '2v2' | null;
+  /** Coéquipier du challenger — présent uniquement en 2v2. */
+  partnerLogin?: string | null;
+  /** Coéquipier de l'adversaire — présent uniquement en 2v2. */
+  opponentPartnerLogin?: string | null;
+  /** Timestamps d'acceptation des 2 adversaires (2v2). */
+  opponentAcceptedAt?: string | null;
+  opponentPartnerAcceptedAt?: string | null;
 }
 
 export interface PlayedMatch {
@@ -74,6 +92,41 @@ export interface PlayedMatch {
   stocksB?: number | null;
   /** '2v2' pour les matchs en mode équipe Babyfoot, null/absent pour les 1v1. */
   mode?: '2v2' | null;
+}
+
+// ─── Smash FFA (Free-For-All) ─────────────────────────────────────────────────
+
+export interface FfaParticipant {
+  login: string;
+  /** 1 = 1er … N = dernier (classement proposé par le déclarant). */
+  position: number;
+  /** Le joueur a validé SA position. */
+  confirmed: boolean;
+}
+
+export interface PendingFfa {
+  id: string;
+  declarerLogin: string;
+  game: Game;
+  declaredAt: string;
+  participants: FfaParticipant[];
+}
+
+export interface PlayedFfaParticipant {
+  login: string;
+  position: number;
+  ratingBefore: number;
+  delta: number;
+  ratingAfter: number;
+}
+
+export interface PlayedFfa {
+  id: string;
+  game: Game;
+  playedAt: string;
+  seasonId: string | null;
+  countedForElo: boolean;
+  participants: PlayedFfaParticipant[];
 }
 
 // ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
@@ -125,14 +178,15 @@ export interface TeamProfile extends BabyfootTeamEntry {
 
 // ─── League Coin · Boutique ───────────────────────────────────────────────────
 
-export type ShopCategory = 'title' | 'banner' | 'cosmetic';
+export type ShopCategory = 'title' | 'banner' | 'badge' | 'cosmetic';
 
 export interface ShopItemData {
   id: string;
-  slug: string;
   name: string;
   description: string | null;
   category: ShopCategory;
+  /** Couleur d'accent (hex #rrggbb) — titres & badges. */
+  color: string | null;
   price: number;
   payload: Record<string, unknown> | null;
   active: boolean;
@@ -140,14 +194,22 @@ export interface ShopItemData {
 }
 
 export interface ShopItemInput {
-  slug: string;
   name: string;
   description?: string | null;
   category: ShopCategory;
+  color?: string | null;
   price: number;
   payload?: Record<string, unknown> | null;
   active?: boolean;
   sortOrder?: number;
+}
+
+/** Badge cosmétique acheté & équipé (def inline renvoyée par /me et /users). */
+export interface EquippedBadge {
+  code: string;
+  label: string;
+  icon: string;
+  color: string | null;
 }
 
 export interface InventoryEntry {
@@ -193,6 +255,12 @@ export interface MeResponse {
   badges?: string[];
   /** Titres que le joueur POSSÈDE (sélecteur de titre, cf. setMyTitle). */
   ownedTitles?: OwnedTitle[];
+  /** Couleur du titre équipé (item boutique) — applique une teinte au titre affiché. */
+  titleColor?: string | null;
+  /** Badge acheté & équipé (boutique) — affiché en plus des badges d'accomplissement. */
+  equippedBadge?: EquippedBadge | null;
+  /** Bannière équipée (data-URL) — fond de la carte profil. */
+  equippedBanner?: string | null;
   /** Palmarès par saison. */
   palmares?: PalmaresEntry[];
   user: {
@@ -216,6 +284,8 @@ export interface MeResponse {
     matchesPlayedSf?: number;
     tournamentsWonSf?: number;
     games?: Game[];
+    favSmash?: string[];
+    favSf?: string[];
     onboardedAt?: string | null;
   } | null;
 }
@@ -239,6 +309,8 @@ export interface AdminUser {
   matchesPlayedSf?: number;
   tournamentsWonSf?: number;
   games?: Game[];
+  favSmash?: string[];
+  favSf?: string[];
   title: string | null;
   imageUrl: string | null;
   campus: string | null;
@@ -373,6 +445,8 @@ export interface UserProfile {
     tournamentsWonSf?: number;
     /** Disciplines auxquelles le joueur a adhéré (badges cross-jeux de la carte héro). */
     games?: Game[];
+    favSmash?: string[];
+    favSf?: string[];
     createdAt: string;
   };
   rank: number | null;
@@ -549,6 +623,8 @@ export interface AppNotification {
   title: string;
   body: string | null;
   link: string | null;
+  /** Jeu d'origine : couleur de fond + emoji de la cloche, bascule de mode au clic. */
+  game: Game | null;
   read: boolean;
   createdAt: string;
 }
@@ -587,6 +663,13 @@ export const api = {
     request<{ games: Game[]; onboardedAt: string | null }>('/me/games', {
       method: 'PATCH',
       body: JSON.stringify({ games }),
+    }),
+  // Persos favoris par jeu de combat. PATCH partiel : seules les clés fournies
+  // sont écrites (ex. ne mettre à jour que `smash`).
+  setFavorites: (input: { smash?: string[]; streetfighter?: string[] }) =>
+    request<{ favSmash: string[]; favSf: string[] }>('/me/favorites', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
     }),
   leaderboard: (game?: Game) =>
     request<LeaderboardEntry[]>(
@@ -662,9 +745,45 @@ export const api = {
       `/matches/${encodeURIComponent(id)}/cancel`,
       { method: 'POST' },
     ),
+
+  // ── Smash FFA (Free-For-All) ──
+  pendingFfas: () => request<PendingFfa[]>('/matches/ffa/pending'),
+  playedFfas: () => request<PlayedFfa[]>('/matches/ffa'),
+  /** `ranking[0]` = 1er … dernier élément = dernier. */
+  declareFfa: (ranking: string[]) =>
+    request<{ id: string; status: 'pending' }>('/matches/ffa', {
+      method: 'POST',
+      body: JSON.stringify({ game: 'smash', ranking }),
+    }),
+  confirmFfaPosition: (id: string, position: number) =>
+    request<PlayedFfa | { id: string; status: 'pending'; confirmed: number; total: number }>(
+      `/matches/ffa/${encodeURIComponent(id)}/confirm`,
+      { method: 'POST', body: JSON.stringify({ position }) },
+    ),
+  contestFfa: (id: string, claimedPosition: number, message?: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/ffa/${encodeURIComponent(id)}/contest`,
+      { method: 'POST', body: JSON.stringify({ claimedPosition, message }) },
+    ),
+  cancelFfa: (id: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/ffa/${encodeURIComponent(id)}/cancel`,
+      { method: 'POST' },
+    ),
   challenges: () => request<Challenge[]>('/challenges'),
   createChallenge: (input: { opponentLogin: string; scheduledAt: string; game?: Game }) =>
     request<Challenge>('/challenges', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  /** Défi 2v2 Babyfoot : challenger + coéquipier contre 2 adversaires. */
+  createChallenge2v2: (input: {
+    partnerLogin: string;
+    opponentLogin: string;
+    opponentPartnerLogin: string;
+    scheduledAt: string;
+  }) =>
+    request<Challenge>('/challenges/2v2', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -798,6 +917,12 @@ export const api = {
   // tester l'app en mode utilisateur (cf. composant TesterSwitch).
   impersonateTester: () =>
     request<{ token: string; login: string }>('/admin/impersonate-tester', {
+      method: 'POST',
+    }),
+  // Staging : crée un compte tester TOUT NEUF (login unique) et renvoie son token,
+  // pour revivre l'arrivée d'un joueur fraîchement créé (onboarding, stats vierges).
+  impersonateFreshTester: () =>
+    request<{ token: string; login: string }>('/admin/impersonate-fresh-tester', {
       method: 'POST',
     }),
   setStagingAccess: (login: string, grant: boolean) =>
@@ -1005,4 +1130,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ login, amount }),
     }),
+  /** Donne un cosmétique (item boutique) à un joueur, avec auto-équipement optionnel. */
+  adminGrantItem: (login: string, itemId: string, equip?: boolean) =>
+    request<{ ok: true; login: string; itemId: string; equipped: boolean }>(
+      '/admin/shop/grant-item',
+      { method: 'POST', body: JSON.stringify({ login, itemId, equip }) },
+    ),
 };

@@ -126,7 +126,9 @@ export function GameModeSwitch() {
         )}
       </AnimatePresence>
 
-      <div className="fixed right-3 bottom-20 sm:bottom-4 z-[90]">
+      {/* Ancré au-dessus de la tab bar mobile (60px + safe-area) quelle que soit
+          la hauteur d'écran ; collé en bas sur desktop (pas de tab bar). */}
+      <div className="fixed right-3 z-[90] bottom-[calc(60px+env(safe-area-inset-bottom)+16px)] sm:bottom-4">
         {open ? (
           // ── Panneau (morph depuis le FAB, reste ancré dans le coin) ──
           <motion.div

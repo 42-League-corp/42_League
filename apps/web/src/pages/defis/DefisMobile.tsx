@@ -6,7 +6,7 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
-import { Declare2v2GameSheet } from './mobile/Declare2v2GameSheet';
+import { DeclareFfaGameSheet } from './mobile/DeclareFfaGameSheet';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
 import { ChallengeRecordSheet } from './mobile/ChallengeRecordSheet';
 import { BigActionButton } from './mobile/BigActionButton';
@@ -16,10 +16,11 @@ import { ChallengeMobileCard } from './mobile/ChallengeMobileCard';
 import { MatchmakingButton } from '../../components/MatchmakingButton';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
-import type { Challenge } from '../../lib/api';
+import type { Challenge, PendingFfa } from '../../lib/api';
 
-type Filter = 'all' | 'received' | 'scheduled' | 'sent';
+type Filter = 'received' | 'scheduled' | 'sent';
 
 export function DefisMobile() {
   const {
@@ -29,22 +30,30 @@ export function DefisMobile() {
     accepted,
     pendingToConfirm,
     pendingWaiting,
+    ffaToConfirm,
+    ffaWaiting,
     others,
     recentOpponents,
     opponentCounts,
     refresh,
     handleAction,
     cancelDeclaration,
+    confirmFfa,
+    contestFfa,
+    cancelFfaDeclaration,
   } = useDefisLogic();
   const t = useT();
   const { leaderboard, locations } = useLeagueData();
+  const { game } = useGameMode();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [declareOpen, setDeclareOpen] = useState(false);
-  const [declare2v2Open, setDeclare2v2Open] = useState(false);
+  const [ffaOpen, setFfaOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>('all');
+
+  const myElo = leaderboard.find((u) => u.login === myLogin)?.elo;
+  const [filter, setFilter] = useState<Filter>('received');
   const [recordChallenge, setRecordChallenge] = useState<Challenge | null>(null);
 
   // Ouvre le sheet d'enregistrement si ?record=<id> est dans l'URL.
@@ -58,17 +67,25 @@ export function DefisMobile() {
   // Map login → imageUrl pour les cartes de défis
   const imgByLogin = new Map(leaderboard.map((u) => [u.login, u.imageUrl] as const));
 
-  // Filtres dynamiques
-  const filterChoices: SegmentChoice<Filter>[] = [
-    { value: 'all', label: t('defis.tab.all'), badge: incoming.length + accepted.length + outgoing.length },
-    { value: 'received', label: t('defis.tab.received'), badge: incoming.length },
-    { value: 'scheduled', label: t('defis.tab.scheduled'), badge: accepted.length },
-    { value: 'sent', label: t('defis.tab.sent'), badge: outgoing.length },
-  ];
+  // Filtres : reçus / prévus / envoyés (pas d'onglet « tout » fourre-tout).
+  // On ne montre que les catégories non vides.
+  const filterChoices: SegmentChoice<Filter>[] = (
+    [
+      { value: 'received', label: t('defis.tab.received'), badge: incoming.length },
+      { value: 'scheduled', label: t('defis.tab.scheduled'), badge: accepted.length },
+      { value: 'sent', label: t('defis.tab.sent'), badge: outgoing.length },
+    ] as SegmentChoice<Filter>[]
+  ).filter((c) => (c.badge ?? 0) > 0);
 
-  const showIncoming = filter === 'all' || filter === 'received';
-  const showAccepted = filter === 'all' || filter === 'scheduled';
-  const showOutgoing = filter === 'all' || filter === 'sent';
+  // Onglet effectif : si le filtre courant n'a plus d'items, on retombe sur la
+  // 1re catégorie disponible.
+  const activeFilter: Filter = filterChoices.some((c) => c.value === filter)
+    ? filter
+    : (filterChoices[0]?.value ?? 'received');
+
+  const showIncoming = activeFilter === 'received';
+  const showAccepted = activeFilter === 'scheduled';
+  const showOutgoing = activeFilter === 'sent';
 
   const totalChallenges = incoming.length + accepted.length + outgoing.length;
 
@@ -81,24 +98,27 @@ export function DefisMobile() {
         {/* Match aléatoire (matchmaking queue) — CTA proéminent */}
         <MatchmakingButton />
 
-        {/* CTAs — Déclarer 1v1, Déclarer 2v2, Défier */}
+        {/* CTAs — Déclarer (1v1/2v2 au choix dans le sheet), Défier */}
         <div className="space-y-2.5">
           <BigActionButton
             Icon={Plus}
             tone="amber"
-            title={t('defis.cta.declare1v1')}
+            title={t('defis.cta.declare')}
             subtitle={t('defis.cta.declare1v1.sub')}
             accessory={<Silhouettes2 />}
             onClick={() => setDeclareOpen(true)}
           />
-          <BigActionButton
-            Icon={Users}
-            tone="red"
-            title={t('defis.cta.declare2v2')}
-            subtitle={t('defis.cta.declare2v2.sub')}
-            accessory={<Silhouettes4 />}
-            onClick={() => setDeclare2v2Open(true)}
-          />
+          {/* FFA — uniquement en Smash. */}
+          {game === 'smash' && (
+            <BigActionButton
+              Icon={Users}
+              tone="red"
+              title={t('ffa.cta.title')}
+              subtitle={t('ffa.cta.sub')}
+              accessory={<Silhouettes4 />}
+              onClick={() => setFfaOpen(true)}
+            />
+          )}
           <BigActionButton
             Icon={Swords}
             tone="gold"
@@ -120,6 +140,35 @@ export function DefisMobile() {
             <div className="space-y-2.5">
               {pendingToConfirm.map((p) => (
                 <PendingMatchCard key={p.id} match={p} onDone={refresh} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* FFA Smash — ma position à confirmer */}
+        {ffaToConfirm.length > 0 && (
+          <section>
+            <SectionHeader
+              icon={<Users className="w-3.5 h-3.5 text-red" strokeWidth={2.5} />}
+              title={t('ffa.toConfirm')}
+              badge={ffaToConfirm.length}
+              tone="gold"
+            />
+            <div className="space-y-2.5">
+              {ffaToConfirm.map((f) => (
+                <FfaMobileCard key={f.id} ffa={f} myLogin={myLogin} onConfirm={confirmFfa} onContest={contestFfa} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* FFA Smash — en attente des autres */}
+        {ffaWaiting.length > 0 && (
+          <section>
+            <SectionHeader title={t('ffa.waiting')} />
+            <div className="space-y-2.5">
+              {ffaWaiting.map((f) => (
+                <FfaMobileCard key={f.id} ffa={f} myLogin={myLogin} waiting onCancel={cancelFfaDeclaration} />
               ))}
             </div>
           </section>
@@ -208,11 +257,13 @@ export function DefisMobile() {
           <section>
             <SectionHeader title={t('nav.defis')} />
             <div className="mb-3">
-              <SegmentedControl<Filter>
-                value={filter}
-                onChange={setFilter}
-                choices={filterChoices.filter((c) => c.value === 'all' || (c.badge ?? 0) > 0)}
-              />
+              {filterChoices.length > 1 && (
+                <SegmentedControl<Filter>
+                  value={activeFilter}
+                  onChange={setFilter}
+                  choices={filterChoices}
+                />
+              )}
             </div>
             <AnimatePresence mode="popLayout">
               <div className="space-y-2.5">
@@ -287,14 +338,15 @@ export function DefisMobile() {
         onDone={refresh}
       />
 
-      {/* Sheet de déclaration 2v2 Babyfoot */}
-      <Declare2v2GameSheet
-        open={declare2v2Open}
-        onClose={() => setDeclare2v2Open(false)}
+      {/* Sheet de déclaration FFA Smash */}
+      <DeclareFfaGameSheet
+        open={ffaOpen}
+        onClose={() => setFfaOpen(false)}
         others={others}
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        myElo={myElo}
         locations={locations}
         onDone={refresh}
       />
@@ -353,6 +405,127 @@ function Silhouettes4() {
       <circle cx="33" cy="5" r="2.8" />
       <ellipse cx="33" cy="14" rx="4.5" ry="3" />
     </svg>
+  );
+}
+
+// ─── FFA Smash : carte mobile (confirmer sa place / contester / annuler) ──────
+
+function FfaMobileCard({
+  ffa, myLogin, waiting = false, onConfirm, onContest, onCancel,
+}: {
+  ffa: PendingFfa;
+  myLogin: string | undefined;
+  waiting?: boolean;
+  onConfirm?: (id: string, position: number) => Promise<void>;
+  onContest?: (id: string, claimedPosition: number, message?: string) => Promise<void>;
+  onCancel?: (id: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [contesting, setContesting] = useState(false);
+  const [claimed, setClaimed] = useState(0);
+  const ordered = [...ffa.participants].sort((a, b) => a.position - b.position);
+  const mine = ffa.participants.find((p) => p.login === myLogin);
+  const confirmedCount = ffa.participants.filter((p) => p.confirmed).length;
+  const total = ffa.participants.length;
+  const isDeclarer = ffa.declarerLogin === myLogin;
+  if (!mine) return null;
+
+  return (
+    <div className="relative card-hud px-4 py-3.5">
+      <div className="flex items-center gap-2 mb-2.5">
+        <Users className="w-4 h-4 text-red flex-shrink-0" strokeWidth={2.5} />
+        <span className="text-xs font-bold text-text-strong">{ffa.declarerLogin}</span>
+        <span className="text-[10px] text-muted-2">{t('ffa.placedYou')}</span>
+        <span className="ml-auto font-mono text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{confirmedCount}/{total}</span>
+      </div>
+
+      {/* Classement proposé */}
+      <div className="space-y-1 mb-3">
+        {ordered.map((p) => (
+          <div
+            key={p.login}
+            className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs ${
+              p.login === myLogin ? 'bg-gold/[0.08] text-gold font-extrabold' : 'text-muted-2'
+            }`}
+          >
+            <span className="font-mono w-5 text-center">{p.position}</span>
+            <span className="flex-1 truncate">{p.login}</span>
+            {p.confirmed && <span className="text-teal">✓</span>}
+          </div>
+        ))}
+      </div>
+
+      {!waiting && !contesting && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => { setBusy(true); try { await onConfirm?.(ffa.id, mine.position); } finally { setBusy(false); } }}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-gold to-[#f5b942] text-[#1a1100] text-xs font-black uppercase tracking-wider active:scale-[0.98] transition-transform disabled:opacity-50"
+          >
+            {t('ffa.confirmPlace')} · {t('ffa.positionShort')}{mine.position}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setClaimed(mine.position); setContesting(true); }}
+            className="px-4 py-2.5 rounded-xl border border-red/40 text-red text-xs font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
+          >
+            {t('ffa.contest')}
+          </button>
+        </div>
+      )}
+
+      {!waiting && contesting && (
+        <div className="rounded-xl border border-red/30 bg-red/[0.04] p-3">
+          <div className="text-[11px] text-muted-2 mb-2 leading-relaxed">{t('ffa.contest.sub')}</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-muted mb-2">{t('ffa.contest.yourPlace')}</div>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {Array.from({ length: total }, (_, i) => i + 1).map((pos) => (
+              <button
+                key={pos}
+                type="button"
+                onClick={() => setClaimed(pos)}
+                className={`w-9 h-9 rounded-lg font-mono font-extrabold text-sm transition-colors ${
+                  claimed === pos ? 'bg-gold text-[#1a1100]' : 'bg-bg-2 text-muted-2'
+                }`}
+              >
+                {pos}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setContesting(false)}
+              className="flex-1 py-2 rounded-lg bg-bg-2 text-muted-2 text-xs font-bold"
+            >
+              {t('defis.confirm.keep')}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => { setBusy(true); try { await onContest?.(ffa.id, claimed); } finally { setBusy(false); setContesting(false); } }}
+              className="flex-1 py-2 rounded-lg bg-red text-white text-xs font-bold disabled:opacity-50"
+            >
+              {t('ffa.contest.submit')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {waiting && isDeclarer && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => { setBusy(true); try { await onCancel?.(ffa.id); } finally { setBusy(false); } }}
+          className="w-full py-2 rounded-xl border border-border text-muted-2 text-xs font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
+        >
+          {t('defis.cancel')}
+        </button>
+      )}
+    </div>
   );
 }
 

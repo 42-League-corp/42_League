@@ -14,78 +14,91 @@ enum Role {
 }
 
 model User {
-  login           String    @id
-  ftId            Int?      @unique @map("ft_id")
-  campus          String?
-  imageUrl        String?   @map("image_url")
-  title           String?
-  role            Role      @default(USER)
-  elo             Int       @default(1000)
-  matchesPlayed   Int       @default(0) @map("matches_played")
-  dodgeCount      Int       @default(0) @map("dodge_count")
-  tournamentsWon  Int       @default(0) @map("tournaments_won")
+  login               String    @id
+  ftId                Int?      @unique @map("ft_id")
+  campus              String?
+  // Identité réelle issue du profil 42 — affichée à la place du login (le front
+  // construit « prénom nom » et retombe sur le login si absent).
+  firstName           String?   @map("first_name")
+  lastName            String?   @map("last_name")
+  imageUrl            String?   @map("image_url")
+  title               String?
+  role                Role      @default(USER)
+  elo                 Int       @default(1000)
+  matchesPlayed       Int       @default(0) @map("matches_played")
+  dodgeCount          Int       @default(0) @map("dodge_count")
+  tournamentsWon      Int       @default(0) @map("tournaments_won")
   // Classement Smash Bros (jeu parallèle) — rating/compteurs distincts du babyfoot.
-  eloSmash            Int   @default(1000) @map("elo_smash")
-  matchesPlayedSmash  Int   @default(0)    @map("matches_played_smash")
-  tournamentsWonSmash Int   @default(0)    @map("tournaments_won_smash")
+  eloSmash            Int       @default(1000) @map("elo_smash")
+  matchesPlayedSmash  Int       @default(0) @map("matches_played_smash")
+  tournamentsWonSmash Int       @default(0) @map("tournaments_won_smash")
   // Classement Échecs (3e discipline).
-  eloChess            Int   @default(1000) @map("elo_chess")
-  matchesPlayedChess  Int   @default(0)    @map("matches_played_chess")
-  tournamentsWonChess Int   @default(0)    @map("tournaments_won_chess")
+  eloChess            Int       @default(1000) @map("elo_chess")
+  matchesPlayedChess  Int       @default(0) @map("matches_played_chess")
+  tournamentsWonChess Int       @default(0) @map("tournaments_won_chess")
   // Classement Street Fighter (4e discipline, mécaniquement identique au Smash).
-  eloSf               Int   @default(1000) @map("elo_sf")
-  matchesPlayedSf     Int   @default(0)    @map("matches_played_sf")
-  tournamentsWonSf    Int   @default(0)    @map("tournaments_won_sf")
+  eloSf               Int       @default(1000) @map("elo_sf")
+  matchesPlayedSf     Int       @default(0) @map("matches_played_sf")
+  tournamentsWonSf    Int       @default(0) @map("tournaments_won_sf")
   // Porte-monnaie « League Coin » — solde dépensable dans la boutique (cf. ShopItem).
-  leagueCoins         Int   @default(0) @map("league_coins")
+  leagueCoins         Int       @default(0) @map("league_coins")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
-  games               String[] @default(["babyfoot"])
+  games               String[]  @default(["babyfoot"])
+  // Personnages favoris (« mains ») par jeu de combat — ids des rosters front
+  // (SMASH_ROSTER / SF_ROSTER), ordonnés. Affichés sur le profil et épinglés en
+  // haut du sélecteur de perso lors d'une déclaration de match.
+  favSmash            String[]  @default([]) @map("fav_smash")
+  favSf               String[]  @default([]) @map("fav_sf")
   onboardedAt         DateTime? @map("onboarded_at") // a choisi ses modes (1er login)
-  bannedAt        DateTime? @map("banned_at")
-  anonymizedAt    DateTime? @map("anonymized_at")
+  bannedAt            DateTime? @map("banned_at")
+  anonymizedAt        DateTime? @map("anonymized_at")
   deletionScheduledAt DateTime? @map("deletion_scheduled_at")
   // Preuve du consentement RGPD (CGU API 42, Art. 4.2). `termsAcceptedAt` = date
   // d'acceptation ; `termsVersion` = version de la politique acceptée. Si la
   // politique évolue, termsVersion ne correspond plus → le consentement est
   // re-demandé. Tant que le consentement n'est pas donné, la consent-gate
   // (cf. index.ts) refuse tout traitement de données 42 côté serveur (403).
-  termsAcceptedAt DateTime? @map("terms_accepted_at")
-  termsVersion    String?   @map("terms_version")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  termsAcceptedAt     DateTime? @map("terms_accepted_at")
+  termsVersion        String?   @map("terms_version")
+  createdAt           DateTime  @default(now()) @map("created_at")
 
-  declaredPending     PendingMatch[]     @relation("declarer")
-  awaitingPending     PendingMatch[]     @relation("opponent")
-  matchesAsA          PlayedMatch[]      @relation("playerA")
-  matchesAsB          PlayedMatch[]      @relation("playerB")
+  declaredPending           PendingMatch[]          @relation("declarer")
+  awaitingPending           PendingMatch[]          @relation("opponent")
+  matchesAsA                PlayedMatch[]           @relation("playerA")
+  matchesAsB                PlayedMatch[]           @relation("playerB")
   // 2v2 Babyfoot — second player of each team side.
-  matchesAsA2         PlayedMatch[]      @relation("playerA2")
-  matchesAsB2         PlayedMatch[]      @relation("playerB2")
-  pendingAsPartner1   PendingMatch[]     @relation("pendingPartner1")
-  pendingAsPartner2   PendingMatch[]     @relation("pendingPartner2")
-  challengesSent      Challenge[]        @relation("challenger")
-  challengesReceived  Challenge[]        @relation("opponentChallenge")
-  tournamentsCreated  Tournament[]       @relation("tournamentCreator")
-  tournamentsWonRel   Tournament[]       @relation("tournamentWinner")
-  tournamentEntries   TournamentEntry[]
-  tournamentMatchesA  TournamentMatch[]  @relation("tournPlayerA")
-  tournamentMatchesB  TournamentMatch[]  @relation("tournPlayerB")
-  opsAsOwner          Ops[]              @relation("opsOwner")
-  opsAsTarget         Ops[]              @relation("opsTarget")
-  tournamentInvitesSent     TournamentInvite[] @relation("tournamentInvitesSent")
-  tournamentInvitesReceived TournamentInvite[] @relation("tournamentInvitesReceived")
-  featureRequests     FeatureRequest[]
-  bugReports          BugReport[]
-  rejectedAsDeclarer  RejectedMatch[]    @relation("rejectedDeclarer")
-  rejectedAsOpponent  RejectedMatch[]    @relation("rejectedOpponent")
-  notifications       Notification[]     @relation("notif")
-  badges              UserBadge[]        @relation("userBadges")
-  following           Follow[]           @relation("following")
-  followers           Follow[]           @relation("followers")
+  matchesAsA2               PlayedMatch[]           @relation("playerA2")
+  matchesAsB2               PlayedMatch[]           @relation("playerB2")
+  pendingAsPartner1         PendingMatch[]          @relation("pendingPartner1")
+  pendingAsPartner2         PendingMatch[]          @relation("pendingPartner2")
+  challengesSent            Challenge[]             @relation("challenger")
+  challengesReceived        Challenge[]             @relation("opponentChallenge")
+  tournamentsCreated        Tournament[]            @relation("tournamentCreator")
+  tournamentsWonRel         Tournament[]            @relation("tournamentWinner")
+  tournamentEntries         TournamentEntry[]
+  tournamentMatchesA        TournamentMatch[]       @relation("tournPlayerA")
+  tournamentMatchesB        TournamentMatch[]       @relation("tournPlayerB")
+  opsAsOwner                Ops[]                   @relation("opsOwner")
+  opsAsTarget               Ops[]                   @relation("opsTarget")
+  tournamentInvitesSent     TournamentInvite[]      @relation("tournamentInvitesSent")
+  tournamentInvitesReceived TournamentInvite[]      @relation("tournamentInvitesReceived")
+  featureRequests           FeatureRequest[]
+  bugReports                BugReport[]
+  rejectedAsDeclarer        RejectedMatch[]         @relation("rejectedDeclarer")
+  rejectedAsOpponent        RejectedMatch[]         @relation("rejectedOpponent")
+  notifications             Notification[]          @relation("notif")
+  badges                    UserBadge[]             @relation("userBadges")
+  following                 Follow[]                @relation("following")
+  followers                 Follow[]                @relation("followers")
   // BabyfootTeam — duos 2v2 dont ce joueur fait partie.
-  babyfootTeamsAsP1   BabyfootTeam[]     @relation("babyfootTeamPlayer1")
-  babyfootTeamsAsP2   BabyfootTeam[]     @relation("babyfootTeamPlayer2")
+  babyfootTeamsAsP1         BabyfootTeam[]          @relation("babyfootTeamPlayer1")
+  babyfootTeamsAsP2         BabyfootTeam[]          @relation("babyfootTeamPlayer2")
   // Boutique — cosmétiques possédés par le joueur (titres, bannières…).
-  inventory           ShopInventory[]    @relation("userInventory")
+  inventory                 ShopInventory[]         @relation("userInventory")
+  // Smash FFA (Free-For-All) — déclarations et participations.
+  ffaDeclared               PendingFfa[]            @relation("ffaDeclarer")
+  ffaPendingParticipant     PendingFfaParticipant[] @relation("ffaPendingParticipant")
+  ffaPlayedParticipant      PlayedFfaParticipant[]  @relation("ffaPlayedParticipant")
 
   @@map("users")
 }
@@ -112,7 +125,7 @@ model Follow {
 model UserBadge {
   id        String   @id @default(uuid())
   userLogin String   @map("user_login")
-  code      String   // code du badge (cf. catalogue front), ex. 'beta_tester', 'season_champion'
+  code      String // code du badge (cf. catalogue front), ex. 'beta_tester', 'season_champion'
   seasonId  String?  @map("season_id") // saison associée (badges de palmarès), si pertinent
   // Discipline liée ('' = badge global, 'babyfoot'/'smash'/'chess' = spécifique).
   // Permet de distinguer un champion babyfoot et un champion chess sur la même saison.
@@ -130,10 +143,14 @@ model UserBadge {
 model Notification {
   id             String   @id @default(uuid())
   recipientLogin String   @map("recipient_login")
-  type           String   // 'challenge_received' | 'match_result' | 'tournament' | 'ops_targeted' | 'new_player' | …
+  type           String // 'challenge_received' | 'match_result' | 'tournament' | 'ops_targeted' | 'new_player' | …
+  // Jeu d'origine (babyfoot|smash|chess|streetfighter) : pilote la couleur de
+  // fond + l'emoji de la cloche et la bascule de mode au clic. Null pour les
+  // notifs transverses (nouveau joueur, OPS…).
+  game           String?
   title          String
   body           String?
-  link           String?  // route front contextuelle (ex. '/challenges')
+  link           String? // route front contextuelle (ex. '/challenges')
   read           Boolean  @default(false)
   createdAt      DateTime @default(now()) @map("created_at")
 
@@ -205,20 +222,20 @@ model Ops {
 }
 
 model Tournament {
-  id            String   @id @default(uuid())
-  name          String
-  kind          String   @default("friendly")  // 'friendly' | 'official'
-  isPrivate     Boolean  @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
-  imageUrl      String?  @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
-  capacity      Int      // nombre de joueurs (>= 6) ; phase de poule activée à partir de 12
-  format        String   @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
-  game          String   @default("babyfoot") // 'babyfoot' | 'smash'
-  status        String   // 'registration' | 'in_progress' | 'finished' | 'cancelled'
-  createdByLogin String  @map("created_by_login")
-  winnerLogin   String?  @map("winner_login")
-  createdAt     DateTime @default(now()) @map("created_at")
-  startedAt     DateTime? @map("started_at")
-  finishedAt    DateTime? @map("finished_at")
+  id             String    @id @default(uuid())
+  name           String
+  kind           String    @default("friendly") // 'friendly' | 'official'
+  isPrivate      Boolean   @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
+  imageUrl       String?   @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
+  capacity       Int // nombre de joueurs (>= 6) ; phase de poule activée à partir de 12
+  format         String    @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
+  game           String    @default("babyfoot") // 'babyfoot' | 'smash'
+  status         String // 'registration' | 'in_progress' | 'finished' | 'cancelled'
+  createdByLogin String    @map("created_by_login")
+  winnerLogin    String?   @map("winner_login")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
 
   createdBy User               @relation("tournamentCreator", fields: [createdByLogin], references: [login])
   winner    User?              @relation("tournamentWinner", fields: [winnerLogin], references: [login])
@@ -240,7 +257,7 @@ model TournamentInvite {
   decidedAt    DateTime? @map("decided_at")
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  inviter    User       @relation("tournamentInvitesSent",     fields: [inviterLogin], references: [login], onDelete: Cascade)
+  inviter    User       @relation("tournamentInvitesSent", fields: [inviterLogin], references: [login], onDelete: Cascade)
   invitee    User       @relation("tournamentInvitesReceived", fields: [inviteeLogin], references: [login], onDelete: Cascade)
 
   @@unique([tournamentId, inviteeLogin])
@@ -262,20 +279,20 @@ model TournamentEntry {
 }
 
 model TournamentMatch {
-  id            String   @id @default(uuid())
-  tournamentId  String   @map("tournament_id")
-  stage         String   @default("bracket") // 'pool' | 'bracket'
-  poolIndex     Int?     @map("pool_index") // index de poule (stage='pool')
-  round         Int      // bracket: 1,2,3... ; pool: 0
-  slot          Int      // position in the round (0-indexed) ; pool: index global
-  playerALogin  String?  @map("player_a_login")
-  playerBLogin  String?  @map("player_b_login")
-  scoreA        Int?     @map("score_a")
-  scoreB        Int?     @map("score_b")
-  winnerLogin   String?  @map("winner_login")
-  recordedByLogin String? @map("recorded_by_login")
-  recordedAt    DateTime? @map("recorded_at")
-  confirmedAt   DateTime? @map("confirmed_at")
+  id              String    @id @default(uuid())
+  tournamentId    String    @map("tournament_id")
+  stage           String    @default("bracket") // 'pool' | 'bracket'
+  poolIndex       Int?      @map("pool_index") // index de poule (stage='pool')
+  round           Int // bracket: 1,2,3... ; pool: 0
+  slot            Int // position in the round (0-indexed) ; pool: index global
+  playerALogin    String?   @map("player_a_login")
+  playerBLogin    String?   @map("player_b_login")
+  scoreA          Int?      @map("score_a")
+  scoreB          Int?      @map("score_b")
+  winnerLogin     String?   @map("winner_login")
+  recordedByLogin String?   @map("recorded_by_login")
+  recordedAt      DateTime? @map("recorded_at")
+  confirmedAt     DateTime? @map("confirmed_at")
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   playerA    User?      @relation("tournPlayerA", fields: [playerALogin], references: [login])
@@ -290,11 +307,19 @@ model Challenge {
   id              String    @id @default(uuid())
   challengerLogin String    @map("challenger_login")
   opponentLogin   String    @map("opponent_login")
-  status          String    // 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled'
+  status          String // 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled'
   game            String    @default("babyfoot") // 'babyfoot' | 'smash'
   scheduledAt     DateTime  @map("scheduled_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   decidedAt       DateTime? @map("decided_at")
+
+  // 2v2 Babyfoot (mode = '2v2') : le challenger nomme les 4 joueurs ; seuls les
+  // DEUX adversaires acceptent (un timestamp chacun) → 'accepted' quand les deux.
+  mode                      String?   // null | '2v2'
+  partnerLogin              String?   @map("partner_login") // coéquipier du challenger
+  opponentPartnerLogin      String?   @map("opponent_partner_login") // coéquipier de l'adversaire
+  opponentAcceptedAt        DateTime? @map("opponent_accepted_at")
+  opponentPartnerAcceptedAt DateTime? @map("opponent_partner_accepted_at")
 
   challenger User @relation("challenger", fields: [challengerLogin], references: [login])
   opponent   User @relation("opponentChallenge", fields: [opponentLogin], references: [login])
@@ -305,26 +330,26 @@ model Challenge {
 }
 
 model PendingMatch {
-  id              String   @id @default(uuid())
-  declarerLogin   String   @map("declarer_login")
-  opponentLogin   String   @map("opponent_login")
-  scoreDeclarer   Int      @map("score_declarer")
-  scoreOpponent   Int      @map("score_opponent")
-  declaredAt      DateTime @default(now()) @map("declared_at")
+  id            String   @id @default(uuid())
+  declarerLogin String   @map("declarer_login")
+  opponentLogin String   @map("opponent_login")
+  scoreDeclarer Int      @map("score_declarer")
+  scoreOpponent Int      @map("score_opponent")
+  declaredAt    DateTime @default(now()) @map("declared_at")
   // Multi-jeu : babyfoot par défaut ; champs smash optionnels.
-  game            String   @default("babyfoot")
-  bestOf          Int?     @map("best_of")
-  charDeclarer    String?  @map("char_declarer")
-  charOpponent    String?  @map("char_opponent")
-  stocks          Int?     // vies restantes du gagnant au game décisif
+  game          String   @default("babyfoot")
+  bestOf        Int?     @map("best_of")
+  charDeclarer  String?  @map("char_declarer")
+  charOpponent  String?  @map("char_opponent")
+  stocks        Int? // vies restantes du gagnant au game décisif
   // 2v2 Babyfoot — présent uniquement quand mode = '2v2'.
   // partner1Login = coéquipier du déclarant ; partner2Login = coéquipier de l'adversaire.
-  mode            String?  // null | '2v2'
-  partner1Login   String?  @map("partner_1_login")
-  partner2Login   String?  @map("partner_2_login")
+  mode          String? // null | '2v2'
+  partner1Login String?  @map("partner_1_login")
+  partner2Login String?  @map("partner_2_login")
 
-  declarer User  @relation("declarer",        fields: [declarerLogin], references: [login])
-  opponent User  @relation("opponent",        fields: [opponentLogin], references: [login])
+  declarer User  @relation("declarer", fields: [declarerLogin], references: [login])
+  opponent User  @relation("opponent", fields: [opponentLogin], references: [login])
   partner1 User? @relation("pendingPartner1", fields: [partner1Login], references: [login])
   partner2 User? @relation("pendingPartner2", fields: [partner2Login], references: [login])
 
@@ -338,7 +363,7 @@ model PlayedMatch {
   playerBLogin  String   @map("player_b_login")
   scoreA        Int      @map("score_a")
   scoreB        Int      @map("score_b")
-  winner        String   // 'A' or 'B'
+  winner        String // 'A' or 'B'
   playedAt      DateTime @map("played_at")
   countedForElo Boolean  @map("counted_for_elo")
   deltaA        Int      @map("delta_a")
@@ -354,7 +379,7 @@ model PlayedMatch {
   // 2v2 Babyfoot — présent uniquement quand mode = '2v2'.
   // playerA/B restent les « premiers » joueurs (déclarant canonique et adversaire canonique).
   // playerA2/B2 sont leurs coéquipiers. teamA/B sont les entités duo.
-  mode          String?  // null | '2v2'
+  mode          String? // null | '2v2'
   playerA2Login String?  @map("player_a2_login")
   playerB2Login String?  @map("player_b2_login")
   deltaA2       Int?     @map("delta_a2")
@@ -362,16 +387,84 @@ model PlayedMatch {
   teamAId       String?  @map("team_a_id")
   teamBId       String?  @map("team_b_id")
 
-  playerA User          @relation("playerA",  fields: [playerALogin],  references: [login])
-  playerB User          @relation("playerB",  fields: [playerBLogin],  references: [login])
-  playerA2 User?        @relation("playerA2", fields: [playerA2Login], references: [login])
-  playerB2 User?        @relation("playerB2", fields: [playerB2Login], references: [login])
+  playerA  User          @relation("playerA", fields: [playerALogin], references: [login])
+  playerB  User          @relation("playerB", fields: [playerBLogin], references: [login])
+  playerA2 User?         @relation("playerA2", fields: [playerA2Login], references: [login])
+  playerB2 User?         @relation("playerB2", fields: [playerB2Login], references: [login])
   teamA    BabyfootTeam? @relation("playedMatchTeamA", fields: [teamAId], references: [id])
   teamB    BabyfootTeam? @relation("playedMatchTeamB", fields: [teamBId], references: [id])
 
   @@index([playerALogin, playerBLogin, playedAt])
   @@index([seasonId])
   @@map("played_matches")
+}
+
+// ─── Smash FFA (Free-For-All, 3+ joueurs) ────────────────────────────────────
+//
+// EXCLUSIF au Smash. Le déclarant propose le CLASSEMENT FINAL complet : chaque
+// participant a une `position` (1 = 1er … N = dernier). Le déclarant est
+// auto-confirmé ; chaque AUTRE participant confirme UNIQUEMENT sa propre position.
+// Une contestation annule tout le FFA (delete cascade). Le settlement (ELO) se
+// déclenche quand toutes les positions sont confirmées : l'ELO bouge selon le
+// rang (round-robin sensible au rating, cf. calculateFfaElo).
+model PendingFfa {
+  id            String   @id @default(uuid())
+  declarerLogin String   @map("declarer_login")
+  game          String   @default("smash")
+  declaredAt    DateTime @default(now()) @map("declared_at")
+
+  declarer     User                    @relation("ffaDeclarer", fields: [declarerLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+  participants PendingFfaParticipant[]
+
+  @@index([declarerLogin])
+  @@map("pending_ffas")
+}
+
+model PendingFfaParticipant {
+  id        String  @id @default(uuid())
+  pendingId String  @map("pending_id")
+  login     String
+  position  Int // 1 = 1er, N = dernier (proposé par le déclarant)
+  confirmed Boolean @default(false) // le joueur a validé SA position
+
+  pending PendingFfa @relation(fields: [pendingId], references: [id], onDelete: Cascade)
+  user    User       @relation("ffaPendingParticipant", fields: [login], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([pendingId, login]) // un joueur une seule fois par FFA
+  @@unique([pendingId, position]) // positions uniques 1..N
+  @@index([login]) // « mes FFA à confirmer »
+  @@map("pending_ffa_participants")
+}
+
+model PlayedFfa {
+  id            String   @id
+  game          String   @default("smash")
+  playedAt      DateTime @map("played_at")
+  seasonId      String?  @map("season_id")
+  countedForElo Boolean  @default(true) @map("counted_for_elo")
+
+  participants PlayedFfaParticipant[]
+
+  @@index([seasonId])
+  @@index([playedAt])
+  @@map("played_ffas")
+}
+
+model PlayedFfaParticipant {
+  id           String @id @default(uuid())
+  playedId     String @map("played_id")
+  login        String
+  position     Int
+  ratingBefore Int    @map("rating_before")
+  delta        Int
+  ratingAfter  Int    @map("rating_after")
+
+  played PlayedFfa @relation(fields: [playedId], references: [id], onDelete: Cascade)
+  user   User      @relation("ffaPlayedParticipant", fields: [login], references: [login])
+
+  @@unique([playedId, login])
+  @@index([login]) // historique FFA d'un joueur
+  @@map("played_ffa_participants")
 }
 
 // ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
@@ -384,12 +477,12 @@ model PlayedMatch {
 // L'ELO initial est pondéré (65 % / 35 %) pour refléter l'influence du joueur fort
 // (cf. `initTeamElo` dans packages/shared/src/elo2v2.ts).
 model BabyfootTeam {
-  id            String   @id @default(uuid())
-  player1Login  String   @map("player_1_login") // login canoniquement "inférieur"
-  player2Login  String   @map("player_2_login") // login canoniquement "supérieur"
-  elo           Int      @default(1000)
-  name          String?  // surnom optionnel du duo, défini par les joueurs
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  player1Login String   @map("player_1_login") // login canoniquement "inférieur"
+  player2Login String   @map("player_2_login") // login canoniquement "supérieur"
+  elo          Int      @default(1000)
+  name         String? // surnom optionnel du duo, défini par les joueurs
+  createdAt    DateTime @default(now()) @map("created_at")
 
   player1        User          @relation("babyfootTeamPlayer1", fields: [player1Login], references: [login])
   player2        User          @relation("babyfootTeamPlayer2", fields: [player2Login], references: [login])
@@ -471,17 +564,23 @@ model AdminAuditLog {
 // bannière → {"gradient":"…"}). Un objet inactif disparaît de la boutique mais
 // reste possédé par ceux qui l'ont déjà acheté.
 model ShopItem {
-  id          String   @id @default(uuid())
-  slug        String   @unique
+  id          String          @id @default(uuid())
   name        String
   description String?
-  category    String   // 'title' | 'banner' | 'cosmetic'
-  price       Int      // en League Coins
-  payload     Json?    // title -> {"title":"Pionnier"} ; banner -> {"gradient":"..."}
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
+  category    String // 'title' | 'banner' | 'badge' | 'cosmetic'
+  price       Int // en League Coins
+  // Couleur d'accent (hex #rrggbb) — titres & badges. Choisie dans le créateur (Shop GOD).
+  color       String?
+  // Données spécifiques à la catégorie :
+  //   title  -> {"title":"Pionnier"}
+  //   badge  -> {"code":"...","icon":"Crown","label":"..."}
+  //   banner -> {"image":"data:image/png;base64,..."} (fond de la carte profil)
+  payload     Json?
+  active      Boolean         @default(true)
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt   DateTime        @default(now()) @map("created_at")
   inventory   ShopInventory[]
+
   @@map("shop_items")
 }
 
@@ -492,8 +591,9 @@ model ShopInventory {
   itemId     String   @map("item_id")
   equipped   Boolean  @default(false)
   acquiredAt DateTime @default(now()) @map("acquired_at")
-  user User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
-  item ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user       User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+  item       ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
   @@id([userLogin, itemId])
   @@index([userLogin])
   @@map("shop_inventory")

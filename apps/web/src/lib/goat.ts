@@ -6,13 +6,11 @@ import type { LeaderboardEntry, PlayedMatch, Tournament } from './api';
  * forcément le n°1 à l'ELO — un joueur qui gagne de gros écarts, enchaîne les
  * séries et remporte des tournois officiels peut le coiffer.
  *
- * Ordre des poids (du plus fort au plus faible), demandé explicitement :
- *   1. Tournois OFFICIELS gagnés  (le plus lourd — autant que l'ELO, voire plus)
- *   2. ELO
- *   3. Goal average (différentiel de buts par match)
- *   4. Écart de points en victoire (marge moyenne quand on gagne)
- *   5. Séries de victoires (plus longue série)
- *   6. Autres : win rate, puis tournois amicaux gagnés
+ * Pondération demandée explicitement :
+ *   - ELO              40 %  (le plus lourd)
+ *   - Tournois         20 %  (officiels 16 % + amicaux 4 %)
+ *   - Le reste (40 %) réparti entre goal average, écart en victoire,
+ *     séries de victoires et win rate.
  */
 
 export interface GoatWeight {
@@ -31,11 +29,11 @@ export type GoatMetricKey =
   | 'friendlyTitles';
 
 export const GOAT_WEIGHTS: GoatWeight[] = [
-  { key: 'officialTitles', label: 'Tournois officiels', weight: 0.3 },
-  { key: 'elo', label: 'ELO', weight: 0.24 },
-  { key: 'goalAvg', label: 'Goal average', weight: 0.16 },
-  { key: 'winMargin', label: 'Écart en victoire', weight: 0.12 },
-  { key: 'winStreak', label: 'Série de victoires', weight: 0.08 },
+  { key: 'elo', label: 'ELO', weight: 0.4 },
+  { key: 'officialTitles', label: 'Tournois officiels', weight: 0.16 },
+  { key: 'goalAvg', label: 'Goal average', weight: 0.14 },
+  { key: 'winMargin', label: 'Écart en victoire', weight: 0.1 },
+  { key: 'winStreak', label: 'Série de victoires', weight: 0.1 },
   { key: 'winRate', label: 'Win rate', weight: 0.06 },
   { key: 'friendlyTitles', label: 'Tournois amicaux', weight: 0.04 },
 ];

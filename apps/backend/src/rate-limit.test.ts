@@ -62,12 +62,42 @@ describe('rateLimit', () => {
   });
 
   it('isole les compteurs par `name` sur une même IP', async () => {
-    const a = makeApp({ name: 'a', windowMs: 60_000, max: 1 });
-    const b = makeApp({ name: 'b', windowMs: 60_000, max: 1 });
+    // progressive:false → on teste l'isolation des buckets sans que la pénalité
+    // progressive (partagée par sujet entre tous les limiters) ne bloque `b`.
+    const a = makeApp({ name: 'a', windowMs: 60_000, max: 1, progressive: false });
+    const b = makeApp({ name: 'b', windowMs: 60_000, max: 1, progressive: false });
     expect((await a.request(req())).status).toBe(200);
     expect((await a.request(req())).status).toBe(429);
     // le limiteur `b` n’est pas affecté par la consommation de `a`
     expect((await b.request(req())).status).toBe(200);
+  });
+
+  it('key() compte par sujet (login) plutôt que par IP', async () => {
+    // Deux requêtes même IP mais sujets différents → budgets séparés.
+    const app = new Hono();
+    app.use('*', rateLimit({
+      name: 't', windowMs: 60_000, max: 1,
+      key: (c) => c.req.header('x-user') ?? clientIp(c),
+    }));
+    app.get('/', (c) => c.text('ok'));
+    const reqAs = (user: string) =>
+      new Request('http://localhost/', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-user': user } });
+
+    expect((await app.request(reqAs('alice'))).status).toBe(200);
+    expect((await app.request(reqAs('alice'))).status).toBe(429); // alice épuisée
+    expect((await app.request(reqAs('bob'))).status).toBe(200);   // bob a son propre budget malgré la même IP
+  });
+
+  it('progressive:false → 429 sans escalade, débloqué dès la fin de fenêtre', async () => {
+    const app = makeApp({ name: 't', windowMs: 60_000, max: 1, progressive: false });
+    expect((await app.request(req())).status).toBe(200);
+    // On martèle bien au-delà du max : sans escalade, aucun ban prolongé ne s'accumule.
+    for (let i = 0; i < 10; i++) {
+      expect((await app.request(req())).status).toBe(429);
+    }
+    // Dès la fenêtre suivante, la requête repasse (vs pénalité progressive qui bloquerait plus longtemps).
+    vi.advanceTimersByTime(60_001);
+    expect((await app.request(req())).status).toBe(200);
   });
 
   it('skip() ne compte ni ne bloque la requête', async () => {

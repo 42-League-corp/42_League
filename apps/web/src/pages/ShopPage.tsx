@@ -13,8 +13,8 @@ import {
   type ShopItemData,
 } from '../lib/api';
 
-/** Catégories pour lesquelles « équiper » a du sens (un titre / une bannière actifs). */
-const EQUIPPABLE: ShopCategory[] = ['title', 'banner'];
+/** Catégories pour lesquelles « équiper » a du sens (titre / bannière / badge actifs). */
+const EQUIPPABLE: ShopCategory[] = ['title', 'banner', 'badge'];
 
 /** Nombre minimum de cases affichées : la grille est comblée par des cartes
  *  placeholder « Bientôt » pour qu'elle paraisse toujours pleine, même quand le

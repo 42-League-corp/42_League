@@ -19,6 +19,8 @@ import {
   type OpsMeResponse,
   type PendingMatch,
   type PlayedMatch,
+  type PendingFfa,
+  type PlayedFfa,
   type Tournament,
 } from '../lib/api';
 import { useAuth } from './useAuth';
@@ -30,6 +32,10 @@ export interface LeagueData {
   me: MeResponse | null;
   matches: PlayedMatch[];
   pending: PendingMatch[];
+  /** FFA Smash en attente de confirmation (tous joueurs confondus). */
+  pendingFfas: PendingFfa[];
+  /** FFA Smash réglés (historique). */
+  playedFfas: PlayedFfa[];
   challenges: Challenge[];
   leaderboard: LeaderboardEntry[];
   tournaments: Tournament[];
@@ -43,12 +49,20 @@ interface LeagueDataContextValue extends LeagueData {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  /**
+   * Met à jour UNIQUEMENT le titre équipé de l'utilisateur courant dans le state
+   * local, sans re-fetch global (donc sans spinner/reload de page). Utilisé par
+   * le sélecteur de titre après confirmation serveur du PUT /me/title.
+   */
+  patchMyTitle: (title: string | null) => void;
 }
 
 const EMPTY: LeagueData = {
   me: null,
   matches: [],
   pending: [],
+  pendingFfas: [],
+  playedFfas: [],
   challenges: [],
   leaderboard: [],
   tournaments: [],
@@ -61,11 +75,12 @@ const EMPTY: LeagueData = {
 // Chaque "domaine" correspond à une tranche du state qu'on peut rafraîchir
 // indépendamment. À réception d'un event SSE, on ne re-fetch QUE les domaines
 // concernés (et non les 8 endpoints).
-type Domain = 'me' | 'matches' | 'challenges' | 'leaderboard' | 'tournaments' | 'ops';
+type Domain = 'me' | 'matches' | 'ffa' | 'challenges' | 'leaderboard' | 'tournaments' | 'ops';
 
 const ALL_DOMAINS: Domain[] = [
   'me',
   'matches',
+  'ffa',
   'challenges',
   'leaderboard',
   'tournaments',
@@ -80,6 +95,13 @@ const DOMAIN_FETCHERS: Record<Domain, () => Promise<Partial<LeagueData>>> = {
       api.pendingMatches(),
     ]);
     return { matches, pending };
+  },
+  ffa: async () => {
+    const [pendingFfas, playedFfas] = await Promise.all([
+      api.pendingFfas(),
+      api.playedFfas(),
+    ]);
+    return { pendingFfas, playedFfas };
   },
   challenges: async () => ({ challenges: await api.challenges() }),
   // Classement ET tournois sont par jeu : on interroge ceux du mode courant.
@@ -101,6 +123,11 @@ const EVENT_DOMAINS: Record<string, Domain[]> = {
   'match:rejected': ['matches'],
   'match:cancelled': ['matches'],
   'match:expired': ['matches'],
+  'ffa:pending': ['ffa'],
+  'ffa:progress': ['ffa'],
+  'ffa:confirmed': ['ffa', 'matches', 'me', 'leaderboard'],
+  'ffa:contested': ['ffa'],
+  'ffa:cancelled': ['ffa'],
   'challenge:received': ['challenges'],
   'challenge:accepted': ['challenges'],
   'challenge:declined': ['challenges'],
@@ -146,10 +173,12 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      const [matches, pending, challenges, leaderboard, tournaments, opsMe, allOps] =
+      const [matches, pending, pendingFfas, playedFfas, challenges, leaderboard, tournaments, opsMe, allOps] =
         await Promise.all([
           api.playedMatches(),
           api.pendingMatches(),
+          api.pendingFfas().catch(() => [] as PendingFfa[]),
+          api.playedFfas().catch(() => [] as PlayedFfa[]),
           api.challenges(),
           api.leaderboard(getGame()),
           api.tournaments(getGame()),
@@ -160,6 +189,8 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
         me,
         matches,
         pending,
+        pendingFfas,
+        playedFfas,
         challenges,
         leaderboard,
         tournaments,
@@ -332,6 +363,9 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener('online', reopen);
     window.addEventListener('focus', reopen);
+    // `pageshow` : restauration depuis le bfcache (iOS Safari surtout) où la
+    // connexion SSE a été gelée sans `onerror` → on rouvre.
+    window.addEventListener('pageshow', reopen);
     document.addEventListener('visibilitychange', onVisibility);
 
     void connect();
@@ -343,14 +377,23 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
       if (reopenTimer) clearTimeout(reopenTimer);
       window.removeEventListener('online', reopen);
       window.removeEventListener('focus', reopen);
+      window.removeEventListener('pageshow', reopen);
       document.removeEventListener('visibilitychange', onVisibility);
       es?.close();
     };
   }, [authenticated]);
 
+  const patchMyTitle = useCallback((title: string | null) => {
+    setData((prev) =>
+      prev.me?.user
+        ? { ...prev, me: { ...prev.me, user: { ...prev.me.user, title } } }
+        : prev,
+    );
+  }, []);
+
   const value = useMemo<LeagueDataContextValue>(
-    () => ({ ...data, loading, error, refresh: load }),
-    [data, loading, error, load],
+    () => ({ ...data, loading, error, refresh: load, patchMyTitle }),
+    [data, loading, error, load, patchMyTitle],
   );
 
   return (

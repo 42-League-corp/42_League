@@ -1,14 +1,22 @@
-import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X } from 'lucide-react';
+import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift, UploadCloud } from 'lucide-react';
 import {
   api,
   type ShopCategory,
   type ShopItemData,
   type ShopItemInput,
 } from '../lib/api';
+import { BADGE_ICON_NAMES, badgeIcon } from '../lib/badgeIcons';
 
 type Role = 'ADMIN' | 'SUPERADMIN';
+
+// Dimensions EXACTES exigées pour une bannière (fond de la carte profil). Une image
+// déposée qui ne fait pas pile cette taille est REFUSÉE (aucun recadrage).
+const BANNER_W = 1024;
+const BANNER_H = 512;
+// Cap d'octets côté client (le serveur revérifie) — évite les data-URL énormes.
+const BANNER_MAX_BYTES = 700_000;
 
 // ── Shared primitives (mirrors GODPage.tsx visual language) ─────────────────
 
@@ -91,24 +99,20 @@ function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; la
   );
 }
 
-const CATEGORIES: ShopCategory[] = ['title', 'banner', 'cosmetic'];
+const CATEGORIES: ShopCategory[] = ['title', 'badge', 'banner', 'cosmetic'];
 
 const CATEGORY_BADGE: Record<ShopCategory, string> = {
   title: 'bg-amber-400/15 text-amber-400',
+  badge: 'bg-fuchsia-400/15 text-fuchsia-400',
   banner: 'bg-violet-400/15 text-violet-400',
   cosmetic: 'bg-sky-400/15 text-sky-400',
 };
 
 const CATEGORY_LABEL: Record<ShopCategory, string> = {
   title: 'TITRE',
+  badge: 'BADGE',
   banner: 'BANNIÈRE',
   cosmetic: 'COSMÉTIQUE',
-};
-
-const PAYLOAD_HINTS: Record<ShopCategory, string> = {
-  title: '{"title":"Pionnier"}',
-  banner: '{"gradient":"linear-gradient(135deg,#5b3fa0,#b8a9e8)"}',
-  cosmetic: '{"key":"value"}',
 };
 
 function CategoryBadge({ category }: { category: ShopCategory }) {
@@ -123,73 +127,105 @@ function CoinIcon() {
   return <img src="/league-coin.svg" alt="League Coin" className="w-4 h-4 inline-block align-text-bottom" />;
 }
 
-// ── Form state shared by create & edit ──────────────────────────────────────
+// ── Form state (guidé, par catégorie — plus de JSON brut) ────────────────────
 
 interface FormState {
-  slug: string;
   name: string;
   description: string;
   category: ShopCategory;
+  color: string; // hex #rrggbb (titres & badges)
   price: string;
   active: boolean;
   sortOrder: string;
-  payload: string;
+  titleText: string; // catégorie title
+  badgeCode: string; // catégorie badge
+  badgeLabel: string; // catégorie badge
+  badgeIconName: string; // catégorie badge (nom lucide)
+  bannerImage: string; // catégorie banner (data-URL)
 }
 
 function emptyForm(): FormState {
   return {
-    slug: '',
     name: '',
     description: '',
-    category: 'cosmetic',
+    category: 'title',
+    color: '#ffc94a',
     price: '0',
     active: true,
     sortOrder: '0',
-    payload: '',
+    titleText: '',
+    badgeCode: '',
+    badgeLabel: '',
+    badgeIconName: 'Crown',
+    bannerImage: '',
   };
+}
+
+function asRecord(p: ShopItemData['payload']): Record<string, unknown> {
+  return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
 }
 
 function formFromItem(it: ShopItemData): FormState {
+  const p = asRecord(it.payload);
   return {
-    slug: it.slug,
     name: it.name,
     description: it.description ?? '',
     category: it.category,
+    color: it.color ?? '#ffc94a',
     price: String(it.price),
     active: it.active,
     sortOrder: String(it.sortOrder),
-    payload: it.payload ? JSON.stringify(it.payload, null, 2) : '',
+    titleText: typeof p.title === 'string' ? p.title : '',
+    badgeCode: typeof p.code === 'string' ? p.code : '',
+    badgeLabel: typeof p.label === 'string' ? p.label : '',
+    badgeIconName: typeof p.icon === 'string' ? p.icon : 'Crown',
+    bannerImage: typeof p.image === 'string' ? p.image : '',
   };
 }
 
-/**
- * Construit un ShopItemInput depuis le formulaire.
- * Lève une Error explicite si le JSON du payload est invalide.
- */
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'badge';
+}
+
+/** Construit un ShopItemInput depuis le formulaire guidé (lève une Error explicite). */
 function buildInput(f: FormState): ShopItemInput {
-  let payload: Record<string, unknown> | undefined;
-  const raw = f.payload.trim();
-  if (raw) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error('Payload JSON invalide.');
-    }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('Le payload doit être un objet JSON (ex. {"title":"Pionnier"}).');
-    }
-    payload = parsed as Record<string, unknown>;
-  }
-  const slug = f.slug.trim();
-  if (!slug) throw new Error('Le slug est obligatoire.');
   const name = f.name.trim();
   if (!name) throw new Error('Le nom est obligatoire.');
+  let payload: Record<string, unknown> | undefined;
+  let color: string | null = null;
+
+  switch (f.category) {
+    case 'title': {
+      if (!f.titleText.trim()) throw new Error('Le texte du titre est obligatoire.');
+      payload = { title: f.titleText.trim() };
+      color = f.color || null;
+      break;
+    }
+    case 'badge': {
+      if (!f.badgeLabel.trim()) throw new Error('Le label du badge est obligatoire.');
+      payload = {
+        code: f.badgeCode.trim() || slugify(f.badgeLabel),
+        label: f.badgeLabel.trim(),
+        icon: f.badgeIconName || 'Award',
+      };
+      color = f.color || null;
+      break;
+    }
+    case 'banner': {
+      if (!f.bannerImage) throw new Error('Dépose une image de bannière à la bonne taille.');
+      payload = { image: f.bannerImage };
+      break;
+    }
+    case 'cosmetic':
+      payload = undefined;
+      break;
+  }
+
   return {
-    slug,
     name,
     description: f.description.trim() || undefined,
     category: f.category,
+    color,
     price: Number(f.price) || 0,
     active: f.active,
     sortOrder: Number(f.sortOrder) || 0,
@@ -197,60 +233,240 @@ function buildInput(f: FormState): ShopItemInput {
   };
 }
 
-// Champs partagés du formulaire (création & édition).
-function ItemFormFields({ form, set }: { form: FormState; set: <K extends keyof FormState>(k: K, v: FormState[K]) => void }) {
+// ── Dropzone bannière (taille EXACTE obligatoire) ────────────────────────────
+
+function BannerDropzone({ value, onChange }: { value: string; onChange: (dataUrl: string) => void }) {
+  const [error, setError] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(
+    (file: File) => {
+      setError('');
+      if (!file.type.startsWith('image/')) {
+        setError('Fichier non-image refusé.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+        if (dataUrl.length > BANNER_MAX_BYTES) {
+          setError(`Image trop lourde (max ~${Math.round(BANNER_MAX_BYTES / 1000)} Ko).`);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          if (img.naturalWidth !== BANNER_W || img.naturalHeight !== BANNER_H) {
+            setError(
+              `Image refusée : doit faire exactement ${BANNER_W}×${BANNER_H}px (reçu ${img.naturalWidth}×${img.naturalHeight}).`,
+            );
+            return;
+          }
+          onChange(dataUrl);
+        };
+        img.onerror = () => setError('Image illisible.');
+        img.src = dataUrl;
+      };
+      reader.onerror = () => setError('Lecture du fichier impossible.');
+      reader.readAsDataURL(file);
+    },
+    [onChange],
+  );
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Slug *</span>
-        <Input value={form.slug} onChange={(v) => set('slug', v)} placeholder="ex. titre-pionnier" />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Nom *</span>
-        <Input value={form.name} onChange={(v) => set('name', v)} placeholder="ex. Pionnier" />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Catégorie</span>
-        <select
-          value={form.category}
-          onChange={(e) => set('category', e.target.value as ShopCategory)}
-          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+    <div className="flex flex-col gap-2">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleFile(file);
+        }}
+        onClick={() => inputRef.current?.click()}
+        className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 cursor-pointer transition-colors ${
+          dragging ? 'border-violet-400 bg-violet-400/10' : 'border-zinc-700 hover:border-zinc-500 bg-zinc-800/40'
+        }`}
+      >
+        <UploadCloud className="w-6 h-6 text-zinc-400" />
+        <span className="text-xs text-zinc-400 font-mono text-center">
+          Glisse une image <span className="text-zinc-200">{BANNER_W}×{BANNER_H}px</span> ou clique pour choisir
+        </span>
+        <span className="text-[10px] text-zinc-600 font-mono">Taille exacte obligatoire — sinon refusée.</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
+      {value && <div className="text-[10px] text-emerald-400 font-mono">✓ Image valide ({BANNER_W}×{BANNER_H}).</div>}
+    </div>
+  );
+}
+
+// ── Aperçu live de l'objet en cours d'édition ────────────────────────────────
+
+function ItemPreview({ form }: { form: FormState }) {
+  const Icon = badgeIcon(form.badgeIconName);
+  const color = form.color || '#ffc94a';
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 flex flex-col items-center justify-center gap-2 min-h-[120px]">
+      <span className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest self-start">Aperçu</span>
+      {form.category === 'title' && (
+        <span className="inline-flex items-center gap-1.5">
+          <span style={{ color }} className="opacity-70 text-base leading-none">❝</span>
+          <span style={{ color }} className="italic text-base font-bold tracking-wide">
+            {form.titleText || 'Titre…'}
+          </span>
+          <span style={{ color }} className="opacity-70 text-base leading-none">❞</span>
+        </span>
+      )}
+      {form.category === 'badge' && (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold border"
+          style={{
+            color,
+            borderColor: `${color}55`,
+            background: `linear-gradient(110deg, ${color}14 0%, ${color}33 45%, ${color}14 70%)`,
+          }}
         >
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Prix (League Coins)</span>
-        <Input type="number" value={form.price} onChange={(v) => set('price', v)} />
-      </label>
-      <label className="flex flex-col gap-1 sm:col-span-2">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Description</span>
-        <Input value={form.description} onChange={(v) => set('description', v)} placeholder="Optionnelle" />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Ordre d'affichage</span>
-        <Input type="number" value={form.sortOrder} onChange={(v) => set('sortOrder', v)} />
-      </label>
-      <div className="flex flex-col gap-1">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Actif</span>
-        <div className="h-[34px] flex items-center">
-          <Toggle on={form.active} onToggle={() => set('active', !form.active)} label={form.active ? 'Visible' : 'Masqué'} />
+          <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+          {form.badgeLabel || 'Badge…'}
+        </span>
+      )}
+      {form.category === 'banner' &&
+        (form.bannerImage ? (
+          <div
+            className="w-full rounded-lg border border-zinc-700"
+            style={{
+              aspectRatio: `${BANNER_W} / ${BANNER_H}`,
+              backgroundImage: `url(${form.bannerImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+        ) : (
+          <span className="text-xs text-zinc-600 font-mono">Dépose une image pour l'aperçu.</span>
+        ))}
+      {form.category === 'cosmetic' && (
+        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold bg-sky-400/15 text-sky-300 border border-sky-400/30">
+          {form.name || 'Cosmétique…'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Champs partagés du formulaire (création & édition) — guidés par catégorie.
+function ItemFormFields({ form, set }: { form: FormState; set: <K extends keyof FormState>(k: K, v: FormState[K]) => void }) {
+  const showColor = form.category === 'title' || form.category === 'badge';
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Nom *</span>
+          <Input value={form.name} onChange={(v) => set('name', v)} placeholder="ex. Pionnier" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Catégorie</span>
+          <select
+            value={form.category}
+            onChange={(e) => set('category', e.target.value as ShopCategory)}
+            className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+            ))}
+          </select>
+        </label>
+
+        {/* Champs spécifiques à la catégorie */}
+        {form.category === 'title' && (
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Texte du titre *</span>
+            <Input value={form.titleText} onChange={(v) => set('titleText', v)} placeholder="ex. sans éclat." />
+          </label>
+        )}
+        {form.category === 'badge' && (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Label du badge *</span>
+              <Input value={form.badgeLabel} onChange={(v) => set('badgeLabel', v)} placeholder="ex. Légende" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Icône</span>
+              <select
+                value={form.badgeIconName}
+                onChange={(e) => set('badgeIconName', e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+              >
+                {BADGE_ICON_NAMES.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 sm:col-span-2">
+              <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Code (optionnel — auto depuis le label)</span>
+              <Input value={form.badgeCode} onChange={(v) => set('badgeCode', v)} placeholder="ex. legend" />
+            </label>
+          </>
+        )}
+        {form.category === 'banner' && (
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Image de bannière *</span>
+            <BannerDropzone value={form.bannerImage} onChange={(v) => set('bannerImage', v)} />
+          </div>
+        )}
+
+        {showColor && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Couleur</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={form.color}
+                onChange={(e) => set('color', e.target.value)}
+                className="w-9 h-9 rounded bg-zinc-800 border border-zinc-700 cursor-pointer"
+              />
+              <Input value={form.color} onChange={(v) => set('color', v)} placeholder="#ffc94a" className="w-28" />
+            </div>
+          </label>
+        )}
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Prix (League Coins)</span>
+          <Input type="number" value={form.price} onChange={(v) => set('price', v)} />
+        </label>
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Description</span>
+          <Input value={form.description} onChange={(v) => set('description', v)} placeholder="Optionnelle" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Ordre d'affichage</span>
+          <Input type="number" value={form.sortOrder} onChange={(v) => set('sortOrder', v)} />
+        </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Actif</span>
+          <div className="h-[34px] flex items-center">
+            <Toggle on={form.active} onToggle={() => set('active', !form.active)} label={form.active ? 'Visible' : 'Masqué'} />
+          </div>
         </div>
       </div>
-      <label className="flex flex-col gap-1 sm:col-span-2">
-        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Payload (JSON)</span>
-        <textarea
-          value={form.payload}
-          onChange={(e) => set('payload', e.target.value)}
-          placeholder={PAYLOAD_HINTS[form.category]}
-          rows={4}
-          spellCheck={false}
-          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-y"
-        />
-        <span className="text-[10px] text-zinc-600 font-mono">Ex. {PAYLOAD_HINTS[form.category]} — laisser vide pour aucun payload.</span>
-      </label>
+
+      <div className="lg:col-span-1">
+        <ItemPreview form={form} />
+      </div>
     </div>
   );
 }
@@ -298,7 +514,7 @@ function EditItemModal({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-[34rem] max-w-full max-h-[88vh] overflow-y-auto shadow-2xl"
+        className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-[48rem] max-w-full max-h-[88vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -323,7 +539,7 @@ function EditItemModal({
 
 // ── Section 1 : gestion des items ───────────────────────────────────────────
 
-function ItemsSection() {
+function ItemsSection({ onItemsChanged }: { onItemsChanged?: (items: ShopItemData[]) => void }) {
   const [items, setItems] = useState<ShopItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -340,13 +556,20 @@ function ItemsSection() {
     setCreateForm((prev) => ({ ...prev, [k]: v }));
   }, []);
 
-  const load = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
-    api.adminShopItems()
-      .then((list) => setItems([...list].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Erreur'))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      api.adminShopItems()
+        .then((list) => {
+          const sorted = [...list].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+          setItems(sorted);
+          onItemsChanged?.(sorted);
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : 'Erreur'))
+        .finally(() => setLoading(false));
+    },
+    [onItemsChanged],
+  );
 
   useEffect(() => { load(); }, [load]);
 
@@ -367,7 +590,7 @@ function ItemsSection() {
       setCreateForm(emptyForm());
       load(true);
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Erreur (slug déjà utilisé ?)');
+      setCreateError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setCreating(false);
     }
@@ -387,7 +610,7 @@ function ItemsSection() {
   }
 
   async function handleDelete(it: ShopItemData) {
-    if (!confirm(`Supprimer définitivement « ${it.name} » (${it.slug}) ? Cette action est irréversible.`)) return;
+    if (!confirm(`Supprimer définitivement « ${it.name} » ? Cette action est irréversible.`)) return;
     setPendingId(it.id);
     setError('');
     try {
@@ -438,7 +661,6 @@ function ItemsSection() {
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
                   <th className="text-left py-2 px-3">Nom</th>
-                  <th className="text-left py-2 px-3">Slug</th>
                   <th className="text-left py-2 px-3">Catégorie</th>
                   <th className="text-right py-2 px-3">Prix</th>
                   <th className="text-right py-2 px-3">Ordre</th>
@@ -453,12 +675,16 @@ function ItemsSection() {
                     className={`border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors ${it.active ? '' : 'opacity-45'}`}
                   >
                     <td className="py-2 px-3 text-zinc-100">
-                      {it.name}
+                      <span className="inline-flex items-center gap-2">
+                        {it.color && (
+                          <span className="w-3 h-3 rounded-full border border-zinc-600" style={{ background: it.color }} />
+                        )}
+                        {it.name}
+                      </span>
                       {it.description && (
                         <span className="block text-[10px] text-zinc-500 max-w-xs truncate" title={it.description}>{it.description}</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 text-zinc-400 text-xs">{it.slug}</td>
                     <td className="py-2 px-3"><CategoryBadge category={it.category} /></td>
                     <td className="py-2 px-3 text-right tabular-nums text-amber-400">
                       <span className="inline-flex items-center gap-1 justify-end">
@@ -553,6 +779,81 @@ function GrantCoinsSection() {
   );
 }
 
+// ── Section 3 : donner un cosmétique à un joueur ─────────────────────────────
+
+function GrantItemSection({ items }: { items: ShopItemData[] }) {
+  const [login, setLogin] = useState('');
+  const [itemId, setItemId] = useState('');
+  const [equip, setEquip] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  async function handleGrant() {
+    const l = login.trim();
+    setError('');
+    setSuccess('');
+    if (!l) {
+      setError('Le login du joueur est obligatoire.');
+      return;
+    }
+    if (!itemId) {
+      setError('Choisis un cosmétique à donner.');
+      return;
+    }
+    setPending(true);
+    try {
+      await api.adminGrantItem(l, itemId, equip);
+      const it = items.find((i) => i.id === itemId);
+      setSuccess(`« ${it?.name ?? itemId} » donné à @${l}${equip ? ' et équipé' : ''}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur (login/objet inconnu ?)');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="p-4">
+      <Section title="Donner un cosmétique à un joueur">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Login du joueur</span>
+            <Input value={login} onChange={setLogin} placeholder="ex. throbert" className="w-48" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Cosmétique</span>
+            <select
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500 w-64"
+            >
+              <option value="">— choisir —</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>
+                  [{CATEGORY_LABEL[it.category]}] {it.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Équiper</span>
+            <div className="h-[34px] flex items-center">
+              <Toggle on={equip} onToggle={() => setEquip(!equip)} label={equip ? 'Auto-équipé' : 'Inventaire seul'} />
+            </div>
+          </div>
+          <Btn onClick={handleGrant} disabled={pending} variant="success" className="px-3 py-1.5">
+            <Gift className="w-3.5 h-3.5" />
+            {pending ? 'En cours…' : 'Donner'}
+          </Btn>
+          {error && <div className="w-full text-xs text-red-400 font-mono">{error}</div>}
+          {success && <div className="w-full text-xs text-emerald-400 font-mono">{success}</div>}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 // ── Page principale (self-guard admin) ──────────────────────────────────────
 
 export function ShopGODPage() {
@@ -560,6 +861,7 @@ export function ShopGODPage() {
   const [myLogin, setMyLogin] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [items, setItems] = useState<ShopItemData[]>([]);
 
   useEffect(() => {
     api.me()
@@ -633,7 +935,8 @@ export function ShopGODPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-screen-2xl mx-auto">
           <GrantCoinsSection />
-          <ItemsSection />
+          <GrantItemSection items={items} />
+          <ItemsSection onItemsChanged={setItems} />
         </div>
       </div>
     </div>

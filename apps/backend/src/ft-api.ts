@@ -44,6 +44,8 @@ export async function getAppToken(): Promise<string | null> {
 interface FtPublicUser {
   id: number;
   login: string;
+  first_name?: string | null;
+  last_name?: string | null;
   campus?: Array<{ name: string }>;
   image?: {
     link?: string | null;
@@ -77,6 +79,8 @@ export async function fetchAndSavePublicUser(login: string): Promise<void> {
       data: {
         ftId: u.id,
         campus: u.campus?.[0]?.name ?? undefined,
+        firstName: u.first_name ?? undefined,
+        lastName: u.last_name ?? undefined,
         imageUrl: imageUrl ?? undefined,
       },
     });
@@ -87,9 +91,11 @@ export async function fetchAndSavePublicUser(login: string): Promise<void> {
   }
 }
 
-export async function backfillMissingImages(): Promise<number> {
+// Rattrape les profils incomplets (image OU nom manquant) en re-tapant l'API 42.
+// Sert au rétro-remplissage des comptes existants après l'ajout des colonnes nom.
+export async function backfillMissingProfiles(): Promise<number> {
   const users = await prisma.user.findMany({
-    where: { imageUrl: null },
+    where: { OR: [{ imageUrl: null }, { firstName: null }, { lastName: null }] },
     select: { login: true },
   });
   await Promise.allSettled(users.map((u) => fetchAndSavePublicUser(u.login)));

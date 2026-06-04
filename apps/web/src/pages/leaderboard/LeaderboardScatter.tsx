@@ -7,16 +7,20 @@ import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 
-/** Marges réservées aux axes (ELO à gauche, Win % en bas) et titres d'axes (px). */
-const M = { l: 58, r: 16, t: 16, b: 50 };
+/** Marges réservées aux axes (matchs à gauche, ELO en bas) et titres d'axes (px). */
+const M = { l: 58, r: 16, t: 22, b: 50 };
 /** Marge intérieure pour ne pas coller les têtes aux bords (px). */
 const PAD = 30;
 /** Rayon « d'occupation » d'une tête (px, base). */
 const NODE_R = 24;
 /** Côté d'une cellule de regroupement (px, base) — points dans la même cellule = 1 amas. */
-const CELL = NODE_R * 1.6;
+const CELL = NODE_R * 1.5;
 /** Rayon du déploiement circulaire des membres d'un amas (px, base). */
 const FAN_R = NODE_R * 1.9;
+/** Espacement du packing serré d'un amas replié (px, base). */
+const CLUMP_STEP = 8;
+/** Diamètre d'un point d'amas replié (px). */
+const DOT = 11;
 const SCALE_MIN = 0.5;
 const SCALE_MAX = 8;
 
@@ -29,8 +33,8 @@ interface View {
 /** Un amas = un ou plusieurs joueurs regroupés sur un même point du nuage. */
 interface Cluster {
   id: string;
-  bx: number; // position horizontale de base (px) — dérivée du win rate
-  by: number; // position verticale de base (px) — dérivée de l'ELO
+  bx: number; // position horizontale de base (px) — dérivée de l'ELO
+  by: number; // position verticale de base (px) — dérivée du nombre de matchs
   members: LeaderboardEntry[];
 }
 
@@ -56,13 +60,29 @@ function fanOffset(i: number, total: number): { x: number; y: number } {
 }
 
 /**
+ * Décalage (base px) du i-ème point dans un amas REPLIÉ : packing en spirale dorée
+ * (phyllotaxie) → un petit paquet serré et régulier, jamais un seul point fusionné.
+ */
+function clumpOffset(i: number, total: number): { x: number; y: number } {
+  if (total <= 1) return { x: 0, y: 0 };
+  const golden = 2.399963229728653; // angle d'or (rad)
+  const r = CLUMP_STEP * Math.sqrt(i);
+  const a = i * golden;
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+}
+
+/** Rayon approximatif (base px) d'un amas replié de `total` points. */
+const clumpRadius = (total: number) => (total <= 1 ? 0 : CLUMP_STEP * Math.sqrt(total - 1) + DOT / 2);
+
+/**
  * Vue « nuage de points » du classement — vrai nuage 2D.
  *
- *  • Axe VERTICAL = ELO (haut = fort).
- *  • Axe HORIZONTAL = win rate (droite = meilleur ratio).
+ *  • Axe HORIZONTAL = ELO (droite = fort). Haute cardinalité → deux joueurs ne
+ *    tombent quasiment jamais sur la même verticale.
+ *  • Axe VERTICAL = nombre de matchs (haut = actif).
  *
- * Les joueurs les plus forts (ELO élevé + bon ratio) se retrouvent donc en haut à
- * droite. Si deux têtes se superposent, on les écarte légèrement à l'horizontale.
+ * Quand plusieurs joueurs se superposent, ils forment un petit AMAS de points
+ * serrés ; au survol l'amas se déploie en éventail (vraies têtes).
  * Molette / pincement pour zoomer, glisser pour se déplacer.
  */
 export function LeaderboardScatter({
@@ -73,7 +93,7 @@ export function LeaderboardScatter({
 }: {
   entries: LeaderboardEntry[];
   myLogin?: string;
-  /** Win rate (0–100) par login — abscisse du nuage. Défaut 50 si absent. */
+  /** Win rate (0–100) par login — affiché dans l'infobulle. */
   winRates?: Map<string, number>;
   className?: string;
 }) {
@@ -99,44 +119,49 @@ export function LeaderboardScatter({
     return () => ro.disconnect();
   }, []);
 
+  // Domaines : ELO (axe X) et nombre de matchs (axe Y).
   const domain = useMemo(() => {
-    let eMin = Infinity;
-    let eMax = -Infinity;
+    let eMin = Infinity, eMax = -Infinity, mMin = Infinity, mMax = -Infinity;
     for (const e of entries) {
       if (e.elo < eMin) eMin = e.elo;
       if (e.elo > eMax) eMax = e.elo;
+      const m = e.matchesPlayed ?? 0;
+      if (m < mMin) mMin = m;
+      if (m > mMax) mMax = m;
     }
-    if (!Number.isFinite(eMin)) {
-      eMin = 1000;
-      eMax = 1000;
-    }
-    // Marge sur l'ELO pour respirer en haut / en bas.
-    const span = eMax - eMin || 1;
-    return { eMin: eMin - span * 0.06, eMax: eMax + span * 0.06 };
+    if (!Number.isFinite(eMin)) { eMin = 1000; eMax = 1000; }
+    if (!Number.isFinite(mMin)) { mMin = 0; mMax = 1; }
+    const eSpan = eMax - eMin || 1;
+    const mSpan = mMax - mMin || 1;
+    return {
+      eMin: eMin - eSpan * 0.06, eMax: eMax + eSpan * 0.06,
+      mMin: Math.max(0, mMin - mSpan * 0.08), mMax: mMax + mSpan * 0.08,
+    };
   }, [entries]);
 
   const plotW = Math.max(10, size.w - M.l - M.r);
   const plotH = Math.max(10, size.h - M.t - M.b);
 
-  // ELO → ordonnée de base (px). Haut = ELO élevé.
-  const yOfElo = (elo: number) => {
-    const ny = domain.eMax > domain.eMin ? (elo - domain.eMin) / (domain.eMax - domain.eMin) : 0.5;
+  // ELO → abscisse de base (px). Droite = ELO élevé.
+  const xOfElo = (elo: number) => {
+    const nx = domain.eMax > domain.eMin ? (elo - domain.eMin) / (domain.eMax - domain.eMin) : 0.5;
+    return PAD + nx * (plotW - 2 * PAD);
+  };
+  // Nombre de matchs → ordonnée de base (px). Haut = beaucoup de matchs.
+  const yOfMatches = (m: number) => {
+    const ny = domain.mMax > domain.mMin ? (m - domain.mMin) / (domain.mMax - domain.mMin) : 0.5;
     return PAD + (1 - ny) * (plotH - 2 * PAD);
   };
 
-  // Win rate (0–100) → abscisse de base (px). Droite = meilleur ratio.
-  const rateOf = (login: string) => clamp(winRates?.get(login) ?? 50, 0, 100);
-  const xOfRate = (rate: number) => PAD + (rate / 100) * (plotW - 2 * PAD);
-
   // Regroupement (bucketing) : chaque joueur tombe dans une cellule de la grille
-  // selon sa position réelle (win rate, ELO). Tous ceux d'une même cellule forment
-  // UN amas affiché comme un seul point — au lieu de les étaler le long d'une ligne.
+  // selon sa position réelle (ELO, matchs). Ceux d'une même cellule forment UN amas
+  // — affiché comme un petit paquet de points serrés (pas un seul point fusionné).
   const clusters = useMemo<Cluster[]>(() => {
     const sorted = [...entries].sort((a, b) => b.elo - a.elo || a.login.localeCompare(b.login));
     const buckets = new Map<string, { sx: number; sy: number; members: LeaderboardEntry[] }>();
     for (const e of sorted) {
-      const bx = clamp(xOfRate(rateOf(e.login)), PAD, plotW - PAD);
-      const by = clamp(yOfElo(e.elo), PAD, plotH - PAD);
+      const bx = clamp(xOfElo(e.elo), PAD, plotW - PAD);
+      const by = clamp(yOfMatches(e.matchesPlayed ?? 0), PAD, plotH - PAD);
       const key = `${Math.round(bx / CELL)},${Math.round(by / CELL)}`;
       const b = buckets.get(key);
       if (b) {
@@ -153,9 +178,9 @@ export function LeaderboardScatter({
       by: b.sy / b.members.length,
       members: b.members,
     }));
-    // yOfElo / xOfRate dépendent de plotW/plotH/domain/winRates → déps explicites
+    // xOfElo / yOfMatches dépendent de plotW/plotH/domain → déps explicites
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, plotW, plotH, domain.eMin, domain.eMax, winRates]);
+  }, [entries, plotW, plotH, domain.eMin, domain.eMax, domain.mMin, domain.mMax]);
 
   // base → coordonnées écran locales (dans la zone de tracé).
   const toLocal = (bx: number, by: number) => ({
@@ -206,7 +231,7 @@ export function LeaderboardScatter({
 
   const reset = () => setView({ scale: 1, tx: 0, ty: 0 });
   const eloTicks = ticks(domain.eMin, domain.eMax, 5);
-  const rateTicks = [0, 25, 50, 75, 100];
+  const matchTicks = Array.from(new Set(ticks(domain.mMin, domain.mMax, 5).map((v) => Math.round(v))));
 
   // Position écran (base) de la tête survolée, pour l'infobulle — qu'elle soit
   // dans un amas replié ou déployée en cercle.
@@ -255,33 +280,64 @@ export function LeaderboardScatter({
         ref={containerRef}
         className="relative w-full h-full overflow-hidden rounded-xl card-hud cursor-grab active:cursor-grabbing select-none touch-none"
       >
-        {/* Axe Y — ELO (ordonnée). Ligne, graduations chiffrées + traits. */}
+        {/* Cadre des axes — vraies flèches SVG longeant tout le graphique */}
+        <svg
+          className="absolute inset-0 pointer-events-none text-gold/45"
+          width={size.w}
+          height={size.h}
+          style={{ overflow: 'visible' }}
+          aria-hidden
+        >
+          <defs>
+            <marker
+              id="lb-axis-arrow"
+              markerUnits="userSpaceOnUse"
+              markerWidth="12"
+              markerHeight="12"
+              refX="8.5"
+              refY="6"
+              orient="auto"
+            >
+              <path d="M0,0 L10,6 L0,12 Z" fill="currentColor" />
+            </marker>
+          </defs>
+          {/* Axe Y — vertical, flèche vers le haut */}
+          <line
+            x1={M.l} y1={M.t + plotH} x2={M.l} y2={M.t - 4}
+            stroke="currentColor" strokeWidth="1.5" markerEnd="url(#lb-axis-arrow)"
+          />
+          {/* Axe X — horizontal, flèche vers la droite */}
+          <line
+            x1={M.l} y1={M.t + plotH} x2={M.l + plotW + 4} y2={M.t + plotH}
+            stroke="currentColor" strokeWidth="1.5" markerEnd="url(#lb-axis-arrow)"
+          />
+        </svg>
+
+        {/* Axe Y — nombre de matchs : graduations chiffrées + traits. */}
         <div
           className="absolute left-0 overflow-hidden pointer-events-none"
           style={{ width: M.l, top: M.t, height: plotH }}
         >
-          {/* Ligne d'axe verticale */}
-          <div className="absolute top-0 bottom-0 right-0 w-px bg-border" />
-          {eloTicks.map((v, i) => (
+          {matchTicks.map((v, i) => (
             <div
               key={i}
               className="absolute right-0 -translate-y-1/2 flex items-center gap-1"
-              style={{ top: view.ty + yOfElo(v) * view.scale }}
+              style={{ top: view.ty + yOfMatches(v) * view.scale }}
             >
-              <span className="font-mono text-[9px] text-muted-2 tabular-nums">{Math.round(v)}</span>
+              <span className="font-mono text-[9px] text-muted-2 tabular-nums">{v}</span>
               {/* Trait de graduation */}
               <span className="w-1.5 h-px bg-border" />
             </div>
           ))}
         </div>
 
-        {/* Titre de l'axe Y — « ELO », vertical le long du bord gauche */}
+        {/* Titre de l'axe Y — « Matchs », vertical le long du bord gauche */}
         <div
-          className="absolute left-0 top-0 pointer-events-none flex items-center justify-center"
-          style={{ width: 14, height: M.t + plotH }}
+          className="absolute left-0 pointer-events-none flex items-center justify-center"
+          style={{ width: 14, top: M.t, height: plotH }}
         >
           <span
-            className="font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2"
+            className="font-bold uppercase tracking-[0.16em] text-[9px] text-gold/70"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
             {t('lb.scatter.axisY')}
@@ -293,33 +349,31 @@ export function LeaderboardScatter({
           className="absolute overflow-hidden"
           style={{ left: M.l, top: M.t, width: plotW, height: plotH }}
         >
-          {/* Lignes ELO horizontales */}
-          {eloTicks.map((v, i) => (
+          {/* Lignes de grille — matchs (horizontales) */}
+          {matchTicks.map((v, i) => (
             <div
               key={`h${i}`}
               className="absolute left-0 right-0 h-px bg-gold/[0.06]"
-              style={{ top: view.ty + yOfElo(v) * view.scale }}
+              style={{ top: view.ty + yOfMatches(v) * view.scale }}
             />
           ))}
 
-          {/* Lignes Win % verticales */}
-          {rateTicks.map((r, i) => (
+          {/* Lignes de grille — ELO (verticales) */}
+          {eloTicks.map((v, i) => (
             <div
               key={`v${i}`}
               className="absolute top-0 bottom-0 w-px bg-gold/[0.05]"
-              style={{ left: view.tx + xOfRate(r) * view.scale }}
+              style={{ left: view.tx + xOfElo(v) * view.scale }}
             />
           ))}
 
-          {/* Amas de joueurs — un point par cellule, déployé en cercle si plusieurs */}
+          {/* Amas de joueurs — paquet de points serrés, déployé en éventail au survol */}
           {clusters.map((c) => {
             const { lx, ly } = toLocal(c.bx, c.by);
             const open = openCluster === c.id;
             const multi = c.members.length > 1;
             const meIdx = myLogin != null ? c.members.findIndex((m) => m.login === myLogin) : -1;
             const containsMe = meIdx >= 0;
-            // Tête visible quand l'amas est replié : « moi » si présent, sinon le plus fort.
-            const repIdx = meIdx >= 0 ? meIdx : 0;
 
             const openFan = () => multi && setOpenCluster(c.id);
             const closeFan = () => setOpenCluster((o) => (o === c.id ? null : o));
@@ -335,37 +389,29 @@ export function LeaderboardScatter({
                   setHovered((h) => (c.members.some((m) => m.login === h) ? null : h));
                 }}
               >
-                {/* Déploiement circulaire des membres (ou tête unique au centre) */}
                 <AnimatePresence>
                   {c.members.map((e, i) => {
-                    // Replié : tout le monde au centre. Déployé : en cercle.
                     const spread = open && multi;
-                    const off = spread ? fanOffset(i, c.members.length) : { x: 0, y: 0 };
-                    // Au repli, seule la tête « représentante » reste visible.
-                    if (!spread && i !== repIdx) return null;
+                    // Replié multi → packing serré ; déployé → éventail ; seul → centre.
+                    const off = !multi ? { x: 0, y: 0 } : spread ? fanOffset(i, c.members.length) : clumpOffset(i, c.members.length);
+                    // Replié multi = petit point ; déployé / seul = vraie tête.
+                    const asDot = multi && !spread;
                     const isMe = e.login === myLogin;
                     const isHover = e.login === hovered;
                     return (
-                      // motion.div : porte le déploiement (x/y) + apparition (opacity/scale).
-                      // L'enfant (button) gère le centrage via translate CSS — non animé,
-                      // donc sans conflit avec les transforms de framer-motion.
+                      // motion.div : porte le déplacement (clump ⇆ éventail). L'enfant
+                      // gère le centrage via translate CSS (non animé) → pas de conflit.
                       <motion.div
                         key={e.login}
                         className="absolute"
-                        style={{ left: 0, top: 0 }}
-                        initial={spread ? { x: 0, y: 0, opacity: 0, scale: 0.6 } : false}
-                        animate={{
-                          x: off.x * view.scale,
-                          y: off.y * view.scale,
-                          opacity: 1,
-                          scale: 1,
-                        }}
-                        exit={{ x: 0, y: 0, opacity: 0, scale: 0.6 }}
+                        style={{ left: 0, top: 0, zIndex: isMe ? 3 : 1 }}
+                        initial={false}
+                        animate={{ x: off.x * view.scale, y: off.y * view.scale, opacity: 1, scale: 1 }}
                         transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
                       >
                         <button
                           type="button"
-                          onMouseEnter={() => setHovered(e.login)}
+                          onMouseEnter={() => { if (!asDot) setHovered(e.login); }}
                           onMouseLeave={() => setHovered((h) => (h === e.login ? null : h))}
                           onClick={(ev) => {
                             // Amas replié à plusieurs : 1er clic = déploie, ne navigue pas.
@@ -379,29 +425,43 @@ export function LeaderboardScatter({
                           className="block -translate-x-1/2 -translate-y-1/2 rounded-full transition-shadow"
                           aria-label={`${e.login} · ${e.elo} ELO`}
                         >
-                          <Avatar
-                            login={e.login}
-                            imageUrl={e.imageUrl}
-                            size={isMe || isHover ? 'md' : 'sm'}
-                            className={
-                              isMe
-                                ? 'ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow'
-                                : isHover
-                                  ? 'ring-2 ring-gold/70 ring-offset-2 ring-offset-bg-1'
-                                  : 'ring-1 ring-border'
-                            }
-                          />
+                          {asDot ? (
+                            <span
+                              className="block rounded-full"
+                              style={{
+                                width: DOT,
+                                height: DOT,
+                                background: isMe ? '#ffc94a' : 'rgba(255,201,74,0.5)',
+                                boxShadow: isMe
+                                  ? '0 0 0 1.5px rgba(255,201,74,0.9), 0 0 8px rgba(255,201,74,0.6)'
+                                  : '0 0 0 1px rgba(8,10,14,0.85)',
+                              }}
+                            />
+                          ) : (
+                            <Avatar
+                              login={e.login}
+                              imageUrl={e.imageUrl}
+                              size={isMe || isHover ? 'md' : 'sm'}
+                              className={
+                                isMe
+                                  ? 'ring-2 ring-gold ring-offset-2 ring-offset-bg-1 shadow-gold-glow'
+                                  : isHover
+                                    ? 'ring-2 ring-gold/70 ring-offset-2 ring-offset-bg-1'
+                                    : 'ring-1 ring-border'
+                              }
+                            />
+                          )}
                         </button>
                       </motion.div>
                     );
                   })}
                 </AnimatePresence>
 
-                {/* Badge de comptage sur un amas replié (×N) — collé en haut-droite de la tête */}
+                {/* Compteur d'amas replié — centré au-dessus du paquet de points */}
                 {multi && !open && (
                   <span
                     className="absolute z-20 pointer-events-none flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gold text-bg-1 text-[9px] font-extrabold tabular-nums shadow-md ring-1 ring-bg-1"
-                    style={{ left: 10, top: -10, transform: 'translate(-50%, -50%)' }}
+                    style={{ left: 0, top: -(clumpRadius(c.members.length) + 8), transform: 'translate(-50%, -50%)' }}
                   >
                     ×{c.members.length}
                   </span>
@@ -411,26 +471,24 @@ export function LeaderboardScatter({
           })}
         </div>
 
-        {/* Axe X — Win rate (abscisse). Ligne, graduations + traits, en bas. */}
+        {/* Axe X — ELO : graduations + traits, en bas. */}
         <div
           className="absolute overflow-hidden pointer-events-none"
           style={{ left: M.l, width: plotW, top: M.t + plotH, height: M.b }}
         >
-          {/* Ligne d'axe horizontale */}
-          <div className="absolute left-0 right-0 top-0 h-px bg-border" />
-          {rateTicks.map((r, i) => (
+          {eloTicks.map((v, i) => (
             <div
               key={i}
               className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
-              style={{ left: view.tx + xOfRate(r) * view.scale }}
+              style={{ left: view.tx + xOfElo(v) * view.scale }}
             >
               {/* Trait de graduation */}
               <span className="w-px h-1.5 bg-border" />
-              <span className="mt-0.5 font-mono text-[9px] text-muted-2 tabular-nums">{r}%</span>
+              <span className="mt-0.5 font-mono text-[9px] text-muted-2 tabular-nums">{Math.round(v)}</span>
             </div>
           ))}
-          {/* Titre de l'axe X — « Win rate % » centré sous les graduations */}
-          <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2">
+          {/* Titre de l'axe X — « ELO », centré sous les graduations */}
+          <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 font-bold uppercase tracking-[0.16em] text-[9px] text-gold/70">
             {t('lb.scatter.axisX')}
           </span>
         </div>
@@ -439,6 +497,7 @@ export function LeaderboardScatter({
         {hoveredPos && hoveredPos.entry && (
           <ScatterTooltip
             entry={hoveredPos.entry}
+            winRate={winRates?.get(hoveredPos.entry.login)}
             left={M.l + toLocal(hoveredPos.bx, hoveredPos.by).lx}
             top={M.t + toLocal(hoveredPos.bx, hoveredPos.by).ly - 26}
           />
@@ -448,7 +507,7 @@ export function LeaderboardScatter({
   );
 }
 
-function ScatterTooltip({ entry, left, top }: { entry: LeaderboardEntry; left: number; top: number }) {
+function ScatterTooltip({ entry, winRate, left, top }: { entry: LeaderboardEntry; winRate?: number; left: number; top: number }) {
   const t = useT();
   return (
     <div
@@ -460,6 +519,7 @@ function ScatterTooltip({ entry, left, top }: { entry: LeaderboardEntry; left: n
         <div className="text-[10px] font-mono tabular-nums text-muted-2 leading-tight">
           #{entry.rank} · <span className="text-gold font-bold">{entry.elo}</span> ELO ·{' '}
           {entry.matchesPlayed} {t('lb.scatter.matches')}
+          {winRate != null && <> · {Math.round(winRate)}% WR</>}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crown, ChevronLeft, Flame, HelpCircle } from 'lucide-react';
+import { Crown, ChevronLeft, Flame, HelpCircle, Gift } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
@@ -181,6 +181,24 @@ export function GoatView() {
                 <div className="mt-3 rounded-xl border border-gold/15 bg-black/20 p-3">
                   <GoatWeightsList />
                 </div>
+                {/* Récompense — l'info « le GOAT reçoit un truc en plus ». */}
+                <div
+                  className="mt-3 flex items-start gap-3 rounded-xl p-3"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,201,74,0.16) 0%, rgba(255,201,74,0.05) 100%)',
+                    border: '1px solid rgba(255,201,74,0.4)',
+                  }}
+                >
+                  <Gift className="w-5 h-5 text-gold shrink-0 mt-0.5 drop-shadow-[0_1px_4px_rgba(255,201,74,0.5)]" strokeWidth={2} />
+                  <div>
+                    <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-gold">
+                      {t('goat.reward.title')}
+                    </div>
+                    <p className="text-[12px] text-muted leading-snug mt-0.5">
+                      {t('goat.reward.text')}
+                    </p>
+                  </div>
+                </div>
                 <label className="mt-5 flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-2 hover:text-muted transition-colors">
                   <input
                     type="checkbox"
@@ -285,6 +303,21 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
 
         {/* Barres de contribution */}
         <MetricBars player={player} />
+
+        {/* Récompense du G.O.A.T — bandeau toujours visible sous le héro. */}
+        <div
+          className="mt-4 flex items-center gap-2.5 rounded-xl px-3 py-2.5"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,201,74,0.16) 0%, rgba(255,201,74,0.05) 100%)',
+            border: '1px solid rgba(255,201,74,0.4)',
+          }}
+        >
+          <Gift className="w-4 h-4 text-gold shrink-0 drop-shadow-[0_1px_4px_rgba(255,201,74,0.5)]" strokeWidth={2.2} />
+          <span className="text-[11px] text-muted leading-snug">
+            <span className="text-gold font-bold">{t('goat.reward.title')} · </span>
+            {t('goat.reward.text')}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { GlobalMatchCard, MyMatchCard } from './MatchCards';
+import { GlobalMatchCard, MyMatchCard, GlobalFfaCard, MyFfaCard } from './MatchCards';
 import type { HistoriqueData } from './useHistoriqueLogic';
 import type { Lang } from '../../../lib/i18n';
 
@@ -52,26 +52,46 @@ export function HistoriqueList({
         {tab === 'mine'
           ? data.mine
               .slice(0, limit)
-              .map((s, i) => (
-                <MyMatchCard
-                  key={s.match.id}
-                  stat={s}
-                  lang={lang}
-                  imageUrl={imgByLogin.get(s.opponent)}
-                  delay={Math.min(i, 12) * 0.02}
-                />
-              ))
+              .map((item, i) =>
+                item.kind === 'match' ? (
+                  <MyMatchCard
+                    key={item.id}
+                    stat={item.stat}
+                    lang={lang}
+                    imageUrl={imgByLogin.get(item.stat.opponent)}
+                    delay={Math.min(i, 12) * 0.02}
+                  />
+                ) : (
+                  <MyFfaCard
+                    key={item.id}
+                    stat={item.stat}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 12) * 0.02}
+                  />
+                ),
+              )
           : data.global
               .slice(0, limit)
-              .map((m, i) => (
-                <GlobalMatchCard
-                  key={m.id}
-                  match={m}
-                  lang={lang}
-                  imgByLogin={imgByLogin}
-                  delay={Math.min(i, 12) * 0.02}
-                />
-              ))}
+              .map((item, i) =>
+                item.kind === 'match' ? (
+                  <GlobalMatchCard
+                    key={item.id}
+                    match={item.match}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 12) * 0.02}
+                  />
+                ) : (
+                  <GlobalFfaCard
+                    key={item.id}
+                    ffa={item.ffa}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 12) * 0.02}
+                  />
+                ),
+              )}
       </motion.div>
     </AnimatePresence>
   );

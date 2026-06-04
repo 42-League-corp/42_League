@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
-import type { PlayedMatch } from '../../../lib/api';
+import type { PlayedMatch, PlayedFfa } from '../../../lib/api';
 
-/** Une de mes games, enrichie de son impact ELO et win-rate. */
+/** Une de mes games 1v1/2v2, enrichie de son impact ELO et win-rate. */
 export interface MyMatchStat {
   match: PlayedMatch;
   won: boolean;
@@ -19,50 +19,80 @@ export interface MyMatchStat {
   wrImpact: number;
 }
 
+/** Ma participation à un FFA Smash (rang + delta). N'entre PAS dans le win-rate. */
+export interface MyFfaStat {
+  ffa: PlayedFfa;
+  myPosition: number;
+  myDelta: number;
+  total: number;
+}
+
+/** Élément du flux global : un match 1v1/2v2 OU un FFA, daté pour le tri. */
+export type GlobalItem =
+  | { kind: 'match'; id: string; playedAt: string; match: PlayedMatch }
+  | { kind: 'ffa'; id: string; playedAt: string; ffa: PlayedFfa };
+
+/** Élément de mon flux : ma game 1v1/2v2 OU ma participation FFA. */
+export type MineItem =
+  | { kind: 'match'; id: string; playedAt: string; stat: MyMatchStat }
+  | { kind: 'ffa'; id: string; playedAt: string; stat: MyFfaStat };
+
 export interface HistoriqueData {
   myLogin: string | undefined;
-  /** Toutes les games de la league, plus récentes d'abord. */
-  global: PlayedMatch[];
-  /** Mes games, plus récentes d'abord, enrichies des impacts. */
-  mine: MyMatchStat[];
+  /** Toutes les games de la league (matchs + FFA), plus récentes d'abord. */
+  global: GlobalItem[];
+  /** Mes games (matchs + FFA), plus récentes d'abord. */
+  mine: MineItem[];
   refresh: () => Promise<void>;
 }
 
 /**
- * Logique de la page Historique — sépare l'historique global du babyfoot de
- * mon historique perso, et calcule pour chacune de mes games l'impact ELO
- * (déjà fourni par l'API) ainsi que l'impact sur mon win-rate (calculé en
- * rejouant mes games dans l'ordre chronologique).
+ * Logique de la page Historique — fusionne l'historique des matchs 1v1/2v2 et
+ * des FFA Smash dans un même flux trié par date (global et perso). L'impact ELO
+ * de chaque game est déjà fourni par l'API ; l'impact sur le win-rate est calculé
+ * en rejouant MES matchs dans l'ordre chronologique. Les FFA déplacent l'ELO mais
+ * N'ENTRENT PAS dans le calcul du win-rate (ils ont un rang, pas un binaire V/D).
  */
 export function useHistoriqueLogic(): HistoriqueData {
-  const { matches: allMatches, me, refresh } = useLeagueData();
+  const { matches: allMatches, playedFfas: allFfas, me, refresh } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
+
   // Historique filtré par discipline (mode courant).
   const matches = useMemo(
     () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
     [allMatches, game],
   );
-
-  const global = useMemo(
-    () => [...matches].sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt)),
-    [matches],
+  // Les FFA n'existent qu'en Smash : présents seulement dans ce mode.
+  const ffas = useMemo(
+    () => allFfas.filter((f) => (f.game ?? 'smash') === game),
+    [allFfas, game],
   );
 
-  const mine = useMemo<MyMatchStat[]>(() => {
+  const global = useMemo<GlobalItem[]>(() => {
+    const items: GlobalItem[] = [
+      ...matches.map((m) => ({ kind: 'match' as const, id: m.id, playedAt: m.playedAt, match: m })),
+      ...ffas.map((f) => ({ kind: 'ffa' as const, id: f.id, playedAt: f.playedAt, ffa: f })),
+    ];
+    return items.sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
+  }, [matches, ffas]);
+
+  const mine = useMemo<MineItem[]>(() => {
     if (!myLogin) return [];
+
+    // Mes matchs, rejoués dans l'ordre chronologique pour le win-rate cumulé.
     const asc = matches
       .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
       .sort((a, b) => +new Date(a.playedAt) - +new Date(b.playedAt));
 
     let wins = 0;
-    const stats: MyMatchStat[] = asc.map((m, i) => {
+    const matchItems: MineItem[] = asc.map((m, i) => {
       const youAreA = m.playerALogin === myLogin;
       const won = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
       const wrBefore = i === 0 ? 0 : (wins / i) * 100;
       if (won) wins++;
       const wrAfter = (wins / (i + 1)) * 100;
-      return {
+      const stat: MyMatchStat = {
         match: m,
         won,
         opponent: youAreA ? m.playerBLogin : m.playerALogin,
@@ -73,10 +103,28 @@ export function useHistoriqueLogic(): HistoriqueData {
         wrAfter: Math.round(wrAfter),
         wrImpact: wrAfter - wrBefore,
       };
+      return { kind: 'match', id: m.id, playedAt: m.playedAt, stat };
     });
 
-    return stats.reverse();
-  }, [matches, myLogin]);
+    // Mes FFA (hors win-rate) : on extrait ma position + mon delta.
+    const ffaItems: MineItem[] = ffas
+      .map((f) => {
+        const me = f.participants.find((p) => p.login === myLogin);
+        if (!me) return null;
+        const stat: MyFfaStat = {
+          ffa: f,
+          myPosition: me.position,
+          myDelta: me.delta,
+          total: f.participants.length,
+        };
+        return { kind: 'ffa', id: f.id, playedAt: f.playedAt, stat } as MineItem;
+      })
+      .filter((x): x is MineItem => x !== null);
+
+    return [...matchItems, ...ffaItems].sort(
+      (a, b) => +new Date(b.playedAt) - +new Date(a.playedAt),
+    );
+  }, [matches, ffas, myLogin]);
 
   return { myLogin, global, mine, refresh };
 }

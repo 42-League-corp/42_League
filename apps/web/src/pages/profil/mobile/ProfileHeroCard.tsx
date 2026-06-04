@@ -334,10 +334,10 @@ export function ProfileHeroCard({
                       {elo}
                     </span>
                     <span
-                      className="text-[8px] uppercase tracking-[0.16em] font-extrabold"
+                      className="text-[8px] uppercase tracking-[0.08em] font-extrabold text-center leading-tight"
                       style={{ color: `${c}b3` }}
                     >
-                      ELO
+                      {t(`game.${g}`)}
                     </span>
                     <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
                   </div>

@@ -41,12 +41,16 @@ export interface FtProfile {
   login: string;
   ftId: number;
   campus: string | null;
+  firstName: string | null;
+  lastName: string | null;
   imageUrl: string | null;
 }
 
 interface FtMeResponse {
   id: number;
   login: string;
+  first_name?: string | null;
+  last_name?: string | null;
   campus?: Array<{ name: string }>;
   image?: {
     link?: string | null;
@@ -233,6 +237,8 @@ export function createAuthRouter(
       login: me.login,
       ftId: me.id,
       campus: me.campus?.[0]?.name ?? null,
+      firstName: me.first_name ?? null,
+      lastName: me.last_name ?? null,
       imageUrl:
         me.image?.versions?.medium ??
         me.image?.versions?.small ??

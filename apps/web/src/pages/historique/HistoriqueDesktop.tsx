@@ -5,7 +5,7 @@ import { Panel } from '../../components/Panel';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
 import { useHistoriqueLogic } from './shared/useHistoriqueLogic';
-import { GlobalMatchCard, MyMatchCard } from './shared/MatchCards';
+import { GlobalMatchCard, MyMatchCard, GlobalFfaCard, MyFfaCard } from './shared/MatchCards';
 
 /**
  * Vue desktop de l'Historique — pensée « dashboard esport » : on n'enferme plus
@@ -27,11 +27,16 @@ export function HistoriqueDesktop() {
     [leaderboard],
   );
 
-  // Stats perso agrégées sur les games affichées.
+  // Stats perso agrégées — WR sur les seuls matchs (les FFA ont un rang, pas un
+  // binaire V/D), mais l'ELO net inclut tout (matchs + FFA).
   const stats = useMemo(() => {
-    const total = data.mine.length;
-    const wins = data.mine.filter((s) => s.won).length;
-    const netElo = data.mine.reduce((acc, s) => acc + s.delta, 0);
+    const matchStats = data.mine.filter((i) => i.kind === 'match');
+    const total = matchStats.length;
+    const wins = matchStats.filter((i) => i.stat.won).length;
+    const netElo = data.mine.reduce(
+      (acc, i) => acc + (i.kind === 'match' ? i.stat.delta : i.stat.myDelta),
+      0,
+    );
     return {
       total,
       wins,
@@ -55,15 +60,25 @@ export function HistoriqueDesktop() {
           ) : (
             data.global
               .slice(0, 80)
-              .map((m, i) => (
-                <GlobalMatchCard
-                  key={m.id}
-                  match={m}
-                  lang={lang}
-                  imgByLogin={imgByLogin}
-                  delay={Math.min(i, 10) * 0.015}
-                />
-              ))
+              .map((item, i) =>
+                item.kind === 'match' ? (
+                  <GlobalMatchCard
+                    key={item.id}
+                    match={item.match}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 10) * 0.015}
+                  />
+                ) : (
+                  <GlobalFfaCard
+                    key={item.id}
+                    ffa={item.ffa}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 10) * 0.015}
+                  />
+                ),
+              )
           )}
         </HistoColumn>
 
@@ -79,15 +94,25 @@ export function HistoriqueDesktop() {
           ) : (
             data.mine
               .slice(0, 80)
-              .map((s, i) => (
-                <MyMatchCard
-                  key={s.match.id}
-                  stat={s}
-                  lang={lang}
-                  imageUrl={imgByLogin.get(s.opponent)}
-                  delay={Math.min(i, 10) * 0.015}
-                />
-              ))
+              .map((item, i) =>
+                item.kind === 'match' ? (
+                  <MyMatchCard
+                    key={item.id}
+                    stat={item.stat}
+                    lang={lang}
+                    imageUrl={imgByLogin.get(item.stat.opponent)}
+                    delay={Math.min(i, 10) * 0.015}
+                  />
+                ) : (
+                  <MyFfaCard
+                    key={item.id}
+                    stat={item.stat}
+                    lang={lang}
+                    imgByLogin={imgByLogin}
+                    delay={Math.min(i, 10) * 0.015}
+                  />
+                ),
+              )
           )}
         </HistoColumn>
       </div>

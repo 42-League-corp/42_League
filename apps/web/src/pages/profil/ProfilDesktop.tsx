@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
@@ -11,11 +11,15 @@ import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { displayTitle } from '../../lib/cosmeticTitles';
 import { TitlePicker } from '../../components/TitlePicker';
+import { BannerPicker } from '../../components/BannerPicker';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
 import { MyTeamsDesktop } from './shared/MyTeamsDesktop';
+import { FavoriteCharsRow } from '../../components/FavoriteCharsRow';
+import { FavoriteCharsEditor } from '../../components/FavoriteCharsEditor';
+import { favoritesForGame, type FightingGame } from '../../lib/chars';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
@@ -29,9 +33,10 @@ import { pickRating } from '../../lib/gameStats';
 export function ProfilDesktop() {
   const t = useT();
   const { locale, lang } = useI18n();
-  const { me, matches, opsMe, leaderboard, tournaments } = useLeagueData();
+  const { me, matches, opsMe, leaderboard, tournaments, refresh } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
+  const [editGame, setEditGame] = useState<FightingGame | null>(null);
 
   const stats = useMemo(() => {
     const meUser = me?.user;
@@ -83,13 +88,21 @@ export function ProfilDesktop() {
   }
 
   const u = me.user;
+  // Cosmétiques équipés (boutique) — profil perso.
+  const titleColor = me.titleColor ?? null;
+  const equippedBadge = me.equippedBadge ?? null;
+  const equippedBanner = me.equippedBanner ?? null;
+  // Jeux de combat où je suis inscrit → afficher/éditer mes persos favoris.
+  const fightingGames = (['smash', 'streetfighter'] as const).filter((g) =>
+    (u.games ?? ['babyfoot']).includes(g),
+  );
   const myEntry = leaderboard.find((x) => x.login === u.login);
   const myRank = myEntry?.rank ?? 0;
   const isTop1 = myRank === 1;
-  // Affiche nom + prénom (depuis l'intra) plutôt que le login.
+  // Affiche prénom + nom (depuis l'intra) plutôt que le login.
   const fullName =
-    [u.lastName, u.firstName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.lastName, myEntry?.firstName].filter(Boolean).join(' ').trim() ||
+    [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
     u.login;
 
   // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.
@@ -113,6 +126,17 @@ export function ProfilDesktop() {
             'inset 0 1px 0 rgba(255,215,120,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 32px -12px rgba(255,201,74,0.25)',
         }}
       >
+        {/* Bannière équipée (boutique) = fond de la carte + voile sombre. */}
+        {equippedBanner && (
+          <>
+            <div
+              aria-hidden
+              className="absolute inset-0 pointer-events-none"
+              style={{ backgroundImage: `url(${equippedBanner})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            />
+            <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/45" />
+          </>
+        )}
         {/* Halo conique animé très discret (coupé si prefers-reduced-motion). */}
         {!reducedMotion && (
           <motion.div
@@ -130,22 +154,22 @@ export function ProfilDesktop() {
         {/* Filet laiton haut */}
         <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-gold/55 to-transparent pointer-events-none" />
 
-        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
-        {displayTitle(u.login, u.title) && (
-          <div className="relative z-10 pt-3.5 pb-1 flex justify-center">
-            <span className="inline-flex items-center gap-1.5 max-w-[90%]">
-              <span className="text-gold/70 text-lg leading-none">❝</span>
-              <span className="text-gold italic text-lg font-bold tracking-wide truncate">
-                {displayTitle(u.login, u.title)}
-              </span>
-              <span className="text-gold/70 text-lg leading-none">❞</span>
+        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. Par défaut
+            « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (cette vue
+            est toujours soi) est une simple flèche à droite. */}
+        <div className="relative z-10 pt-3.5 pb-1 flex items-center justify-center px-5">
+          <span
+            className="inline-flex items-center gap-1.5 max-w-[80%]"
+            style={titleColor ? { color: titleColor } : undefined}
+          >
+            <span className={`text-lg leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❝</span>
+            <span className={`italic text-lg font-bold tracking-wide truncate ${titleColor ? '' : 'text-gold'}`}>
+              {displayTitle(u.login, u.title, t('profil.title.tarnished'))}
             </span>
-          </div>
-        )}
-
-        {/* Sélecteur de titre — uniquement sur SON profil (cette vue est toujours soi). */}
-        <div className="relative z-10 flex justify-center pt-1.5">
-          <TitlePicker />
+            <span className={`text-lg leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❞</span>
+          </span>
+          <BannerPicker className="absolute left-5" />
+          <TitlePicker className="absolute right-5" />
         </div>
 
         <div className="relative z-10 p-5 pt-3 flex items-center gap-5">
@@ -169,9 +193,9 @@ export function ProfilDesktop() {
               <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight min-w-0">
                 {fullName}
               </div>
-              {me.badges && me.badges.length > 0 && (
+              {((me.badges && me.badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
-                  <BadgesRow codes={me.badges} size="md" />
+                  <BadgesRow codes={me.badges ?? []} extra={equippedBadge ? [equippedBadge] : []} size="md" />
                 </div>
               )}
             </div>
@@ -247,6 +271,18 @@ export function ProfilDesktop() {
           game={game}
         />
       </div>
+
+      {/* Persos favoris — une rangée par jeu de combat où je suis inscrit. */}
+      {fightingGames.length > 0 && (
+        <div className="mt-4 card-hud rounded-xl px-4 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-muted-2">
+            {t('favorites.label')}
+          </div>
+          {fightingGames.map((g) => (
+            <FavoriteCharsRow key={g} game={g} ids={favoritesForGame(u, g)} onEdit={() => setEditGame(g)} />
+          ))}
+        </div>
+      )}
 
       {/* Following / Followers (style GitHub) */}
       <div className="mt-4">
@@ -333,6 +369,15 @@ export function ProfilDesktop() {
         </>
       )}
       </Panel>
+
+      {editGame && (
+        <FavoriteCharsEditor
+          games={[editGame]}
+          initial={{ [editGame]: favoritesForGame(u, editGame) }}
+          onClose={() => setEditGame(null)}
+          onSaved={refresh}
+        />
+      )}
     </div>
   );
 }

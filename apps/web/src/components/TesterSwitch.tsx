@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { UserPlus } from 'lucide-react';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { api } from '../lib/api';
@@ -39,6 +40,19 @@ export function TesterSwitch() {
     }
   }
 
+  // Variante : bascule sur un compte tester FRAÎCHEMENT créé (onboarding à refaire).
+  async function handleFresh() {
+    setBusy(true);
+    try {
+      const { token, login } = await api.impersonateFreshTester();
+      startImpersonation(token, login);
+      window.location.assign('/');
+    } catch (err) {
+      setBusy(false);
+      show(err instanceof Error ? err.message : 'Création impossible', 'error');
+    }
+  }
+
   function handleReturn() {
     if (stopImpersonation()) {
       window.location.assign('/');
@@ -70,16 +84,28 @@ export function TesterSwitch() {
   if (!IS_STAGING || !isAdmin) return null;
 
   return (
-    <button
-      onClick={handleSwitch}
-      disabled={busy}
-      className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
-      title="Basculer sur le compte tester (mode utilisateur)"
-    >
-      <span className="text-base">🧪</span>
-      <span className="text-xs font-semibold text-teal">
-        {busy ? 'Bascule…' : 'Tester en mode user'}
-      </span>
-    </button>
+    <div className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2">
+      <button
+        onClick={handleSwitch}
+        disabled={busy}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
+        title="Basculer sur le compte tester (mode utilisateur)"
+      >
+        <span className="text-base">🧪</span>
+        <span className="text-xs font-semibold text-teal">
+          {busy ? 'Bascule…' : 'Tester en mode user'}
+        </span>
+      </button>
+      {/* Petit rond : se connecter avec un NOUVEAU compte tester (fraîchement créé). */}
+      <button
+        onClick={handleFresh}
+        disabled={busy}
+        className="flex items-center justify-center w-9 h-9 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
+        title="Se connecter avec un nouveau compte tester (fraîchement créé)"
+        aria-label="Nouveau compte tester"
+      >
+        <UserPlus className="w-4 h-4 text-teal" strokeWidth={2.5} />
+      </button>
+    </div>
   );
 }

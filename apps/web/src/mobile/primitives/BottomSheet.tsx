@@ -113,10 +113,20 @@ export function BottomSheet({
     [onClose, preventSwipeDismiss, y],
   );
 
+  // Clavier ouvert : on remonte la sheet juste au-dessus du clavier (`bottom`)
+  // et on borne sa hauteur à la zone visible restante → le contenu (inputs,
+  // bouton d'envoi) n'est plus caché derrière le clavier.
   const sheetStyle = useMemo(() => {
-    if (snap === 'auto') return undefined;
-    return { maxHeight: `${snap}vh` };
-  }, [snap]);
+    const style: Record<string, string | number> = { bottom: keyboardInset };
+    const visibleCap = `calc(100dvh - ${keyboardInset}px - 24px)`;
+    if (snap === 'auto') {
+      if (keyboardInset > 0) style.maxHeight = visibleCap;
+    } else {
+      style.maxHeight =
+        keyboardInset > 0 ? `min(${snap}vh, ${visibleCap})` : `${snap}vh`;
+    }
+    return style;
+  }, [snap, keyboardInset]);
 
   return (
     <AnimatePresence>
@@ -186,7 +196,7 @@ export function BottomSheet({
                 Padding-bottom inclut la safe-area. */}
             <div
               className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth-touch custom-scrollbar"
-              style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + 16px + ${keyboardInset}px)` }}
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
             >
               {children}
             </div>

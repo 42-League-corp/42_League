@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Crosshair } from 'lucide-react';
+import { Shield, Crosshair, Settings } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { NotificationBell } from '../../components/NotificationBell';
 import { useAuth } from '../../hooks/useAuth';
@@ -59,14 +59,12 @@ export function MobileHeader() {
       />
 
       <div className="relative flex items-center gap-3 px-4 h-14">
-        {/* Brand compact — plaque dorée mini */}
-        <NavLink
-          to="/"
-          onClick={() => haptic('selection')}
-          className="flex items-center gap-1.5 active:opacity-70 transition-opacity tap-transparent"
-        >
+        {/* Brand compact — plaque dorée mini. Non cliquable sur mobile : la nav
+            se fait via la tab bar (cliquer le logo provoquait un saut de mise en
+            page persistant en haut des pages). */}
+        <div className="flex items-center gap-1.5">
           <img src="/icon-192.png" alt="42L" className="w-7 h-7 rounded-md" />
-        </NavLink>
+        </div>
 
         {/* Titre de page animé — change avec la route */}
         <motion.h1
@@ -105,6 +103,16 @@ export function MobileHeader() {
 
         {/* Les games à confirmer ne s'affichent plus ici : elles vivent dans la
             section Défis (badge sur l'onglet) + la bannière popup. */}
+
+        {/* Réglages — rouage, à gauche des notifs (comme la version web) */}
+        <NavLink
+          to="/settings"
+          onClick={() => haptic('selection')}
+          aria-label={t('nav.reglages')}
+          className="relative flex items-center justify-center w-9 h-9 rounded-full text-muted-2 active:scale-90 active:text-text transition-transform tap-transparent"
+        >
+          <Settings className="w-[18px] h-[18px]" strokeWidth={2.2} />
+        </NavLink>
 
         {/* Centre de notifications */}
         <NotificationBell />

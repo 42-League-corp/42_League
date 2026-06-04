@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { ChallengeFlow } from '../shared/ChallengeFlow';
+import { Challenge2v2Flow } from '../shared/Challenge2v2Flow';
+import { Mode1v1Toggle, type DuelMode } from '../shared/Mode1v1Toggle';
+import { useGameMode } from '../../../hooks/useGameMode';
 import { useT } from '../../../lib/i18n';
 import type { LeaderboardEntry } from '../../../lib/api';
 
@@ -29,6 +33,8 @@ export function ChallengeSheet({
   onDone,
 }: ChallengeSheetProps) {
   const t = useT();
+  const { game } = useGameMode();
+  const [mode, setMode] = useState<DuelMode>('1v1');
   const handleSubmitted = async () => {
     await onDone();
     onClose();
@@ -42,15 +48,29 @@ export function ChallengeSheet({
       snap={92}
     >
       <div className="px-5 pt-4 pb-2">
-        <ChallengeFlow
-          variant="mobile"
-          others={others}
-          recentOpponents={recentOpponents}
-          opponentCounts={opponentCounts}
-          myLogin={myLogin}
-          locations={locations}
-          onSubmitted={handleSubmitted}
-        />
+        {/* Toggle 1v1 / 2v2 — babyfoot uniquement. */}
+        <Mode1v1Toggle mode={mode} onChange={setMode} game={game} className="mb-4" />
+        {mode === '2v2' && game === 'babyfoot' ? (
+          <Challenge2v2Flow
+            variant="mobile"
+            others={others}
+            recentOpponents={recentOpponents}
+            opponentCounts={opponentCounts}
+            myLogin={myLogin}
+            locations={locations}
+            onSubmitted={handleSubmitted}
+          />
+        ) : (
+          <ChallengeFlow
+            variant="mobile"
+            others={others}
+            recentOpponents={recentOpponents}
+            opponentCounts={opponentCounts}
+            myLogin={myLogin}
+            locations={locations}
+            onSubmitted={handleSubmitted}
+          />
+        )}
       </div>
     </BottomSheet>
   );

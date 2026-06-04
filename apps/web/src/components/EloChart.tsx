@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AnimatePresence, motion,
+  motion,
   useMotionValue, useMotionValueEvent, useTransform,
 } from 'framer-motion';
 import type { Game, PlayedMatch } from '../lib/api';
@@ -104,36 +104,6 @@ const LOSS = '#ff5366';
 
 // ─── Sous-composants tooltip ───────────────────────────────────────────────────
 
-/** Un chiffre qui roule verticalement (sens selon la tendance). */
-function RollDigit({ ch, up }: { ch: string; up: boolean }) {
-  return (
-    <span className="relative inline-block overflow-hidden align-baseline" style={{ height: '1em', width: ch === '1' ? '0.55em' : '0.62em' }}>
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={ch}
-          className="absolute inset-0 flex items-center justify-center"
-          initial={{ y: up ? '100%' : '-100%', opacity: 0 }}
-          animate={{ y: '0%', opacity: 1 }}
-          exit={{ y: up ? '-100%' : '100%', opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 0.8 }}
-        >
-          {ch}
-        </motion.span>
-      </AnimatePresence>
-    </span>
-  );
-}
-
-/** Compteur ELO à roulettes — seuls les chiffres qui changent s'animent. */
-function RollingNumber({ value, up }: { value: number; up: boolean }) {
-  const chars = Math.round(value).toString().split('');
-  return (
-    <span className="inline-flex tabular-nums">
-      {chars.map((c, i) => <RollDigit key={chars.length - 1 - i} ch={c} up={up} />)}
-    </span>
-  );
-}
-
 /** Flèche diagonale ↗ (victoire) / ↘ (défaite), rotation + couleur fluides. */
 function TrendArrow({ up }: { up: boolean }) {
   const c = up ? WIN : LOSS;
@@ -220,7 +190,7 @@ export function EloChart({
     }));
     const linePath = monotonePath(mapped);
     const areaPath = `${linePath} L${mapped.at(-1)!.x},${baseY} L${padX},${baseY} Z`;
-    return { mapped, linePath, areaPath };
+    return { mapped, linePath, areaPath, yMin, yMax };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points, W, H]);
 
@@ -234,6 +204,29 @@ export function EloChart({
   const idxRef = useRef(0);
   const [idx, setIdx] = useState(0);
   const [active, setActive] = useState(false);
+  // `touched` : passe à true au 1er survol. Permet d'afficher le dernier match au
+  // repos (avant interaction) puis de masquer le tooltip dès qu'on quitte la case.
+  const [touched, setTouched] = useState(false);
+
+  // Conversion y-curseur → ELO (inverse du mapping de geo), via ref pour que le
+  // useTransform lise toujours les bornes courantes. Donne un odomètre ELO
+  // CONTINU : le chiffre glisse au fil du curseur au lieu de sauter d'un point à
+  // l'autre au passage du milieu.
+  const mapRef = useRef({ yMin: 0, yMax: 0, padTop, plotH, fallback: currentElo });
+  mapRef.current = {
+    yMin: geo?.yMin ?? 0,
+    yMax: geo?.yMax ?? 0,
+    padTop,
+    plotH,
+    fallback: currentElo,
+  };
+  const liveElo = useTransform(cy, (y) => {
+    const m = mapRef.current;
+    if (m.yMax <= m.yMin) return m.fallback;
+    return m.yMin + (1 - (y - m.padTop) / m.plotH) * (m.yMax - m.yMin);
+  });
+  const [displayElo, setDisplayElo] = useState(() => Math.round(currentElo));
+  useMotionValueEvent(liveElo, 'change', (v) => setDisplayElo(Math.round(v)));
 
   // y exact sur la courbe pour une position x → le curseur glisse dessus
   const sampleY = (xv: number): number | null => {
@@ -281,6 +274,7 @@ export function EloChart({
     xv = Math.max(padX, Math.min(W - padX, xv));
     mx.set(xv);
     if (!active) setActive(true);
+    if (!touched) setTouched(true);
   };
 
   // Tooltip : suit le curseur, recentré et borné dans la largeur
@@ -350,9 +344,13 @@ export function EloChart({
         <motion.circle cx={mx} cy={cy} r="4" fill="#0b1220" stroke={lineColor} strokeWidth="2.5" style={{ opacity: active ? 1 : 0 }} />
       </svg>
 
-      {/* Tooltip détaillé du match, suit le point actif */}
+      {/* Tooltip détaillé du match, suit le point actif. Au repos AVANT toute
+          interaction : visible (dernier match). Dès qu'on quitte la case après
+          avoir survolé : fade out. */}
       <motion.div className="pointer-events-none absolute left-0 top-0 z-20"
-        style={{ x: ttX, y: cy }} animate={{ opacity: active ? 1 : 0.92 }}>
+        style={{ x: ttX, y: cy }}
+        animate={{ opacity: active ? 1 : touched ? 0 : 0.92 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}>
         <div style={{ transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))' }}>
           {below && <div className="mx-auto mb-[-5px] h-2.5 w-2.5 rotate-45 border-l border-t border-white/10 bg-slate-900/95" />}
           <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur"
@@ -361,7 +359,7 @@ export function EloChart({
             {cur.isStart ? (
               <div className="flex items-center justify-between px-3 py-2.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">Départ</span>
-                <span className="font-display text-base font-black tabular-nums text-white">{Math.round(cur.elo)}</span>
+                <span className="font-display text-base font-black tabular-nums text-white">{displayElo}</span>
               </div>
             ) : (
               <div className="px-3 py-2.5">
@@ -377,7 +375,7 @@ export function EloChart({
                     <TrendArrow up={won} />
                     <div className="text-right leading-tight">
                       <div className="font-display text-base font-black tabular-nums" style={{ color: won ? WIN : LOSS }}>
-                        <RollingNumber value={cur.elo} up={won} />
+                        {displayElo}
                       </div>
                       <div className="text-[8px] font-bold uppercase tracking-wider text-white/40">elo</div>
                     </div>

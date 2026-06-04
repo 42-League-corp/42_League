@@ -112,7 +112,7 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
         {/* ELO + delta */}
         <div className="flex items-end justify-between px-1">
           <div>
-            <div className="font-display text-[52px] font-black leading-none tabular-nums text-gold"
+            <div className="font-display text-[clamp(2.5rem,12vw,3.25rem)] font-black leading-none tabular-nums text-gold"
               style={{ textShadow: '0 0 24px rgba(255,201,74,0.35)' }}>
               {team.elo}
             </div>

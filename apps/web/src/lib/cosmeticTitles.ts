@@ -9,7 +9,14 @@ const COSMETIC_TITLES: Record<string, string> = {
   nithomas: 'Godfather',
 };
 
-/** Titre à afficher : override cosmétique prioritaire, sinon le titre réel. */
-export function displayTitle(login: string, title?: string | null): string | null {
-  return COSMETIC_TITLES[login] ?? title ?? null;
+/**
+ * Titre à afficher : override cosmétique prioritaire, sinon le titre réel, sinon
+ * le `fallback` (ex. titre par défaut « sans éclat. » quand aucun n'est équipé).
+ */
+export function displayTitle(
+  login: string,
+  title?: string | null,
+  fallback?: string | null,
+): string | null {
+  return COSMETIC_TITLES[login] ?? title ?? fallback ?? null;
 }

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, type LucideIcon } from 'lucide-react';
 import { api, type AppNotification } from '../lib/api';
 import { useServerEvents } from '../hooks/useServerEvents';
+import { gameColor, GAME_EMOJI } from '../lib/gameVisuals';
+import { setGame } from '../lib/gameMode';
 
 const POLL_MS = 30_000;
 
@@ -98,6 +100,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
       setUnread((u) => Math.max(0, u - 1));
       await api.markNotificationsRead([n.id]).catch(() => {});
     }
+    // Bascule sur le mode du jeu d'origine avant de naviguer, pour atterrir sur
+    // la page DANS la bonne discipline (ex. un défi smash ouvre Défis en mode smash).
+    if (n.game) setGame(n.game);
     if (n.link) navigate(n.link);
   };
 
@@ -143,20 +148,30 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
               items.map((n) => {
                 const Icon = ICON_BY_TYPE[n.type] ?? Bell;
                 const color = COLOR_BY_TYPE[n.type] ?? 'text-muted-2';
+                // Fond teinté + barre + emoji de la discipline d'origine (le cas
+                // échéant). Le `opacity-60` du parent atténue aussi le fond si lu.
+                const emoji = n.game ? GAME_EMOJI[n.game] : null;
+                const tint = n.game
+                  ? { backgroundColor: `${gameColor(n.game)}14`, borderLeft: `3px solid ${gameColor(n.game)}` }
+                  : undefined;
                 return (
                   <button
                     key={n.id}
                     type="button"
                     onClick={() => onClickItem(n)}
+                    style={tint}
                     className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-b border-border/30 last:border-0 transition-colors hover:bg-bg-2/60 ${
-                      n.read ? 'opacity-60' : 'bg-gold/[0.04]'
+                      n.read ? 'opacity-60' : !n.game ? 'bg-gold/[0.04]' : ''
                     }`}
                   >
                     <span className={`mt-0.5 flex-shrink-0 ${color}`}>
                       <Icon className="w-4 h-4" strokeWidth={2.4} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-bold text-text-strong truncate">{n.title}</span>
+                      <span className="block text-xs font-bold text-text-strong truncate">
+                        {emoji && <span className="mr-1">{emoji}</span>}
+                        {n.title}
+                      </span>
                       {n.body && <span className="block text-[11px] text-muted-2 leading-snug">{n.body}</span>}
                       <span className="block text-[10px] text-muted mt-0.5 font-mono">{ago(n.createdAt)}</span>
                     </span>

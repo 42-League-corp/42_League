@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion';
-import { TrendingDown, TrendingUp } from 'lucide-react';
+import { TrendingDown, TrendingUp, Users } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
-import type { Game, PlayedMatch } from '../../../lib/api';
+import type { Game, PlayedMatch, PlayedFfa } from '../../../lib/api';
 import { fmtDatePair } from '../../../lib/format';
 import { useT, type Lang } from '../../../lib/i18n';
-import type { MyMatchStat } from './useHistoriqueLogic';
+import type { MyMatchStat, MyFfaStat } from './useHistoriqueLogic';
 
 // ─── Pastille de discipline ──────────────────────────────────────────────────
 const GAME_BADGE: Record<string, string> = {
@@ -213,6 +213,140 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
       </div>
 
       <Avatar login={loserLogin} imageUrl={imgByLogin.get(loserLogin) ?? null} size="sm" />
+    </motion.div>
+  );
+}
+
+// ─── FFA Smash : carte d'historique ───────────────────────────────────────────
+
+/** Petite pastille de delta ELO pour le FFA (toujours compté pour l'ELO). */
+function FfaDeltaPill({ delta }: { delta: number }) {
+  const neutral = delta === 0;
+  const positive = delta > 0;
+  return (
+    <span
+      className={`font-mono font-extrabold tabular-nums text-[10px] ${
+        neutral ? 'text-muted-2' : positive ? 'text-accent' : 'text-red'
+      }`}
+    >
+      {positive ? '+' : ''}
+      {delta}
+    </span>
+  );
+}
+
+interface GlobalFfaCardProps {
+  ffa: PlayedFfa;
+  lang: Lang;
+  imgByLogin: Map<string, string | null>;
+  delay?: number;
+}
+
+/**
+ * Carte FFA « game de la league » (historique global) — affiche TOUS les
+ * participants (« @a vs @b vs @c vs @d »), classés par rang, avec leur delta ELO.
+ * Le 1er est mis en avant (couronne).
+ */
+export function GlobalFfaCard({ ffa, lang, imgByLogin, delay = 0 }: GlobalFfaCardProps) {
+  const t = useT();
+  const ordered = [...ffa.participants].sort((a, b) => a.position - b.position);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      className="relative card-hud rounded-2xl p-3.5 hover-glow border border-red/25"
+    >
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-red/15">
+          <Users className="w-4 h-4 text-red" strokeWidth={2.5} />
+        </div>
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-red">
+          {t('ffa.label')}
+        </span>
+        <span className="text-[10px] text-muted-2 font-mono">· {ordered.length} {t('ffa.playersSuffix')}</span>
+        <span className="ml-auto text-[10px] text-muted font-medium whitespace-nowrap">
+          {fmtDatePair(ffa.playedAt, lang).short}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {ordered.map((p, i) => (
+          <span key={p.login} className="inline-flex items-center gap-1">
+            {i > 0 && <span className="text-muted-2 text-[10px] mr-1">vs</span>}
+            <span className={`font-mono text-[10px] font-extrabold ${p.position === 1 ? 'text-gold' : 'text-muted-2'}`}>
+              {p.position === 1 ? '🏆' : `${p.position}.`}
+            </span>
+            <Avatar login={p.login} imageUrl={imgByLogin.get(p.login) ?? null} size="xs" />
+            <PlayerLink login={p.login} className={`text-xs font-bold truncate max-w-[88px] ${p.position === 1 ? 'text-gold' : 'text-text-strong'}`}>
+              {p.login}
+            </PlayerLink>
+            <FfaDeltaPill delta={p.delta} />
+          </span>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+interface MyFfaCardProps {
+  stat: MyFfaStat;
+  lang: Lang;
+  imgByLogin: Map<string, string | null>;
+  delay?: number;
+}
+
+/** Carte FFA « mon historique » — met en avant MON rang dans le FFA + delta. */
+export function MyFfaCard({ stat, lang, imgByLogin, delay = 0 }: MyFfaCardProps) {
+  const t = useT();
+  const { ffa, myPosition, myDelta, total } = stat;
+  const won = myPosition === 1;
+  const others = [...ffa.participants]
+    .filter((p) => p.position !== myPosition)
+    .sort((a, b) => a.position - b.position);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      className={`relative card-hud rounded-2xl p-3.5 flex items-center gap-3 hover-glow border ${
+        won ? 'border-accent/25' : 'border-red/20'
+      }`}
+    >
+      {/* Badge rang */}
+      <div
+        className={`flex-shrink-0 w-9 h-9 rounded-xl flex flex-col items-center justify-center font-display font-black leading-none ${
+          won ? 'bg-gold/15 text-gold' : 'bg-bg-2/60 text-text-strong'
+        }`}
+      >
+        <span className="text-sm">{won ? '🏆' : `#${myPosition}`}</span>
+        <span className="text-[8px] text-muted-2 font-mono">/{total}</span>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-red">{t('ffa.label')}</span>
+          <span className="text-[10px] text-muted">vs</span>
+          {others.slice(0, 4).map((p) => (
+            <span key={p.login} className="inline-flex items-center gap-0.5">
+              <Avatar login={p.login} imageUrl={imgByLogin.get(p.login) ?? null} size="xs" />
+              <span className="text-[10px] text-muted-2 truncate max-w-[64px]">{p.login}</span>
+            </span>
+          ))}
+          {others.length > 4 && <span className="text-[10px] text-muted-2">+{others.length - 4}</span>}
+        </div>
+        <div className="text-[10px] text-muted font-medium mt-1">
+          {fmtDatePair(ffa.playedAt, lang).short}
+          <span className="mx-1 opacity-40">·</span>
+          <span className="text-muted-2">{fmtDatePair(ffa.playedAt, lang).long}</span>
+        </div>
+      </div>
+
+      <div className="flex-shrink-0">
+        <EloDeltaPill delta={myDelta} counted={ffa.countedForElo} />
+      </div>
     </motion.div>
   );
 }

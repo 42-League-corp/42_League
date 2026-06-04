@@ -1,22 +1,41 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X, type LucideIcon } from 'lucide-react';
 import { badgeDef } from '../lib/badges';
+import { badgeIcon } from '../lib/badgeIcons';
+import type { EquippedBadge } from '../lib/api';
+
+/** Def de rendu d'un badge (catalogue OU badge acheté en boutique). */
+export interface BadgeRenderDef {
+  label: string;
+  color: string;
+  icon: LucideIcon;
+  description?: string;
+}
+
+/** Convertit un badge acheté (icône = nom string) en def de rendu. */
+function defFromEquipped(b: EquippedBadge): BadgeRenderDef {
+  return { label: b.label, color: b.color ?? '#a89880', icon: badgeIcon(b.icon) };
+}
 
 /**
  * Pastille de badge — façon badge ELO mais teintée selon le badge, avec un léger
  * dégradé animé (sheen) qui balaie en continu pour donner de la vie.
+ *
+ * `def` (badge acheté, inline) prime sur `code` (badge du catalogue).
  */
 export function BadgeChip({
   code,
+  def,
   size = 'sm',
   onClick,
 }: {
-  code: string;
+  code?: string;
+  def?: BadgeRenderDef;
   size?: 'xs' | 'sm' | 'md';
   onClick?: () => void;
 }) {
-  const b = badgeDef(code);
+  const b = def ?? badgeDef(code ?? '');
   const Icon = b.icon;
   const sizeCls =
     size === 'xs'
@@ -51,22 +70,46 @@ export function BadgeChip({
  * Rangée de badges d'un joueur. Cliquer ouvre une modale listant tous ses badges
  * avec leur description (« clique sur le badge pour voir ceux qu'on a »).
  */
-export function BadgesRow({ codes, size = 'sm' }: { codes: string[]; size?: 'xs' | 'sm' | 'md' }) {
+export function BadgesRow({
+  codes,
+  extra,
+  size = 'sm',
+}: {
+  codes: string[];
+  /** Badge(s) acheté(s) & équipé(s) (boutique), rendus avec leur def inline. */
+  extra?: EquippedBadge[];
+  size?: 'xs' | 'sm' | 'md';
+}) {
   const [open, setOpen] = useState(false);
-  if (!codes || codes.length === 0) return null;
+  const extras = extra ?? [];
+  if ((!codes || codes.length === 0) && extras.length === 0) return null;
   return (
     <>
       <div className="flex flex-wrap items-center gap-1.5">
         {codes.map((code) => (
           <BadgeChip key={code} code={code} size={size} onClick={() => setOpen(true)} />
         ))}
+        {extras.map((b) => (
+          <BadgeChip key={`shop-${b.code}`} def={defFromEquipped(b)} size={size} onClick={() => setOpen(true)} />
+        ))}
       </div>
-      <AnimatePresence>{open && <BadgesModal codes={codes} onClose={() => setOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {open && <BadgesModal codes={codes} extra={extras} onClose={() => setOpen(false)} />}
+      </AnimatePresence>
     </>
   );
 }
 
-function BadgesModal({ codes, onClose }: { codes: string[]; onClose: () => void }) {
+function BadgesModal({
+  codes,
+  extra = [],
+  onClose,
+}: {
+  codes: string[];
+  extra?: EquippedBadge[];
+  onClose: () => void;
+}) {
+  const total = codes.length + extra.length;
   return (
     <motion.div
       className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -85,7 +128,7 @@ function BadgesModal({ codes, onClose }: { codes: string[]; onClose: () => void 
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gold/15 bg-bg-2/50">
           <span className="font-gaming text-xs uppercase tracking-[0.16em] text-gold font-extrabold">
-            Badges · {codes.length}
+            Badges · {total}
           </span>
           <button
             onClick={onClose}
@@ -96,11 +139,13 @@ function BadgesModal({ codes, onClose }: { codes: string[]; onClose: () => void 
           </button>
         </div>
         <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
-          {codes.map((code) => {
-            const b = badgeDef(code);
+          {[
+            ...codes.map((code) => ({ key: code, b: badgeDef(code) as BadgeRenderDef })),
+            ...extra.map((e) => ({ key: `shop-${e.code}`, b: defFromEquipped(e) })),
+          ].map(({ key, b }) => {
             const Icon = b.icon;
             return (
-              <div key={code} className="flex items-center gap-3 p-2.5 rounded-xl bg-bg-2/40 border border-border/40">
+              <div key={key} className="flex items-center gap-3 p-2.5 rounded-xl bg-bg-2/40 border border-border/40">
                 <span
                   className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0"
                   style={{ color: b.color, background: `${b.color}1a`, border: `1px solid ${b.color}40` }}
