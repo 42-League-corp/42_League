@@ -5,6 +5,7 @@ import { ViewportSwitch } from './ViewportSwitch';
 import { NotifBanner } from '../components/NotifBanner';
 import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
 import { GameModeSwitch } from '../components/GameModeSwitch';
+import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
 
@@ -32,6 +33,8 @@ export function AppShell({ children }: AppShellProps) {
       <NotifBanner />
       <OpsRevealOverlay />
       <GameModeSwitch />
+      {/* Bouton « Tester en mode user » (staging + admins) — bas-gauche */}
+      <TesterSwitch />
       <GameOnboarding />
       {/* Overlay cinématique de changement d'univers — pointer-events-none */}
       <GameTransitionOverlay />
