@@ -6,6 +6,7 @@ import { ContestModal } from '../../../components/ContestModal';
 import { PlayerLink } from '../../../components/PlayerLink';
 import { api, type PendingMatch } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
+import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
 interface PendingMatchCardProps {
@@ -20,6 +21,7 @@ interface PendingMatchCardProps {
  * du score à la confirmation.
  */
 export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
+  const t = useT();
   const flash = useFlash();
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -40,7 +42,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
         game: match.game,
         bestOf: match.bestOf as 3 | 5 | undefined,
       });
-      flash.show('Match confirmé — ELO mis à jour !');
+      flash.show(t('defis.matchConfirmedM'));
       haptic('success');
       setResolved(true);
       await onDone();
@@ -60,7 +62,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
     setBusy(true);
     try {
       await api.rejectMatch(match.id, reason, message);
-      flash.show('Contestation envoyée.');
+      flash.show(t('defis.contestSent'));
       haptic('warning');
       setResolved(true);
       await onDone();
@@ -94,14 +96,14 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             <PlayerLink login={match.declarerLogin} className="font-bold text-gold">
               {match.declarerLogin}
             </PlayerLink>
-            <span className="text-muted-2">a déclaré :</span>
+            <span className="text-muted-2">{t('defis.declared')}</span>
           </div>
 
           {/* Discipline du match */}
           {match.game && match.game !== 'babyfoot' && (
             <div className="flex justify-center mb-2">
               <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-accent/15 text-accent border border-accent/30">
-                {match.game === 'smash' ? '🎮 Smash' : match.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs'}
+                {match.game === 'smash' ? `🎮 ${t('game.smash')}` : match.game === 'streetfighter' ? `🥊 ${t('game.streetfighter')}` : `♟ ${t('game.chess')}`}
               </span>
             </div>
           )}
@@ -124,9 +126,9 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             </span>
           </div>
           <div className="text-center text-[10px] text-muted uppercase tracking-wider font-bold mb-4">
-            {match.declarerLogin} <span className="opacity-50 mx-1">/</span> toi
+            {match.declarerLogin} <span className="opacity-50 mx-1">/</span> {t('common.toi')}
             <span className="block normal-case tracking-normal text-muted-2 mt-1">
-              Selon {match.declarerLogin}, tu as {iWon ? 'gagné' : 'perdu'}. Confirme si c'est exact.
+              {t('defis.accordingTo')} {match.declarerLogin}{t('defis.accordingToYouHave')} {iWon ? t('defis.won') : t('defis.lost')}. {t('defis.confirmIfExact')}
             </span>
           </div>
 
@@ -138,7 +140,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
               className="py-3 text-sm"
             >
               <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
-              Confirmer
+              {t('defis.confirm')}
             </Button>
             <Button
               size="md"
@@ -151,7 +153,7 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
               className="py-3 text-sm text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
             >
               <X className="w-4 h-4 mr-1.5" strokeWidth={3} />
-              Contester
+              {t('defis.contest')}
             </Button>
           </div>
         </div>

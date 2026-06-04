@@ -1,0 +1,126 @@
+import type { Lang } from '../i18n';
+
+type Dict = Record<string, string>;
+
+/**
+ * Traductions du domaine « leaderboard ». Fusionné dans le dictionnaire global par i18n.tsx.
+ */
+export const dict: Record<Lang, Dict> = {
+  fr: {
+    // Onglets Solo / 2v2
+    'lb.tab.solo': 'Solo',
+    'lb.tab.teams': '2v2',
+    // Badge « moi »
+    'lb.me': 'Toi',
+    // Ops (ciblé par) — {owner} remplacé côté composant
+    'lb.opsOf': 'Ops de',
+    // Sélecteur de saison
+    'lb.season.current': 'En cours',
+    'lb.season.currentLong': 'Saison en cours',
+    // Vue figée d'une saison passée
+    'lb.snapshot.empty': 'Aucun classement archivé pour cette saison.',
+    'lb.snapshot.emptyShort': 'Aucun classement archivé.',
+    'lb.col.eloFinal': 'ELO final',
+    'lb.col.wd': 'V-D',
+    // Série « none »
+    'lb.streak.none': 'none',
+    // Stats mobiles
+    'lb.stat.players': 'Joueurs',
+    'lb.stat.matches': 'Matches',
+    // Recherche
+    'lb.search.placeholder': 'Chercher un joueur…',
+    'lb.search.clear': 'Effacer',
+    'lb.search.noResult': 'Aucun joueur trouvé pour',
+    'lb.search.empty': 'Aucun joueur',
+    // Bascule de vue
+    'lb.view.list': 'Liste',
+    'lb.view.graph': 'Nuage',
+    // Nuage de points — contrôles & légendes
+    'lb.scatter.zoomIn': 'Zoomer',
+    'lb.scatter.zoomOut': 'Dézoomer',
+    'lb.scatter.reset': 'Réinitialiser la vue',
+    'lb.scatter.legendTop': 'ELO ↑  ·  Win % →',
+    'lb.scatter.legendBest': 'Haut-droite = meilleur',
+    'lb.scatter.legendCluster': '×N = amas, tap pour déployer',
+    'lb.scatter.axisY': 'ELO (ordonnée) ↑',
+    'lb.scatter.axisX': 'Taux de victoire % (abscisse) →',
+    'lb.scatter.matches': 'matchs',
+    // Classement équipes
+    'lb.teams.error': 'Impossible de charger le classement équipes.',
+    'lb.teams.emptyTitle': 'Aucune équipe 2v2',
+    'lb.teams.emptyBody1': 'Déclarez votre premier match 2v2',
+    'lb.teams.emptyBody2': 'pour créer un duo.',
+    // Action défier (swipe)
+    'lb.defi': 'Défier',
+  },
+  en: {
+    'lb.tab.solo': 'Solo',
+    'lb.tab.teams': '2v2',
+    'lb.me': 'You',
+    'lb.opsOf': 'Ops by',
+    'lb.season.current': 'Current',
+    'lb.season.currentLong': 'Current season',
+    'lb.snapshot.empty': 'No archived ranking for this season.',
+    'lb.snapshot.emptyShort': 'No archived ranking.',
+    'lb.col.eloFinal': 'Final ELO',
+    'lb.col.wd': 'W-L',
+    'lb.streak.none': 'none',
+    'lb.stat.players': 'Players',
+    'lb.stat.matches': 'Matches',
+    'lb.search.placeholder': 'Search for a player…',
+    'lb.search.clear': 'Clear',
+    'lb.search.noResult': 'No player found for',
+    'lb.search.empty': 'No player',
+    'lb.view.list': 'List',
+    'lb.view.graph': 'Scatter',
+    'lb.scatter.zoomIn': 'Zoom in',
+    'lb.scatter.zoomOut': 'Zoom out',
+    'lb.scatter.reset': 'Reset view',
+    'lb.scatter.legendTop': 'ELO ↑  ·  Win % →',
+    'lb.scatter.legendBest': 'Top-right = best',
+    'lb.scatter.legendCluster': '×N = cluster, tap to expand',
+    'lb.scatter.axisY': 'ELO (y-axis) ↑',
+    'lb.scatter.axisX': 'Win rate % (x-axis) →',
+    'lb.scatter.matches': 'matches',
+    'lb.teams.error': 'Could not load the team leaderboard.',
+    'lb.teams.emptyTitle': 'No 2v2 team',
+    'lb.teams.emptyBody1': 'Report your first 2v2 match',
+    'lb.teams.emptyBody2': 'to create a duo.',
+    'lb.defi': 'Challenge',
+  },
+  es: {
+    'lb.tab.solo': 'Solo',
+    'lb.tab.teams': '2v2',
+    'lb.me': 'Tú',
+    'lb.opsOf': 'Ops de',
+    'lb.season.current': 'Actual',
+    'lb.season.currentLong': 'Temporada actual',
+    'lb.snapshot.empty': 'No hay clasificación archivada para esta temporada.',
+    'lb.snapshot.emptyShort': 'No hay clasificación archivada.',
+    'lb.col.eloFinal': 'ELO final',
+    'lb.col.wd': 'V-D',
+    'lb.streak.none': 'ninguna',
+    'lb.stat.players': 'Jugadores',
+    'lb.stat.matches': 'Partidos',
+    'lb.search.placeholder': 'Buscar un jugador…',
+    'lb.search.clear': 'Borrar',
+    'lb.search.noResult': 'No se encontró ningún jugador para',
+    'lb.search.empty': 'Ningún jugador',
+    'lb.view.list': 'Lista',
+    'lb.view.graph': 'Nube',
+    'lb.scatter.zoomIn': 'Acercar',
+    'lb.scatter.zoomOut': 'Alejar',
+    'lb.scatter.reset': 'Restablecer vista',
+    'lb.scatter.legendTop': 'ELO ↑  ·  Win % →',
+    'lb.scatter.legendBest': 'Arriba a la derecha = mejor',
+    'lb.scatter.legendCluster': '×N = grupo, toca para desplegar',
+    'lb.scatter.axisY': 'ELO (eje Y) ↑',
+    'lb.scatter.axisX': '% de victorias (eje X) →',
+    'lb.scatter.matches': 'partidos',
+    'lb.teams.error': 'No se pudo cargar la clasificación de equipos.',
+    'lb.teams.emptyTitle': 'Sin equipo 2v2',
+    'lb.teams.emptyBody1': 'Declara tu primer partido 2v2',
+    'lb.teams.emptyBody2': 'para crear un dúo.',
+    'lb.defi': 'Desafiar',
+  },
+};

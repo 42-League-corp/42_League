@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { LeaderboardEntry } from '../../../lib/api';
 import { OnlineBadge } from '../../../components/OnlineBadge';
+import { useT } from '../../../lib/i18n';
 
 interface PlayerSearchProps {
   players: LeaderboardEntry[];
@@ -34,6 +35,7 @@ export function PlayerSearch({
   locations,
   variant = 'desktop',
 }: PlayerSearchProps) {
+  const t = useT();
   const isMobileVariant = variant === 'mobile';
   const [query, setQuery] = useState('');
   // Sur mobile, on ouvre la liste des adversaires d'emblée (sans focus ni clavier)
@@ -125,7 +127,7 @@ export function PlayerSearch({
         <span className="text-gold text-sm font-extrabold bg-gold/10 px-2 py-1 rounded-md font-mono tabular-nums border border-gold/20">{selected.elo}</span>
         <button
           type="button"
-          aria-label="Changer d'adversaire"
+          aria-label={t('defis.changeOpponent')}
           onClick={() => {
             onClear();
             requestAnimationFrame(() => inputRef.current?.focus());
@@ -161,8 +163,8 @@ export function PlayerSearch({
             }
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Tape un pseudo…"
-          aria-label="Rechercher un adversaire"
+          placeholder={t('defis.searchPlaceholder')}
+          aria-label={t('defis.searchAria')}
           className="w-full pl-11 pr-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-base font-medium focus:border-gold outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] tap-transparent allow-select"
         />
       </div>
@@ -174,10 +176,10 @@ export function PlayerSearch({
           {showingRecents && (
             <div className="flex items-center justify-between px-4 py-2 bg-bg-2/50 border-b border-gold/15">
               <span className="text-[10px] uppercase tracking-wider text-gold font-extrabold">
-                Tes adversaires
+                {t('defis.yourOpponents')}
               </span>
               <span className="text-[10px] text-muted-2 font-mono">
-                {recentPlayers.length} joué·s
+                {recentPlayers.length} {t('defis.playedSuffix')}
               </span>
             </div>
           )}
@@ -223,10 +225,10 @@ export function PlayerSearch({
                     <div className="text-[11px] text-muted font-medium">
                       {played ? (
                         <span className="text-gold/80">
-                          {count} game{count > 1 ? 's' : ''} jouée{count > 1 ? 's' : ''}
+                          {count} {count > 1 ? t('defis.gamePlural') : t('defis.gameSingular')} {count > 1 ? t('defis.playedFemPlural') : t('defis.playedFemSingular')}
                         </span>
                       ) : (
-                        <span>Jamais joué</span>
+                        <span>{t('defis.neverPlayed')}</span>
                       )}
                     </div>
                   </div>
@@ -243,7 +245,7 @@ export function PlayerSearch({
 
       {open && normalizedQuery.length > 0 && visibleList.length === 0 && (
         <div className="absolute z-50 w-full mt-2 card-hud rounded-xl shadow-2xl px-4 py-4 text-sm text-muted font-medium text-center animate-pop">
-          Aucun joueur trouvé
+          {t('defis.noPlayerFound')}
         </div>
       )}
     </div>

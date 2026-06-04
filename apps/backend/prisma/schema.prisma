@@ -497,3 +497,17 @@ model ShopInventory {
   @@index([userLogin])
   @@map("shop_inventory")
 }
+
+// ─── Matchmaking ───────────────────────────────────────────────────────────────
+//
+// File d'attente du matchmaking : une seule entrée par joueur (clé = login). Le
+// `game` est la discipline pour laquelle le joueur cherche un adversaire. Lors
+// d'un /queue/join, on apparie le joueur avec le plus ancien autre joueur de la
+// même discipline puis on retire les deux entrées.
+model MatchmakingQueue {
+  login    String   @id
+  game     String
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  @@map("matchmaking_queue")
+}

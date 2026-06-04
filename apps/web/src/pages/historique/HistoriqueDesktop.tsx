@@ -149,10 +149,10 @@ function MyStatsStrip({ total, wins, losses, wr, netElo }: MyStatsStripProps) {
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       className="grid grid-cols-3 gap-2 mb-1"
     >
-      <Stat label="Games" value={String(total)} sub={`${wins}${t('lb.abbr.win')} · ${losses}${t('lb.abbr.loss')}`} />
-      <Stat label="Win rate" value={`${wr}%`} accent={wr >= 50 ? 'accent' : 'red'} />
+      <Stat label={t('history.stat.games')} value={String(total)} sub={`${wins}${t('lb.abbr.win')} · ${losses}${t('lb.abbr.loss')}`} />
+      <Stat label={t('history.stat.winRate')} value={`${wr}%`} accent={wr >= 50 ? 'accent' : 'red'} />
       <Stat
-        label="ELO net"
+        label={t('history.stat.eloNet')}
         value={`${netElo > 0 ? '+' : ''}${netElo}`}
         accent={netElo === 0 ? 'muted' : eloUp ? 'accent' : 'red'}
         Icon={netElo !== 0 ? EloIcon : undefined}

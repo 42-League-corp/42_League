@@ -31,3 +31,20 @@ export function tournamentArt(seed: string): TournamentArt {
   const art = PALETTE[hashSeed(seed) % PALETTE.length];
   return art ?? PALETTE[0]!;
 }
+
+/**
+ * Défense en profondeur côté rendu : ne laisse passer une URL d'image que si
+ * elle parse en http(s). Bloque les schémas dangereux (javascript:, data:,
+ * vbscript:, file:…) qui, injectés dans un `<img src>` ou un `url()` CSS,
+ * permettraient une exécution de code. Retourne `undefined` si l'URL est
+ * absente ou non sûre.
+ */
+export function safeImageUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  try {
+    const p = new URL(url).protocol;
+    return p === 'http:' || p === 'https:' ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}

@@ -23,6 +23,12 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
+    <!-- Préchargement des logos d'univers (évite le flash gris↔couleur du GameModeSwitch) -->
+    <link rel="preload" as="image" href="/smash-color.png" />
+    <link rel="preload" as="image" href="/smash-grey.png" />
+    <link rel="preload" as="image" href="/sf-color.png" />
+    <link rel="preload" as="image" href="/sf-grey.png" />
+
     <!-- Fonts (preconnect for speed) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

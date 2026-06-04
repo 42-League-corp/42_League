@@ -92,7 +92,7 @@ export function PlayerPage() {
 
   if (loading) {
     return (
-      <Panel title={login || 'Joueur'} sub={t('profil.subtitle')}>
+      <Panel title={login || t('player.defaultName')} sub={t('profil.subtitle')}>
         <div className="text-center text-muted-2 py-10">{t('common.loading')}</div>
       </Panel>
     );
@@ -153,12 +153,12 @@ export function PlayerPage() {
                 {following ? (
                   <>
                     <UserCheck className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-                    Suivi
+                    {t('player.following')}
                   </>
                 ) : (
                   <>
                     <UserPlus className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-                    Suivre
+                    {t('player.follow')}
                   </>
                 )}
               </Button>
@@ -188,13 +188,13 @@ export function PlayerPage() {
         <div className="mb-6 card-hud rounded-xl p-4 border-gold/20">
           <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
             <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-            Me notifier quand {p.user.login}…
+            {t('player.notify.heading.a')} {p.user.login}{t('player.notify.heading.b')}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <FollowToggle label="Rejoint un tournoi" on={followPrefs.notifyTournament} onChange={(v) => setPref('notifyTournament', v)} />
-            <FollowToggle label="Entre dans le top 3" on={followPrefs.notifyTop3} onChange={(v) => setPref('notifyTop3', v)} />
-            <FollowToggle label="Gagne un trophée" on={followPrefs.notifyTrophy} onChange={(v) => setPref('notifyTrophy', v)} hint="bientôt" />
-            <FollowToggle label="Déclare / perd un OPS" on={followPrefs.notifyOps} onChange={(v) => setPref('notifyOps', v)} />
+            <FollowToggle label={t('player.notify.tournament')} on={followPrefs.notifyTournament} onChange={(v) => setPref('notifyTournament', v)} />
+            <FollowToggle label={t('player.notify.top3')} on={followPrefs.notifyTop3} onChange={(v) => setPref('notifyTop3', v)} />
+            <FollowToggle label={t('player.notify.trophy')} on={followPrefs.notifyTrophy} onChange={(v) => setPref('notifyTrophy', v)} hint={t('player.notify.soon')} />
+            <FollowToggle label={t('player.notify.ops')} on={followPrefs.notifyOps} onChange={(v) => setPref('notifyOps', v)} />
           </div>
         </div>
       )}
@@ -202,13 +202,13 @@ export function PlayerPage() {
       {me?.isAdmin && (
         <div className="mb-4 p-3 bg-bg-2 border border-border rounded flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gold">
-            ★ Admin · Titre
+            {t('player.admin.title')}
           </span>
           <input
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             maxLength={40}
-            placeholder="ex. Le Maître"
+            placeholder={t('player.admin.placeholder')}
             className="flex-1 min-w-[160px] px-3 py-1.5 bg-bg-0 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors"
           />
           <Button
@@ -217,7 +217,7 @@ export function PlayerPage() {
               try {
                 const tval = titleDraft.trim();
                 await api.setUserTitle(p.user.login, tval || null);
-                flash.show(tval ? `Titre défini : « ${tval} »` : 'Titre retiré');
+                flash.show(tval ? `${t('player.admin.titleSet')} « ${tval} »` : t('player.admin.titleRemoved'));
                 await load();
                 await refresh();
               } catch (err) {
@@ -225,7 +225,7 @@ export function PlayerPage() {
               }
             }}
           >
-            Enregistrer
+            {t('player.admin.save')}
           </Button>
           {p.user.title && (
             <Button
@@ -234,7 +234,7 @@ export function PlayerPage() {
               onClick={async () => {
                 try {
                   await api.setUserTitle(p.user.login, null);
-                  flash.show('Titre retiré');
+                  flash.show(t('player.admin.titleRemoved'));
                   await load();
                   await refresh();
                 } catch (err) {
@@ -242,7 +242,7 @@ export function PlayerPage() {
                 }
               }}
             >
-              Effacer
+              {t('player.admin.clear')}
             </Button>
           )}
         </div>
@@ -421,13 +421,15 @@ function DeclareOpsBox({
   confirm,
   flash,
 }: DeclareOpsBoxProps) {
+  const t = useT();
+  const { locale } = useI18n();
   if (isMe) return null;
 
   // Already this player's ops owner
   if (opsMe?.current && opsMe.current.targetLogin === playerLogin) {
     return (
       <div className="p-3 border border-red/50 bg-red/[0.06] rounded text-red text-sm font-semibold">
-        ☠ {playerLogin} est ton ops · {fmtCountdown(opsMe.current.expiresAt)} restants
+        ☠ {playerLogin} {t('ops.isYourOps.a')} {fmtCountdown(opsMe.current.expiresAt)} {t('ops.isYourOps.b')}
       </div>
     );
   }
@@ -435,23 +437,33 @@ function DeclareOpsBox({
   const reasons: string[] = [];
   if (opsMe?.current) {
     reasons.push(
-      `Tu as déjà un ops actif (${opsMe.current.targetLogin}) jusqu'au ${new Date(opsMe.current.expiresAt).toLocaleDateString('fr-FR')}.`,
+      t('ops.alreadyActive')
+        .replace('{target}', opsMe.current.targetLogin)
+        .replace('{date}', new Date(opsMe.current.expiresAt).toLocaleDateString(locale)),
     );
   } else if (opsMe?.canDeclareAt) {
-    reasons.push(`Cooldown actif · prochain ops dispo dans ${fmtCountdown(opsMe.canDeclareAt)}.`);
+    reasons.push(t('ops.cooldown').replace('{time}', fmtCountdown(opsMe.canDeclareAt)));
   }
   if (opsForPlayer?.targetedBy && opsForPlayer.targetedBy.ownerLogin !== undefined) {
-    reasons.push(`${playerLogin} est déjà l'ops de ${opsForPlayer.targetedBy.ownerLogin}.`);
+    reasons.push(
+      t('ops.targetTaken')
+        .replace('{player}', playerLogin)
+        .replace('{owner}', opsForPlayer.targetedBy.ownerLogin),
+    );
   }
   if (opsForPlayer?.owns) {
-    reasons.push(`${playerLogin} a actuellement ${opsForPlayer.owns.targetLogin} comme ops.`);
+    reasons.push(
+      t('ops.playerOwns')
+        .replace('{player}', playerLogin)
+        .replace('{target}', opsForPlayer.owns.targetLogin),
+    );
   }
 
   if (reasons.length > 0) {
     return (
       <div className="p-3 border border-border bg-bg-2/60 rounded text-sm text-muted-2 space-y-1.5">
         <div className="text-red font-extrabold text-[10px] uppercase tracking-wider">
-          ☠ OPS — indisponible
+          {t('ops.unavailable')}
         </div>
         {reasons.map((r, i) => (
           <div key={i}>{r}</div>
@@ -467,12 +479,12 @@ function DeclareOpsBox({
       </div>
       <div className="text-sm text-text mb-3 leading-relaxed space-y-1.5">
         <p>
-          Déclarer {playerLogin} comme ton ops ouvre une <span className="font-semibold">traque de 24h</span>.
+          {t('ops.declare.intro.a')} {playerLogin} {t('ops.declare.intro.b')} <span className="font-semibold">{t('ops.declare.hunt24')}</span>.
         </p>
         <ul className="space-y-1 pl-3 border-l border-red/30 text-muted-2 text-[13px]">
-          <li>Il ne pourra pas refuser tes <span className="text-text font-semibold">3 prochains défis</span>.</li>
-          <li>S'il en refuse un, il perd <span className="text-red font-semibold">3× l'ELO d'une défaite</span>.</li>
-          <li>Un seul ops à la fois · cooldown d'1 semaine après.</li>
+          <li>{t('ops.declare.rule1.a')} <span className="text-text font-semibold">{t('ops.declare.rule1.b')}</span>.</li>
+          <li>{t('ops.declare.rule2.a')} <span className="text-red font-semibold">{t('ops.declare.rule2.b')}</span>.</li>
+          <li>{t('ops.declare.rule3')}</li>
         </ul>
       </div>
       <Button
@@ -480,20 +492,20 @@ function DeclareOpsBox({
         size="sm"
         onClick={async () => {
           const ok = await confirm({
-            title: `Déclarer ${playerLogin} comme ton ops ?`,
-            message: `Tu ouvres une traque de 24h sur ${playerLogin}. Il ne pourra pas refuser tes 3 prochains défis — sous peine de perdre 3× l'ELO d'une défaite. Action unilatérale, pas d'acceptation requise. Cooldown d'1 semaine ensuite.`,
+            title: t('ops.declare.confirm.title').replace('{player}', playerLogin),
+            message: t('ops.declare.confirm.msg').replace('{player}', playerLogin),
           });
           if (!ok) return;
           try {
             await api.declareOps(playerLogin);
-            flash.show(`☠ ${playerLogin} est ton ops`);
+            flash.show(t('ops.declared').replace('{player}', playerLogin));
             await onDeclared();
           } catch (err) {
             flash.show(err instanceof Error ? err.message : String(err), 'error');
           }
         }}
       >
-        ☠ Déclarer comme mon ops
+        {t('ops.declare.btn')}
       </Button>
     </div>
   );

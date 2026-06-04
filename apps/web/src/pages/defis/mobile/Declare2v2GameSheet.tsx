@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { Declare2v2GameFlow } from '../shared/Declare2v2GameFlow';
 import { TeamNameModal } from '../../../components/TeamNameModal';
+import { useT } from '../../../lib/i18n';
 import type { LeaderboardEntry, Declare2v2Response } from '../../../lib/api';
 
 interface Declare2v2GameSheetProps {
@@ -33,6 +34,7 @@ export function Declare2v2GameSheet({
   locations,
   onDone,
 }: Declare2v2GameSheetProps) {
+  const t = useT();
   const [teamModal, setTeamModal] = useState<{
     teamId: string;
     player1Login: string;
@@ -59,7 +61,7 @@ export function Declare2v2GameSheet({
         onClose={onClose}
         title={
           <div className="flex items-baseline gap-2">
-            <span className="gradient-text-brand">Déclarer une game</span>
+            <span className="gradient-text-brand">{t('defis.cta.declare')}</span>
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-red/80 border border-red/30 px-2 py-0.5 rounded-full">
               2 vs 2
             </span>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, Crown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
@@ -9,6 +9,7 @@ import { Avatar } from '../../components/Avatar';
 import { OnlineBadge } from '../../components/OnlineBadge';
 import { Tooltip } from '../../components/Tooltip';
 import { WinRateBar } from '../../components/WinRateBar';
+import { RankBadge } from '../../components/RankBadge';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
@@ -65,6 +66,7 @@ type SortDir = 'asc' | 'desc';
  */
 export function LeaderboardDesktop() {
   const t = useT();
+  const navigate = useNavigate();
   const { leaderboard, matches: allMatches, me, allOps, locations } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
@@ -278,8 +280,8 @@ export function LeaderboardDesktop() {
               value={activeTab}
               onChange={setActiveTab}
               choices={[
-                { value: 'personal' as LeaderboardTab, label: 'Solo' },
-                { value: 'teams' as LeaderboardTab, label: '2v2' },
+                { value: 'personal' as LeaderboardTab, label: t('lb.tab.solo') },
+                { value: 'teams' as LeaderboardTab, label: t('lb.tab.teams') },
               ]}
             />
           </div>
@@ -306,16 +308,11 @@ export function LeaderboardDesktop() {
             >
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-          <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} />
+          <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} currentLabel={t('lb.season.current')} />
           <div className="flex items-center gap-2">
-            <Link
-              to="/goat"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold/40 bg-gold/10 text-gold text-[10px] font-extrabold uppercase tracking-[0.12em] hover:bg-gold/20 hover:border-gold/60 transition-all"
-            >
-              <Crown className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
-              G.O.A.T
-            </Link>
-            {!viewingPast && <RankingViewToggle view={viewMode} onChange={setViewMode} />}
+            {!viewingPast && (
+              <RankingViewToggle view={viewMode} onChange={setViewMode} onGoat={() => navigate('/goat')} />
+            )}
           </div>
         </div>
         {viewingPast ? (
@@ -383,13 +380,13 @@ export function LeaderboardDesktop() {
                           </span>
                           {isMe && (
                             <span className="text-[8px] font-extrabold text-[#1a1100] metal-plate-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider ml-1">
-                              Toi
+                              {t('lb.me')}
                             </span>
                           )}
                           {targetedBy && (
                             <span
                               className="text-red ml-1"
-                              title={`Ops de ${targetedBy.ownerLogin}`}
+                              title={`${t('lb.opsOf')} ${targetedBy.ownerLogin}`}
                             >
                               <Skull className="w-3 h-3 inline" strokeWidth={2.5} />
                             </span>
@@ -405,7 +402,10 @@ export function LeaderboardDesktop() {
                         className="px-2 sm:px-3 py-2.5 text-right tabular-nums font-display font-extrabold text-gold"
                         style={{ textShadow: '0 0 10px rgba(255,201,74,0.25)' }}
                       >
-                        {u.elo}
+                        <span className="inline-flex items-center gap-1.5">
+                          <RankBadge elo={u.elo} size="xs" showLabel={false} />
+                          {u.elo}
+                        </span>
                       </td>
                       <td className="px-1 sm:px-3 py-2.5 text-right tabular-nums text-muted-2">
                         {stats.games}
@@ -448,10 +448,12 @@ function SeasonSelect({
   seasons,
   value,
   onChange,
+  currentLabel,
 }: {
   seasons: Season[];
   value: string;
   onChange: (v: string) => void;
+  currentLabel: string;
 }) {
   const past = seasons.filter((s) => !s.isActive);
   if (past.length === 0) return <div />;
@@ -461,7 +463,7 @@ function SeasonSelect({
       onChange={(e) => onChange(e.target.value)}
       className="px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-bold uppercase tracking-wider text-text focus:border-gold outline-none transition-colors"
     >
-      <option value="">En cours</option>
+      <option value="">{currentLabel}</option>
       {past.map((s) => (
         <option key={s.id} value={s.id}>
           {s.name}
@@ -473,8 +475,9 @@ function SeasonSelect({
 
 // ─── Classement figé d'une saison passée ──────────────────────────────────────
 function SnapshotTable({ standings }: { standings: SeasonStanding[] }) {
+  const t = useT();
   if (standings.length === 0) {
-    return <div className="text-center text-muted-2 py-10">Aucun classement archivé pour cette saison.</div>;
+    return <div className="text-center text-muted-2 py-10">{t('lb.snapshot.empty')}</div>;
   }
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -482,9 +485,9 @@ function SnapshotTable({ standings }: { standings: SeasonStanding[] }) {
         <thead>
           <tr className="font-gaming text-[10px] uppercase tracking-[0.14em] text-gold/80 font-extrabold">
             <th className="px-3 py-2 border-b border-gold/20 text-left">#</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-left">Joueur</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-right">ELO final</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-right">V-D</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-left">{t('lb.col.player')}</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-right">{t('lb.col.eloFinal')}</th>
+            <th className="px-3 py-2 border-b border-gold/20 text-right">{t('lb.col.wd')}</th>
           </tr>
         </thead>
         <tbody>
@@ -592,7 +595,7 @@ function WinRateCell({
 function StreakCell({ streak }: { streak: number }) {
   const t = useT();
   if (Math.abs(streak) < 2) {
-    return <span className="text-muted/40 text-xs uppercase tracking-wide">none</span>;
+    return <span className="text-muted/40 text-xs uppercase tracking-wide">{t('lb.streak.none')}</span>;
   }
   if (streak > 0) {
     return (
@@ -619,7 +622,7 @@ function StreakCell({ streak }: { streak: number }) {
 function MaxStreakCell({ value, kind }: { value: number; kind: 'win' | 'loss' }) {
   const t = useT();
   if (value < 2) {
-    return <span className="text-muted/40 text-xs uppercase tracking-wide">none</span>;
+    return <span className="text-muted/40 text-xs uppercase tracking-wide">{t('lb.streak.none')}</span>;
   }
   if (kind === 'win') {
     return (

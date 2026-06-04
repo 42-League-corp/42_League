@@ -9,6 +9,7 @@ import { Button } from '../../../components/Button';
 import { api, type Challenge } from '../../../lib/api';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useFlash } from '../../../hooks/useFlash';
+import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
@@ -53,11 +54,12 @@ interface ChallengeRecordSheetProps {
  * Utilise `challenge.game` (pas le mode global) → interface correcte smash/baby/chess.
  */
 export function ChallengeRecordSheet({ challenge, myLogin, onClose, onDone }: ChallengeRecordSheetProps) {
+  const t = useT();
   return (
     <BottomSheet
       open={challenge !== null}
       onClose={onClose}
-      title={<span className="gradient-text-brand">Saisir le score</span>}
+      title={<span className="gradient-text-brand">{t('defis.enterScoreTitle')}</span>}
       snap={94}
     >
       <div className="px-5 pt-4 pb-4">
@@ -72,6 +74,7 @@ export function ChallengeRecordSheet({ challenge, myLogin, onClose, onDone }: Ch
 function RecordForm({ challenge, myLogin, onClose, onDone }: {
   challenge: Challenge; myLogin: string | undefined; onClose: () => void; onDone: () => Promise<void>;
 }) {
+  const t = useT();
   const { refresh } = useLeagueData();
   const flash = useFlash();
 
@@ -102,7 +105,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
     setBusy(true);
     try {
       if (isSetGame) {
-        if (!charSelf || !charOpp) { flash.show('Choisis les deux personnages', 'error'); setBusy(false); setSending(false); return; }
+        if (!charSelf || !charOpp) { flash.show(t('defis.chooseBothChars'), 'error'); setBusy(false); setSending(false); return; }
         await api.recordChallengeResult(challenge.id, {
           scoreSelf: iWon ? target : loserGames,
           scoreOpponent: iWon ? loserGames : target,
@@ -118,7 +121,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
           scoreOpponent: iWon ? loserScore : WINNING_SCORE,
         });
       }
-      flash.show(`Score envoyé — ${opponent} doit confirmer`);
+      flash.show(`${t('defis.scoreSentPrefix')} ${opponent} ${t('defis.scoreSentMustConfirm')}`);
       haptic('success');
       await refresh();
       await onDone();
@@ -131,8 +134,8 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
 
   const triggerSend = () => { setSending(true); haptic('medium'); window.setTimeout(handleSubmit, 140); };
 
-  const winnerLogin = iWon ? (myLogin ?? 'Moi') : opponent;
-  const loserLogin = iWon ? opponent : (myLogin ?? 'Moi');
+  const winnerLogin = iWon ? (myLogin ?? t('defis.me')) : opponent;
+  const loserLogin = iWon ? opponent : (myLogin ?? t('defis.me'));
 
   return (
     <div className="relative space-y-4">
@@ -153,10 +156,10 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
       >
         {/* Contexte */}
         <div className="text-center text-sm text-muted-2">
-          Match contre <span className="font-extrabold text-text-strong">{opponent}</span>
+          {t('defis.matchAgainst')} <span className="font-extrabold text-text-strong">{opponent}</span>
           {game !== 'babyfoot' && (
             <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-bg-2 border border-border">
-              {game === 'smash' ? 'Smash' : game === 'streetfighter' ? 'Street Fighter' : 'Échecs'}
+              {game === 'smash' ? t('game.smash') : game === 'streetfighter' ? t('game.streetfighter') : t('game.chess')}
             </span>
           )}
         </div>
@@ -164,17 +167,17 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
         {/* Résultat */}
         {iWon === null ? (
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3 text-center">Résultat</label>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3 text-center">{t('defis.result')}</label>
             <div className="grid grid-cols-2 gap-4">
-              <OutcomeButton kind="win" onClick={() => { setIWon(true); haptic('success'); }}>J'ai gagné</OutcomeButton>
-              <OutcomeButton kind="loss" onClick={() => { setIWon(false); haptic('warning'); }}>J'ai perdu</OutcomeButton>
+              <OutcomeButton kind="win" onClick={() => { setIWon(true); haptic('success'); }}>{t('defis.iWon')}</OutcomeButton>
+              <OutcomeButton kind="loss" onClick={() => { setIWon(false); haptic('warning'); }}>{t('defis.iLost')}</OutcomeButton>
             </div>
           </div>
         ) : (
           <button type="button" onClick={() => setIWon(null)}
             className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all ${iWon ? 'border-teal/40 bg-teal/10 text-teal' : 'border-red/40 bg-red/10 text-red'}`}
           >
-            <span className="text-sm font-extrabold">{iWon ? "J'ai gagné" : "J'ai perdu"}</span>
+            <span className="text-sm font-extrabold">{iWon ? t('defis.iWon') : t('defis.iLost')}</span>
             <span className="text-muted-2 text-lg">×</span>
           </button>
         )}
@@ -183,19 +186,19 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
         {iWon !== null && !isSetGame && !isChess && (
           <div className="space-y-4">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold text-center">
-              Score de {iWon ? opponent : (myLogin ?? 'moi')}
+              {t('defis.scoreOf')} {iWon ? opponent : (myLogin ?? t('defis.me'))}
             </label>
             <AbacusSlider value={loserScore} onChange={setLoserScore} min={LOSER_SCORE_MIN} max={LOSER_SCORE_MAX} />
             <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
               <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-              {' a gagné '}
+              {' '}{t('defis.wonScore')}{' '}
               <span className="font-extrabold text-text-strong font-mono tabular-nums">{WINNING_SCORE}</span>
               <span className="text-muted mx-2 opacity-50">/</span>
               <span className={`font-extrabold font-mono tabular-nums ${loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>{loserScore}</span>
-              {' face à '}
+              {' '}{t('defis.against')}{' '}
               <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
             </div>
-            <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">Envoyer le score</Button>
+            <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">{t('defis.sendScore')}</Button>
           </div>
         )}
 
@@ -203,7 +206,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
         {iWon !== null && isSetGame && (
           <div className="space-y-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Format</label>
+              <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.format')}</label>
               <div className="grid grid-cols-2 gap-2">
                 {([3, 5] as const).map((bo) => (
                   <button key={bo} type="button"
@@ -215,7 +218,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-                Games de {iWon ? opponent : (myLogin ?? 'moi')} · gagnant {target}
+                {t('defis.gamesOf')} {iWon ? opponent : (myLogin ?? t('defis.me'))} · {t('defis.winnerTarget')} {target}
               </label>
               <div className="flex gap-2">
                 {Array.from({ length: target }, (_, g) => (
@@ -227,7 +230,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
             </div>
             {isSmash && (
               <div>
-                <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Vies restantes du gagnant</label>
+                <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.winnerStocksShort')}</label>
                 <div className="flex gap-2">
                   {[1, 2, 3].map((s) => (
                     <button key={s} type="button" onClick={() => setWinnerStocks(s)}
@@ -237,16 +240,16 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
                 </div>
               </div>
             )}
-            <CharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
-            <CharPicker label={`Perso de ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+            <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
+            <CharPicker label={`${t('defis.charOf')} ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
             <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
               <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-              {' gagne '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>
+              {' '}{t('defis.winsShort')}{' '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>
               <span className="text-muted mx-1.5 opacity-50">–</span>
               <span className="font-extrabold text-text-strong font-mono tabular-nums">{loserGames}</span>
               {' (Bo'}{bestOf}{')'}
             </div>
-            <Button size="md" loading={busy} disabled={!charSelf || !charOpp} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">Envoyer le score</Button>
+            <Button size="md" loading={busy} disabled={!charSelf || !charOpp} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">{t('defis.sendScore')}</Button>
           </div>
         )}
 
@@ -255,10 +258,10 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
           <div className="space-y-4">
             <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
               <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-              {' a maté '}
+              {' '}{t('defis.checkmated')}{' '}
               <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
             </div>
-            <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">Envoyer le score</Button>
+            <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">{t('defis.sendScore')}</Button>
           </div>
         )}
       </motion.div>

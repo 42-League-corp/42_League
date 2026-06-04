@@ -7,6 +7,15 @@ import {
   type ReactNode,
 } from 'react';
 import { getStoredLang, setStoredLang } from './storage';
+import { dict as aboutDict } from './locales/about';
+import { dict as settingsDict } from './locales/settings';
+import { dict as defisDict } from './locales/defis';
+import { dict as tournoisDict } from './locales/tournois';
+import { dict as miscDict } from './locales/misc';
+import { dict as leaderboardDict } from './locales/leaderboard';
+import { dict as profilDict } from './locales/profil';
+import { dict as pagesDict } from './locales/pages';
+import { dict as histteamDict } from './locales/histteam';
 
 export type Lang = 'fr' | 'en' | 'es';
 
@@ -559,7 +568,25 @@ const es: Dict = {
   'login.how.linkPrivacy': 'Nuestra política de privacidad',
 };
 
-const DICTS: Record<Lang, Dict> = { fr, en, es };
+// Dictionnaires par domaine (page) — fusionnés ici pour que chaque domaine
+// puisse être traduit dans son propre fichier sans toucher au cœur.
+const DOMAIN_DICTS = [
+  aboutDict,
+  settingsDict,
+  defisDict,
+  tournoisDict,
+  miscDict,
+  leaderboardDict,
+  profilDict,
+  pagesDict,
+  histteamDict,
+];
+
+const DICTS: Record<Lang, Dict> = {
+  fr: Object.assign({}, fr, ...DOMAIN_DICTS.map((d) => d.fr)),
+  en: Object.assign({}, en, ...DOMAIN_DICTS.map((d) => d.en)),
+  es: Object.assign({}, es, ...DOMAIN_DICTS.map((d) => d.es)),
+};
 const LOCALES: Record<Lang, string> = { fr: 'fr-FR', en: 'en-GB', es: 'es-ES' };
 
 function readInitialLang(): Lang {
@@ -596,7 +623,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return {
       lang,
       setLang,
-      t: (key) => dict[key] ?? fr[key] ?? key,
+      t: (key) => dict[key] ?? DICTS.fr[key] ?? key,
       locale: LOCALES[lang],
     };
   }, [lang, setLang]);

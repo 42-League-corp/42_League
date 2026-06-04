@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users } from 'lucide-react';
+import { Users, Lock } from 'lucide-react';
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { Button } from '../../../components/Button';
 import { api } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { useT } from '../../../lib/i18n';
 
 type Capacity = 8 | 16;
 type Kind = 'friendly' | 'official';
@@ -28,6 +29,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
   const flash = useFlash();
   const navigate = useNavigate();
   const { me } = useLeagueData();
+  const t = useT();
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
@@ -46,7 +48,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
   const submit = async () => {
     const n = name.trim();
     if (!n) {
-      flash.show('Nom requis', 'error');
+      flash.show(t('tournois.flash.nameRequiredShort'), 'error');
       haptic('error');
       return;
     }
@@ -54,7 +56,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
     try {
       const img = imageUrl.trim();
       const tNew = await api.createTournament({ name: n, capacity, kind, ...(img ? { imageUrl: img } : {}) });
-      flash.show(`Tournoi "${tNew.name}" créé`);
+      flash.show(t('tournois.flash.created').replace('{name}', tNew.name));
       haptic('success');
       await onDone();
       reset();
@@ -77,7 +79,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
       }}
       title={
         <div className="flex items-baseline gap-2">
-          <span className="gradient-text-brand">Créer un tournoi</span>
+          <span className="gradient-text-brand">{t('tournois.create')}</span>
         </div>
       }
       snap={80}
@@ -86,7 +88,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
         {/* Type */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-            Type
+            {t('tournois.field.type')}
           </label>
           <div className="grid grid-cols-2 gap-2">
             <KindButton
@@ -95,25 +97,25 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
                 haptic('selection');
                 setKind('friendly');
               }}
-              label="Amical"
-              hint="Ouvert à tous"
+              label={t('tournois.type.friendly')}
+              hint={t('tournois.sheet.friendly.hint')}
               tone="teal"
             />
             <KindButton
               active={kind === 'official'}
               onClick={() => {
                 if (!isAdmin) {
-                  flash.show('Officiel : réservé aux admins', 'error');
+                  flash.show(t('tournois.official.adminsOnly'), 'error');
                   haptic('warning');
                   return;
                 }
                 haptic('selection');
                 setKind('official');
               }}
-              label="Officiel"
-              hint={isAdmin ? 'Compte au classement' : '🔒 Admin only'}
+              label={t('tournois.type.official')}
+              hint={isAdmin ? t('tournois.sheet.official.hint.admin') : t('tournois.sheet.official.hint.locked')}
               tone="gold"
-              disabled={!isAdmin}
+              sealed={!isAdmin}
             />
           </div>
         </div>
@@ -121,12 +123,12 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
         {/* Nom */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-            Nom du tournoi
+            {t('tournois.field.name')}
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ex. Coupe du Havre"
+            placeholder={t('tournois.createPage.namePlaceholder')}
             autoFocus
             maxLength={60}
             className="w-full px-4 py-3.5 bg-bg-1 border-2 border-border rounded-xl text-base font-medium focus:border-teal outline-none text-text-strong placeholder:text-muted transition-all shadow-sm focus:shadow-md tap-transparent allow-select"
@@ -136,7 +138,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
         {/* Image de couverture (optionnel) */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-            Image de couverture <span className="text-muted-2 normal-case">(URL, optionnel)</span>
+            {t('tournois.sheet.cover')} <span className="text-muted-2 normal-case">{t('tournois.sheet.cover.optional')}</span>
           </label>
           <input
             value={imageUrl}
@@ -150,7 +152,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
         {/* Capacité */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-            Capacité
+            {t('tournois.sheet.capacity')}
           </label>
           <div className="grid grid-cols-2 gap-2">
             {CAPACITY_CHOICES.map((c) => {
@@ -172,7 +174,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
                 >
                   <Users className="w-5 h-5" strokeWidth={2.5} />
                   <span className="font-mono font-extrabold text-base tabular-nums">{c}</span>
-                  <span className="text-[9px] uppercase tracking-wider font-bold">joueurs</span>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">{t('tournois.mobile.players')}</span>
                 </motion.button>
               );
             })}
@@ -186,11 +188,11 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
           className="w-full py-3.5 text-sm"
           disabled={!name.trim()}
         >
-          Créer le tournoi
+          {t('tournois.modal.submit')}
         </Button>
 
         <p className="text-[10px] text-muted/70 text-center font-medium leading-relaxed pt-1">
-          Tu deviendras automatiquement l'organisateur. Les inscriptions s'ouvriront immédiatement.
+          {t('tournois.sheet.footer')}
         </p>
       </div>
     </BottomSheet>
@@ -203,23 +205,46 @@ interface KindButtonProps {
   label: string;
   hint: string;
   tone: 'teal' | 'gold';
-  disabled?: boolean;
+  /** Verrouillé sous un sceau de cire rouge (non-admin). */
+  sealed?: boolean;
 }
 
-function KindButton({ active, onClick, label, hint, tone, disabled }: KindButtonProps) {
+function KindButton({ active, onClick, label, hint, tone, sealed }: KindButtonProps) {
   const activeStyle =
     tone === 'teal' ? 'border-teal bg-teal/10 text-teal' : 'border-gold bg-gold/10 text-gold';
   return (
     <motion.button
       type="button"
-      whileTap={!disabled ? { scale: 0.97 } : undefined}
+      whileTap={!sealed ? { scale: 0.97 } : undefined}
       onClick={onClick}
+      aria-disabled={sealed || undefined}
       className={`relative flex flex-col gap-0.5 py-3 px-3 rounded-xl border-2 tap-transparent transition-all text-left ${
-        active ? activeStyle : 'border-border bg-bg-2/50 text-muted-2'
-      } ${disabled ? 'opacity-50' : ''}`}
+        sealed
+          ? 'border-red/40 bg-bg-2/50 text-muted-2'
+          : active
+          ? activeStyle
+          : 'border-border bg-bg-2/50 text-muted-2'
+      }`}
     >
-      <span className="text-sm font-extrabold uppercase tracking-wide">{label}</span>
-      <span className="text-[10px] opacity-75 font-medium leading-tight">{hint}</span>
+      <span className={`text-sm font-extrabold uppercase tracking-wide ${sealed ? 'opacity-50' : ''}`}>{label}</span>
+      <span className={`text-[10px] font-medium leading-tight ${sealed ? 'opacity-50' : 'opacity-75'}`}>{hint}</span>
+      {/* Sceau de cire rouge cadenassé — option réservée aux admins */}
+      {sealed && (
+        <motion.span
+          initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
+          animate={{ scale: 1, rotate: -8, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 18 }}
+          className="absolute -top-2 -right-2 flex items-center justify-center w-9 h-9 rounded-full"
+          style={{
+            background: 'radial-gradient(circle at 38% 32%, #d44 0%, #a31818 45%, #7a0e0e 100%)',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,140,140,0.35), inset 0 -3px 6px rgba(0,0,0,0.45)',
+            border: '2px solid rgba(120,8,8,0.9)',
+          }}
+        >
+          <span className="absolute inset-0 rounded-full pointer-events-none" style={{ boxShadow: 'inset 0 0 0 2px rgba(180,30,30,0.55)' }} />
+          <Lock className="relative w-4 h-4 text-[#3a0606]" strokeWidth={2.6} fill="rgba(58,6,6,0.25)" />
+        </motion.span>
+      )}
     </motion.button>
   );
 }

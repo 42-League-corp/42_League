@@ -13,8 +13,10 @@ import { BigActionButton } from './mobile/BigActionButton';
 import { OpponentBubble } from './mobile/OpponentBubble';
 import { PendingMatchCard } from './mobile/PendingMatchCard';
 import { ChallengeMobileCard } from './mobile/ChallengeMobileCard';
+import { MatchmakingButton } from '../../components/MatchmakingButton';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useT } from '../../lib/i18n';
 import type { Challenge } from '../../lib/api';
 
 type Filter = 'all' | 'received' | 'scheduled' | 'sent';
@@ -34,6 +36,7 @@ export function DefisMobile() {
     handleAction,
     cancelDeclaration,
   } = useDefisLogic();
+  const t = useT();
   const { leaderboard, locations } = useLeagueData();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -57,10 +60,10 @@ export function DefisMobile() {
 
   // Filtres dynamiques
   const filterChoices: SegmentChoice<Filter>[] = [
-    { value: 'all', label: 'Tous', badge: incoming.length + accepted.length + outgoing.length },
-    { value: 'received', label: 'Reçus', badge: incoming.length },
-    { value: 'scheduled', label: 'Prévus', badge: accepted.length },
-    { value: 'sent', label: 'Envoyés', badge: outgoing.length },
+    { value: 'all', label: t('defis.tab.all'), badge: incoming.length + accepted.length + outgoing.length },
+    { value: 'received', label: t('defis.tab.received'), badge: incoming.length },
+    { value: 'scheduled', label: t('defis.tab.scheduled'), badge: accepted.length },
+    { value: 'sent', label: t('defis.tab.sent'), badge: outgoing.length },
   ];
 
   const showIncoming = filter === 'all' || filter === 'received';
@@ -75,29 +78,32 @@ export function DefisMobile() {
         {/* Hero player card */}
         <HeroPlayerCard />
 
+        {/* Match aléatoire (matchmaking queue) — CTA proéminent */}
+        <MatchmakingButton />
+
         {/* CTAs — Déclarer 1v1, Déclarer 2v2, Défier */}
         <div className="space-y-2.5">
           <BigActionButton
             Icon={Plus}
             tone="amber"
-            title="Déclarer une game 1 vs 1"
-            subtitle="Game passée · 2 clics"
+            title={t('defis.cta.declare1v1')}
+            subtitle={t('defis.cta.declare1v1.sub')}
             accessory={<Silhouettes2 />}
             onClick={() => setDeclareOpen(true)}
           />
           <BigActionButton
             Icon={Users}
             tone="red"
-            title="Déclarer une game 2 vs 2"
-            subtitle="Babyfoot · Mode équipe"
+            title={t('defis.cta.declare2v2')}
+            subtitle={t('defis.cta.declare2v2.sub')}
             accessory={<Silhouettes4 />}
             onClick={() => setDeclare2v2Open(true)}
           />
           <BigActionButton
             Icon={Swords}
             tone="gold"
-            title="Défier un joueur"
-            subtitle="Programme un duel à venir"
+            title={t('defis.cta.challenge')}
+            subtitle={t('defis.cta.challengeSub')}
             onClick={() => setChallengeOpen(true)}
           />
         </div>
@@ -107,7 +113,7 @@ export function DefisMobile() {
           <section>
             <SectionHeader
               icon={<Zap className="w-3.5 h-3.5 text-gold" strokeWidth={2.5} />}
-              title="À confirmer"
+              title={t('defis.toConfirm')}
               badge={pendingToConfirm.length}
               tone="gold"
             />
@@ -121,7 +127,7 @@ export function DefisMobile() {
 
         {pendingWaiting.length > 0 && (
           <section>
-            <SectionHeader title="En attente de confirmation" />
+            <SectionHeader title={t('defis.waitingConfirm')} />
             <div className="space-y-2">
               {pendingWaiting.map((p) => (
                 <motion.div
@@ -144,7 +150,7 @@ export function DefisMobile() {
 
                   <div className="flex-1 min-w-0">
                     <div className="text-[10px] text-muted-2 uppercase tracking-[0.12em] font-bold">
-                      En attente de
+                      {t('defis.waitingFor')}
                     </div>
                     <div className="font-display font-bold text-text-strong truncate text-sm tracking-wide">
                       {p.opponentLogin}
@@ -164,7 +170,7 @@ export function DefisMobile() {
                   <button
                     type="button"
                     onClick={() => cancelDeclaration(p)}
-                    aria-label="Annuler la déclaration"
+                    aria-label={t('defis.cancelDeclarationAria')}
                     className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 active:scale-95 transition-colors"
                   >
                     <X className="w-4 h-4" strokeWidth={2.5} />
@@ -180,7 +186,7 @@ export function DefisMobile() {
           <section>
             <SectionHeader
               icon={<Users className="w-3.5 h-3.5 text-teal" strokeWidth={2.5} />}
-              title="Adversaires récents"
+              title={t('defis.recentOpponents')}
             />
             <div className="-mx-4 px-4 overflow-x-auto scrollbar-none scroll-smooth-touch">
               <div className="flex gap-3 pb-1 min-w-min">
@@ -200,7 +206,7 @@ export function DefisMobile() {
         {/* Défis — section avec segmented control */}
         {totalChallenges > 0 && (
           <section>
-            <SectionHeader title="Défis" />
+            <SectionHeader title={t('nav.defis')} />
             <div className="mb-3">
               <SegmentedControl<Filter>
                 value={filter}
@@ -260,9 +266,9 @@ export function DefisMobile() {
             <div className="text-center py-10 px-4">
               <div className="text-4xl mb-3 opacity-60"></div>
               <div className="text-sm text-muted-2 font-medium">
-                Aucun défi en cours.<br />
+                {t('defis.noChallenges')}<br />
                 <span className="text-xs text-muted">
-                  Va défier quelqu'un dans le classement.
+                  {t('defis.goChallenge')}
                 </span>
               </div>
             </div>

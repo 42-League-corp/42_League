@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, Swords } from 'lucide-react';
 import { api, type BabyfootTeamEntry } from '../../../lib/api';
+import { useT } from '../../../lib/i18n';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ interface MyTeamsDesktopProps {
  * Se positionne dans le panneau gauche du ProfilDesktop.
  */
 export function MyTeamsDesktop({ myLogin }: MyTeamsDesktopProps) {
+  const t = useT();
   const [teams, setTeams] = useState<BabyfootTeamEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -126,10 +128,10 @@ export function MyTeamsDesktop({ myLogin }: MyTeamsDesktopProps) {
           </div>
           <div className="text-left">
             <div className="text-sm font-extrabold text-text-strong uppercase tracking-wide">
-              Mes Équipes 2v2
+              {t('profil.myTeams')}
             </div>
             <div className="text-[10px] text-muted font-medium">
-              {loading ? '…' : teams.length === 0 ? 'Aucune équipe' : `${teams.length} duo${teams.length > 1 ? 's' : ''} · Babyfoot`}
+              {loading ? '…' : teams.length === 0 ? t('profil.noTeam') : `${teams.length} ${teams.length > 1 ? t('profil.duos') : t('profil.duo')} · ${t('game.babyfoot')}`}
             </div>
           </div>
         </div>
@@ -159,7 +161,7 @@ export function MyTeamsDesktop({ myLogin }: MyTeamsDesktopProps) {
 
               {!loading && teams.length === 0 && (
                 <div className="text-center py-6 text-sm text-muted-2 italic">
-                  Aucune équipe 2v2 — déclare un match en duo pour en créer une !
+                  {t('profil.noTeamHintDesktop')}
                 </div>
               )}
 

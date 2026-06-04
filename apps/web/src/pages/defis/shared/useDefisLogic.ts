@@ -4,6 +4,7 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useFlash } from '../../../hooks/useFlash';
 import { useConfirm } from '../../../hooks/useConfirm';
 import { useOpsStatus } from '../../../hooks/useOpsStatus';
+import { useT } from '../../../lib/i18n';
 
 export interface DefisLogic {
   myLogin: string | undefined;
@@ -28,6 +29,7 @@ export function useDefisLogic(): DefisLogic {
   const { challenges, leaderboard, me, pending, matches, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
+  const t = useT();
   const { hunter, forcedLeftAsTarget } = useOpsStatus();
 
   const myLogin = me?.login;
@@ -93,36 +95,36 @@ export function useDefisLogic(): DefisLogic {
         forcedLeftAsTarget > 0;
       if (isForcedByHunter) {
         return {
-          title: 'Refuser un match forcé ?',
-          message: `${opponent} t'a déclaré comme son ops. Tu ne peux pas refuser ce défi sans sanction.`,
-          warning: `⚠ Pénalité : 3× l'ELO d'une défaite. Il te reste ${forcedLeftAsTarget} match${forcedLeftAsTarget > 1 ? 's' : ''} forcé${forcedLeftAsTarget > 1 ? 's' : ''}.`,
-          confirmLabel: 'Refuser quand même',
-          cancelLabel: 'Garder',
+          title: t('defis.confirm.refuseForced.title'),
+          message: `${opponent} ${t('defis.confirm.refuseForced.declaredYou')}`,
+          warning: `${t('defis.confirm.refuseForced.penaltyPre')} ${forcedLeftAsTarget} ${forcedLeftAsTarget > 1 ? t('defis.confirm.refuseForced.matchPlural') : t('defis.confirm.refuseForced.matchSingular')}`,
+          confirmLabel: t('defis.confirm.refuseAnyway'),
+          cancelLabel: t('defis.confirm.keep'),
           danger: true,
         } as const;
       }
 
       if (wasAccepted) {
         return {
-          title: 'Fuir ce match ?',
-          message: `Le match contre ${opponent} était accepté par les deux. Si tu annules maintenant, c'est considéré comme une fuite.`,
-          warning: '⚠ Pénalité : -10 ELO + 1 fuite marquée sur ton profil.',
-          confirmLabel: 'Confirmer la fuite',
-          cancelLabel: 'Garder',
+          title: t('defis.confirm.flee.title'),
+          message: `${t('defis.confirm.flee.messagePre')} ${opponent} ${t('defis.confirm.flee.messagePost')}`,
+          warning: t('defis.confirm.flee.warning'),
+          confirmLabel: t('defis.confirm.flee.confirm'),
+          cancelLabel: t('defis.confirm.keep'),
           danger: true,
         } as const;
       }
       return {
-        title: iAmChallenger ? 'Annuler ce défi ?' : 'Refuser ce défi ?',
+        title: iAmChallenger ? t('defis.confirm.cancelChallenge.title') : t('defis.confirm.refuseChallenge.title'),
         message: iAmChallenger
-          ? `Annuler ton défi envoyé à ${opponent} ?`
-          : `Refuser le défi de ${opponent} ?`,
-        confirmLabel: iAmChallenger ? 'Annuler' : 'Refuser',
-        cancelLabel: 'Garder',
+          ? `${t('defis.confirm.cancelChallenge.message')} ${opponent} ?`
+          : `${t('defis.confirm.refuseChallenge.message')} ${opponent} ?`,
+        confirmLabel: iAmChallenger ? t('defis.confirm.cancel') : t('defis.confirm.refuse'),
+        cancelLabel: t('defis.confirm.keep'),
         danger: true,
       } as const;
     },
-    [myLogin, hunter, forcedLeftAsTarget],
+    [myLogin, hunter, forcedLeftAsTarget, t],
   );
 
   const handleAction = useCallback(
@@ -136,13 +138,13 @@ export function useDefisLogic(): DefisLogic {
       try {
         if (action === 'accept') {
           await api.acceptChallenge(id);
-          flash.show('Défi accepté');
+          flash.show(t('defis.toast.challengeAccepted'));
         } else {
           const res = await api.declineChallenge(id);
           if (res.isOps && res.eloPenalty > 0) {
-            flash.show(`Match forcé refusé · −${res.eloPenalty} ELO ☠`, 'error');
+            flash.show(`${t('defis.toast.forcedRefusedPre')}${res.eloPenalty} ${t('defis.toast.forcedRefusedPost')}`, 'error');
           } else {
-            flash.show('Défi clos');
+            flash.show(t('defis.toast.challengeClosed'));
           }
         }
         await refresh();
@@ -150,28 +152,28 @@ export function useDefisLogic(): DefisLogic {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
       }
     },
-    [challenges, confirm, declinePrompt, flash, refresh],
+    [challenges, confirm, declinePrompt, flash, refresh, t],
   );
 
   const cancelDeclaration = useCallback(
     async (match: PendingMatch) => {
       const ok = await confirm({
-        title: 'Annuler ta déclaration ?',
-        message: `Le match que tu as déclaré contre ${match.opponentLogin} (${match.scoreDeclarer}–${match.scoreOpponent}) sera retiré. Tu pourras le redéclarer plus tard.`,
-        confirmLabel: 'Annuler la déclaration',
-        cancelLabel: 'Garder',
+        title: t('defis.confirm.cancelDeclaration.title'),
+        message: `${t('defis.confirm.cancelDeclaration.messagePre')} ${match.opponentLogin} (${match.scoreDeclarer}–${match.scoreOpponent}) ${t('defis.confirm.cancelDeclaration.messagePost')}`,
+        confirmLabel: t('defis.confirm.cancelDeclaration.confirm'),
+        cancelLabel: t('defis.confirm.keep'),
         danger: true,
       });
       if (!ok) return;
       try {
         await api.cancelMatch(match.id);
-        flash.show('Déclaration annulée');
+        flash.show(t('defis.toast.declarationCancelled'));
         await refresh();
       } catch (err) {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
       }
     },
-    [confirm, flash, refresh],
+    [confirm, flash, refresh, t],
   );
 
   return {

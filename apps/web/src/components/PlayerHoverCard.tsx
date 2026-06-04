@@ -58,16 +58,23 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
       }}
       className="z-[120] rounded-xl p-3.5 border border-gold/25 shadow-2xl pointer-events-none animate-pop"
     >
+      {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
+      {entry?.title && (
+        <div className="mb-2.5 flex justify-center">
+          <span className="inline-flex items-center gap-1 max-w-full text-gold italic text-xs font-bold truncate">
+            <span className="text-gold/70 leading-none">❝</span>
+            <span className="truncate">{entry.title}</span>
+            <span className="text-gold/70 leading-none">❞</span>
+          </span>
+        </div>
+      )}
+
       {/* En-tête : avatar + identité */}
       <div className="flex items-center gap-2.5">
         <Avatar login={login} imageUrl={entry?.imageUrl ?? null} size="md" className="ring-1 ring-gold/30" />
         <div className="min-w-0">
           <div className="font-extrabold text-text-strong text-sm truncate">{name}</div>
-          {entry?.title ? (
-            <div className="text-[10px] text-gold italic truncate">« {entry.title} »</div>
-          ) : (
-            <div className="text-[10px] text-muted-2 truncate">@{login}</div>
-          )}
+          <div className="text-[10px] text-muted-2 truncate">@{login}</div>
         </div>
       </div>
 

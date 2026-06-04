@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Crown } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { RankingScopeToggle } from './RankingScopeToggle';
@@ -9,15 +9,19 @@ import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
 import { PlayerLink } from '../../components/PlayerLink';
+import { RankBadge } from '../../components/RankBadge';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { TeamLeaderboard } from './TeamLeaderboard';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
+import { useT } from '../../lib/i18n';
 
 type LeaderboardTab = 'personal' | 'teams';
 
 export function LeaderboardMobile() {
+  const t = useT();
+  const navigate = useNavigate();
   const { leaderboard, matches: allMatches, me, allOps, locations, refresh } = useLeagueData();
   const { game } = useGameMode();
   const matches = useMemo(
@@ -37,8 +41,8 @@ export function LeaderboardMobile() {
   }, [game]);
 
   const tabChoices = [
-    { value: 'personal' as LeaderboardTab, label: 'Solo' },
-    ...(showTeamsTab ? [{ value: 'teams' as LeaderboardTab, label: '2v2' }] : []),
+    { value: 'personal' as LeaderboardTab, label: t('lb.tab.solo') },
+    ...(showTeamsTab ? [{ value: 'teams' as LeaderboardTab, label: t('lb.tab.teams') }] : []),
   ];
 
   // Saison affichée : '' = en cours (live), sinon snapshot d'une saison passée.
@@ -175,7 +179,7 @@ export function LeaderboardMobile() {
               onChange={(e) => setSeasonId(e.target.value)}
               className="px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-bold uppercase tracking-wider text-text focus:border-gold outline-none"
             >
-              <option value="">Saison en cours</option>
+              <option value="">{t('lb.season.currentLong')}</option>
               {pastSeasons.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -188,7 +192,7 @@ export function LeaderboardMobile() {
         {viewingPast ? (
           <div className="space-y-1.5">
             {(standings ?? []).length === 0 ? (
-              <div className="text-center text-muted-2 py-10 text-sm">Aucun classement archivé.</div>
+              <div className="text-center text-muted-2 py-10 text-sm">{t('lb.snapshot.emptyShort')}</div>
             ) : (
               (standings ?? []).map((s) => (
                 <div
@@ -201,7 +205,10 @@ export function LeaderboardMobile() {
                   <PlayerLink login={s.login} className="flex-1 min-w-0">
                     <span className="font-semibold text-text-strong truncate">{s.login}</span>
                   </PlayerLink>
-                  <span className="font-display font-extrabold text-gold tabular-nums text-sm">{s.elo}</span>
+                  <span className="inline-flex items-center gap-1 font-display font-extrabold text-gold tabular-nums text-sm">
+                    <RankBadge elo={s.elo} size="xs" showLabel={false} />
+                    {s.elo}
+                  </span>
                   <span className="text-[11px] text-muted-2 font-mono tabular-nums w-12 text-right">
                     {s.wins}-{s.losses}
                   </span>
@@ -221,14 +228,7 @@ export function LeaderboardMobile() {
 
         {/* Bascule liste / nuage + accès G.O.A.T (en dessous du podium) */}
         <div className="flex items-center justify-center gap-2">
-          <RankingViewToggle view={viewMode} onChange={setViewMode} />
-          <Link
-            to="/goat"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold/40 bg-gold/10 text-gold text-[10px] font-extrabold uppercase tracking-[0.12em]"
-          >
-            <Crown className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
-            G.O.A.T
-          </Link>
+          <RankingViewToggle view={viewMode} onChange={setViewMode} onGoat={() => navigate('/goat')} />
         </div>
 
         {viewMode === 'graph' ? (
@@ -250,13 +250,13 @@ export function LeaderboardMobile() {
           transition={{ delay: 0.3 }}
           className="flex items-center justify-around py-2 px-3 rounded-2xl card-hud"
         >
-          <Stat label="Joueurs" value={leaderboard.length} />
+          <Stat label={t('lb.stat.players')} value={leaderboard.length} />
           <div className="w-px h-8 bg-border" />
-          <Stat label="Matches" value={matches.length} />
+          <Stat label={t('lb.stat.matches')} value={matches.length} />
           {myRank && (
             <>
               <div className="w-px h-8 bg-border" />
-              <Stat label="Toi" value={`#${myRank}`} tone="teal" />
+              <Stat label={t('lb.me')} value={`#${myRank}`} tone="teal" />
             </>
           )}
         </motion.div>
@@ -267,13 +267,13 @@ export function LeaderboardMobile() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Chercher un joueur…"
+            placeholder={t('lb.search.placeholder')}
             className="w-full pl-11 pr-10 py-3 bg-bg-1 border border-border rounded-xl text-sm font-medium focus:border-gold focus:shadow-[0_0_16px_rgba(255,201,74,0.18)] outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
           />
           {query && (
             <button
               type="button"
-              aria-label="Effacer"
+              aria-label={t('lb.search.clear')}
               onClick={() => setQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-red hover:bg-red/10 tap-transparent"
             >
@@ -285,7 +285,7 @@ export function LeaderboardMobile() {
         {/* Liste des joueurs */}
         {rest.length === 0 ? (
           <div className="text-center py-10 text-sm text-muted-2">
-            {query ? `Aucun joueur trouvé pour "${query}"` : 'Aucun joueur'}
+            {query ? `${t('lb.search.noResult')} "${query}"` : t('lb.search.empty')}
           </div>
         ) : (
           <StaggerList className="space-y-2" stagger={0.03}>

@@ -6,7 +6,7 @@ import { Button } from '../../../components/Button';
 import { PlayerLink } from '../../../components/PlayerLink';
 import type { Challenge } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
-import { useI18n } from '../../../lib/i18n';
+import { useI18n, useT } from '../../../lib/i18n';
 
 type Kind = 'incoming' | 'outgoing' | 'accepted';
 
@@ -19,10 +19,10 @@ interface ChallengeMobileCardProps {
   onDecline: () => void;
 }
 
-const KIND_LABEL: Record<Kind, string> = {
-  incoming: 'Défi reçu',
-  outgoing: 'Défi envoyé',
-  accepted: 'Match prévu',
+const KIND_LABEL_KEY: Record<Kind, string> = {
+  incoming: 'defis.challengeReceived',
+  outgoing: 'defis.challengeSent',
+  accepted: 'defis.matchPlanned',
 };
 
 const KIND_TONE: Record<Kind, { border: string; badge: string; icon: string }> = {
@@ -57,6 +57,7 @@ export function ChallengeMobileCard({
   onDecline,
 }: ChallengeMobileCardProps) {
   const { lang } = useI18n();
+  const t = useT();
   const opponent =
     challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
   const when = fmtRelative(challenge.scheduledAt, lang);
@@ -75,7 +76,7 @@ export function ChallengeMobileCard({
         <div className="flex items-center gap-2 mb-1">
           <Swords className={`w-3 h-3 ${tone.icon}`} strokeWidth={2.5} />
           <span className={`text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded ${tone.badge}`}>
-            {KIND_LABEL[kind]}
+            {t(KIND_LABEL_KEY[kind])}
           </span>
         </div>
         <PlayerLink login={opponent} className="font-display font-bold text-text-strong text-sm">
@@ -90,7 +91,7 @@ export function ChallengeMobileCard({
       {kind === 'incoming' && (
         <div className="flex flex-col gap-1.5 flex-shrink-0">
           <Button size="sm" onClick={onAccept} className="text-[10px] px-3">
-            Accepter
+            {t('defis.accept')}
           </Button>
           <Button
             size="sm"
@@ -98,18 +99,18 @@ export function ChallengeMobileCard({
             onClick={onDecline}
             className="text-[10px] px-3 text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
           >
-            Refuser
+            {t('defis.decline')}
           </Button>
         </div>
       )}
       {kind === 'outgoing' && (
         <Button size="sm" variant="ghost" onClick={onDecline} className="text-[10px]">
-          Annuler
+          {t('defis.cancel')}
         </Button>
       )}
       {kind === 'accepted' && (
         <Button size="sm" onClick={onAccept} className="text-[10px]">
-          Score
+          {t('defis.scoreShort')}
         </Button>
       )}
     </motion.div>
@@ -119,8 +120,8 @@ export function ChallengeMobileCard({
   if (kind === 'incoming') {
     return (
       <SwipeableCard
-        leftAction={{ label: 'Accepter', color: 'teal', onTrigger: onAccept }}
-        rightAction={{ label: 'Refuser', color: 'red', onTrigger: onDecline }}
+        leftAction={{ label: t('defis.accept'), color: 'teal', onTrigger: onAccept }}
+        rightAction={{ label: t('defis.decline'), color: 'red', onTrigger: onDecline }}
       >
         {Inner}
       </SwipeableCard>

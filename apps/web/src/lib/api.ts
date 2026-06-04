@@ -163,6 +163,20 @@ export interface ShopResponse {
   owned: string[];
 }
 
+/** Titre cosmétique possédé par un joueur (dérivé des accomplissements). */
+export interface OwnedTitle {
+  key: string;
+  label: string;
+}
+
+/** Adversaire d'un appariement matchmaking (champs d'affichage). */
+export interface MatchmakingOpponent {
+  login: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  imageUrl: string | null;
+}
+
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
@@ -177,6 +191,8 @@ export interface MeResponse {
   termsVersion?: string;
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Titres que le joueur POSSÈDE (sélecteur de titre, cf. setMyTitle). */
+  ownedTitles?: OwnedTitle[];
   /** Palmarès par saison. */
   palmares?: PalmaresEntry[];
   user: {
@@ -532,6 +548,27 @@ export interface AppNotification {
 
 export const api = {
   me: () => request<MeResponse>('/me'),
+  // Sélection de titre self-service : `null`/'' retire le titre. Le serveur
+  // vérifie que le titre est bien possédé (cf. MeResponse.ownedTitles).
+  setMyTitle: (title: string | null) =>
+    request<{ login: string; title: string | null }>('/me/title', {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    }),
+  // ── Matchmaking ─────────────────────────────────────────────────────────
+  queueJoin: (game: Game) =>
+    request<{ matched: boolean; game?: Game; opponent?: MatchmakingOpponent | null }>(
+      '/queue/join',
+      { method: 'POST', body: JSON.stringify({ game }) },
+    ),
+  queueLeave: () =>
+    request<{ ok: boolean }>('/queue/leave', { method: 'POST', body: JSON.stringify({}) }),
+  queueStatus: () =>
+    request<{
+      state: 'idle' | 'queued' | 'matched';
+      game?: Game;
+      opponent?: MatchmakingOpponent | null;
+    }>('/queue/status'),
   // RGPD / CGU 42 — enregistre (accept=true) ou refuse (accept=false, supprime le compte)
   // le consentement de l'utilisateur final.
   consent: (accept: boolean) =>

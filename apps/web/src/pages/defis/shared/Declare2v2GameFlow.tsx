@@ -5,6 +5,7 @@ import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
 import { api, type LeaderboardEntry, type Declare2v2Response } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
+import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { PlayerSearch } from './PlayerSearch';
 
@@ -15,7 +16,7 @@ const SEND_AWAY_MS = 140;
 
 // ─── Slot "moi" — plaquette non-interactive ───────────────────────────────────
 
-function MeSlot({ login, elo }: { login: string; elo?: number }) {
+function MeSlot({ login, elo, youLabel }: { login: string; elo?: number; youLabel: string }) {
   return (
     <div className="flex items-center gap-2.5 px-3.5 py-3 bg-gold/10 border-2 border-gold/40 rounded-xl">
       <div
@@ -30,7 +31,7 @@ function MeSlot({ login, elo }: { login: string; elo?: number }) {
           <div className="text-[10px] text-muted font-mono tabular-nums">{elo} ELO</div>
         )}
       </div>
-      <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">Toi</span>
+      <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">{youLabel}</span>
     </div>
   );
 }
@@ -90,6 +91,7 @@ export function Declare2v2GameFlow({
   variant = 'desktop',
 }: Declare2v2GameFlowProps) {
   const flash = useFlash();
+  const t = useT();
 
   const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
   const [opponent1, setOpponent1] = useState<LeaderboardEntry | null>(null);
@@ -131,8 +133,8 @@ export function Declare2v2GameFlow({
 
   const allSelected = !!partner && !!opponent1 && !!opponent2;
 
-  const winnerLabel = iWon ? 'Mon Équipe' : `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}`;
-  const loserLabel = iWon ? `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}` : 'Mon Équipe';
+  const winnerLabel = iWon ? t('defis.myTeamPlain') : `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}`;
+  const loserLabel = iWon ? `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}` : t('defis.myTeamPlain');
 
   const handleOutcome = (won: boolean) => {
     haptic(won ? 'success' : 'warning');
@@ -153,7 +155,7 @@ export function Declare2v2GameFlow({
         scoreSelf,
         scoreOpponent,
       });
-      flash.show(`Game 2v2 déclarée — confirmation en attente`);
+      flash.show(t('defis.game2v2Declared'));
       haptic('success');
       await onSubmitted(result, partner.login);
     } catch (err) {
@@ -163,7 +165,7 @@ export function Declare2v2GameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [partner, opponent1, opponent2, iWon, loserScore, flash, onSubmitted]);
+  }, [partner, opponent1, opponent2, iWon, loserScore, flash, onSubmitted, t]);
 
   const triggerSend = () => {
     setSending(true);
@@ -205,13 +207,13 @@ export function Declare2v2GameFlow({
           className="rounded-2xl border border-gold/25 p-4 space-y-3"
           style={{ background: 'rgba(255,201,74,0.04)' }}
         >
-          <SectionLabel color="gold">⚽ Mon Équipe</SectionLabel>
+          <SectionLabel color="gold">{t('defis.myTeam')}</SectionLabel>
 
-          {myLogin && <MeSlot login={myLogin} elo={myElo} />}
+          {myLogin && <MeSlot login={myLogin} elo={myElo} youLabel={t('defis.you')} />}
 
           <div className="relative z-30">
             <label className="block text-[9px] font-bold text-muted uppercase tracking-wider mb-1.5">
-              Mon Coéquipier
+              {t('defis.myTeammate')}
             </label>
             <PlayerSearch
               variant={variant}
@@ -239,11 +241,11 @@ export function Declare2v2GameFlow({
           className="rounded-2xl border border-red/25 p-4 space-y-3"
           style={{ background: 'rgba(255,83,102,0.04)' }}
         >
-          <SectionLabel color="red">⚔️ Équipe Adverse</SectionLabel>
+          <SectionLabel color="red">{t('defis.opponentTeam')}</SectionLabel>
 
           <div className="relative z-20">
             <label className="block text-[9px] font-bold text-muted uppercase tracking-wider mb-1.5">
-              Adversaire 1
+              {t('defis.opponent1')}
             </label>
             <PlayerSearch
               variant={variant}
@@ -259,7 +261,7 @@ export function Declare2v2GameFlow({
 
           <div className="relative z-10">
             <label className="block text-[9px] font-bold text-muted uppercase tracking-wider mb-1.5">
-              Adversaire 2
+              {t('defis.opponent2')}
             </label>
             <PlayerSearch
               variant={variant}
@@ -278,14 +280,14 @@ export function Declare2v2GameFlow({
         {allSelected && iWon === null && (
           <div className="animate-slide-down">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3">
-              Résultat
+              {t('defis.result')}
             </label>
             <div className="grid grid-cols-2 gap-4">
               <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>
-                Mon Équipe a gagné
+                {t('defis.myTeamWon')}
               </OutcomeButton>
               <OutcomeButton kind="loss" onClick={() => handleOutcome(false)}>
-                Mon Équipe a perdu
+                {t('defis.myTeamLost')}
               </OutcomeButton>
             </div>
           </div>
@@ -294,12 +296,12 @@ export function Declare2v2GameFlow({
         {allSelected && iWon !== null && (
           <div className="animate-fade-in">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-              Résultat
+              {t('defis.result')}
             </label>
             <button
               type="button"
               onClick={() => setIWon(null)}
-              aria-label="Modifier le résultat"
+              aria-label={t('defis.editResult')}
               className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all tap-transparent active:scale-[0.98] ${
                 iWon
                   ? 'border-teal/40 bg-teal/10 text-teal hover:bg-teal/20'
@@ -307,7 +309,7 @@ export function Declare2v2GameFlow({
               }`}
             >
               <span className="text-sm font-extrabold tracking-wide">
-                {iWon ? 'Mon Équipe a gagné' : 'Mon Équipe a perdu'}
+                {iWon ? t('defis.myTeamWon') : t('defis.myTeamLost')}
               </span>
               <span className="text-muted-2 text-lg leading-none">×</span>
             </button>
@@ -350,12 +352,12 @@ export function Declare2v2GameFlow({
                   </span>
                   {isWinner && (
                     <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">
-                      🔒 Verrouillé
+                      {t('defis.locked')}
                     </span>
                   )}
                   {!isWinner && (
                     <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-2">
-                      ← Fais glisser
+                      {t('defis.slideHint')}
                     </span>
                   )}
                 </div>
@@ -376,11 +378,11 @@ export function Declare2v2GameFlow({
               onClick={triggerSend}
               className="w-full py-3.5 text-sm font-bold shadow-lg"
             >
-              Envoyer la déclaration 2v2
+              {t('defis.send2v2')}
             </Button>
 
             <p className="text-[10px] text-muted/70 leading-relaxed text-center font-medium">
-              Les 3 autres joueurs devront confirmer le score.
+              {t('defis.others3Confirm')}
             </p>
           </div>
         )}

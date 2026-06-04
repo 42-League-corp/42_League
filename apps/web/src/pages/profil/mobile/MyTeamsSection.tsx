@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { api, type BabyfootTeamEntry } from '../../../lib/api';
+import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +111,7 @@ interface MyTeamsSectionProps {
  * Charge les équipes depuis `GET /teams?login=...`.
  */
 export function MyTeamsSection({ myLogin }: MyTeamsSectionProps) {
+  const t = useT();
   const [teams, setTeams] = useState<BabyfootTeamEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -137,7 +139,7 @@ export function MyTeamsSection({ myLogin }: MyTeamsSectionProps) {
       <div className="card-hud rounded-2xl px-4 py-5 text-center">
         <div className="text-2xl mb-2 opacity-50">⚽</div>
         <div className="text-xs font-medium text-muted-2">
-          Aucune équipe 2v2 — déclare un match en duo !
+          {t('profil.noTeamHintMobile')}
         </div>
       </div>
     );

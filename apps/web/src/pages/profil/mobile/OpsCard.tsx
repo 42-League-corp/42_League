@@ -4,6 +4,7 @@ import { Skull, Target } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { fmtCountdown } from '../../../lib/format';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useT } from '../../../lib/i18n';
 
 /**
  * Card "Ops" mobile — ton ennemi juré + qui te traque.
@@ -11,6 +12,7 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
  */
 export function OpsCard() {
   const { opsMe } = useLeagueData();
+  const t = useT();
 
   if (!opsMe) return null;
 
@@ -35,7 +37,7 @@ export function OpsCard() {
       <div className="font-gaming relative flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.18em]">
         <span className="inline-block w-1 h-3 bg-red rounded-sm" />
         <Skull className="w-4 h-4 animate-pulse" strokeWidth={2.5} fill="rgba(255,83,102,0.25)" />
-        <span>Ops · Ennemi juré</span>
+        <span>{t('profil.opsTitleMobile')}</span>
       </div>
 
       {opsMe.current && (
@@ -51,7 +53,7 @@ export function OpsCard() {
                 {opsMe.current.targetLogin}
               </div>
               <div className="text-[11px] text-muted-2 font-mono">
-                Traque · {fmtCountdown(opsMe.current.expiresAt)} restant
+                {t('profil.opsTracking')} · {fmtCountdown(opsMe.current.expiresAt)} {t('profil.opsRemaining')}
               </div>
             </div>
             <Target className="w-5 h-5 text-red flex-shrink-0" strokeWidth={2} />
@@ -61,21 +63,21 @@ export function OpsCard() {
 
       {!opsMe.current && opsMe.canDeclareAt && (
         <div className="text-xs text-muted-2 leading-relaxed">
-          ⏳ Cooldown actif · prochain ops dans{' '}
+          {t('profil.opsCooldownMobile')}{' '}
           <span className="font-mono text-muted">{fmtCountdown(opsMe.canDeclareAt)}</span>
         </div>
       )}
 
       {!opsMe.current && !opsMe.canDeclareAt && (
         <div className="text-xs text-muted-2 leading-relaxed">
-          Va sur la fiche d'un joueur depuis le classement pour le déclarer comme ton ops.
+          {t('profil.opsHintMobile')}
         </div>
       )}
 
       {opsMe.targetedBy && (
         <>
           <div className="text-[10px] text-red uppercase tracking-wider mt-3 mb-2 font-extrabold">
-            ⚠ Tu es la cible de :
+            {t('profil.opsTargetedByMobile')}
           </div>
           <Link to={`/player/${opsMe.targetedBy.ownerLogin}`} className="block tap-transparent">
             <div className="flex items-center gap-3 p-3 rounded-xl bg-red/10 border border-red/20">
@@ -89,7 +91,7 @@ export function OpsCard() {
                   {opsMe.targetedBy.ownerLogin}
                 </div>
                 <div className="text-[11px] text-red font-mono">
-                  Te traque · libère dans {fmtCountdown(opsMe.targetedBy.expiresAt)}
+                  {t('profil.opsHuntsYouMobile')} {fmtCountdown(opsMe.targetedBy.expiresAt)}
                 </div>
               </div>
             </div>

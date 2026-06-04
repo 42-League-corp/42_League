@@ -1,5 +1,6 @@
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { ChallengeFlow } from '../shared/ChallengeFlow';
+import { useT } from '../../../lib/i18n';
 import type { LeaderboardEntry } from '../../../lib/api';
 
 interface ChallengeSheetProps {
@@ -27,6 +28,7 @@ export function ChallengeSheet({
   locations,
   onDone,
 }: ChallengeSheetProps) {
+  const t = useT();
   const handleSubmitted = async () => {
     await onDone();
     onClose();
@@ -36,7 +38,7 @@ export function ChallengeSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={<span className="gradient-text-brand">Défier un joueur</span>}
+      title={<span className="gradient-text-brand">{t('defis.cta.challenge')}</span>}
       snap={92}
     >
       <div className="px-5 pt-4 pb-2">

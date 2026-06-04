@@ -29,10 +29,11 @@ export function GamePill({ game }: { game?: Game }) {
 
 /** Pastille « +15 ELO » verte / « -5 » rouge. */
 export function EloDeltaPill({ delta, counted }: { delta: number; counted: boolean }) {
+  const t = useT();
   if (!counted) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-muted-2 bg-bg-2/60 border border-border">
-        hors ELO
+        {t('history.outOfElo')}
       </span>
     );
   }
@@ -151,6 +152,7 @@ interface GlobalMatchCardProps {
  * PERDANT à droite (nom + Δ ELO + avatar), en miroir.
  */
 export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMatchCardProps) {
+  const t = useT();
   const aWon = match.winner === 'A';
   const winnerLogin = aWon ? match.playerALogin : match.playerBLogin;
   const loserLogin = aWon ? match.playerBLogin : match.playerALogin;
@@ -185,7 +187,7 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
         {match.game === 'chess' ? (
           /* Échecs : affiche Victoire / Défaite plutôt qu'un score 1-0 brut */
           <div className="text-[11px] font-extrabold text-gold text-gold-emboss uppercase tracking-wide whitespace-nowrap">
-            Victoire
+            {t('history.result.win')}
           </div>
         ) : (
           <div className="font-display tabular-nums text-base font-black">

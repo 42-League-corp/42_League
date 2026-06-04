@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { haptic } from '../../mobile/feedback/useHaptic';
+import { useT } from '../../lib/i18n';
 
 type Capacity = 8 | 16;
 
@@ -14,6 +15,7 @@ export function CreateTournamentPage() {
   const navigate = useNavigate();
   const flash = useFlash();
   const { refresh } = useLeagueData();
+  const t = useT();
 
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState<Capacity>(8);
@@ -45,10 +47,10 @@ export function CreateTournamentPage() {
         type="button"
         onClick={() => navigate(-1)}
         className="self-start flex items-center gap-1.5 text-muted text-sm font-semibold active:opacity-60 transition-opacity tap-transparent -ml-0.5"
-        aria-label="Retour"
+        aria-label={t('tournois.createPage.back')}
       >
         <ArrowLeft className="w-4 h-4" strokeWidth={2.5} />
-        Tournois
+        {t('tournois.createPage.back')}
       </button>
 
       {/* ── Hero visuel ── */}
@@ -89,9 +91,9 @@ export function CreateTournamentPage() {
             <span className="text-2xl">⚔️</span>
           </div>
           <h1 className="font-display text-xl font-black text-text-strong tracking-tight">
-            Tournoi amical
+            {t('tournois.createPage.heroTitle')}
           </h1>
-          <p className="text-xs text-muted-2 font-medium">ELO non impacté · ouvert à tous</p>
+          <p className="text-xs text-muted-2 font-medium">{t('tournois.createPage.heroSub')}</p>
         </div>
       </motion.div>
 
@@ -105,13 +107,13 @@ export function CreateTournamentPage() {
           transition={{ duration: 0.28, delay: 0.08 }}
         >
           <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
-            Nom du tournoi
+            {t('tournois.field.name')}
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void submit()}
-            placeholder="Ex. Coupe du Havre"
+            placeholder={t('tournois.createPage.namePlaceholder')}
             autoFocus
             maxLength={60}
             className="w-full px-4 py-4 bg-bg-1 border-2 border-border rounded-2xl text-base font-semibold focus:border-teal outline-none text-text-strong placeholder:text-muted/50 transition-all allow-select"
@@ -134,7 +136,7 @@ export function CreateTournamentPage() {
           transition={{ duration: 0.28, delay: 0.14 }}
         >
           <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
-            Nombre de joueurs
+            {t('tournois.field.players')}
           </label>
           <div className="grid grid-cols-2 gap-3">
             {([8, 16] as Capacity[]).map((c) => {
@@ -180,10 +182,10 @@ export function CreateTournamentPage() {
                   </span>
                   <div className="relative z-10 text-center">
                     <div className={`text-[11px] font-extrabold uppercase tracking-wide ${active ? 'text-teal' : 'text-muted-2'}`}>
-                      joueurs
+                      {t('tournois.mobile.players')}
                     </div>
                     <div className={`text-[10px] font-medium mt-0.5 ${active ? 'text-teal/70' : 'text-muted-2/60'}`}>
-                      {c === 8 ? '3 tours · ~45 min' : '4 tours · ~90 min'}
+                      {c === 8 ? t('tournois.createPage.cap8') : t('tournois.createPage.cap16')}
                     </div>
                   </div>
                   {active && (
@@ -211,10 +213,10 @@ export function CreateTournamentPage() {
             className="w-full py-4 text-[15px] font-extrabold"
             disabled={!canSubmit}
           >
-            Créer le tournoi
+            {t('tournois.modal.submit')}
           </Button>
           <p className="text-[10px] text-muted/50 text-center font-medium leading-relaxed">
-            Les inscriptions s'ouvriront immédiatement.
+            {t('tournois.createPage.footer')}
           </p>
         </motion.div>
 

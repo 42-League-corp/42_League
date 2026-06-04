@@ -1,0 +1,155 @@
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, ChevronDown, Tag } from 'lucide-react';
+import { api, type OwnedTitle } from '../lib/api';
+import { useLeagueData } from '../hooks/useLeagueData';
+import { useT } from '../lib/i18n';
+
+/**
+ * Sélecteur de titre cosmétique (self-service), affiché UNIQUEMENT sur son
+ * propre profil. Liste `me.ownedTitles` + une option « Aucun » (null).
+ *
+ * À la sélection : mise à jour optimiste de l'affichage (state local), appel
+ * `api.setMyTitle`, puis `refresh()` du contexte LeagueData pour resynchroniser
+ * `me.user.title`. En cas d'erreur réseau on revient à la valeur précédente.
+ */
+export function TitlePicker({ className }: { className?: string }) {
+  const { me, refresh } = useLeagueData();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // Titre affiché de façon optimiste (label) — `undefined` = on suit `me`.
+  const [optimistic, setOptimistic] = useState<string | null | undefined>(undefined);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const owned: OwnedTitle[] = me?.ownedTitles ?? [];
+  const serverTitle = me?.user?.title ?? null;
+  const current = optimistic === undefined ? serverTitle : optimistic;
+
+  // Resynchronise l'optimiste dès que le serveur confirme la même valeur.
+  useEffect(() => {
+    if (optimistic !== undefined && optimistic === serverTitle) setOptimistic(undefined);
+  }, [optimistic, serverTitle]);
+
+  // Fermeture au clic extérieur / Échap.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // Pas de titres possédés : indice discret (pas de sélecteur).
+  if (owned.length === 0) {
+    return (
+      <div className={`text-[10px] text-muted-2 italic ${className ?? ''}`}>
+        {t('profil.title.earnHint')}
+      </div>
+    );
+  }
+
+  async function select(label: string | null) {
+    setOpen(false);
+    if (label === current) return;
+    const prev = current;
+    setOptimistic(label);
+    setSaving(true);
+    try {
+      await api.setMyTitle(label);
+      await refresh();
+    } catch {
+      setOptimistic(prev);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div ref={rootRef} className={`relative inline-block ${className ?? ''}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={saving}
+        className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-bg-1/60 px-2.5 py-1 text-[11px] font-bold text-gold transition hover:border-gold/70 hover:bg-bg-1/80 disabled:opacity-50"
+      >
+        <Tag className="w-3 h-3" strokeWidth={2.5} />
+        <span className="max-w-[160px] truncate">{current ?? t('profil.title.choose')}</span>
+        <ChevronDown
+          className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2.5}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute left-1/2 top-full z-50 mt-1.5 w-56 -translate-x-1/2 overflow-hidden rounded-xl border border-gold/30 shadow-2xl"
+            style={{ background: 'linear-gradient(180deg, #1b1d26 0%, #14151c 100%)' }}
+          >
+            <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider font-bold text-muted-2 border-b border-border/40">
+              {t('profil.title.current')}
+            </div>
+            <ul className="max-h-64 overflow-y-auto py-1">
+              <TitleOption
+                label={t('profil.title.none')}
+                muted
+                selected={current === null}
+                onClick={() => void select(null)}
+              />
+              {owned.map((o) => (
+                <TitleOption
+                  key={o.key}
+                  label={o.label}
+                  selected={current === o.label}
+                  onClick={() => void select(o.label)}
+                />
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function TitleOption({
+  label,
+  selected,
+  muted,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  muted?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-gold/10 ${
+          muted ? 'text-muted-2 italic' : 'text-gold italic font-semibold'
+        }`}
+      >
+        <span className="w-3.5 flex-shrink-0">
+          {selected && <Check className="w-3.5 h-3.5 text-gold" strokeWidth={3} />}
+        </span>
+        <span className="truncate">{muted ? label : `« ${label} »`}</span>
+      </button>
+    </li>
+  );
+}

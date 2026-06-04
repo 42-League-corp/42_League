@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crown, ChevronLeft, Flame } from 'lucide-react';
+import { Crown, ChevronLeft, Flame, HelpCircle } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
@@ -15,6 +15,8 @@ import {
   type GoatMetricKey,
 } from '../lib/goat';
 import type { LeaderboardEntry } from '../lib/api';
+import { useT } from '../lib/i18n';
+import { hasSeenGoatIntro, markGoatIntroSeen } from '../lib/storage';
 
 const OFFICIAL_CUP = '#ff6b6b';
 const FRIENDLY_CUP = '#ffc94a';
@@ -24,11 +26,42 @@ function displayName(e: LeaderboardEntry): string {
   return full || e.login;
 }
 
+const weightPct = (w: number) => Math.round(w * 100);
+
+/**
+ * Répartition réelle du Score G.O.A.T, générée depuis GOAT_WEIGHTS — reste donc
+ * toujours synchrone avec le calcul (toutes les mesures), contrairement à
+ * l'ancien résumé « ELO/WR/titres » figé et faux.
+ */
+function GoatWeightsList({ compact = false }: { compact?: boolean }) {
+  const t = useT();
+  return (
+    <ul className={`grid grid-cols-2 ${compact ? 'gap-x-3 gap-y-1' : 'gap-x-4 gap-y-1.5'}`}>
+      {GOAT_WEIGHTS.map((w) => (
+        <li
+          key={w.key}
+          className={`flex items-center justify-between gap-2 ${compact ? 'text-[11px]' : 'text-xs'}`}
+        >
+          <span className="text-muted truncate">{t(`goat.metric.${w.key}`)}</span>
+          <span className="text-gold/90 font-bold tabular-nums shrink-0">{weightPct(w.weight)}%</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function GoatPage() {
   const { leaderboard, matches, tournaments, me } = useLeagueData();
   const { game } = useGameMode();
   const navigate = useNavigate();
-  const [showIntro, setShowIntro] = useState(true);
+  const t = useT();
+  // L'intro ne s'affiche qu'au tout premier passage ; ensuite elle est rappelable
+  // via le bouton « ? » (hover) ou en cliquant dessus.
+  const [showIntro, setShowIntro] = useState(() => !hasSeenGoatIntro());
+  const dismissIntro = () => {
+    markGoatIntroSeen();
+    setShowIntro(false);
+  };
   const ranking = useMemo(
     () => computeGoat(leaderboard, matches.filter((m) => (m.game ?? 'babyfoot') === game), tournaments),
     [leaderboard, matches, tournaments, game],
@@ -38,7 +71,7 @@ export function GoatPage() {
   const rest = ranking.slice(1);
 
   return (
-    <Panel title="G.O.A.T" sub="Greatest Of All Time" accent="crown">
+    <Panel title="G.O.A.T" sub={t('goat.sub')} accent="crown">
       {/* ── Bouton retour ── */}
       <button
         type="button"
@@ -46,7 +79,7 @@ export function GoatPage() {
         className="group inline-flex items-center gap-1 mb-4 rounded-lg px-2.5 py-1.5 text-[11px] uppercase tracking-wider font-semibold text-muted-2 hover:text-gold hover:bg-white/[0.03] border border-transparent hover:border-border/50 transition-colors"
       >
         <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
-        Retour
+        {t('common.back')}
       </button>
 
       {/* ── Contenu (grisé tant que l'intro est affichée) ── */}
@@ -60,25 +93,31 @@ export function GoatPage() {
         className={showIntro ? 'pointer-events-none select-none' : ''}
         aria-hidden={showIntro}
       >
-      <div className="flex items-center justify-between mb-5">
-        <Link to="/leaderboard" className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold transition-colors">
-          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-          Classement
-        </Link>
-        <div className="text-[10px] text-muted-2 text-right leading-snug">
-          <span className="text-gold/80">ELO 50%</span>
-          {' · '}
-          <span className="text-[#f5b942]/80">WR 30%</span>
-          {' · '}
-          <span className="text-[#cd7f32]/80">Titres 20%</span>
+      <div className="flex items-center justify-end mb-5">
+        {/* Bouton « ? » : réaffiche la répartition du Score au survol (et la modale au clic). */}
+        <div className="relative group">
+          <button
+            type="button"
+            onClick={() => setShowIntro(true)}
+            aria-label={t('goat.help.aria')}
+            className="w-7 h-7 rounded-full flex items-center justify-center border border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 hover:bg-gold/5 transition-colors"
+          >
+            <HelpCircle className="w-4 h-4" strokeWidth={2.4} />
+          </button>
+          <div className="absolute right-0 top-9 z-30 w-64 rounded-xl border border-gold/30 bg-bg-1/95 backdrop-blur p-3 shadow-xl opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-150">
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold mb-2">
+              {t('goat.intro.scoreLabel')}
+            </div>
+            <GoatWeightsList compact />
+          </div>
         </div>
       </div>
 
       {!goat ? (
         <div className="text-center text-muted-2 py-16">
           <div className="text-5xl mb-3 opacity-40">🐐</div>
-          <div className="text-sm font-semibold">Pas encore assez de données</div>
-          <div className="text-xs mt-1">Joue quelques matchs pour voir émerger un G.O.A.T</div>
+          <div className="text-sm font-semibold">{t('goat.notEnough.title')}</div>
+          <div className="text-xs mt-1">{t('goat.notEnough.sub')}</div>
         </div>
       ) : (
         <>
@@ -89,7 +128,7 @@ export function GoatPage() {
           {rest.length > 0 && (
             <div className="mt-8">
               <div className="flex items-center gap-2 mb-4">
-                <span className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold">Les prétendants</span>
+                <span className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold">{t('goat.contenders')}</span>
                 <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -134,29 +173,29 @@ export function GoatPage() {
                 <div className="flex items-center gap-2.5 mb-3">
                   <Crown className="w-6 h-6 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.6)]" fill="currentColor" strokeWidth={1.5} />
                   <span className="font-display text-xl font-black text-text-strong leading-none">
-                    Le G.O.A.T
+                    {t('goat.title')}
                   </span>
                 </div>
                 <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-4">
-                  🐐 Greatest Of All Time
+                  🐐 {t('goat.sub')}
                 </div>
                 <p className="text-sm text-muted leading-relaxed">
-                  Bienvenue dans le panthéon de la 42 League. Cette page met à l'honneur les meilleurs
-                  joueurs de tous les temps, classés par un <span className="text-gold/90 font-semibold">Score G.O.A.T</span> qui
-                  synthétise toute leur carrière.
+                  {t('goat.intro.p1.a')}<span className="text-gold/90 font-semibold">{t('goat.intro.scoreLabel')}</span>{t('goat.intro.p1.b')}
                 </p>
                 <p className="text-sm text-muted leading-relaxed mt-3">
-                  Le classement combine trois mesures : l'<span className="text-gold/90 font-semibold">ELO</span> (50 %),
-                  le <span className="text-[#f5b942]/90 font-semibold">taux de victoire</span> (30 %) et
-                  les <span className="text-[#cd7f32]/90 font-semibold">titres remportés</span> en tournoi (20 %).
-                  Le joueur en tête trône en couronne, ses prétendants le suivent juste en dessous.
+                  {t('goat.intro.p2.a')}
+                  <span className="text-gold/90 font-semibold">{GOAT_WEIGHTS.length} {t('goat.intro.measures')}</span>
+                  {t('goat.intro.p2.b')}
                 </p>
+                <div className="mt-3 rounded-xl border border-gold/15 bg-black/20 p-3">
+                  <GoatWeightsList />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowIntro(false)}
+                  onClick={dismissIntro}
                   className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
                 >
-                  J'ai compris
+                  {t('goat.intro.ok')}
                 </button>
               </div>
             </motion.div>
@@ -171,6 +210,7 @@ export function GoatPage() {
 
 function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
   const { entry, metrics } = player;
+  const t = useT();
   return (
     <div className="relative rounded-2xl overflow-hidden"
       style={{
@@ -195,7 +235,7 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-1">
-              🐐 Greatest Of All Time {isMe && '· toi'}
+              🐐 {t('goat.sub')} {isMe && `· ${t('common.toi')}`}
             </div>
             <PlayerLink login={entry.login} className="inline-block">
               <span className="font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
@@ -216,9 +256,9 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
         {/* Stats grid compacte */}
         <div className="grid grid-cols-4 gap-2 mb-4">
           <MiniStat label="ELO" value={String(metrics.elo)} accent="gold" />
-          <MiniStat label="Win rate" value={`${metrics.winRate}%`} accent="gold" />
-          <MiniStat label="Matchs" value={`${metrics.wins}V`} accent="teal" />
-          <MiniStat label="Coupe off." value={String(metrics.officialTitles)} accent={metrics.officialTitles > 0 ? 'red' : 'muted'} />
+          <MiniStat label={t('profil.winRate')} value={`${metrics.winRate}%`} accent="gold" />
+          <MiniStat label={t('goat.stat.matches')} value={`${metrics.wins}${t('lb.abbr.win')}`} accent="teal" />
+          <MiniStat label={t('goat.stat.officialCup')} value={String(metrics.officialTitles)} accent={metrics.officialTitles > 0 ? 'red' : 'muted'} />
         </div>
 
         {/* Barres de contribution */}
@@ -232,6 +272,7 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
 
 function ContenderCard({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
   const { entry, metrics } = player;
+  const t = useT();
   return (
     <div className={`rounded-xl p-3.5 transition-colors ${
       isMe ? 'border border-gold/35 bg-gold/[0.04]' : 'border border-border/50 bg-white/[0.02]'
@@ -269,7 +310,7 @@ function ContenderCard({ player, isMe }: { player: GoatPlayer; isMe: boolean }) 
           return (
             <div key={w.key} className="flex items-center gap-2">
               <span className="w-20 text-[9px] uppercase tracking-wider text-muted-2 font-semibold truncate shrink-0">
-                {w.label}
+                {t(`goat.metric.${w.key}`)}
               </span>
               <div className="flex-1 h-1 rounded-full bg-bg-1 overflow-hidden">
                 <div className="h-full rounded-full bg-gradient-to-r from-gold/50 to-gold"
@@ -297,6 +338,7 @@ function MiniStat({ label, value, accent }: { label: string; value: string; acce
 }
 
 function MetricBars({ player }: { player: GoatPlayer }) {
+  const t = useT();
   return (
     <div className="space-y-1.5">
       {GOAT_WEIGHTS.map((w) => {
@@ -304,7 +346,7 @@ function MetricBars({ player }: { player: GoatPlayer }) {
         return (
           <div key={w.key} className="flex items-center gap-2">
             <span className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-muted-2 font-semibold truncate">
-              {w.label}
+              {t(`goat.metric.${w.key}`)}
             </span>
             <div className="flex-1 h-1.5 rounded-full bg-bg-0/60 overflow-hidden">
               <div className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold"

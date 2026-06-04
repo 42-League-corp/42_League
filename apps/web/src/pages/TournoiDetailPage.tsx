@@ -13,24 +13,25 @@ import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
+import { useT } from '../lib/i18n';
 
-const STATUS_LABEL: Record<Tournament['status'], string> = {
-  registration: 'INSCRIPTIONS',
-  in_progress: 'EN COURS',
-  finished: 'TERMINÉ',
-  cancelled: 'ANNULÉ',
+const STATUS_KEY: Record<Tournament['status'], string> = {
+  registration: 'tournois.status.registration',
+  in_progress: 'tournois.status.in_progress',
+  finished: 'tournois.status.finished',
+  cancelled: 'tournois.status.cancelled',
 };
 
 const WINNING_SCORE = 10;
 const LOSER_SCORE_MIN = -10;
 const LOSER_SCORE_MAX = WINNING_SCORE - 1;
 
-function roundLabel(round: number, totalRounds: number): string {
+function roundLabel(t: (key: string) => string, round: number, totalRounds: number): string {
   const fromEnd = totalRounds - round;
-  if (fromEnd === 0) return 'FINALE';
-  if (fromEnd === 1) return 'DEMI-FINALES';
-  if (fromEnd === 2) return 'QUARTS';
-  return `TOUR ${round}`;
+  if (fromEnd === 0) return t('tournois.bracket.final');
+  if (fromEnd === 1) return t('tournois.bracket.semis');
+  if (fromEnd === 2) return t('tournois.bracket.quarters');
+  return t('tournois.bracket.round').replace('{n}', String(round));
 }
 
 export function TournoiDetailPage() {
@@ -40,6 +41,7 @@ export function TournoiDetailPage() {
   const flash = useFlash();
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const t = useT();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,17 +68,17 @@ export function TournoiDetailPage() {
 
   if (loading) {
     return (
-      <Panel title="Tournoi" sub="…">
+      <Panel title={t('tournois.detail.tournament')} sub="…">
         <BackLink />
-        <div className="text-center text-muted-2 py-10">Chargement…</div>
+        <div className="text-center text-muted-2 py-10">{t('tournois.detail.loading')}</div>
       </Panel>
     );
   }
   if (!tournament) {
     return (
-      <Panel title="Tournoi" sub="introuvable">
+      <Panel title={t('tournois.detail.tournament')} sub={t('tournois.detail.notFoundSub')}>
         <BackLink />
-        <div className="text-center text-muted-2 py-10">Tournoi introuvable.</div>
+        <div className="text-center text-muted-2 py-10">{t('tournois.detail.notFound')}</div>
       </Panel>
     );
   }
@@ -117,54 +119,54 @@ export function TournoiDetailPage() {
     setInvitee(null);
     await runAction(
       () => api.inviteTournamentPlayer(tournament.id, login),
-      `Invitation envoyée à ${login}`,
+      t('tournois.flash.inviteSent').replace('{login}', login),
     );
   };
 
   const handleAcceptInvite = async (invite: TournamentInvite) => {
     await runAction(
       () => api.acceptTournamentInvite(tournament.id, invite.id),
-      'Tu as rejoint le tournoi',
+      t('tournois.flash.joined'),
     );
   };
 
   const handleDeclineInvite = async (invite: TournamentInvite) => {
     await runAction(
       () => api.declineTournamentInvite(tournament.id, invite.id),
-      'Invitation déclinée',
+      t('tournois.flash.inviteDeclined'),
     );
   };
 
-  const kindLabel = tournament.kind === 'official' ? '★ OFFICIEL' : 'AMICAL';
-  const visLabel = tournament.isPrivate ? ' · 🔒 PRIVÉ' : '';
-  const formatLabel = tournament.format === 'pools' ? ' · POULES' : '';
-  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${STATUS_LABEL[tournament.status]}`;
+  const kindLabel = tournament.kind === 'official' ? t('tournois.detail.kind.official') : t('tournois.detail.kind.friendly');
+  const visLabel = tournament.isPrivate ? t('tournois.detail.private') : '';
+  const formatLabel = tournament.format === 'pools' ? t('tournois.detail.pools') : '';
+  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${t(STATUS_KEY[tournament.status])}`;
 
   const handleLeave = async () => {
     const ok = await confirm({
-      title: 'Quitter ce tournoi ?',
-      message: 'Tu te retires des inscriptions.',
-      confirmLabel: 'Quitter',
-      cancelLabel: 'Rester',
+      title: t('tournois.confirm.leave.title'),
+      message: t('tournois.confirm.leave.message'),
+      confirmLabel: t('tournois.confirm.leave.confirm'),
+      cancelLabel: t('tournois.confirm.leave.cancel'),
       danger: true,
     });
     if (!ok) return;
-    await runAction(() => api.leaveTournament(tournament.id), 'Désinscrit');
+    await runAction(() => api.leaveTournament(tournament.id), t('tournois.flash.leftReg'));
   };
 
   const handleCancel = async () => {
     const ok = await confirm({
-      title: 'Annuler ce tournoi ?',
-      message: 'Le tournoi sera supprimé définitivement et disparaîtra de la liste.',
-      warning: 'Cette action est irréversible.',
-      confirmLabel: 'Supprimer le tournoi',
-      cancelLabel: 'Garder',
+      title: t('tournois.confirm.cancel.title'),
+      message: t('tournois.confirm.cancel.message'),
+      warning: t('tournois.confirm.cancel.warning'),
+      confirmLabel: t('tournois.confirm.cancel.confirm'),
+      cancelLabel: t('tournois.confirm.cancel.cancel'),
       danger: true,
     });
     if (!ok) return;
     try {
       await api.cancelTournament(tournament.id);
-      flash.show('Tournoi supprimé');
+      flash.show(t('tournois.flash.deleted'));
       navigate('/tournaments');
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -179,26 +181,26 @@ export function TournoiDetailPage() {
         <>
           {tournament.isPrivate && !iAmIn && !isOrganizer && !isAdmin && (
             <div className="mb-4 text-[11px] text-teal flex items-center gap-1.5 uppercase tracking-wider font-semibold">
-              🔒 Tournoi privé — accès sur invitation de l'organisateur.
+              {t('tournois.detail.privateNotice')}
             </div>
           )}
           <div className="flex flex-wrap gap-2 mb-4">
             {!iAmIn && entriesCount < tournament.capacity &&
               (!tournament.isPrivate || isOrganizer || isAdmin) && (
-              <Button onClick={() => runAction(() => api.joinTournament(tournament.id), 'Inscrit au tournoi')}>
-                S'inscrire
+              <Button onClick={() => runAction(() => api.joinTournament(tournament.id), t('tournois.flash.registered'))}>
+                {t('tournois.detail.join')}
               </Button>
             )}
             {iAmIn && (
-              <Button variant="ghost" onClick={handleLeave}>Se retirer</Button>
+              <Button variant="ghost" onClick={handleLeave}>{t('tournois.detail.leave')}</Button>
             )}
             {isOrganizer && entriesCount === tournament.capacity && (
-              <Button onClick={() => runAction(() => api.startTournament(tournament.id), 'Tournoi lancé · bracket généré')}>
-                Lancer le tournoi
+              <Button onClick={() => runAction(() => api.startTournament(tournament.id), t('tournois.flash.started'))}>
+                {t('tournois.detail.start')}
               </Button>
             )}
             {(isOrganizer || isAdmin) && (
-              <Button variant="danger" onClick={handleCancel}>Supprimer</Button>
+              <Button variant="danger" onClick={handleCancel}>{t('tournois.detail.delete')}</Button>
             )}
           </div>
 
@@ -206,17 +208,17 @@ export function TournoiDetailPage() {
           {myPendingInvite && !iAmIn && (
             <div className="mb-4 p-4 rounded-xl border border-gold/40 bg-gold/[0.06]">
               <div className="text-sm font-extrabold text-gold mb-1">
-                Tu as été invité à ce tournoi
+                {t('tournois.detail.invited.title')}
               </div>
               <div className="text-xs text-muted-2 mb-3">
-                Par <span className="font-semibold text-text-strong">{myPendingInvite.inviterLogin}</span>
+                {t('tournois.detail.invited.by')} <span className="font-semibold text-text-strong">{myPendingInvite.inviterLogin}</span>
               </div>
               <div className="flex gap-2">
                 <Button onClick={() => handleAcceptInvite(myPendingInvite)} className="flex-1">
-                  Rejoindre
+                  {t('tournois.detail.invited.join')}
                 </Button>
                 <Button variant="ghost" onClick={() => handleDeclineInvite(myPendingInvite)} className="flex-1 text-red border-red/30">
-                  Décliner
+                  {t('tournois.detail.invited.decline')}
                 </Button>
               </div>
             </div>
@@ -226,7 +228,7 @@ export function TournoiDetailPage() {
           {(isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
             <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
               <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
-                Inviter un joueur
+                {t('tournois.detail.invite.title')}
               </div>
               {invitable.length > 0 ? (
                 <div className="flex flex-col gap-2">
@@ -240,21 +242,21 @@ export function TournoiDetailPage() {
                     locations={locations}
                   />
                   <Button onClick={handleSendInvite} disabled={!invitee}>
-                    {invitee ? `Envoyer l'invitation à ${invitee.login}` : 'Envoyer une invitation'}
+                    {invitee ? t('tournois.detail.invite.send').replace('{login}', invitee.login) : t('tournois.detail.invite.sendGeneric')}
                   </Button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-2">Tous les joueurs disponibles ont déjà été invités.</p>
+                <p className="text-xs text-muted-2">{t('tournois.detail.invite.allInvited')}</p>
               )}
               <p className="text-[10px] text-muted mt-1.5">
-                Le joueur recevra une notification et devra accepter pour rejoindre.
+                {t('tournois.detail.invite.notice')}
               </p>
 
               {/* Invitations en attente (vue organisateur) */}
               {(tournament.invites ?? []).filter((i) => i.status === 'pending').length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border/50">
                   <div className="text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-                    En attente de réponse
+                    {t('tournois.detail.invite.pending')}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {(tournament.invites ?? [])
@@ -275,7 +277,7 @@ export function TournoiDetailPage() {
           )}
 
           <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
-            Inscrits
+            {t('tournois.detail.entrants')}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {(tournament.entries ?? []).map((e) => (
@@ -302,7 +304,7 @@ export function TournoiDetailPage() {
                 <div className="w-11 h-11 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-lg font-bold">
                   ?
                 </div>
-                <div className="text-muted text-sm font-semibold">Place libre</div>
+                <div className="text-muted text-sm font-semibold">{t('tournois.detail.freeSlot')}</div>
               </div>
             ))}
           </div>
@@ -314,7 +316,7 @@ export function TournoiDetailPage() {
           {tournament.winner && tournament.status === 'finished' && (
             <div className="border border-gold/40 bg-gold/5 rounded p-5 mb-6 text-center">
               <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
-                🏆 VAINQUEUR
+                {t('tournois.detail.winner')}
               </div>
               <PlayerLink login={tournament.winner.login} className="inline-flex flex-col gap-2 text-base">
                 <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
@@ -328,7 +330,7 @@ export function TournoiDetailPage() {
           {tournament.status === 'in_progress' && (isOrganizer || isAdmin) && (
             <div className="mt-6 pt-4 border-t border-border/40 flex justify-end">
               <Button size="sm" variant="danger" onClick={handleCancel}>
-                Supprimer le tournoi
+                {t('tournois.detail.deleteTournament')}
               </Button>
             </div>
           )}
@@ -339,12 +341,13 @@ export function TournoiDetailPage() {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link
       to="/tournaments"
       className="inline-block text-[11px] uppercase tracking-wider text-muted-2 hover:text-teal mb-3"
     >
-      ← Retour aux tournois
+      {t('tournois.detail.back')}
     </Link>
   );
 }
@@ -400,6 +403,7 @@ function PoolsAndBracket({
   myLogin: string | null;
   onChange: () => Promise<void>;
 }) {
+  const t = useT();
   const { poolGroups, bracketRounds, totalBracketRounds, poolsComplete } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
@@ -449,9 +453,9 @@ function PoolsAndBracket({
         <section>
           <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-3 flex items-center gap-2">
             <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-            Phase de poules
+            {t('tournois.bracket.poolPhase')}
             <span className="text-muted-2 normal-case font-mono">
-              · top {QUALIFY_PER_POOL} qualifiés / poule
+              {t('tournois.bracket.poolQualify').replace('{n}', String(QUALIFY_PER_POOL))}
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -467,8 +471,7 @@ function PoolsAndBracket({
           </div>
           {!poolsComplete && (
             <p className="text-[11px] text-muted-2 mt-3">
-              Le bracket des qualifiés est généré automatiquement une fois tous les matchs de
-              poule confirmés.
+              {t('tournois.bracket.poolPending')}
             </p>
           )}
         </section>
@@ -479,7 +482,7 @@ function PoolsAndBracket({
           {hasPools && (
             <div className="text-[10px] uppercase tracking-[0.16em] text-teal font-extrabold mb-3 flex items-center gap-2">
               <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-teal to-teal rounded-sm" />
-              Phase finale
+              {t('tournois.bracket.finalPhase')}
             </div>
           )}
           <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2">
@@ -488,7 +491,7 @@ function PoolsAndBracket({
               return (
                 <div key={round} className="min-w-[240px] flex flex-col gap-3 justify-around">
                   <div className="text-[10px] uppercase tracking-wider text-muted font-semibold text-center">
-                    {roundLabel(round, totalBracketRounds)}
+                    {roundLabel(t, round, totalBracketRounds)}
                   </div>
                   <div className="flex flex-col gap-3">
                     {matches.map((m) => (
@@ -508,7 +511,7 @@ function PoolsAndBracket({
         </section>
       ) : (
         !hasPools && (
-          <div className="text-center text-muted-2 py-8 text-sm">Bracket en préparation…</div>
+          <div className="text-center text-muted-2 py-8 text-sm">{t('tournois.bracket.preparing')}</div>
         )
       )}
     </div>
@@ -526,21 +529,22 @@ function PoolCard({
   myLogin: string | null;
   onChange: () => Promise<void>;
 }) {
+  const t = useT();
   const poolName = String.fromCharCode(65 + pool.index); // A, B, C…
   return (
     <div className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
       <div className="px-3 py-2 bg-bg-2/60 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-text-strong">
-        Poule {poolName}
+        {t('tournois.pool.name').replace('{name}', poolName)}
       </div>
       {/* Classement */}
       <table className="w-full text-xs">
         <thead>
           <tr className="text-muted-2 border-b border-border/40">
             <th className="text-left font-semibold py-1.5 pl-3">#</th>
-            <th className="text-left font-semibold py-1.5">Joueur</th>
-            <th className="text-center font-semibold py-1.5">J</th>
-            <th className="text-center font-semibold py-1.5">V</th>
-            <th className="text-center font-semibold py-1.5 pr-3">+/−</th>
+            <th className="text-left font-semibold py-1.5">{t('tournois.pool.col.player')}</th>
+            <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.played')}</th>
+            <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.wins')}</th>
+            <th className="text-center font-semibold py-1.5 pr-3">{t('tournois.pool.col.diff')}</th>
           </tr>
         </thead>
         <tbody>
@@ -610,6 +614,7 @@ function BracketMatch({
 }) {
   const flash = useFlash();
   const confirm = useConfirm();
+  const t = useT();
   const [recording, setRecording] = useState(false);
 
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
@@ -628,7 +633,7 @@ function BracketMatch({
   const handleRecordSubmit = async (scoreA: number, scoreB: number) => {
     try {
       await api.recordTournamentMatch(tournament.id, match.id, scoreA, scoreB);
-      flash.show('Score enregistré · en attente de confirmation');
+      flash.show(t('tournois.flash.scoreRecorded'));
       setRecording(false);
       await onChange();
     } catch (err) {
@@ -643,8 +648,8 @@ function BracketMatch({
       const res = await api.confirmTournamentMatch(tournament.id, match.id, match.scoreA, match.scoreB);
       flash.show(
         res.finished
-          ? `🏆 ${res.winnerLogin} remporte le tournoi !`
-          : 'Score confirmé',
+          ? t('tournois.flash.tournamentWon').replace('{login}', String(res.winnerLogin))
+          : t('tournois.flash.scoreConfirmed'),
       );
       await onChange();
     } catch (err) {
@@ -654,16 +659,16 @@ function BracketMatch({
 
   const handleReject = async () => {
     const ok = await confirm({
-      title: 'Refuser ce score ?',
-      message: 'Le score sera reset, à ressaisir.',
-      confirmLabel: 'Refuser',
-      cancelLabel: 'Garder',
+      title: t('tournois.confirm.reject.title'),
+      message: t('tournois.confirm.reject.message'),
+      confirmLabel: t('tournois.confirm.reject.confirm'),
+      cancelLabel: t('tournois.confirm.reject.cancel'),
       danger: true,
     });
     if (!ok) return;
     try {
       await api.rejectTournamentMatch(tournament.id, match.id);
-      flash.show('Score reset');
+      flash.show(t('tournois.flash.scoreReset'));
       await onChange();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
@@ -700,7 +705,7 @@ function BracketMatch({
           transition={{ duration: 1.8, ease: 'easeInOut', times: [0, 0.14, 0.28, 0.42, 0.56, 0.7, 1] }}
         >
           <Button size="sm" full onClick={() => setRecording(true)}>
-            Saisir le score
+            {t('tournois.match.enterScore')}
           </Button>
         </motion.div>
       )}
@@ -716,18 +721,18 @@ function BracketMatch({
 
       {canRecord && recorded && iRecorded && (
         <div className="text-[11px] text-muted-2 mt-2 text-center">
-          En attente de confirmation par l'adversaire ({match.scoreA}-{match.scoreB})
+          {t('tournois.match.waitingConfirm').replace('{score}', `${match.scoreA}-${match.scoreB}`)}
         </div>
       )}
 
       {canRecord && recorded && !iRecorded && (
         <div className="mt-2">
           <div className="text-[11px] text-gold mb-1.5">
-            Score à confirmer : {match.scoreA}-{match.scoreB}
+            {t('tournois.match.scoreToConfirm').replace('{score}', `${match.scoreA}-${match.scoreB}`)}
           </div>
           <div className="flex gap-1.5">
-            <Button size="sm" onClick={handleConfirm}>Confirmer</Button>
-            <Button size="sm" variant="ghost" onClick={handleReject}>Refuser</Button>
+            <Button size="sm" onClick={handleConfirm}>{t('tournois.match.confirm')}</Button>
+            <Button size="sm" variant="ghost" onClick={handleReject}>{t('tournois.match.reject')}</Button>
           </div>
         </div>
       )}
@@ -776,6 +781,7 @@ function RecordBracketForm({
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [winner, setWinner] = useState<'a' | 'b' | null>(null);
   const [loserScore, setLoserScore] = useState(0);
   const [winnerGames, setWinnerGames] = useState(2); // smash : games du vainqueur (2 ou 3)
@@ -798,22 +804,22 @@ function RecordBracketForm({
     };
     return (
       <div className="mt-2 space-y-2">
-        <div className="text-xs text-muted text-center">Qui a gagné ?</div>
+        <div className="text-xs text-muted text-center">{t('tournois.match.whoWon')}</div>
         <div className="grid grid-cols-2 gap-2">
           <OutcomeButton kind="win" onClick={() => pick('a')}>
-            {match.playerALogin ?? 'Joueur A'}
+            {match.playerALogin ?? t('tournois.match.playerA')}
           </OutcomeButton>
           <OutcomeButton kind="win" onClick={() => pick('b')}>
-            {match.playerBLogin ?? 'Joueur B'}
+            {match.playerBLogin ?? t('tournois.match.playerB')}
           </OutcomeButton>
         </div>
-        <Button size="sm" variant="ghost" onClick={onCancel} className="w-full">Annuler</Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} className="w-full">{t('tournois.match.cancel')}</Button>
       </div>
     );
   }
 
   const loserLabel =
-    winner === 'a' ? (match.playerBLogin ?? 'Joueur B') : (match.playerALogin ?? 'Joueur A');
+    winner === 'a' ? (match.playerBLogin ?? t('tournois.match.playerB')) : (match.playerALogin ?? t('tournois.match.playerA'));
 
   // Set (Smash / Street Fighter) : score du set en games (vainqueur 2 ou 3, perdant strictement moins).
   if (game === 'smash' || game === 'streetfighter') {
@@ -824,9 +830,9 @@ function RecordBracketForm({
       }`;
     return (
       <div className="mt-2 space-y-2">
-        <div className="text-xs text-muted text-center">Score du set (games)</div>
+        <div className="text-xs text-muted text-center">{t('tournois.match.setScore')}</div>
         <div className="flex items-center justify-center gap-2 text-[11px] text-muted-2">
-          <span className="w-20 text-right">Vainqueur</span>
+          <span className="w-20 text-right">{t('tournois.match.winner')}</span>
           {[2, 3].map((g) => (
             <button key={g} type="button" onClick={() => setWinnerGames(g)} className={chip(winnerGames === g)}>
               {g}
@@ -861,7 +867,7 @@ function RecordBracketForm({
   return (
     <div className="mt-2 space-y-2">
       <div className="text-xs text-muted text-center">
-        Score de <span className="text-text font-semibold">{loserLabel}</span>
+        {t('tournois.match.loserScore')} <span className="text-text font-semibold">{loserLabel}</span>
       </div>
       <AbacusSlider
         value={loserScore}

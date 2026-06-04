@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { api } from '../lib/api';
-import { useT } from '../lib/i18n';
+import { useT, useI18n } from '../lib/i18n';
+import type { Lang } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
@@ -30,7 +31,7 @@ export function AboutPage() {
           {t('about.tech.title')}
         </TabBtn>
         <TabBtn active={tab === 'team'} onClick={() => setTab('team')} Icon={Users}>
-          Équipe
+          {t('about.team.title')}
         </TabBtn>
       </div>
 
@@ -58,7 +59,7 @@ export function AboutPage() {
               className="inline-flex items-center gap-1.5 text-muted-2 hover:text-gold transition-colors text-xs font-semibold uppercase tracking-[0.14em]"
             >
               <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-              Connexion
+              {t('about.back.login')}
             </Link>
           </div>
           {inner}
@@ -101,9 +102,10 @@ function TabBtn({
 // ─── Règles du jeu (adaptées à la discipline courante) ───────────────────────
 
 /**
- * Contenu des règles propre à chaque discipline. Pour ajouter un jeu, il suffit
- * d'ajouter une entrée à ce `Record<Game, GameRules>` — la `RulesSection` lit
- * automatiquement la discipline active via `useGameMode()`.
+ * Contenu des règles propre à chaque discipline. Les contenus sont RICHES (JSX
+ * avec surlignages), donc traduits par langue : `RULES_I18N[lang][game]`. Pour
+ * ajouter un jeu, il faut une entrée par langue ; la `RulesSection` lit la
+ * discipline active via `useGameMode()` et la langue via `useI18n()`.
  */
 type GameRules = {
   /** Nom de la discipline, employé dans les phrases (ex. « babyfoot 1 contre 1 »). */
@@ -114,7 +116,7 @@ type GameRules = {
   format: { intro: React.ReactNode; bullets: React.ReactNode[] };
 };
 
-const RULES: Record<Game, GameRules> = {
+const RULES_FR: Record<Game, GameRules> = {
   babyfoot: {
     label: 'babyfoot 1 contre 1',
     terrain: {
@@ -270,6 +272,10 @@ const RULES: Record<Game, GameRules> = {
           Les sets se disputent au <span className="text-gold font-semibold">meilleur des 3 (Bo3)</span> ou{' '}
           <span className="text-gold font-semibold">des 5 (Bo5)</span> selon le contexte (officiel, tournoi).
         </>,
+        <>
+          <span className="text-text font-semibold">Réglages standards</span> : timer et vie par défaut, pas de
+          modificateurs ni d'assists exotiques — on reste sur un set équitable et lisible.
+        </>,
       ],
     },
     format: {
@@ -289,13 +295,489 @@ const RULES: Record<Game, GameRules> = {
   },
 };
 
+const RULES_EN: Record<Game, GameRules> = {
+  babyfoot: {
+    label: 'foosball 1v1',
+    terrain: {
+      intro: (
+        <>
+          Playing conventions so a goal counts and matches stay cleanly contested:
+        </>
+      ),
+      bullets: [
+        <>
+          After the serve (<span className="text-text font-semibold">kick-off</span>), the ball must be
+          <span className="text-gold font-semibold"> touched at least twice</span> before a goal counts.
+        </>,
+        <>
+          The player who <span className="text-text font-semibold">just conceded a goal</span> may put the
+          ball back <span className="text-gold font-semibold">on their midfield bar</span> (the halfbacks)
+          to restart play.
+        </>,
+        <>
+          <span className="text-gold font-semibold">Goals scored from the midfield bar</span> (halfbacks)
+          are valid.
+        </>,
+        <>
+          The <span className="text-gold font-semibold">gamelle</span> (ball that bounces back out of the goal):
+          you can either <span className="text-text font-semibold">take the point</span> or
+          <span className="text-text font-semibold"> remove a point from your opponent</span> — but you
+          <span className="text-text font-semibold"> cannot win the match on a gamelle</span>.
+        </>,
+        <>
+          <span className="text-gold font-semibold">Spins</span> must be
+          <span className="text-text font-semibold"> controlled</span> (no wild, uncontrolled twirling).
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League is an ELO ranking for <span className="text-text font-semibold">foosball 1v1</span>.
+          Every registered player can challenge any other member of their league.
+        </>
+      ),
+      bullets: [
+        <>Match to <span className="text-gold font-semibold">10 goals</span> — first to 10 wins.</>,
+        <>A match can only be reported <span className="text-text font-semibold">after it has been played</span>.</>,
+        <>Both players report their score independently. If they disagree, the match is voided.</>,
+      ],
+    },
+  },
+  smash: {
+    label: 'Super Smash Bros. 1v1',
+    terrain: {
+      intro: (
+        <>
+          Set conventions so victories are clear and matches fair:
+        </>
+      ),
+      bullets: [
+        <>
+          Each match is played in <span className="text-gold font-semibold">stocks (lives)</span> — the player
+          who depletes all of their opponent's stocks wins the game.
+        </>,
+        <>
+          <span className="text-gold font-semibold">Character</span> selection before each game; after a lost
+          game, the loser may <span className="text-text font-semibold">switch character</span>.
+        </>,
+        <>
+          Sets are played in a <span className="text-gold font-semibold">best of 3 (Bo3)</span> or{' '}
+          <span className="text-gold font-semibold">best of 5 (Bo5)</span> depending on the context (official, tournament).
+        </>,
+        <>
+          <span className="text-text font-semibold">Items</span> and contested stages are off by default,
+          unless both players explicitly agree otherwise.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League ranks <span className="text-text font-semibold">Super Smash Bros. 1v1</span> in stocks here.
+          Every registered player can challenge any other member of their league.
+        </>
+      ),
+      bullets: [
+        <>Set in a <span className="text-gold font-semibold">best of 3 or best of 5</span> games (Bo3 / Bo5).</>,
+        <>The winner is whoever takes the <span className="text-text font-semibold">majority of games</span>.</>,
+        <>Your <span className="text-text font-semibold">ELO is per discipline</span>: your Smash rating is separate from foosball.</>,
+        <>Both players report their result independently. If they disagree, the match is voided.</>,
+      ],
+    },
+  },
+  chess: {
+    label: 'chess 1v1',
+    terrain: {
+      intro: (
+        <>
+          Game conventions so the result is beyond dispute:
+        </>
+      ),
+      bullets: [
+        <>
+          A <span className="text-gold font-semibold">1v1</span> game under the classic rules of chess
+          (touch-move).
+        </>,
+        <>
+          The result is <span className="text-gold font-semibold">binary</span>: win or loss. A draw is
+          replayed or settled as the players agree.
+        </>,
+        <>
+          Victory is achieved by <span className="text-text font-semibold">checkmate</span> or by the
+          opponent's <span className="text-text font-semibold">resignation</span>.
+        </>,
+        <>
+          If a <span className="text-text font-semibold">time control</span> (clock) is used, flag fall
+          counts as a loss.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League ranks <span className="text-text font-semibold">chess 1v1</span> here. Every registered
+          player can challenge any other member of their league.
+        </>
+      ),
+      bullets: [
+        <><span className="text-gold font-semibold">Binary</span> result — win or loss, no numeric score.</>,
+        <>A match can only be reported <span className="text-text font-semibold">after it has been played</span>.</>,
+        <>Your <span className="text-text font-semibold">ELO is dedicated to chess</span>, separate from the other disciplines.</>,
+        <>Both players report their result independently. If they disagree, the match is voided.</>,
+      ],
+    },
+  },
+  streetfighter: {
+    label: 'Street Fighter 1v1',
+    terrain: {
+      intro: (
+        <>
+          Set conventions so victories are clear and matches fair:
+        </>
+      ),
+      bullets: [
+        <>
+          Each match is played in <span className="text-gold font-semibold">rounds</span> — the player who
+          wins the majority of rounds takes the game.
+        </>,
+        <>
+          <span className="text-gold font-semibold">Character</span> selection before each game; after a lost
+          game, the loser may <span className="text-text font-semibold">switch character</span>.
+        </>,
+        <>
+          Sets are played in a <span className="text-gold font-semibold">best of 3 (Bo3)</span> or{' '}
+          <span className="text-gold font-semibold">best of 5 (Bo5)</span> depending on the context (official, tournament).
+        </>,
+        <>
+          <span className="text-text font-semibold">Standard settings</span>: default timer and health, no
+          modifiers or exotic assists — a fair, readable set.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League ranks <span className="text-text font-semibold">Street Fighter 1v1</span> here.
+          Every registered player can challenge any other member of their league.
+        </>
+      ),
+      bullets: [
+        <>Set in a <span className="text-gold font-semibold">best of 3 or best of 5</span> games (Bo3 / Bo5).</>,
+        <>The winner is whoever takes the <span className="text-text font-semibold">majority of games</span>.</>,
+        <>Your <span className="text-text font-semibold">ELO is per discipline</span>: your Street Fighter rating is separate from the other games.</>,
+        <>Both players report their result independently. If they disagree, the match is voided.</>,
+      ],
+    },
+  },
+};
+
+const RULES_ES: Record<Game, GameRules> = {
+  babyfoot: {
+    label: 'futbolín 1 contra 1',
+    terrain: {
+      intro: (
+        <>
+          Convenciones de juego para que un gol sea válido y los partidos se disputen limpiamente:
+        </>
+      ),
+      bullets: [
+        <>
+          Tras el saque (<span className="text-text font-semibold">kick-off</span>), la pelota debe
+          <span className="text-gold font-semibold"> tocarse al menos dos veces</span> antes de que un gol
+          cuente.
+        </>,
+        <>
+          El jugador que <span className="text-text font-semibold">acaba de encajar un gol</span> tiene
+          derecho a reponer la pelota <span className="text-gold font-semibold">en su barra del medio</span> (medios)
+          para reanudar.
+        </>,
+        <>
+          Los <span className="text-gold font-semibold">goles marcados desde la barra del medio</span> (medios)
+          son válidos.
+        </>,
+        <>
+          La <span className="text-gold font-semibold">gamelle</span> (pelota que sale rebotada de la portería):
+          puedes <span className="text-text font-semibold">tomar el punto</span> o
+          <span className="text-text font-semibold"> quitarle un punto al rival</span> — pero no se puede
+          <span className="text-text font-semibold"> cerrar el partido con una gamelle</span>.
+        </>,
+        <>
+          Las <span className="text-gold font-semibold">ruletas</span> deben ser
+          <span className="text-text font-semibold"> controladas</span> (sin molinetes descontrolados).
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League es una clasificación ELO de <span className="text-text font-semibold">futbolín 1 contra 1</span>.
+          Cada jugador inscrito puede desafiar a cualquier otro miembro de su league.
+        </>
+      ),
+      bullets: [
+        <>Partido a <span className="text-gold font-semibold">10 goles</span> — el primero en llegar a 10 gana.</>,
+        <>Un partido solo puede declararse <span className="text-text font-semibold">después de haberse jugado</span>.</>,
+        <>Ambos jugadores declaran su marcador de forma independiente. En caso de desacuerdo, el partido se anula.</>,
+      ],
+    },
+  },
+  smash: {
+    label: 'Super Smash Bros. 1 contra 1',
+    terrain: {
+      intro: (
+        <>
+          Convenciones de set para que la victoria sea clara y los partidos justos:
+        </>
+      ),
+      bullets: [
+        <>
+          Cada partido se juega por <span className="text-gold font-semibold">stocks (vidas)</span> — el jugador
+          que agota todos los stocks del rival gana la manga.
+        </>,
+        <>
+          Selección de <span className="text-gold font-semibold">personaje</span> antes de cada manga; tras una
+          manga perdida, el perdedor puede <span className="text-text font-semibold">cambiar de personaje</span>.
+        </>,
+        <>
+          Los sets se disputan al <span className="text-gold font-semibold">mejor de 3 (Bo3)</span> o{' '}
+          <span className="text-gold font-semibold">de 5 (Bo5)</span> según el contexto (oficial, torneo).
+        </>,
+        <>
+          Los <span className="text-text font-semibold">objetos</span> y los escenarios discutidos están
+          desactivados por defecto, salvo acuerdo explícito de ambos jugadores.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League clasifica aquí <span className="text-text font-semibold">Super Smash Bros. 1 contra 1</span> por
+          stocks. Cada jugador inscrito puede desafiar a cualquier otro miembro de su league.
+        </>
+      ),
+      bullets: [
+        <>Set al <span className="text-gold font-semibold">mejor de 3 o de 5</span> mangas (Bo3 / Bo5).</>,
+        <>El vencedor es quien gana la <span className="text-text font-semibold">mayoría de las mangas</span>.</>,
+        <>El <span className="text-text font-semibold">ELO es propio de la disciplina</span>: tu rating de Smash es distinto del de futbolín.</>,
+        <>Ambos jugadores declaran su resultado de forma independiente. En caso de desacuerdo, el partido se anula.</>,
+      ],
+    },
+  },
+  chess: {
+    label: 'ajedrez 1 contra 1',
+    terrain: {
+      intro: (
+        <>
+          Convenciones de partida para que el resultado sea incontestable:
+        </>
+      ),
+      bullets: [
+        <>
+          Partida <span className="text-gold font-semibold">1 contra 1</span> con las reglas clásicas del
+          ajedrez (pieza tocada, pieza jugada).
+        </>,
+        <>
+          El resultado es <span className="text-gold font-semibold">binario</span>: victoria o derrota. Unas
+          tablas se vuelven a jugar o se deciden según el acuerdo de los jugadores.
+        </>,
+        <>
+          La victoria se logra por <span className="text-text font-semibold">jaque mate</span> o por
+          <span className="text-text font-semibold"> abandono</span> del rival.
+        </>,
+        <>
+          Si se usa un <span className="text-text font-semibold">ritmo</span> (reloj), la caída de la bandera
+          vale como derrota.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League clasifica aquí el <span className="text-text font-semibold">ajedrez 1 contra 1</span>. Cada
+          jugador inscrito puede desafiar a cualquier otro miembro de su league.
+        </>
+      ),
+      bullets: [
+        <>Resultado <span className="text-gold font-semibold">binario</span> — victoria o derrota, sin marcador numérico.</>,
+        <>Un partido solo puede declararse <span className="text-text font-semibold">después de haberse jugado</span>.</>,
+        <>El <span className="text-text font-semibold">ELO está dedicado al ajedrez</span>, distinto de las demás disciplinas.</>,
+        <>Ambos jugadores declaran su resultado de forma independiente. En caso de desacuerdo, el partido se anula.</>,
+      ],
+    },
+  },
+  streetfighter: {
+    label: 'Street Fighter 1 contra 1',
+    terrain: {
+      intro: (
+        <>
+          Convenciones de set para que la victoria sea clara y los partidos justos:
+        </>
+      ),
+      bullets: [
+        <>
+          Cada partido se juega por <span className="text-gold font-semibold">rounds</span> — el jugador que
+          gana la mayoría de los rounds se lleva la manga.
+        </>,
+        <>
+          Selección de <span className="text-gold font-semibold">personaje</span> antes de cada manga; tras una
+          manga perdida, el perdedor puede <span className="text-text font-semibold">cambiar de personaje</span>.
+        </>,
+        <>
+          Los sets se disputan al <span className="text-gold font-semibold">mejor de 3 (Bo3)</span> o{' '}
+          <span className="text-gold font-semibold">de 5 (Bo5)</span> según el contexto (oficial, torneo).
+        </>,
+        <>
+          <span className="text-text font-semibold">Ajustes estándar</span>: temporizador y vida por defecto,
+          sin modificadores ni assists exóticos — un set justo y legible.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League clasifica aquí el <span className="text-text font-semibold">Street Fighter 1 contra 1</span>.
+          Cada jugador inscrito puede desafiar a cualquier otro miembro de su league.
+        </>
+      ),
+      bullets: [
+        <>Set al <span className="text-gold font-semibold">mejor de 3 o de 5</span> mangas (Bo3 / Bo5).</>,
+        <>El vencedor es quien gana la <span className="text-text font-semibold">mayoría de las mangas</span>.</>,
+        <>El <span className="text-text font-semibold">ELO es propio de la disciplina</span>: tu rating de Street Fighter es distinto del de los demás juegos.</>,
+        <>Ambos jugadores declaran su resultado de forma independiente. En caso de desacuerdo, el partido se anula.</>,
+      ],
+    },
+  },
+};
+
+const RULES_I18N: Record<Lang, Record<Game, GameRules>> = {
+  fr: RULES_FR,
+  en: RULES_EN,
+  es: RULES_ES,
+};
+
+// ─── Défis & OPS (texte riche, par langue) ───────────────────────────────────
+
+const CHALLENGES_BODY: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <p>
+        Les <span className="text-gold font-semibold">défis</span> permettent de planifier un match à une heure précise.
+        L'adversaire accepte ou décline.
+      </p>
+      <p>
+        Un <span className="text-red font-semibold">OPS</span> (opération) désigne ton{' '}
+        <span className="text-text font-semibold">ennemi juré</span> : tu cibles un joueur et la traque
+        s'ouvre. Action unilatérale, aucune acceptation requise.
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-red/30">
+        <li>La traque dure <span className="text-text font-semibold">24 heures</span>.</li>
+        <li>
+          Pendant ce temps, la cible <span className="text-text font-semibold">ne peut pas refuser</span> les
+          <span className="text-text font-semibold"> 3 premiers défis</span> de son traqueur — elle doit les jouer.
+        </li>
+        <li>
+          Refuser un de ces matchs forcés coûte <span className="text-red font-semibold">3× l'ELO d'une défaite</span>
+          {' '}(bien plus qu'un simple désistement).
+        </li>
+        <li>Un seul OPS actif à la fois, avec un cooldown d'une semaine après expiration.</li>
+      </ul>
+    </>
+  ),
+  en: (
+    <>
+      <p>
+        <span className="text-gold font-semibold">Challenges</span> let you schedule a match at a set time.
+        Your opponent accepts or declines.
+      </p>
+      <p>
+        An <span className="text-red font-semibold">OPS</span> (operation) marks your{' '}
+        <span className="text-text font-semibold">arch-rival</span>: you target a player and the hunt
+        begins. A unilateral action — no acceptance required.
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-red/30">
+        <li>The hunt lasts <span className="text-text font-semibold">24 hours</span>.</li>
+        <li>
+          During that window, the target <span className="text-text font-semibold">cannot decline</span> the
+          <span className="text-text font-semibold"> first 3 challenges</span> from their hunter — they must play them.
+        </li>
+        <li>
+          Declining one of these forced matches costs <span className="text-red font-semibold">3× the ELO of a loss</span>
+          {' '}(far more than a simple withdrawal).
+        </li>
+        <li>Only one OPS active at a time, with a one-week cooldown after it expires.</li>
+      </ul>
+    </>
+  ),
+  es: (
+    <>
+      <p>
+        Los <span className="text-gold font-semibold">desafíos</span> permiten planificar un partido a una hora concreta.
+        El rival acepta o rechaza.
+      </p>
+      <p>
+        Una <span className="text-red font-semibold">OPS</span> (operación) designa a tu{' '}
+        <span className="text-text font-semibold">archienemigo</span>: marcas a un jugador y se abre la
+        caza. Acción unilateral, sin necesidad de aceptación.
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-red/30">
+        <li>La caza dura <span className="text-text font-semibold">24 horas</span>.</li>
+        <li>
+          Durante ese tiempo, el objetivo <span className="text-text font-semibold">no puede rechazar</span> los
+          <span className="text-text font-semibold"> 3 primeros desafíos</span> de su cazador — debe jugarlos.
+        </li>
+        <li>
+          Rechazar uno de estos partidos forzados cuesta <span className="text-red font-semibold">3× el ELO de una derrota</span>
+          {' '}(mucho más que un simple abandono).
+        </li>
+        <li>Solo una OPS activa a la vez, con un cooldown de una semana tras expirar.</li>
+      </ul>
+    </>
+  ),
+};
+
+const TOURNAMENTS_BODY: Record<Lang, React.ReactNode> = {
+  fr: (
+    <p>
+      Deux formats : <span className="text-text font-semibold">élimination directe</span> (bracket,
+      byes auto si besoin) ou <span className="text-text font-semibold">phase de poules</span> (dès 12
+      joueurs — poules de 4, 2 qualifiés par poule, puis bracket des qualifiés). Les tournois{' '}
+      <span className="text-gold font-semibold">officiels</span> sont créés par les admins et donnent des
+      récompenses spéciales ; les <span className="text-text font-semibold">amicaux</span> sont ouverts à
+      tous, sans impact ELO, et ne figurent dans l'historique que pour leurs participants.
+    </p>
+  ),
+  en: (
+    <p>
+      Two formats: <span className="text-text font-semibold">single elimination</span> (bracket,
+      auto byes if needed) or a <span className="text-text font-semibold">group stage</span> (from 12
+      players — groups of 4, 2 qualifiers per group, then a bracket of the qualifiers). The{' '}
+      <span className="text-gold font-semibold">official</span> tournaments are created by admins and grant
+      special rewards; the <span className="text-text font-semibold">friendly</span> ones are open to
+      everyone, have no ELO impact, and appear in the history only for their participants.
+    </p>
+  ),
+  es: (
+    <p>
+      Dos formatos: <span className="text-text font-semibold">eliminación directa</span> (bracket,
+      byes automáticos si hace falta) o <span className="text-text font-semibold">fase de grupos</span> (a partir de 12
+      jugadores — grupos de 4, 2 clasificados por grupo, luego bracket de clasificados). Los torneos{' '}
+      <span className="text-gold font-semibold">oficiales</span> los crean los admins y dan recompensas
+      especiales; los <span className="text-text font-semibold">amistosos</span> están abiertos a
+      todos, sin impacto en el ELO, y solo figuran en el historial de sus participantes.
+    </p>
+  ),
+};
+
 function RulesSection() {
   const { game } = useGameMode();
-  const rules = RULES[game];
+  const { lang } = useI18n();
+  const t = useT();
+  const rules = RULES_I18N[lang][game];
   return (
     <div className="flex flex-col gap-4">
       {/* En tête, pleine largeur : les règles propres à la discipline active. */}
-      <Panel title="Règles sur le terrain" accent="book">
+      <Panel title={t('about.rules.terrain.title')} accent="book">
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>{rules.terrain.intro}</p>
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
@@ -311,7 +793,7 @@ function RulesSection() {
 
       {/* Rangée régulière de 3 panneaux « méta », hauteurs égales. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-      <Panel title="Format du match">
+      <Panel title={t('about.rules.format.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>{rules.format.intro}</p>
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
@@ -322,42 +804,15 @@ function RulesSection() {
         </div>
       </Panel>
 
-      <Panel title="Défis et OPS">
+      <Panel title={t('about.rules.challenges.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Les <span className="text-gold font-semibold">défis</span> permettent de planifier un match à une heure précise.
-            L'adversaire accepte ou décline.
-          </p>
-          <p>
-            Un <span className="text-red font-semibold">OPS</span> (opération) désigne ton{' '}
-            <span className="text-text font-semibold">ennemi juré</span> : tu cibles un joueur et la traque
-            s'ouvre. Action unilatérale, aucune acceptation requise.
-          </p>
-          <ul className="space-y-1.5 pl-3 border-l border-red/30">
-            <li>La traque dure <span className="text-text font-semibold">24 heures</span>.</li>
-            <li>
-              Pendant ce temps, la cible <span className="text-text font-semibold">ne peut pas refuser</span> les
-              <span className="text-text font-semibold"> 3 premiers défis</span> de son traqueur — elle doit les jouer.
-            </li>
-            <li>
-              Refuser un de ces matchs forcés coûte <span className="text-red font-semibold">3× l'ELO d'une défaite</span>
-              {' '}(bien plus qu'un simple désistement).
-            </li>
-            <li>Un seul OPS actif à la fois, avec un cooldown d'une semaine après expiration.</li>
-          </ul>
+          {CHALLENGES_BODY[lang]}
         </div>
       </Panel>
 
-      <Panel title="Tournois">
+      <Panel title={t('about.rules.tournaments.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Deux formats : <span className="text-text font-semibold">élimination directe</span> (bracket,
-            byes auto si besoin) ou <span className="text-text font-semibold">phase de poules</span> (dès 12
-            joueurs — poules de 4, 2 qualifiés par poule, puis bracket des qualifiés). Les tournois{' '}
-            <span className="text-gold font-semibold">officiels</span> sont créés par les admins et donnent des
-            récompenses spéciales ; les <span className="text-text font-semibold">amicaux</span> sont ouverts à
-            tous, sans impact ELO, et ne figurent dans l'historique que pour leurs participants.
-          </p>
+          {TOURNAMENTS_BODY[lang]}
         </div>
       </Panel>
       </div>
@@ -372,31 +827,203 @@ function RulesSection() {
  * (cf. packages/shared/src/elo.ts). Présentation pédagogique, en pleine largeur.
  * L'ELO est calculé indépendamment par discipline : ne change que la phrase
  * d'introduction (et la mention de l'écart de buts, propre aux jeux scorés).
+ *
+ * Contenu riche (formules, surlignages) → sélectionné par langue.
  */
+type EloContent = {
+  /** Intro : tableau [avant-discipline, après-discipline]. Le label discipline s'insère entre les deux. */
+  intro: (label: string, scored: boolean) => React.ReactNode;
+  term: {
+    E: React.ReactNode;
+    K: React.ReactNode;
+    M: React.ReactNode;
+    bonus: React.ReactNode;
+  };
+  exampleNote: (scored: boolean) => React.ReactNode;
+};
+
+const ELO_CONTENT: Record<Lang, EloContent> = {
+  fr: {
+    intro: (label, scored) => (
+      <>
+        Le classement repose sur un système <span className="text-gold font-semibold">ELO dérivé des échecs</span>,
+        appliqué <span className="text-text font-semibold">par discipline</span> ({label}).
+        Chaque joueur démarre à{' '}
+        <span className="text-text font-semibold">1000 points</span>. À chaque match, des points sont
+        transférés du perdant vers le gagnant — d'autant plus que le résultat était{' '}
+        <span className="text-text font-semibold">inattendu</span>
+        {scored ? (
+          <> et la victoire <span className="text-text font-semibold">large</span></>
+        ) : null}
+        .
+      </>
+    ),
+    term: {
+      E: (
+        <>
+          La chance théorique de victoire du gagnant, calculée à partir de l'écart de classement
+          (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 / (1 + 10^((Elo_perdant − Elo_gagnant) / 400))</code>).
+          Battre un adversaire mieux classé rapporte plus, car la victoire était peu probable.
+        </>
+      ),
+      K: (
+        <>
+          La quantité maximale de points en jeu sur un match « neutre ». Plus il est élevé, plus le
+          classement réagit vite.
+        </>
+      ),
+      M: (
+        <>
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − score_perdant) × 0,1</code> :
+          gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
+          <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
+        </>
+      ),
+      bonus: (
+        <>
+          En clair :{' '}
+          <span className="text-text font-semibold">
+            si tu bats quelqu'un de bien mieux classé que toi, tu gagnes beaucoup plus de points
+          </span>{' '}
+          — et lui en perd d'autant. Battre un adversaire de niveau proche ne rapporte que peu :
+          plus l'écart de classement est grand, plus l'exploit paie.
+        </>
+      ),
+    },
+    exampleNote: (scored) => (
+      <>
+        {scored ? 'Même score, même victoire' : 'Même victoire'} : l'exploit face au joueur à +400 d'écart
+        rapporte <span className="text-text font-semibold">deux fois plus de points</span>.
+      </>
+    ),
+  },
+  en: {
+    intro: (label, scored) => (
+      <>
+        The ranking is based on a <span className="text-gold font-semibold">chess-derived ELO system</span>,
+        applied <span className="text-text font-semibold">per discipline</span> ({label}).
+        Each player starts at{' '}
+        <span className="text-text font-semibold">1000 points</span>. In every match, points are
+        transferred from the loser to the winner — all the more so when the result was{' '}
+        <span className="text-text font-semibold">unexpected</span>
+        {scored ? (
+          <> and the win was <span className="text-text font-semibold">wide</span></>
+        ) : null}
+        .
+      </>
+    ),
+    term: {
+      E: (
+        <>
+          The winner's theoretical chance of victory, computed from the rating gap
+          (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 / (1 + 10^((Elo_loser − Elo_winner) / 400))</code>).
+          Beating a higher-rated opponent pays more, since the win was unlikely.
+        </>
+      ),
+      K: (
+        <>
+          The maximum amount of points at stake in a "neutral" match. The higher it is, the faster the
+          ranking reacts.
+        </>
+      ),
+      M: (
+        <>
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − loser_score) × 0.1</code>:
+          winning <span className="text-text font-semibold">10–0</span> weighs more than a tight{' '}
+          <span className="text-text font-semibold">10–9</span>. The margin of victory matters.
+        </>
+      ),
+      bonus: (
+        <>
+          Put plainly:{' '}
+          <span className="text-text font-semibold">
+            if you beat someone rated far above you, you gain a lot more points
+          </span>{' '}
+          — and they lose just as many. Beating an opponent of similar level pays little:
+          the wider the rating gap, the more the upset pays off.
+        </>
+      ),
+    },
+    exampleNote: (scored) => (
+      <>
+        {scored ? 'Same score, same win' : 'Same win'}: the upset against the player +400 apart
+        pays <span className="text-text font-semibold">twice as many points</span>.
+      </>
+    ),
+  },
+  es: {
+    intro: (label, scored) => (
+      <>
+        La clasificación se basa en un sistema <span className="text-gold font-semibold">ELO derivado del ajedrez</span>,
+        aplicado <span className="text-text font-semibold">por disciplina</span> ({label}).
+        Cada jugador empieza con{' '}
+        <span className="text-text font-semibold">1000 puntos</span>. En cada partido se transfieren
+        puntos del perdedor al ganador — tanto más cuanto más{' '}
+        <span className="text-text font-semibold">inesperado</span> fuera el resultado
+        {scored ? (
+          <> y más <span className="text-text font-semibold">amplia</span> la victoria</>
+        ) : null}
+        .
+      </>
+    ),
+    term: {
+      E: (
+        <>
+          La probabilidad teórica de victoria del ganador, calculada a partir de la diferencia de clasificación
+          (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 / (1 + 10^((Elo_perdedor − Elo_ganador) / 400))</code>).
+          Ganar a un rival mejor clasificado da más, porque la victoria era poco probable.
+        </>
+      ),
+      K: (
+        <>
+          La cantidad máxima de puntos en juego en un partido «neutro». Cuanto mayor es, más rápido
+          reacciona la clasificación.
+        </>
+      ),
+      M: (
+        <>
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − marcador_perdedor) × 0,1</code>:
+          ganar <span className="text-text font-semibold">10–0</span> pesa más que un{' '}
+          <span className="text-text font-semibold">10–9</span> ajustado. La magnitud de la victoria cuenta.
+        </>
+      ),
+      bonus: (
+        <>
+          En claro:{' '}
+          <span className="text-text font-semibold">
+            si ganas a alguien mucho mejor clasificado que tú, ganas muchos más puntos
+          </span>{' '}
+          — y él pierde otros tantos. Ganar a un rival de nivel parecido apenas da puntos:
+          cuanto mayor es la diferencia de clasificación, más paga la sorpresa.
+        </>
+      ),
+    },
+    exampleNote: (scored) => (
+      <>
+        {scored ? 'Mismo marcador, misma victoria' : 'Misma victoria'}: la sorpresa frente al jugador a +400 de diferencia
+        da <span className="text-text font-semibold">el doble de puntos</span>.
+      </>
+    ),
+  },
+};
+
 function EloSection({ game }: { game: Game }) {
+  const { lang } = useI18n();
+  const t = useT();
+  const content = ELO_CONTENT[lang];
+  const label = RULES_I18N[lang][game].label;
   // L'écart de buts (multiplicateur M) n'a de sens que pour le babyfoot, qui se
   // joue en score chiffré. Smash et échecs ont un résultat sans écart de buts.
   const scored = game === 'babyfoot';
   return (
-    <Panel title="Système ELO" sub="comment les points sont calculés">
+    <Panel title={t('about.elo.title')} sub={t('about.elo.sub')}>
       <div className="space-y-5 text-sm text-muted leading-relaxed">
-        <p>
-          Le classement repose sur un système <span className="text-gold font-semibold">ELO dérivé des échecs</span>,
-          appliqué <span className="text-text font-semibold">par discipline</span> ({RULES[game].label}).
-          Chaque joueur démarre à{' '}
-          <span className="text-text font-semibold">1000 points</span>. À chaque match, des points sont
-          transférés du perdant vers le gagnant — d'autant plus que le résultat était{' '}
-          <span className="text-text font-semibold">inattendu</span>
-          {scored ? (
-            <> et la victoire <span className="text-text font-semibold">large</span></>
-          ) : null}
-          .
-        </p>
+        <p>{content.intro(label, scored)}</p>
 
         {/* La formule mise en avant */}
         <div className="rounded-xl border border-gold/25 bg-bg-2/50 p-4 sm:p-5">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2 mb-3">
-            Points transférés
+            {t('about.elo.transferred')}
           </div>
           <div className="font-gaming text-center text-base sm:text-lg text-text-strong tracking-wide">
             <span className="text-gold">K</span> ×{' '}
@@ -407,95 +1034,130 @@ function EloSection({ game }: { game: Game }) {
             ) : null}
             <span className="text-text">(1 − E)</span>
             <span className="text-muted"> + </span>
-            <span className="text-gold">bonus d'upset</span>
+            <span className="text-gold">{t('about.elo.upsetBonus')}</span>
           </div>
         </div>
 
         {/* Décomposition terme par terme */}
         <div className="space-y-3">
-          <EloTerm symbol="E" label="Probabilité attendue">
-            La chance théorique de victoire du gagnant, calculée à partir de l'écart de classement
-            (<code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 / (1 + 10^((Elo_perdant − Elo_gagnant) / 400))</code>).
-            Battre un adversaire mieux classé rapporte plus, car la victoire était peu probable.
+          <EloTerm symbol="E" label={t('about.elo.term.E.label')}>
+            {content.term.E}
           </EloTerm>
-          <EloTerm symbol="K = 32" label="Facteur de base">
-            La quantité maximale de points en jeu sur un match « neutre ». Plus il est élevé, plus le
-            classement réagit vite.
+          <EloTerm symbol="K = 32" label={t('about.elo.term.K.label')}>
+            {content.term.K}
           </EloTerm>
           {scored ? (
-            <EloTerm symbol="M" label="Multiplicateur d'écart de buts">
-              <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">1 + (10 − score_perdant) × 0,1</code> :
-              gagner <span className="text-text font-semibold">10–0</span> pèse davantage qu'un{' '}
-              <span className="text-text font-semibold">10–9</span> serré. L'ampleur de la victoire compte.
+            <EloTerm symbol="M" label={t('about.elo.term.M.label')}>
+              {content.term.M}
             </EloTerm>
           ) : null}
-          <EloTerm symbol="Bonus d'upset" label="Récompense l'exploit">
-            En clair :{' '}
-            <span className="text-text font-semibold">
-              si tu bats quelqu'un de bien mieux classé que toi, tu gagnes beaucoup plus de points
-            </span>{' '}
-            — et lui en perd d'autant. Battre un adversaire de niveau proche ne rapporte que peu :
-            plus l'écart de classement est grand, plus l'exploit paie.
+          <EloTerm symbol={t('about.elo.upsetBonus')} label={t('about.elo.term.bonus.label')}>
+            {content.term.bonus}
           </EloTerm>
         </div>
 
         {/* Exemple chiffré : à score égal, seul l'écart de classement change le gain. */}
         <div className="rounded-xl border border-gold/20 bg-bg-2/40 overflow-hidden">
           <div className="px-4 py-2.5 bg-bg-2/60 border-b border-gold/15 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2">
-            {scored ? 'Exemple — tu es à 1000 ELO et tu gagnes 10–5' : 'Exemple — tu es à 1000 ELO et tu gagnes'}
+            {scored ? t('about.elo.example.scored') : t('about.elo.example.unscored')}
           </div>
           <div className="divide-y divide-border/20">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <div className="text-text font-semibold text-sm">Petit écart</div>
-                <div className="text-xs text-muted-2">tu bats un joueur à 1050 ELO</div>
+                <div className="text-text font-semibold text-sm">{t('about.elo.example.small.title')}</div>
+                <div className="text-xs text-muted-2">{t('about.elo.example.small.sub')}</div>
               </div>
               <div className="flex items-center gap-2.5 shrink-0 font-mono tabular-nums text-sm">
                 <span className="text-[#7fd66e] font-extrabold">+29</span>
-                <span className="text-muted-2 text-[11px]">/ il perd</span>
+                <span className="text-muted-2 text-[11px]">{t('about.elo.example.heLoses')}</span>
                 <span className="text-red font-extrabold">−29</span>
               </div>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <div className="text-text font-semibold text-sm">Gros écart</div>
-                <div className="text-xs text-muted-2">tu bats un joueur à 1400 ELO</div>
+                <div className="text-text font-semibold text-sm">{t('about.elo.example.big.title')}</div>
+                <div className="text-xs text-muted-2">{t('about.elo.example.big.sub')}</div>
               </div>
               <div className="flex items-center gap-2.5 shrink-0 font-mono tabular-nums text-sm">
                 <span className="text-[#7fd66e] font-extrabold">+60</span>
-                <span className="text-muted-2 text-[11px]">/ il perd</span>
+                <span className="text-muted-2 text-[11px]">{t('about.elo.example.heLoses')}</span>
                 <span className="text-red font-extrabold">−60</span>
               </div>
             </div>
           </div>
           <div className="px-4 py-2.5 text-xs text-muted leading-relaxed border-t border-gold/15">
-            {scored ? 'Même score, même victoire' : 'Même victoire'} : l'exploit face au joueur à +400 d'écart
-            rapporte <span className="text-text font-semibold">deux fois plus de points</span>.
+            {content.exampleNote(scored)}
           </div>
         </div>
 
         {/* Garde-fous & règles annexes */}
         <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-          <li>
-            <span className="text-text font-semibold">Asymétrie sur les gros upsets</span> — le perdant surcoté encaisse
-            tout le bonus (jusqu'à <span className="text-gold font-semibold">−400</span> sur un match), mais le gagnant
-            ne grimpe que d'une part <span className="text-text font-semibold">plafonnée à +50</span> : battre un seul
-            « boss » gonflé ne fait pas exploser ton propre rating.
-          </li>
-          <li>
-            <span className="text-text font-semibold">Garde-fou</span> — la variation est bornée à{' '}
-            <span className="text-gold font-semibold">±400 points</span> par match.
-          </li>
-          <li>
-            <span className="text-text font-semibold">Ranked illimité</span> —{' '}
-            <span className="text-text font-semibold">chaque match compte pour l'ELO</span>, sans
-            limite par jour ni par adversaire.
-          </li>
+          {ELO_GUARDRAILS[lang]}
         </ul>
       </div>
     </Panel>
   );
 }
+
+const ELO_GUARDRAILS: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Asymétrie sur les gros upsets</span> — le perdant surcoté encaisse
+        tout le bonus (jusqu'à <span className="text-gold font-semibold">−400</span> sur un match), mais le gagnant
+        ne grimpe que d'une part <span className="text-text font-semibold">plafonnée à +50</span> : battre un seul
+        « boss » gonflé ne fait pas exploser ton propre rating.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Garde-fou</span> — la variation est bornée à{' '}
+        <span className="text-gold font-semibold">±400 points</span> par match.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Ranked illimité</span> —{' '}
+        <span className="text-text font-semibold">chaque match compte pour l'ELO</span>, sans
+        limite par jour ni par adversaire.
+      </li>
+    </>
+  ),
+  en: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Asymmetry on big upsets</span> — the overrated loser takes
+        the full bonus (up to <span className="text-gold font-semibold">−400</span> on a single match), but the winner
+        only gains a <span className="text-text font-semibold">capped +50</span> share: beating a single
+        inflated "boss" won't blow up your own rating.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Guardrail</span> — the change is capped at{' '}
+        <span className="text-gold font-semibold">±400 points</span> per match.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Unlimited ranked</span> —{' '}
+        <span className="text-text font-semibold">every match counts toward ELO</span>, with no
+        daily or per-opponent limit.
+      </li>
+    </>
+  ),
+  es: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Asimetría en las grandes sorpresas</span> — el perdedor sobrevalorado encaja
+        todo el bonus (hasta <span className="text-gold font-semibold">−400</span> en un partido), pero el ganador
+        solo sube una parte <span className="text-text font-semibold">limitada a +50</span>: ganar a un solo
+        «boss» inflado no dispara tu propio rating.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Salvaguarda</span> — la variación está acotada a{' '}
+        <span className="text-gold font-semibold">±400 puntos</span> por partido.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Ranked ilimitado</span> —{' '}
+        <span className="text-text font-semibold">cada partido cuenta para el ELO</span>, sin
+        límite diario ni por rival.
+      </li>
+    </>
+  ),
+};
 
 function EloTerm({
   symbol,
@@ -519,117 +1181,236 @@ function EloTerm({
 
 // ─── Politique de confidentialité ─────────────────────────────────────────────
 
+// Paragraphes riches (liens, surlignages) → par langue.
+const PRIVACY_CONTROLLER: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      Cette application est développée et opérée par des étudiants du réseau 42 dans le cadre
+      des CGU de l'API 42 (
+      <a href="https://api.intra.42.fr/apidoc" target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">
+        api.intra.42.fr
+      </a>
+      ). Pour toute question relative à vos données :{' '}
+      <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+        abidaux@student.42lehavre.fr
+      </a>
+    </>
+  ),
+  en: (
+    <>
+      This app is developed and operated by students of the 42 network under the terms of the 42 API
+      (
+      <a href="https://api.intra.42.fr/apidoc" target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">
+        api.intra.42.fr
+      </a>
+      ). For any question regarding your data:{' '}
+      <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+        abidaux@student.42lehavre.fr
+      </a>
+    </>
+  ),
+  es: (
+    <>
+      Esta aplicación es desarrollada y operada por estudiantes de la red 42 en el marco de las
+      condiciones de la API 42 (
+      <a href="https://api.intra.42.fr/apidoc" target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">
+        api.intra.42.fr
+      </a>
+      ). Para cualquier consulta sobre tus datos:{' '}
+      <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+        abidaux@student.42lehavre.fr
+      </a>
+    </>
+  ),
+};
+
+const PRIVACY_LEGAL: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      Le traitement est fondé sur l'<span className="text-text font-semibold">intérêt légitime</span> (RGPD Art. 6(1)(f)) :
+      gestion d'un classement sportif au sein du réseau 42, dans le cadre pédagogique défini
+      par les CGU de l'API 42. L'accès à vos données de profil 42 est conditionné à votre
+      consentement explicite lors de la connexion OAuth.
+    </>
+  ),
+  en: (
+    <>
+      Processing is based on <span className="text-text font-semibold">legitimate interest</span> (GDPR Art. 6(1)(f)):
+      running a sports ranking within the 42 network, in the educational context defined by the
+      42 API terms. Access to your 42 profile data is subject to your explicit consent during
+      the OAuth sign-in.
+    </>
+  ),
+  es: (
+    <>
+      El tratamiento se basa en el <span className="text-text font-semibold">interés legítimo</span> (RGPD Art. 6(1)(f)):
+      gestión de una clasificación deportiva dentro de la red 42, en el marco pedagógico definido
+      por las condiciones de la API 42. El acceso a tus datos de perfil de 42 está sujeto a tu
+      consentimiento explícito durante el inicio de sesión OAuth.
+    </>
+  ),
+};
+
+const PRIVACY_RIGHTS: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Accès et portabilité</span> — export JSON disponible
+        dans <Link to="/settings" className="text-gold hover:underline">Réglages</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Effacement</span> — suppression (anonymisation)
+        du compte disponible dans <Link to="/settings" className="text-gold hover:underline">Réglages</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Rectification</span> — contactez-nous par email.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Opposition</span> — vous pouvez cesser d'utiliser l'application
+        à tout moment et demander la suppression de votre compte.
+      </li>
+    </>
+  ),
+  en: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Access and portability</span> — JSON export available
+        in <Link to="/settings" className="text-gold hover:underline">Settings</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Erasure</span> — account deletion (anonymization)
+        available in <Link to="/settings" className="text-gold hover:underline">Settings</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Rectification</span> — contact us by email.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Objection</span> — you can stop using the app
+        at any time and request the deletion of your account.
+      </li>
+    </>
+  ),
+  es: (
+    <>
+      <li>
+        <span className="text-text font-semibold">Acceso y portabilidad</span> — exportación JSON disponible
+        en <Link to="/settings" className="text-gold hover:underline">Ajustes</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Supresión</span> — eliminación (anonimización)
+        de la cuenta disponible en <Link to="/settings" className="text-gold hover:underline">Ajustes</Link>.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Rectificación</span> — contáctanos por email.
+      </li>
+      <li>
+        <span className="text-text font-semibold">Oposición</span> — puedes dejar de usar la aplicación
+        en cualquier momento y solicitar la eliminación de tu cuenta.
+      </li>
+    </>
+  ),
+};
+
+const PRIVACY_SECURITY: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      Les communications sont chiffrées en transit (HTTPS). Les tokens de session
+      sont signés cryptographiquement (HMAC-SHA256) et transmis exclusivement
+      via cookies <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">HttpOnly</code> ou
+      fragment d'URL (non loggués). Aucune donnée n'est partagée avec des tiers,
+      à l'exception du webhook Discord interne utilisé pour les alertes admin
+      (sans données personnelles).
+    </>
+  ),
+  en: (
+    <>
+      Communications are encrypted in transit (HTTPS). Session tokens are
+      cryptographically signed (HMAC-SHA256) and transmitted exclusively via
+      <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text"> HttpOnly</code> cookies or
+      URL fragment (not logged). No data is shared with third parties,
+      except for the internal Discord webhook used for admin alerts
+      (no personal data).
+    </>
+  ),
+  es: (
+    <>
+      Las comunicaciones se cifran en tránsito (HTTPS). Los tokens de sesión
+      se firman criptográficamente (HMAC-SHA256) y se transmiten exclusivamente
+      mediante cookies <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">HttpOnly</code> o
+      fragmento de URL (no registrados). No se comparte ningún dato con terceros,
+      salvo el webhook interno de Discord usado para las alertas de admin
+      (sin datos personales).
+    </>
+  ),
+};
+
 function PrivacySection() {
+  const { lang } = useI18n();
+  const t = useT();
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="Responsable du traitement">
-        <p className="text-sm text-muted leading-relaxed">
-          Cette application est développée et opérée par des étudiants du réseau 42 dans le cadre
-          des CGU de l'API 42 (
-          <a
-            href="https://api.intra.42.fr/apidoc"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gold hover:underline"
-          >
-            api.intra.42.fr
-          </a>
-          ). Pour toute question relative à vos données :{' '}
-          <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
-            abidaux@student.42lehavre.fr
-          </a>
-        </p>
+      <Panel title={t('about.privacy.controller.title')}>
+        <p className="text-sm text-muted leading-relaxed">{PRIVACY_CONTROLLER[lang]}</p>
       </Panel>
 
-      <Panel title="Données collectées">
+      <Panel title={t('about.privacy.collected.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>Les données suivantes sont traitées dans l'application :</p>
+          <p>{t('about.privacy.collected.intro')}</p>
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b border-border/40">
-                <th className="text-left py-1.5 pr-3 text-muted-2 font-bold uppercase tracking-wider">Donnée</th>
-                <th className="text-left py-1.5 pr-3 text-muted-2 font-bold uppercase tracking-wider">Source</th>
-                <th className="text-left py-1.5 text-muted-2 font-bold uppercase tracking-wider">Conservation</th>
+                <th className="text-left py-1.5 pr-3 text-muted-2 font-bold uppercase tracking-wider">{t('about.privacy.table.data')}</th>
+                <th className="text-left py-1.5 pr-3 text-muted-2 font-bold uppercase tracking-wider">{t('about.privacy.table.source')}</th>
+                <th className="text-left py-1.5 text-muted-2 font-bold uppercase tracking-wider">{t('about.privacy.table.retention')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/20">
               <tr>
-                <td className="py-1.5 pr-3 text-text">Login, campus, photo</td>
-                <td className="py-1.5 pr-3 text-muted">API 42 (OAuth)</td>
-                <td className="py-1.5 text-muted">Jusqu'à suppression</td>
+                <td className="py-1.5 pr-3 text-text">{t('about.privacy.row1.data')}</td>
+                <td className="py-1.5 pr-3 text-muted">{t('about.privacy.row1.source')}</td>
+                <td className="py-1.5 text-muted">{t('about.privacy.row1.retention')}</td>
               </tr>
               <tr>
-                <td className="py-1.5 pr-3 text-text">Historique de matchs</td>
-                <td className="py-1.5 pr-3 text-muted">Actions utilisateur</td>
-                <td className="py-1.5 text-muted">Durée de la saison</td>
+                <td className="py-1.5 pr-3 text-text">{t('about.privacy.row2.data')}</td>
+                <td className="py-1.5 pr-3 text-muted">{t('about.privacy.row2.source')}</td>
+                <td className="py-1.5 text-muted">{t('about.privacy.row2.retention')}</td>
               </tr>
               <tr>
-                <td className="py-1.5 pr-3 text-text">Cookie de session</td>
-                <td className="py-1.5 pr-3 text-muted">Technique (auth)</td>
-                <td className="py-1.5 text-muted">30 jours</td>
+                <td className="py-1.5 pr-3 text-text">{t('about.privacy.row3.data')}</td>
+                <td className="py-1.5 pr-3 text-muted">{t('about.privacy.row3.source')}</td>
+                <td className="py-1.5 text-muted">{t('about.privacy.row3.retention')}</td>
               </tr>
               <tr>
-                <td className="py-1.5 pr-3 text-text">Logs d'administration</td>
-                <td className="py-1.5 pr-3 text-muted">Actions admin</td>
-                <td className="py-1.5 text-muted">24 mois</td>
+                <td className="py-1.5 pr-3 text-text">{t('about.privacy.row4.data')}</td>
+                <td className="py-1.5 pr-3 text-muted">{t('about.privacy.row4.source')}</td>
+                <td className="py-1.5 text-muted">{t('about.privacy.row4.retention')}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </Panel>
 
-      <Panel title="Base légale">
-        <p className="text-sm text-muted leading-relaxed">
-          Le traitement est fondé sur l'<span className="text-text font-semibold">intérêt légitime</span> (RGPD Art. 6(1)(f)) :
-          gestion d'un classement sportif au sein du réseau 42, dans le cadre pédagogique défini
-          par les CGU de l'API 42. L'accès à vos données de profil 42 est conditionné à votre
-          consentement explicite lors de la connexion OAuth.
-        </p>
+      <Panel title={t('about.privacy.legal.title')}>
+        <p className="text-sm text-muted leading-relaxed">{PRIVACY_LEGAL[lang]}</p>
       </Panel>
 
-      <Panel title="Vos droits">
+      <Panel title={t('about.privacy.rights.title')}>
         <div className="space-y-2 text-sm text-muted leading-relaxed">
-          <p>Conformément au RGPD, vous disposez des droits suivants :</p>
+          <p>{t('about.privacy.rights.intro')}</p>
           <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-            <li>
-              <span className="text-text font-semibold">Accès et portabilité</span> — export JSON disponible
-              dans <Link to="/settings" className="text-gold hover:underline">Réglages</Link>.
-            </li>
-            <li>
-              <span className="text-text font-semibold">Effacement</span> — suppression (anonymisation)
-              du compte disponible dans <Link to="/settings" className="text-gold hover:underline">Réglages</Link>.
-            </li>
-            <li>
-              <span className="text-text font-semibold">Rectification</span> — contactez-nous par email.
-            </li>
-            <li>
-              <span className="text-text font-semibold">Opposition</span> — vous pouvez cesser d'utiliser l'application
-              à tout moment et demander la suppression de votre compte.
-            </li>
+            {PRIVACY_RIGHTS[lang]}
           </ul>
           <p className="text-xs text-muted-2 pt-1">
-            Autorité de contrôle : CNIL —{' '}
-            <a
-              href="https://www.cnil.fr"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gold hover:underline"
-            >
+            {t('about.privacy.authority')}{' '}
+            <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">
               cnil.fr
             </a>
           </p>
         </div>
       </Panel>
 
-      <Panel title="Sécurité">
-        <p className="text-sm text-muted leading-relaxed">
-          Les communications sont chiffrées en transit (HTTPS). Les tokens de session
-          sont signés cryptographiquement (HMAC-SHA256) et transmis exclusivement
-          via cookies <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">HttpOnly</code> ou
-          fragment d'URL (non loggués). Aucune donnée n'est partagée avec des tiers,
-          à l'exception du webhook Discord interne utilisé pour les alertes admin
-          (sans données personnelles).
-        </p>
+      <Panel title={t('about.privacy.security.title')}>
+        <p className="text-sm text-muted leading-relaxed">{PRIVACY_SECURITY[lang]}</p>
       </Panel>
     </div>
   );
@@ -640,64 +1421,199 @@ function PrivacySection() {
 /**
  * Parenthèse « sous le capot » : un site utilisé par 42, autant en exposer le
  * fonctionnement. Volontairement court et synthétique, dans le ton du reste.
+ * Contenu riche → par langue.
  */
+const TECH_ARCHITECTURE: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <p>
+        Monorepo <span className="text-text font-semibold">TypeScript</span> de bout en bout, en trois morceaux :
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+        <li>
+          <span className="text-gold font-semibold">Front</span> — React 18 + Vite, installable en{' '}
+          <span className="text-text font-semibold">PWA</span> (service worker, plein écran sur mobile).
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Back</span> — API <span className="text-text font-semibold">Hono</span>{' '}
+          sur Node, base <span className="text-text font-semibold">PostgreSQL</span> via Prisma. Connexion 42 en OAuth.
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Temps réel</span> — le serveur pousse les changements en{' '}
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">SSE</code> ; le classement, les défis et les OPS
+          se mettent à jour <span className="text-text font-semibold">sans rechargement</span>.
+        </li>
+      </ul>
+    </>
+  ),
+  en: (
+    <>
+      <p>
+        End-to-end <span className="text-text font-semibold">TypeScript</span> monorepo, in three pieces:
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+        <li>
+          <span className="text-gold font-semibold">Front</span> — React 18 + Vite, installable as a{' '}
+          <span className="text-text font-semibold">PWA</span> (service worker, full screen on mobile).
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Back</span> — <span className="text-text font-semibold">Hono</span> API{' '}
+          on Node, <span className="text-text font-semibold">PostgreSQL</span> database via Prisma. 42 sign-in over OAuth.
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Real-time</span> — the server pushes changes over{' '}
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">SSE</code>; the ranking, challenges and OPS
+          update <span className="text-text font-semibold">without a reload</span>.
+        </li>
+      </ul>
+    </>
+  ),
+  es: (
+    <>
+      <p>
+        Monorepo <span className="text-text font-semibold">TypeScript</span> de extremo a extremo, en tres piezas:
+      </p>
+      <ul className="space-y-1.5 pl-3 border-l border-gold/25">
+        <li>
+          <span className="text-gold font-semibold">Front</span> — React 18 + Vite, instalable como{' '}
+          <span className="text-text font-semibold">PWA</span> (service worker, pantalla completa en móvil).
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Back</span> — API <span className="text-text font-semibold">Hono</span>{' '}
+          sobre Node, base de datos <span className="text-text font-semibold">PostgreSQL</span> con Prisma. Conexión 42 por OAuth.
+        </li>
+        <li>
+          <span className="text-gold font-semibold">Tiempo real</span> — el servidor envía los cambios por{' '}
+          <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">SSE</code>; la clasificación, los desafíos y las OPS
+          se actualizan <span className="text-text font-semibold">sin recargar</span>.
+        </li>
+      </ul>
+    </>
+  ),
+};
+
+const TECH_HOSTING: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <p>
+        Le site tourne sur un serveur <span className="text-gold font-semibold">Scaleway</span>, derrière un reverse-proxy{' '}
+        <span className="text-text font-semibold">Caddy</span> qui gère le <span className="text-text font-semibold">TLS</span>{' '}
+        automatiquement (Let's Encrypt).
+      </p>
+      <p>
+        Chaque <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">push</code> sur la branche principale
+        déclenche une <span className="text-gold font-semibold">GitHub Action</span> : elle construit une{' '}
+        <span className="text-text font-semibold">image Docker</span>, la scanne (Trivy) puis la pousse sur le serveur, qui
+        redémarre sur la nouvelle version. <span className="text-text font-semibold">Zéro déploiement manuel.</span>
+      </p>
+    </>
+  ),
+  en: (
+    <>
+      <p>
+        The site runs on a <span className="text-gold font-semibold">Scaleway</span> server, behind a{' '}
+        <span className="text-text font-semibold">Caddy</span> reverse proxy that handles <span className="text-text font-semibold">TLS</span>{' '}
+        automatically (Let's Encrypt).
+      </p>
+      <p>
+        Every <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">push</code> to the main branch
+        triggers a <span className="text-gold font-semibold">GitHub Action</span>: it builds a{' '}
+        <span className="text-text font-semibold">Docker image</span>, scans it (Trivy), then pushes it to the server, which
+        restarts on the new version. <span className="text-text font-semibold">Zero manual deployment.</span>
+      </p>
+    </>
+  ),
+  es: (
+    <>
+      <p>
+        El sitio corre en un servidor <span className="text-gold font-semibold">Scaleway</span>, detrás de un reverse-proxy{' '}
+        <span className="text-text font-semibold">Caddy</span> que gestiona el <span className="text-text font-semibold">TLS</span>{' '}
+        automáticamente (Let's Encrypt).
+      </p>
+      <p>
+        Cada <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">push</code> a la rama principal
+        dispara una <span className="text-gold font-semibold">GitHub Action</span>: construye una{' '}
+        <span className="text-text font-semibold">imagen Docker</span>, la escanea (Trivy) y la envía al servidor, que
+        reinicia con la nueva versión. <span className="text-text font-semibold">Cero despliegue manual.</span>
+      </p>
+    </>
+  ),
+};
+
+const TECH_HACK: Record<Lang, React.ReactNode> = {
+  fr: (
+    <>
+      <p>
+        Détailler la stack ici, c'est assumé : un site fait <span className="text-text font-semibold">par</span> et{' '}
+        <span className="text-text font-semibold">pour</span> 42 mérite d'être curieux de l'intérieur. Le code applicatif
+        reste en dépôt <span className="text-gold font-semibold">privé</span>, mais le fonctionnement n'a rien d'un secret.
+      </p>
+      <p>
+        Tu trouves une faille, un comportement louche, une idée de contournement ? <span className="text-gold font-semibold">Préviens
+        plutôt que d'exploiter</span> — divulgation responsable à{' '}
+        <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+          abidaux@student.42lehavre.fr
+        </a>
+        . Les bons reports finissent crédités. 🏴‍☠️
+      </p>
+    </>
+  ),
+  en: (
+    <>
+      <p>
+        Spelling out the stack here is deliberate: a site built <span className="text-text font-semibold">by</span> and{' '}
+        <span className="text-text font-semibold">for</span> 42 deserves to be poked at from the inside. The application code
+        stays in a <span className="text-gold font-semibold">private</span> repo, but how it works is no secret.
+      </p>
+      <p>
+        Found a flaw, shady behavior, a bypass idea? <span className="text-gold font-semibold">Report rather
+        than exploit</span> — responsible disclosure to{' '}
+        <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+          abidaux@student.42lehavre.fr
+        </a>
+        . Good reports end up credited. 🏴‍☠️
+      </p>
+    </>
+  ),
+  es: (
+    <>
+      <p>
+        Detallar la stack aquí es algo asumido: un sitio hecho <span className="text-text font-semibold">por</span> y{' '}
+        <span className="text-text font-semibold">para</span> 42 merece que lo curioseen por dentro. El código de la aplicación
+        sigue en un repo <span className="text-gold font-semibold">privado</span>, pero su funcionamiento no es ningún secreto.
+      </p>
+      <p>
+        ¿Encuentras un fallo, un comportamiento raro, una idea para saltártelo? <span className="text-gold font-semibold">Avisa
+        en vez de explotarlo</span> — divulgación responsable a{' '}
+        <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
+          abidaux@student.42lehavre.fr
+        </a>
+        . Los buenos reportes acaban acreditados. 🏴‍☠️
+      </p>
+    </>
+  ),
+};
+
 function TechSection() {
+  const { lang } = useI18n();
+  const t = useT();
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="Architecture">
+      <Panel title={t('about.tech.architecture.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Monorepo <span className="text-text font-semibold">TypeScript</span> de bout en bout, en trois morceaux :
-          </p>
-          <ul className="space-y-1.5 pl-3 border-l border-gold/25">
-            <li>
-              <span className="text-gold font-semibold">Front</span> — React 18 + Vite, installable en{' '}
-              <span className="text-text font-semibold">PWA</span> (service worker, plein écran sur mobile).
-            </li>
-            <li>
-              <span className="text-gold font-semibold">Back</span> — API <span className="text-text font-semibold">Hono</span>{' '}
-              sur Node, base <span className="text-text font-semibold">PostgreSQL</span> via Prisma. Connexion 42 en OAuth.
-            </li>
-            <li>
-              <span className="text-gold font-semibold">Temps réel</span> — le serveur pousse les changements en{' '}
-              <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">SSE</code> ; le classement, les défis et les OPS
-              se mettent à jour <span className="text-text font-semibold">sans rechargement</span>.
-            </li>
-          </ul>
+          {TECH_ARCHITECTURE[lang]}
         </div>
       </Panel>
 
-      <Panel title="Hébergement & déploiement">
+      <Panel title={t('about.tech.hosting.title')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Le site tourne sur un serveur <span className="text-gold font-semibold">Scaleway</span>, derrière un reverse-proxy{' '}
-            <span className="text-text font-semibold">Caddy</span> qui gère le <span className="text-text font-semibold">TLS</span>{' '}
-            automatiquement (Let's Encrypt).
-          </p>
-          <p>
-            Chaque <code className="bg-bg-2 px-1 py-0.5 rounded text-xs text-text">push</code> sur la branche principale
-            déclenche une <span className="text-gold font-semibold">GitHub Action</span> : elle construit une{' '}
-            <span className="text-text font-semibold">image Docker</span>, la scanne (Trivy) puis la pousse sur le serveur, qui
-            redémarre sur la nouvelle version. <span className="text-text font-semibold">Zéro déploiement manuel.</span>
-          </p>
+          {TECH_HOSTING[lang]}
         </div>
       </Panel>
 
-      <Panel title="Friendly hack" sub="la transparence est volontaire">
+      <Panel title={t('about.tech.hack.title')} sub={t('about.tech.hack.sub')}>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
-          <p>
-            Détailler la stack ici, c'est assumé : un site fait <span className="text-text font-semibold">par</span> et{' '}
-            <span className="text-text font-semibold">pour</span> 42 mérite d'être curieux de l'intérieur. Le code applicatif
-            reste en dépôt <span className="text-gold font-semibold">privé</span>, mais le fonctionnement n'a rien d'un secret.
-          </p>
-          <p>
-            Tu trouves une faille, un comportement louche, une idée de contournement ? <span className="text-gold font-semibold">Préviens
-            plutôt que d'exploiter</span> — divulgation responsable à{' '}
-            <a href="mailto:abidaux@student.42lehavre.fr" className="text-gold hover:underline">
-              abidaux@student.42lehavre.fr
-            </a>
-            . Les bons reports finissent crédités. 🏴‍☠️
-          </p>
+          {TECH_HACK[lang]}
         </div>
       </Panel>
     </div>
@@ -710,13 +1626,18 @@ function TechSection() {
  * Les personnes derrière 42 League — de l'idée au déploiement. Chaque membre a
  * un rôle distinct dans l'histoire du projet ; l'ordre suit cette chronologie :
  * l'idée, le passage 0 → 1, l'ambition, puis l'accompagnement (bêta & infra).
+ *
+ * `login`, `accent`, `roleKey` sont invariants ; le `role` (via t()) et le
+ * `blurb` (JSX riche) sont sélectionnés par langue à l'affichage.
  */
 type Member = {
   login: string;
-  role: string;
+  /** Clé i18n du rôle (rendue via t() dans la carte). */
+  roleKey: string;
   accent: 'gold' | 'red' | 'violet';
   crown?: boolean;
-  blurb: React.ReactNode;
+  /** Blurb riche par langue. */
+  blurb: Record<Lang, React.ReactNode>;
 };
 
 // Ordre d'affichage du carrousel (gauche → droite). nithomas est centré au
@@ -724,82 +1645,195 @@ type Member = {
 const TEAM: Member[] = [
   {
     login: 'throbert',
-    role: 'Founder',
+    roleKey: 'about.role.throbert',
     accent: 'gold',
-    blurb: (
-      <>
-        Celui qui a transformé l'idée en vrai projet. La{' '}
-        <span className="text-text font-semibold">vision d'origine</span> : un{' '}
-        <span className="text-text font-semibold">classement ELO 1v1</span> du campus, juste et
-        vivant. Aujourd'hui il pousse les{' '}
-        <span className="text-gold font-semibold">features principales</span> — étendre les jeux
-        (babyfoot, Smash, échecs…), les <span className="text-text font-semibold">tournois</span>,
-        défis programmés, OPS et trophées.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Celui qui a transformé l'idée en vrai projet. La{' '}
+          <span className="text-text font-semibold">vision d'origine</span> : un{' '}
+          <span className="text-text font-semibold">classement ELO 1v1</span> du campus, juste et
+          vivant. C'est lui qui <span className="text-gold font-semibold">développe les features</span> —
+          étendre les jeux (babyfoot, Smash, échecs…), les{' '}
+          <span className="text-text font-semibold">tournois</span>, défis programmés, OPS et trophées.{' '}
+          Ensuite <span className="text-gold font-semibold">Adrien</span> les{' '}
+          <span className="text-text font-semibold">peaufine pour la mise en prod</span>.
+        </>
+      ),
+      en: (
+        <>
+          The one who turned the idea into a real project. The{' '}
+          <span className="text-text font-semibold">original vision</span>: a fair, living{' '}
+          <span className="text-text font-semibold">1v1 ELO ranking</span> of the campus. He's the one who{' '}
+          <span className="text-gold font-semibold">builds the features</span> —
+          adding games (foosball, Smash, chess…), the{' '}
+          <span className="text-text font-semibold">tournaments</span>, scheduled challenges, OPS and trophies.{' '}
+          Then <span className="text-gold font-semibold">Adrien</span>{' '}
+          <span className="text-text font-semibold">polishes them for production</span>.
+        </>
+      ),
+      es: (
+        <>
+          El que convirtió la idea en un proyecto real. La{' '}
+          <span className="text-text font-semibold">visión original</span>: una{' '}
+          <span className="text-text font-semibold">clasificación ELO 1v1</span> del campus, justa y
+          viva. Es él quien <span className="text-gold font-semibold">desarrolla las features</span> —
+          ampliar los juegos (futbolín, Smash, ajedrez…), los{' '}
+          <span className="text-text font-semibold">torneos</span>, desafíos programados, OPS y trofeos.{' '}
+          Luego <span className="text-gold font-semibold">Adrien</span> las{' '}
+          <span className="text-text font-semibold">pule para la puesta en producción</span>.
+        </>
+      ),
+    },
   },
   {
     login: 'nithomas',
-    role: 'Parrain',
+    roleKey: 'about.role.nithomas',
     accent: 'gold',
-    blurb: (
-      <>
-        Tout est parti d'une <span className="text-text font-semibold">idée qu'il a lâchée</span> un
-        jour, comme ça. Sans cette première étincelle, 42 League serait jamais sorti de terre.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Tout est parti d'une <span className="text-text font-semibold">idée qu'il a lâchée</span> un
+          jour, comme ça. Sans cette première étincelle, 42 League serait jamais sorti de terre.
+        </>
+      ),
+      en: (
+        <>
+          It all started from an <span className="text-text font-semibold">idea he tossed out</span> one
+          day, just like that. Without that first spark, 42 League would never have gotten off the ground.
+        </>
+      ),
+      es: (
+        <>
+          Todo empezó con una <span className="text-text font-semibold">idea que soltó</span> un
+          día, así sin más. Sin esa primera chispa, 42 League nunca habría salido adelante.
+        </>
+      ),
+    },
   },
   {
     login: 'abidaux',
-    role: 'Cofondateur',
+    roleKey: 'about.role.abidaux',
     accent: 'gold',
-    blurb: (
-      <>
-        Il a transformé l'<span className="text-text font-semibold">extension de campus</span> en
-        vrai site web, puis l'a <span className="text-gold font-semibold">hébergé et déployé en ligne</span>.
-        C'est lui notamment derrière les <span className="text-text font-semibold">designs et les animations</span>.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Il a transformé l'<span className="text-text font-semibold">extension de campus</span> en
+          vrai site web, puis l'a <span className="text-gold font-semibold">hébergé et déployé en ligne</span>.
+          C'est lui notamment derrière les <span className="text-text font-semibold">designs et les animations</span>.
+        </>
+      ),
+      en: (
+        <>
+          He turned the <span className="text-text font-semibold">campus extension</span> into a
+          real website, then <span className="text-gold font-semibold">hosted and deployed it online</span>.
+          He's notably behind the <span className="text-text font-semibold">designs and animations</span>.
+        </>
+      ),
+      es: (
+        <>
+          Convirtió la <span className="text-text font-semibold">extensión de campus</span> en un
+          sitio web real, y luego lo <span className="text-gold font-semibold">alojó y desplegó en línea</span>.
+          Es él, en particular, quien está detrás de los <span className="text-text font-semibold">diseños y las animaciones</span>.
+        </>
+      ),
+    },
   },
   {
     login: 'jagharra',
-    role: 'Sécurité · Pentester',
+    roleKey: 'about.role.jagharra',
     accent: 'violet',
-    blurb: (
-      <>
-        Son expertise en <span className="text-text font-semibold">cybersécurité</span> a blindé le
-        projet : il audite les routes, traque les failles et{' '}
-        <span className="text-[#c97bff] font-semibold">patch avant que ça devienne un problème</span>.
-        Pas de vulnérabilité qui passe entre ses doigts.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Son expertise en <span className="text-text font-semibold">cybersécurité</span> a blindé le
+          projet : il audite les routes, traque les failles et{' '}
+          <span className="text-[#c97bff] font-semibold">patch avant que ça devienne un problème</span>.
+          Pas de vulnérabilité qui passe entre ses doigts.
+        </>
+      ),
+      en: (
+        <>
+          His <span className="text-text font-semibold">cybersecurity</span> expertise hardened the
+          project: he audits the routes, hunts for flaws and{' '}
+          <span className="text-[#c97bff] font-semibold">patches before it becomes a problem</span>.
+          No vulnerability slips through his fingers.
+        </>
+      ),
+      es: (
+        <>
+          Su experiencia en <span className="text-text font-semibold">ciberseguridad</span> blindó el
+          proyecto: audita las rutas, caza los fallos y{' '}
+          <span className="text-[#c97bff] font-semibold">parchea antes de que se convierta en problema</span>.
+          Ninguna vulnerabilidad se le escapa entre los dedos.
+        </>
+      ),
+    },
   },
   {
     login: 'rbardet-',
-    role: 'Conseiller UX/UI',
+    roleKey: 'about.role.rbardet',
     accent: 'red',
-    blurb: (
-      <>
-        Son <span className="text-text font-semibold">expertise e-sport</span> et sa connaissance
-        des sites de ranked ont beaucoup pesé : c'est lui qui a apporté l'
-        <span className="text-text font-semibold">analyse UX/UI</span> pour rendre l'app nette et
-        lisible.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Son <span className="text-text font-semibold">expertise e-sport</span> et sa connaissance
+          des sites de ranked ont beaucoup pesé : c'est lui qui a apporté l'
+          <span className="text-text font-semibold">analyse UX/UI</span> pour rendre l'app nette et
+          lisible.
+        </>
+      ),
+      en: (
+        <>
+          His <span className="text-text font-semibold">e-sport expertise</span> and his knowledge
+          of ranked sites weighed heavily: he's the one who brought the{' '}
+          <span className="text-text font-semibold">UX/UI analysis</span> to make the app crisp and
+          readable.
+        </>
+      ),
+      es: (
+        <>
+          Su <span className="text-text font-semibold">experiencia en e-sport</span> y su conocimiento
+          de los sitios de ranked pesaron mucho: es él quien aportó el{' '}
+          <span className="text-text font-semibold">análisis UX/UI</span> para hacer la app nítida y
+          legible.
+        </>
+      ),
+    },
   },
   {
     login: 'sbonneau',
-    role: 'Pen tester · Abuser',
+    roleKey: 'about.role.sbonneau',
     accent: 'red',
-    blurb: (
-      <>
-        Le <span className="text-text font-semibold">pen tester</span> de service : il cherche la
-        faille, <span className="text-text font-semibold">abuse</span> de chaque fonctionnalité pour
-        la pousser dans ses retranchements — et{' '}
-        <span className="text-[#ff5366] font-semibold">casse ce qui doit l'être</span> avant les
-        autres.
-      </>
-    ),
+    blurb: {
+      fr: (
+        <>
+          Le <span className="text-text font-semibold">pen tester</span> de service : il cherche la
+          faille, <span className="text-text font-semibold">abuse</span> de chaque fonctionnalité pour
+          la pousser dans ses retranchements — et{' '}
+          <span className="text-[#ff5366] font-semibold">casse ce qui doit l'être</span> avant les
+          autres.
+        </>
+      ),
+      en: (
+        <>
+          The resident <span className="text-text font-semibold">pen tester</span>: he looks for the
+          flaw, <span className="text-text font-semibold">abuses</span> every feature to push it to
+          its limits — and{' '}
+          <span className="text-[#ff5366] font-semibold">breaks what needs breaking</span> before
+          everyone else.
+        </>
+      ),
+      es: (
+        <>
+          El <span className="text-text font-semibold">pen tester</span> de turno: busca el
+          fallo, <span className="text-text font-semibold">abusa</span> de cada función para
+          llevarla al límite — y{' '}
+          <span className="text-[#ff5366] font-semibold">rompe lo que hay que romper</span> antes que
+          los demás.
+        </>
+      ),
+    },
   },
 ];
 
@@ -849,6 +1883,7 @@ function TeamSectionAuthed() {
 }
 
 function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
+  const t = useT();
   // Ordre déclaré tel quel : nithomas centré au démarrage (throbert à gauche,
   // abidaux à droite).
   const members = TEAM;
@@ -883,11 +1918,10 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="Les développeurs" sub="de l'idée au déploiement">
+      <Panel title={t('about.team.devs.title')} sub={t('about.team.devs.sub')}>
         <p className="text-sm text-muted leading-relaxed">
-          42 League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première
-          idée jusqu'à la mise en production.{' '}
-          <span className="text-muted-2">← glisse, scrolle ou clique pour parcourir →</span>
+          {t('about.team.intro')}{' '}
+          <span className="text-muted-2">{t('about.team.intro.hint')}</span>
         </p>
       </Panel>
 
@@ -931,7 +1965,7 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
         <button
           type="button"
           onClick={() => go(-1)}
-          aria-label="Précédent"
+          aria-label={t('about.team.prev')}
           className="absolute left-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 transition-all"
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
@@ -939,7 +1973,7 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
         <button
           type="button"
           onClick={() => go(1)}
-          aria-label="Suivant"
+          aria-label={t('about.team.next')}
           className="absolute right-1 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-9 h-9 rounded-full bg-bg-2/80 border border-border/60 text-text hover:text-gold hover:border-gold/40 transition-all"
         >
           <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
@@ -953,7 +1987,7 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
             key={m.login}
             type="button"
             onClick={() => setActive(i)}
-            aria-label={`Aller à ${m.login}`}
+            aria-label={`${t('about.team.goto')} ${m.login}`}
             className={`h-1.5 rounded-full transition-all ${
               i === active ? 'w-6 bg-gold' : 'w-1.5 bg-border hover:bg-muted-2'
             }`}
@@ -983,6 +2017,8 @@ function MemberCard({
   imageUrl: string | null;
   active: boolean;
 }) {
+  const { lang } = useI18n();
+  const t = useT();
   const accent = ACCENT[member.accent];
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
@@ -1036,9 +2072,9 @@ function MemberCard({
         <div
           className={`inline-block mt-2 text-[11px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-md border ${accent.badge}`}
         >
-          {member.role}
+          {t(member.roleKey)}
         </div>
-        <p className="mt-3 text-sm text-white/85 leading-relaxed">{member.blurb}</p>
+        <p className="mt-3 text-sm text-white/85 leading-relaxed">{member.blurb[lang]}</p>
       </div>
     </div>
   );

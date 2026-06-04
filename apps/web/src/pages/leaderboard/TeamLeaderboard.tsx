@@ -5,6 +5,7 @@ import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { PlayerLink } from '../../components/PlayerLink';
 import { api, type BabyfootTeamEntry, type LeaderboardEntry } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useT } from '../../lib/i18n';
 
 // ─── Avatar d'un joueur dans la carte d'équipe ───────────────────────────────
 
@@ -110,6 +111,7 @@ function TeamCard({ entry, isTop }: TeamCardProps) {
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 function EmptyTeams() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center py-14 px-4 gap-4">
       <div
@@ -119,9 +121,9 @@ function EmptyTeams() {
         <Swords className="w-7 h-7 text-gold/50" strokeWidth={1.5} />
       </div>
       <div className="text-center">
-        <div className="text-sm font-extrabold text-text-strong">Aucune équipe 2v2</div>
+        <div className="text-sm font-extrabold text-text-strong">{t('lb.teams.emptyTitle')}</div>
         <div className="text-xs text-muted-2 mt-1 leading-relaxed">
-          Déclarez votre premier match 2v2<br />pour créer un duo.
+          {t('lb.teams.emptyBody1')}<br />{t('lb.teams.emptyBody2')}
         </div>
       </div>
     </div>
@@ -137,23 +139,24 @@ function EmptyTeams() {
  * un appel réseau supplémentaire.
  */
 export function TeamLeaderboard() {
+  const t = useT();
   const { leaderboard } = useLeagueData();
 
   const [teams, setTeams] = useState<BabyfootTeamEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setError(null);
+    setError(false);
     api
       .teamLeaderboard()
       .then((data) => {
         if (alive) setTeams(data);
       })
       .catch(() => {
-        if (alive) setError('Impossible de charger le classement équipes.');
+        if (alive) setError(true);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -184,7 +187,7 @@ export function TeamLeaderboard() {
 
   if (error) {
     return (
-      <div className="text-center py-10 text-sm text-red/80 font-medium">{error}</div>
+      <div className="text-center py-10 text-sm text-red/80 font-medium">{t('lb.teams.error')}</div>
     );
   }
 

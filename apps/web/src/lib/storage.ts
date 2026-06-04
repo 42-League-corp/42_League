@@ -2,6 +2,7 @@ const KEY_TOKEN = 'league:token';
 const KEY_LOGIN = 'league:login';
 const KEY_LANG = 'league:lang';
 const KEY_API_BASE_OVERRIDE = 'league:api_base_override';
+const KEY_GOAT_INTRO_SEEN = 'league:goat_intro_seen';
 
 function safeGet(key: string): string | null {
   try {
@@ -51,6 +52,15 @@ export function getStoredLang(): string | null {
 
 export function setStoredLang(lang: string): void {
   safeSet(KEY_LANG, lang);
+}
+
+// Intro G.O.A.T : affichée une seule fois (puis rappelable via le bouton « ? »).
+export function hasSeenGoatIntro(): boolean {
+  return safeGet(KEY_GOAT_INTRO_SEEN) === '1';
+}
+
+export function markGoatIntroSeen(): void {
+  safeSet(KEY_GOAT_INTRO_SEEN, '1');
 }
 
 export function getApiBaseOverride(): string | null {

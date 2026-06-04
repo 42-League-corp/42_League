@@ -7,6 +7,7 @@ import { PlayerLink } from '../components/PlayerLink';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { computePlayerStats } from '../lib/playerStats';
 import type { PlayedMatch } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /** Vue d'un match du point de vue d'un joueur. */
 function sideOf(m: PlayedMatch, login: string) {
@@ -40,6 +41,7 @@ export function H2HPage() {
   const a = params.get('a') ?? '';
   const b = params.get('b') ?? '';
   const { leaderboard, matches } = useLeagueData();
+  const t = useT();
 
   const data = useMemo(() => {
     if (!a || !b || a === b) return null;
@@ -84,9 +86,9 @@ export function H2HPage() {
 
   if (!a || !b || a === b) {
     return (
-      <Panel title="Head-to-Head" sub="comparatif" accent="swords">
+      <Panel title={t('h2h.title')} sub={t('h2h.sub.compare')} accent="swords">
         <div className="text-center text-muted-2 py-10">
-          Paramètres manquants. Ouvre un H2H depuis la fiche d'un joueur.
+          {t('h2h.missing')}
         </div>
       </Panel>
     );
@@ -98,7 +100,7 @@ export function H2HPage() {
   const statsB = computePlayerStats(b, matches, 0);
 
   return (
-    <Panel title="Head-to-Head" sub="confrontations directes" accent="swords">
+    <Panel title={t('h2h.title')} sub={t('h2h.sub.direct')} accent="swords">
       {/* Deux profils côte à côte */}
       <div className="flex items-stretch gap-3 sm:gap-4">
         <ProfileSide
@@ -132,27 +134,27 @@ export function H2HPage() {
       {/* Stats H2H */}
       {!data || data.n === 0 ? (
         <div className="mt-6 text-center text-muted-2 py-8 card-hud rounded-xl">
-          Ces deux joueurs ne se sont <span className="text-text font-semibold">jamais affrontés</span> en match classé.
+          {t('h2h.never.a')} <span className="text-text font-semibold">{t('h2h.never.b')}</span> {t('h2h.never.c')}
         </div>
       ) : (
         <>
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <H2HStat label="Confrontations" value={String(data.n)} />
-            <H2HStat label="Bilan" value={`${data.winsA} – ${data.winsB}`} />
+            <H2HStat label={t('h2h.stat.confrontations')} value={String(data.n)} />
+            <H2HStat label={t('h2h.stat.record')} value={`${data.winsA} – ${data.winsB}`} />
             <H2HStat
-              label={`ELO net · ${a}`}
+              label={`${t('h2h.stat.eloNet')} · ${a}`}
               value={`${data.eloNetA >= 0 ? '+' : ''}${data.eloNetA}`}
               tone={data.eloNetA >= 0 ? 'win' : 'loss'}
             />
             <H2HStat
-              label={`ELO net · ${b}`}
+              label={`${t('h2h.stat.eloNet')} · ${b}`}
               value={`${data.eloNetB >= 0 ? '+' : ''}${data.eloNetB}`}
               tone={data.eloNetB >= 0 ? 'win' : 'loss'}
             />
-            <H2HStat label="Score moyen" value={`${data.avgA} – ${data.avgB}`} />
+            <H2HStat label={t('h2h.stat.avgScore')} value={`${data.avgA} – ${data.avgB}`} />
             {data.last && (
               <H2HStat
-                label="Dernier match"
+                label={t('h2h.stat.lastMatch')}
                 value={`${sideOf(data.last, a).scoreFor}–${sideOf(data.last, a).scoreAgainst}`}
                 sub={fmtDateFr(data.last.playedAt)}
               />
@@ -163,8 +165,8 @@ export function H2HPage() {
           <div className="mt-6">
             <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
               <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-              10 derniers duels
-              <span className="text-muted-2 normal-case tracking-normal font-mono">· vus de {a}</span>
+              {t('h2h.last10')}
+              <span className="text-muted-2 normal-case tracking-normal font-mono">· {t('h2h.seenFrom')} {a}</span>
               <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -181,7 +183,7 @@ export function H2HPage() {
                     <span
                       className={`text-[10px] font-black uppercase ${sa.won ? 'text-[#7fd66e]' : 'text-red'}`}
                     >
-                      {sa.won ? 'Victoire' : 'Défaite'}
+                      {sa.won ? t('h2h.win') : t('h2h.loss')}
                     </span>
                     <span className="font-mono text-sm font-extrabold tabular-nums text-text-strong">
                       {sa.scoreFor}–{sa.scoreAgainst}
@@ -200,7 +202,7 @@ export function H2HPage() {
           to="/leaderboard"
           className="text-[11px] uppercase tracking-wider text-muted-2 hover:text-gold transition-colors"
         >
-          ← Retour au classement
+          {t('h2h.back')}
         </Link>
       </div>
     </Panel>

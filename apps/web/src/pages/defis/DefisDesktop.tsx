@@ -8,6 +8,7 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
 import { AbacusSlider } from '../../components/AbacusSlider';
 import { ContestModal } from '../../components/ContestModal';
+import { MatchmakingButton } from '../../components/MatchmakingButton';
 import {
   api,
   type Challenge,
@@ -40,17 +41,18 @@ type OpenCard = 'declare' | 'challenge' | null;
 const NOOP = () => {};
 
 // ─── Badges de discipline ─────────────────────────────────────────────────────
-const GAME_BADGE: Partial<Record<Game, string>> = {
-  smash: '🎮 Smash',
-  chess: '♟ Échecs',
-  streetfighter: '🥊 Street Fighter',
+const GAME_EMOJI: Partial<Record<Game, string>> = {
+  smash: '🎮',
+  chess: '♟',
+  streetfighter: '🥊',
 };
 
 function GameTag({ game }: { game?: Game }) {
+  const t = useT();
   if (!game || game === 'babyfoot') return null;
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] bg-accent/12 text-accent border border-accent/25">
-      {GAME_BADGE[game]}
+      {GAME_EMOJI[game]} {t(`game.${game}`)}
     </span>
   );
 }
@@ -122,17 +124,22 @@ export function DefisDesktop() {
       {/* ── Stats game-aware (mini bar, toujours visible) ────────────────── */}
       {gameStats && (
         <div className="grid grid-cols-5 gap-2 mb-6">
-          <StatCard value={gameStats.rank ? `#${gameStats.rank}` : '—'} label="Rang" tone="gold" />
+          <StatCard value={gameStats.rank ? `#${gameStats.rank}` : '—'} label={t('defis.stat.rank')} tone="gold" />
           <StatCard value={String(gameStats.elo)} label={<>ELO <RankedBadge size="xs" /></>} tone="teal" />
-          <StatCard value={`${gameStats.wins}-${gameStats.losses}`} label="V-D" tone="neutral" />
-          <StatCard value={`${gameStats.winRate}%`} label="Win rate" tone={gameStats.winRate >= 50 ? 'win' : 'loss'} />
+          <StatCard value={`${gameStats.wins}-${gameStats.losses}`} label={t('defis.stat.wl')} tone="neutral" />
+          <StatCard value={`${gameStats.winRate}%`} label={t('defis.stat.winrate')} tone={gameStats.winRate >= 50 ? 'win' : 'loss'} />
           <StatCard
             value={gameStats.streak > 0 ? `${gameStats.streak}V` : gameStats.streak < 0 ? `${Math.abs(gameStats.streak)}D` : '—'}
-            label="Série"
+            label={t('defis.stat.streak')}
             tone={gameStats.streak > 0 ? 'win' : gameStats.streak < 0 ? 'loss' : 'neutral'}
           />
         </div>
       )}
+
+      {/* ── 0. MATCH ALÉATOIRE (matchmaking queue) ───────────────────────── */}
+      <div className="mb-4">
+        <MatchmakingButton />
+      </div>
 
       {/* ── 1. HERO CTAs ─────────────────────────────────────────────────── */}
       {/* Les 2 boutons les plus importants du site : toujours au-dessus du pli,
@@ -257,8 +264,8 @@ function HeroCTAs({
 const CTA_META = {
   declare: {
     Icon: Plus,
-    label: 'Déclarer une game',
-    sub: 'Enregistrer une partie déjà jouée',
+    labelKey: 'defis.cta.declare',
+    subKey: 'defis.cta.declare.sub',
     gradient: 'from-gold/25 via-gold/8 to-transparent',
     border: 'border-gold/50 hover:border-gold',
     glow: '0 0 36px rgba(255,201,74,0.22)',
@@ -267,8 +274,8 @@ const CTA_META = {
   },
   challenge: {
     Icon: Swords,
-    label: 'Défier un joueur',
-    sub: 'Programmer un duel à venir',
+    labelKey: 'defis.cta.challenge',
+    subKey: 'defis.cta.challenge.sub',
     gradient: 'from-accent/20 via-accent/6 to-transparent',
     border: 'border-accent/50 hover:border-accent',
     glow: '0 0 36px rgba(var(--accent-gold),0.20)',
@@ -286,8 +293,11 @@ interface HeroCTACardProps {
 }
 
 function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardProps) {
+  const t = useT();
   const meta = CTA_META[kind];
   const Icon = meta.Icon;
+  const label = t(meta.labelKey);
+  const sub = t(meta.subKey);
 
   if (!expanded) {
     return (
@@ -323,10 +333,10 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
         {/* Texte */}
         <span className="relative min-w-0 flex-1">
           <span className={`block font-display text-xl font-black tracking-tight ${meta.accent} leading-none mb-1.5`}>
-            {meta.label}
+            {label}
           </span>
           <span className="block text-[11px] text-muted-2 font-medium uppercase tracking-[0.16em]">
-            {meta.sub}
+            {sub}
           </span>
         </span>
 
@@ -357,13 +367,13 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
         <div className="flex items-center gap-3">
           <Icon className={`w-5 h-5 ${meta.accent}`} strokeWidth={2.5} />
           <span className={`font-display text-base font-black ${meta.accent}`}>
-            {meta.label}
+            {label}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Fermer"
+          aria-label={t('defis.close')}
           className="text-muted hover:text-text-strong transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
         >
           <X className="w-4 h-4" strokeWidth={2.5} />
@@ -394,6 +404,7 @@ function ActivityStream({
   pendingToConfirm, pendingWaiting, incoming, accepted, outgoing,
   myLogin, lang, refresh, handleAction, cancelDeclaration,
 }: ActivityStreamProps) {
+  const t = useT();
   const urgentCount = pendingToConfirm.length + incoming.length;
   const [open, setOpen] = useState(true);
 
@@ -411,7 +422,7 @@ function ActivityStream({
           </span>
         )}
         <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90 flex-1 text-left">
-          Activité en cours
+          {t('defis.activity')}
         </span>
         <ChevronDown
           className={`w-4 h-4 text-muted-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -422,14 +433,14 @@ function ActivityStream({
       {open && (
         <div className="px-5 pb-5 space-y-4">
           {pendingToConfirm.length > 0 && (
-            <ActivityGroup label="À confirmer" badge={pendingToConfirm.length} urgent>
+            <ActivityGroup label={t('defis.toConfirm')} badge={pendingToConfirm.length} urgent>
               {pendingToConfirm.map((p) => (
                 <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
               ))}
             </ActivityGroup>
           )}
           {incoming.length > 0 && (
-            <ActivityGroup label="Défis reçus" badge={incoming.length} urgent>
+            <ActivityGroup label={t('defis.received')} badge={incoming.length} urgent>
               {incoming.map((c) => (
                 <ChallengeRow key={c.id} challenge={c} kind="incoming" myLogin={myLogin} lang={lang}
                   onAccept={() => handleAction(c.id, 'accept')}
@@ -438,7 +449,7 @@ function ActivityStream({
             </ActivityGroup>
           )}
           {accepted.length > 0 && (
-            <ActivityGroup label="Duels programmés" badge={accepted.length}>
+            <ActivityGroup label={t('defis.scheduledDuels')} badge={accepted.length}>
               {accepted.map((c) => (
                 <ChallengeRow key={c.id} challenge={c} kind="accepted" myLogin={myLogin} lang={lang}
                   onAccept={NOOP}
@@ -447,7 +458,7 @@ function ActivityStream({
             </ActivityGroup>
           )}
           {outgoing.length > 0 && (
-            <ActivityGroup label="Défis envoyés" badge={outgoing.length}>
+            <ActivityGroup label={t('defis.sent')} badge={outgoing.length}>
               {outgoing.map((c) => (
                 <ChallengeRow key={c.id} challenge={c} kind="outgoing" myLogin={myLogin} lang={lang}
                   onAccept={NOOP}
@@ -456,7 +467,7 @@ function ActivityStream({
             </ActivityGroup>
           )}
           {pendingWaiting.length > 0 && (
-            <ActivityGroup label="En attente de confirmation" badge={pendingWaiting.length}>
+            <ActivityGroup label={t('defis.waitingConfirm')} badge={pendingWaiting.length}>
               {pendingWaiting.map((p) => (
                 <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
               ))}
@@ -508,9 +519,9 @@ function PlayerPool({ players, leaderboard: _lb, game: _game, onChallenge, onDec
       <div className="flex items-center gap-3 mb-4">
         <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold flex items-center gap-2">
           <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-          Pool de joueurs
+          {t('defis.pool')}
           <span className="font-mono text-muted-2 normal-case tracking-normal">
-            · {players.length} joueurs
+            · {players.length} {t('defis.poolCount')}
           </span>
         </div>
         <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
@@ -518,7 +529,7 @@ function PlayerPool({ players, leaderboard: _lb, game: _game, onChallenge, onDec
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filtrer…"
+          placeholder={t('defis.filter')}
           className="w-36 px-3 py-1.5 bg-bg-1 border border-border rounded-lg text-xs font-medium focus:border-gold outline-none text-text-strong placeholder:text-muted tap-transparent allow-select transition-all"
         />
       </div>
@@ -550,6 +561,7 @@ function PlayerCard({
   onChallenge: (p: LeaderboardEntry) => void;
   onDeclare: (p: LeaderboardEntry) => void;
 }) {
+  const t = useT();
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -587,7 +599,7 @@ function PlayerCard({
             <button
               type="button"
               onClick={() => onDeclare(player)}
-              title="Déclarer une game passée"
+              title={t('defis.declarePastGame')}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-gold hover:bg-gold/10 transition-colors"
             >
               <Plus className="w-4 h-4" strokeWidth={2.5} />
@@ -595,7 +607,7 @@ function PlayerCard({
             <button
               type="button"
               onClick={() => onChallenge(player)}
-              title="Défier ce joueur"
+              title={t('defis.challengeThisPlayer')}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-accent hover:bg-accent/10 transition-colors"
             >
               <Swords className="w-4 h-4" strokeWidth={2.5} />
@@ -610,6 +622,7 @@ function PlayerCard({
 // ─── Ligne de match en attente de confirmation ────────────────────────────────
 
 function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () => Promise<void> }) {
+  const t = useT();
   const flash = useFlash();
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -623,7 +636,7 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
         game: match.game,
         bestOf: match.bestOf as 3 | 5 | undefined,
       });
-      flash.show('✓ Match confirmé — ELO mis à jour !');
+      flash.show(t('defis.matchConfirmed'));
       setResolved(true);
       await onDone();
     } catch (err) {
@@ -637,7 +650,7 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
     setBusy(true);
     try {
       await api.rejectMatch(match.id, reason, message);
-      flash.show('Contestation envoyée.');
+      flash.show(t('defis.contestSent'));
       setResolved(true);
       await onDone();
     } catch (err) {
@@ -655,22 +668,22 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
         <PlayerLink login={match.declarerLogin} className="font-semibold text-gold text-sm">
           {match.declarerLogin}
         </PlayerLink>
-        <span className="text-muted-2 text-sm">a déclaré :</span>
+        <span className="text-muted-2 text-sm">{t('defis.declared')}</span>
         <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
           {match.scoreDeclarer}
           <span className="text-muted mx-1">–</span>
           {match.scoreOpponent}
         </span>
         <GameTag game={match.game} />
-        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">(eux – toi)</span>
+        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{t('defis.themYou')}</span>
         <span className="text-[11px] text-muted-2 hidden sm:inline">
-          → Tu as {iWon ? 'gagné' : 'perdu'}
+          → {t('defis.youHave')} {iWon ? t('defis.won') : t('defis.lost')}
         </span>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" loading={busy} onClick={handleConfirm}>✓ Confirmer</Button>
+          <Button size="sm" loading={busy} onClick={handleConfirm}>{t('defis.confirmCheck')}</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
             className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
-            Contester
+            {t('defis.contest')}
           </Button>
         </div>
       </div>
@@ -688,10 +701,11 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 }
 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
+  const t = useT();
   return (
     <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
       <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
-      <span className="text-muted-2">En attente de</span>
+      <span className="text-muted-2">{t('defis.waitingFor')}</span>
       <PlayerLink login={match.opponentLogin} className="font-semibold">{match.opponentLogin}</PlayerLink>
       <span className="font-mono font-extrabold tabular-nums text-text-strong">
         {match.scoreDeclarer}
@@ -699,10 +713,10 @@ function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: ()
         {match.scoreOpponent}
       </span>
       <GameTag game={match.game} />
-      <span className="ml-auto text-[10px] text-muted italic">confirmation en attente…</span>
+      <span className="ml-auto text-[10px] text-muted italic">{t('defis.waitingConfirmEllipsis')}</span>
       <button type="button" onClick={onCancel}
         className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
-        title="Annuler" aria-label="Annuler">
+        title={t('defis.cancel')} aria-label={t('defis.cancel')}>
         <X className="w-4 h-4" strokeWidth={2.5} />
       </button>
     </div>
@@ -721,12 +735,17 @@ interface ChallengeRowProps {
 }
 
 function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: ChallengeRowProps) {
+  const t = useT();
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
   const when = fmtRelative(challenge.scheduledAt, lang);
   const [recording, setRecording] = useState(false);
 
   const KIND_ICON = { incoming: '⚔', outgoing: '→', accepted: '🎯' };
-  const KIND_LABEL = { incoming: 'Défi reçu de', outgoing: 'Défi envoyé à', accepted: 'Match vs' };
+  const KIND_LABEL = {
+    incoming: t('defis.challengeReceivedFrom'),
+    outgoing: t('defis.challengeSentTo'),
+    accepted: t('defis.vs'),
+  };
 
   return (
     <div className="rounded-xl p-3 border border-border/50 bg-white/[0.02] hover:border-accent/30 transition-colors">
@@ -740,17 +759,17 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
 
         {kind === 'incoming' && (
           <>
-            <Button size="sm" onClick={onAccept}>Accepter</Button>
-            <Button size="sm" variant="ghost" onClick={onDecline}>Refuser</Button>
+            <Button size="sm" onClick={onAccept}>{t('defis.accept')}</Button>
+            <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.decline')}</Button>
           </>
         )}
         {kind === 'outgoing' && (
-          <Button size="sm" variant="ghost" onClick={onDecline}>Annuler</Button>
+          <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.cancel')}</Button>
         )}
         {kind === 'accepted' && !recording && (
           <>
-            <Button size="sm" onClick={() => setRecording(true)}>Saisir score</Button>
-            <Button size="sm" variant="ghost" onClick={onDecline}>Annuler</Button>
+            <Button size="sm" onClick={() => setRecording(true)}>{t('defis.enterScore')}</Button>
+            <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.cancel')}</Button>
           </>
         )}
       </div>
@@ -771,6 +790,7 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
 function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
   challengeId: string; game: Game; oppLogin: string; onDone: () => void;
 }) {
+  const t = useT();
   const { refresh } = useLeagueData();
   const flash = useFlash();
   const [iWon, setIWon] = useState<boolean | null>(null);
@@ -781,7 +801,7 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
     setBusy(true);
     try {
       await api.recordChallengeResult(challengeId, result);
-      flash.show('Score envoyé — en attente de confirmation');
+      flash.show(t('defis.scoreSent'));
       await refresh();
       onDone();
     } catch (err) {
@@ -793,16 +813,16 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
   if (game === 'chess') {
     return (
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <OutcomeButton kind="win" onClick={() => send({ scoreSelf: 1, scoreOpponent: 0, game: 'chess' })}>J'ai gagné</OutcomeButton>
-        <OutcomeButton kind="loss" onClick={() => send({ scoreSelf: 0, scoreOpponent: 1, game: 'chess' })}>J'ai perdu</OutcomeButton>
+        <OutcomeButton kind="win" onClick={() => send({ scoreSelf: 1, scoreOpponent: 0, game: 'chess' })}>{t('defis.iWon')}</OutcomeButton>
+        <OutcomeButton kind="loss" onClick={() => send({ scoreSelf: 0, scoreOpponent: 1, game: 'chess' })}>{t('defis.iLost')}</OutcomeButton>
       </div>
     );
   }
   if (game === 'smash' || game === 'streetfighter') {
     return (
       <div className="mt-3 text-center space-y-2">
-        <p className="text-xs text-muted-2">Pour un set, utilise <span className="text-text font-semibold">« Déclarer une game »</span>.</p>
-        <Button size="sm" variant="ghost" onClick={onDone} className="w-full">OK</Button>
+        <p className="text-xs text-muted-2">{t('defis.setUseDeclare')} <span className="text-text font-semibold">{t('defis.declareAGame')}</span>.</p>
+        <Button size="sm" variant="ghost" onClick={onDone} className="w-full">{t('defis.ok')}</Button>
       </div>
     );
   }
@@ -810,8 +830,8 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
   if (iWon === null) {
     return (
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <OutcomeButton kind="win" onClick={() => setIWon(true)}>J'ai gagné</OutcomeButton>
-        <OutcomeButton kind="loss" onClick={() => setIWon(false)}>J'ai perdu</OutcomeButton>
+        <OutcomeButton kind="win" onClick={() => setIWon(true)}>{t('defis.iWon')}</OutcomeButton>
+        <OutcomeButton kind="loss" onClick={() => setIWon(false)}>{t('defis.iLost')}</OutcomeButton>
       </div>
     );
   }
@@ -827,12 +847,12 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
           { login: loserLogin, score: loserScore, isWinner: false }].map(({ login, score, isWinner }) => (
           <div key={login} className={`flex-1 rounded-xl flex flex-col items-center py-3 gap-1
             ${isWinner ? 'bg-gold/10 border border-gold/40' : loserScore < 0 ? 'bg-red/[0.07] border border-red/30' : 'bg-bg-2/60 border border-border/60'}`}>
-            <span className="text-[9px] uppercase tracking-wider text-muted font-bold">{login === 'Moi' ? 'Toi' : login}</span>
+            <span className="text-[9px] uppercase tracking-wider text-muted font-bold">{login === 'Moi' ? t('defis.you') : login}</span>
             <span className={`font-display text-3xl font-black tabular-nums ${isWinner ? 'text-gold' : loserScore < 0 ? 'text-red' : 'text-text-strong'}`}>
               {score}
             </span>
             {isWinner && <span className="text-[8px] text-gold/50 font-extrabold uppercase tracking-wider">🔒</span>}
-            {!isWinner && <span className="text-[8px] text-muted-2 font-extrabold uppercase tracking-wider">← glisser</span>}
+            {!isWinner && <span className="text-[8px] text-muted-2 font-extrabold uppercase tracking-wider">{t('defis.slideHint')}</span>}
           </div>
         ))}
       </div>
@@ -845,8 +865,8 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
             scoreOpponent: iWon ? loserScore : WINNING_SCORE,
             game: 'babyfoot',
           })}
-          className="flex-1">Envoyer</Button>
-        <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">Annuler</Button>
+          className="flex-1">{t('defis.send')}</Button>
+        <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">{t('defis.cancel')}</Button>
       </div>
     </div>
   );

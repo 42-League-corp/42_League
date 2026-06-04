@@ -6,6 +6,7 @@ import { useFAB } from '../../mobile/primitives/FAB';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { TournamentCard } from './mobile/TournamentCard';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useT } from '../../lib/i18n';
 import type { Tournament } from '../../lib/api';
 
 type Filter = 'all' | 'live' | 'open' | 'done';
@@ -13,6 +14,7 @@ type Filter = 'all' | 'live' | 'open' | 'done';
 export function TournoisMobile() {
   const { tournaments, refresh } = useLeagueData();
   const navigate = useNavigate();
+  const t = useT();
   const [filter, setFilter] = useState<Filter>('all');
 
   const counts = useMemo(() => {
@@ -37,7 +39,7 @@ export function TournoisMobile() {
 
   useFAB({
     Icon: Plus,
-    label: 'Nouveau tournoi',
+    label: t('tournois.mobile.newTournament'),
     onClick: () => navigate('/tournaments/create'),
     pulse: tournaments.length === 0,
   });
@@ -97,6 +99,7 @@ export function TournoisMobile() {
 // ─── État vide ───────────────────────────────────────────────────────────────
 
 function EmptyTournois() {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -105,8 +108,8 @@ function EmptyTournois() {
       className="flex flex-col items-center justify-center py-20 gap-3"
     >
       <Trophy className="w-10 h-10 text-gold/30" strokeWidth={1.5} />
-      <p className="text-sm font-bold text-muted-2">Aucun tournoi pour l'instant</p>
-      <p className="text-xs text-muted-2/60">Appuie sur + pour en créer un</p>
+      <p className="text-sm font-bold text-muted-2">{t('tournois.mobile.empty.title')}</p>
+      <p className="text-xs text-muted-2/60">{t('tournois.mobile.empty.sub')}</p>
     </motion.div>
   );
 }
@@ -114,6 +117,7 @@ function EmptyTournois() {
 // ─── Hero d'un tournoi live ───────────────────────────────────────────────────
 
 function LiveHero({ tournament }: { tournament: Tournament }) {
+  const t = useT();
   const count = tournament.entries?.length ?? 0;
   return (
     <Link to={`/tournaments/${encodeURIComponent(tournament.id)}`} className="block">
@@ -135,12 +139,12 @@ function LiveHero({ tournament }: { tournament: Tournament }) {
           <div className="flex items-center gap-1.5 mb-3">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gold/15 border border-gold/30 text-gold text-[9px] font-extrabold uppercase tracking-[0.18em]">
               <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
-              Live
+              {t('tournois.mobile.live')}
             </span>
             <span className="text-[10px] text-muted-2 font-bold">
-              {count}/{tournament.capacity} joueurs · {tournament.game && tournament.game !== 'babyfoot'
-                ? (tournament.game === 'smash' ? '🎮 Smash' : tournament.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs')
-                : '⚽ Babyfoot'}
+              {count}/{tournament.capacity} {t('tournois.mobile.players')} · {tournament.game && tournament.game !== 'babyfoot'
+                ? (tournament.game === 'smash' ? `🎮 ${t('game.smash')}` : tournament.game === 'streetfighter' ? `🥊 ${t('game.streetfighter')}` : `♟ ${t('game.chess')}`)
+                : `⚽ ${t('game.babyfoot')}`}
             </span>
           </div>
 
@@ -148,7 +152,7 @@ function LiveHero({ tournament }: { tournament: Tournament }) {
             <Trophy className="w-6 h-6 text-gold shrink-0" strokeWidth={2.2} fill="rgba(255,201,74,0.35)" />
             <div className="min-w-0">
               <h3 className="text-xl font-extrabold text-text-strong tracking-tight truncate">{tournament.name}</h3>
-              <div className="text-[11px] text-muted-2">Par {tournament.createdByLogin}</div>
+              <div className="text-[11px] text-muted-2">{t('tournois.mobile.by')} {tournament.createdByLogin}</div>
             </div>
           </div>
 
@@ -159,7 +163,7 @@ function LiveHero({ tournament }: { tournament: Tournament }) {
           </div>
 
           <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl metal-plate-gold text-[#1a1100] text-xs font-extrabold uppercase tracking-wider">
-            Voir le bracket <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+            {t('tournois.mobile.viewBracket')} <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
           </div>
         </div>
       </motion.div>
@@ -176,14 +180,15 @@ interface FilterPillsProps {
   total: number;
 }
 
-const PILL_META: Record<Filter, { label: string; accent: string }> = {
-  all: { label: 'Tous', accent: 'border-border text-muted-2 bg-transparent' },
-  live: { label: '● Live', accent: 'border-gold/50 text-gold' },
-  open: { label: 'Inscriptions', accent: 'border-teal/50 text-teal' },
-  done: { label: 'Terminés', accent: 'border-border/60 text-muted-2' },
+const PILL_META: Record<Filter, { labelKey: string; accent: string }> = {
+  all: { labelKey: 'tournois.mobile.filter.all', accent: 'border-border text-muted-2 bg-transparent' },
+  live: { labelKey: 'tournois.mobile.filter.live', accent: 'border-gold/50 text-gold' },
+  open: { labelKey: 'tournois.mobile.filter.open', accent: 'border-teal/50 text-teal' },
+  done: { labelKey: 'tournois.mobile.filter.done', accent: 'border-border/60 text-muted-2' },
 };
 
 function FilterPills({ filter, onChange, counts, total }: FilterPillsProps) {
+  const t = useT();
   const opts: Array<{ key: Filter; badge: number }> = [
     { key: 'all', badge: total },
     { key: 'live', badge: counts.live },
@@ -206,7 +211,7 @@ function FilterPills({ filter, onChange, counts, total }: FilterPillsProps) {
                 : 'border-border/40 text-muted-2 bg-transparent'
             }`}
           >
-            {m.label}
+            {t(m.labelKey)}
             {badge > 0 && (
               <span className={`font-mono text-[9px] ${active ? 'opacity-80' : 'opacity-50'}`}>
                 {badge}
@@ -222,11 +227,12 @@ function FilterPills({ filter, onChange, counts, total }: FilterPillsProps) {
 // ─── Empty filter state ───────────────────────────────────────────────────────
 
 function EmptyFilter({ filter }: { filter: Filter }) {
+  const t = useT();
   const msgs: Record<Filter, { emoji: string; main: string; sub: string }> = {
-    all: { emoji: '🏆', main: 'Aucun tournoi', sub: '' },
-    live: { emoji: '⏳', main: 'Aucun tournoi en cours', sub: 'Rendez-vous dans Inscriptions.' },
-    open: { emoji: '📝', main: "Pas d'inscriptions ouvertes", sub: 'Lance-en un avec + en bas a droite.' },
-    done: { emoji: '🥇', main: 'Aucun tournoi terminé', sub: 'Les résultats apparaîtront ici.' },
+    all: { emoji: '🏆', main: t('tournois.mobile.emptyFilter.all'), sub: '' },
+    live: { emoji: '⏳', main: t('tournois.mobile.emptyFilter.live.main'), sub: t('tournois.mobile.emptyFilter.live.sub') },
+    open: { emoji: '📝', main: t('tournois.mobile.emptyFilter.open.main'), sub: t('tournois.mobile.emptyFilter.open.sub') },
+    done: { emoji: '🥇', main: t('tournois.mobile.emptyFilter.done.main'), sub: t('tournois.mobile.emptyFilter.done.sub') },
   };
   const m = msgs[filter];
   return (
@@ -241,13 +247,14 @@ function EmptyFilter({ filter }: { filter: Filter }) {
 // ─── Aide rapide discrète ─────────────────────────────────────────────────────
 
 function QuickHelp() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div>
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 text-[10px] text-muted-2 hover:text-muted transition-colors tap-transparent">
         <Info className="w-3.5 h-3.5" strokeWidth={2} />
-        Comment ça marche ?
+        {t('tournois.help.toggle')}
       </button>
       <AnimatePresence>
         {open && (
@@ -256,10 +263,10 @@ function QuickHelp() {
             className="mt-2 space-y-2 overflow-hidden">
             <div className="grid grid-cols-2 gap-2">
               {[
-                { num: '1', text: '+ Nouveau → choisis nom, capacité, discipline.' },
-                { num: '2', text: "Les joueurs s'inscrivent depuis la carte." },
-                { num: '3', text: 'Démarre : le bracket se génère automatiquement.' },
-                { num: '4', text: 'Chaque match : saisir le score + confirmer.' },
+                { num: '1', text: t('tournois.mobile.help.step1') },
+                { num: '2', text: t('tournois.mobile.help.step2') },
+                { num: '3', text: t('tournois.mobile.help.step3') },
+                { num: '4', text: t('tournois.mobile.help.step4') },
               ].map(({ num, text }) => (
                 <div key={num} className="flex gap-2 text-[10px] text-muted-2 p-2 rounded-lg bg-white/[0.02]">
                   <span className="w-4 h-4 rounded-full bg-gold/15 text-gold text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">{num}</span>

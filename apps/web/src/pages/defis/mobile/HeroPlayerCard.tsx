@@ -6,6 +6,7 @@ import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { pickRating } from '../../../lib/gameStats';
+import { useT } from '../../../lib/i18n';
 
 /**
  * Hero card "RPG / Esport" du joueur — pièce maîtresse de la page Défis.
@@ -21,6 +22,7 @@ import { pickRating } from '../../../lib/gameStats';
  * Animations conservées : rotation du conic gradient, shimmer, count-up.
  */
 export function HeroPlayerCard() {
+  const t = useT();
   const { me, matches, leaderboard } = useLeagueData();
   const { game } = useGameMode();
   const user = me?.user;
@@ -241,7 +243,7 @@ export function HeroPlayerCard() {
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gold/40 bg-gold/10 text-gold font-gaming text-[10px] font-extrabold uppercase tracking-wider">
                 <Trophy className="w-3 h-3" strokeWidth={2.5} />
                 <span className="font-mono tabular-nums">{pickRating(user, game).tournamentsWon}</span>
-                <span>tournoi{pickRating(user, game).tournamentsWon > 1 ? 's' : ''}</span>
+                <span>{pickRating(user, game).tournamentsWon > 1 ? t('defis.tournamentPlural') : t('defis.tournamentSingular')}</span>
               </div>
             )}
           </div>

@@ -20,6 +20,12 @@ export interface ProfilStats {
   currentStreak: number;
   /** Score "domination" : moyenne du score adverse sur les wins (plus c'est bas, plus on domine). */
   avgOpponentScoreOnWin: number;
+  /** Login de l'adversaire qui a brisé la plus longue série de victoires (null si record en cours). */
+  streakBrokenBy: string | null;
+  /** Date ISO du match qui a brisé la plus longue série (null si record en cours). */
+  streakBrokenAt: string | null;
+  /** true si la plus longue série de victoires est encore en cours (jamais brisée). */
+  streakOngoing: boolean;
 }
 
 export interface ProfilLogic {
@@ -40,6 +46,9 @@ const EMPTY_STATS: ProfilStats = {
   longestWinStreak: 0,
   currentStreak: 0,
   avgOpponentScoreOnWin: 0,
+  streakBrokenBy: null,
+  streakBrokenAt: null,
+  streakOngoing: false,
 };
 
 export function useProfilLogic(): ProfilLogic {
@@ -114,6 +123,49 @@ export function useProfilLogic(): ProfilLogic {
     }
     const signedStreak = currentSign === 'loss' ? -currentStreakLen : currentStreakLen;
 
+    // Pass 3 : qui a brisé la plus longue série de victoires (et quand).
+    // On itère dans l'ordre chronologique (du plus ancien au plus récent) sur une
+    // copie dédiée, pour ne pas perturber les passes ci-dessus qui travaillent en
+    // newest-first. On retient la 1re série maximale et, pour celle-ci, le 1er match
+    // perdu qui l'a stoppée. Si la série maximale est la dernière séquence et n'a
+    // jamais été suivie d'une défaite → record toujours en cours (pas de breaker).
+    const chrono = [...mine].reverse();
+    let streakBrokenBy: string | null = null;
+    let streakBrokenAt: string | null = null;
+    let streakOngoing = false;
+    if (longestWinStreak > 0) {
+      let run = 0;
+      let bestRun = 0;
+      let breaker: PlayedMatch | null = null; // match perdu qui a brisé la meilleure série
+      for (const m of chrono) {
+        const youAreA = m.playerALogin === myLogin;
+        const youWon = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
+        if (youWon) {
+          run++;
+        } else {
+          // Une défaite : si la série qui vient de s'achever est la nouvelle meilleure
+          // (strictement, pour garder la 1re occurrence en cas d'égalité), on note le
+          // match qui l'a brisée — c'est ce match perdu (m).
+          if (run > bestRun) {
+            bestRun = run;
+            breaker = m;
+          }
+          run = 0;
+        }
+      }
+      // À la fin, si la série courante (non clôturée par une défaite) est strictement
+      // la meilleure, c'est qu'elle est toujours en cours → pas de breaker.
+      if (run > bestRun) {
+        streakOngoing = true;
+        breaker = null;
+      }
+      if (!streakOngoing && breaker) {
+        const youAreA = breaker.playerALogin === myLogin;
+        streakBrokenBy = youAreA ? breaker.playerBLogin : breaker.playerALogin;
+        streakBrokenAt = breaker.playedAt;
+      }
+    }
+
     const total = wins + losses;
     const winRate = total === 0 ? 0 : Math.round((wins / total) * 100);
     const avgOpponentScoreOnWin =
@@ -137,6 +189,9 @@ export function useProfilLogic(): ProfilLogic {
         longestWinStreak,
         currentStreak: signedStreak,
         avgOpponentScoreOnWin,
+        streakBrokenBy,
+        streakBrokenAt,
+        streakOngoing,
       },
       recentMatches: mine.slice(0, 10),
     };

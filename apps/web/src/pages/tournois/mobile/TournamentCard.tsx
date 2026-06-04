@@ -4,16 +4,17 @@ import { ChevronRight, Crown, Users } from 'lucide-react';
 import type { Tournament } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
+import { useT } from '../../../lib/i18n';
 
 interface TournamentCardProps {
   tournament: Tournament;
 }
 
-const STATUS_LABEL: Record<Tournament['status'], string> = {
-  registration: 'INSCRIPTIONS',
-  in_progress: 'EN COURS',
-  finished: 'TERMINÉ',
-  cancelled: 'ANNULÉ',
+const STATUS_KEY: Record<Tournament['status'], string> = {
+  registration: 'tournois.status.registration',
+  in_progress: 'tournois.status.in_progress',
+  finished: 'tournois.status.finished',
+  cancelled: 'tournois.status.cancelled',
 };
 
 const STATUS_STYLE: Record<Tournament['status'], { ring: string; bg: string; chip: string; glow: string }> = {
@@ -51,6 +52,7 @@ const STATUS_STYLE: Record<Tournament['status'], { ring: string; bg: string; chi
  * - Mise en avant du vainqueur si terminé
  */
 export function TournamentCard({ tournament: t }: TournamentCardProps) {
+  const tr = useT();
   const count = t.entries?.length ?? 0;
   const fillPct = Math.min(100, Math.round((count / t.capacity) * 100));
   const isOfficial = t.kind === 'official';
@@ -88,23 +90,23 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-muted-2 flex-wrap">
                 <span className={`px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] ${isOfficial ? 'text-gold bg-gold/10 border border-gold/30' : 'text-muted-2 bg-bg-2'}`}>
-                  {isOfficial ? '★ Officiel' : 'Amical'}
+                  {isOfficial ? tr('tournois.kind.official') : tr('tournois.kind.friendly')}
                 </span>
                 {/* Discipline du tournoi */}
                 {t.game && t.game !== 'babyfoot' && (
                   <span className="px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] bg-accent/10 text-accent border border-accent/25">
-                    {t.game === 'smash' ? '🎮 Smash' : t.game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs'}
+                    {t.game === 'smash' ? `🎮 ${tr('game.smash')}` : t.game === 'streetfighter' ? `🥊 ${tr('game.streetfighter')}` : `♟ ${tr('game.chess')}`}
                   </span>
                 )}
                 <span className="opacity-60">·</span>
-                <span>par <span className="text-text-strong font-semibold">{t.createdByLogin}</span></span>
+                <span>{tr('tournois.card.by')} <span className="text-text-strong font-semibold">{t.createdByLogin}</span></span>
               </div>
             </div>
 
             <span
               className={`text-[9px] font-extrabold uppercase tracking-[0.14em] px-2 py-1 rounded-full whitespace-nowrap ${style.chip}`}
             >
-              {STATUS_LABEL[t.status]}
+              {tr(STATUS_KEY[t.status])}
             </span>
           </div>
 
@@ -115,7 +117,7 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
                 <div className="flex items-center gap-1 text-muted-2">
                   <Users className="w-3 h-3" strokeWidth={2.5} />
                   <span className="font-mono tabular-nums font-bold">{count}/{t.capacity}</span>
-                  <span className="uppercase tracking-wider">joueurs</span>
+                  <span className="uppercase tracking-wider">{tr('tournois.mobile.players')}</span>
                 </div>
                 {isReg && (
                   <span className="text-teal font-mono font-bold">{fillPct}%</span>
@@ -137,7 +139,7 @@ export function TournamentCard({ tournament: t }: TournamentCardProps) {
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-gold/10 border border-gold/30">
               <Crown className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.55)" />
               <div className="text-xs">
-                <span className="text-muted-2">Vainqueur · </span>
+                <span className="text-muted-2">{tr('tournois.card.winner')}</span>
                 <span className="font-extrabold text-gold">{t.winner.login}</span>
               </div>
             </div>

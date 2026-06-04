@@ -39,7 +39,7 @@ export function ReglagesPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      flash.show('Erreur lors de l\'export.');
+      flash.show(t('settings.exportError'));
     } finally {
       setExporting(false);
     }
@@ -58,7 +58,7 @@ export function ReglagesPage() {
       flash.show(t('settings.gdpr.deleted'));
       signOut();
     } catch {
-      flash.show('Erreur lors de la suppression.');
+      flash.show(t('settings.deleteError'));
       setDeleting(false);
     }
   }
@@ -97,7 +97,7 @@ export function ReglagesPage() {
           </div>
           {login && (
             <div className="text-sm text-muted-2 mb-3">
-              Connecté en tant que <span className="text-teal font-semibold">{login}</span>
+              {t('settings.connectedAs')} <span className="text-teal font-semibold">{login}</span>
             </div>
           )}
           <div className="flex flex-wrap gap-2">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGameMode } from '../hooks/useGameMode';
+import { useT } from '../lib/i18n';
 import type { Game } from '../lib/gameMode';
 
 /** Applique `data-game` sur <html> pour le thème conditionnel. */
@@ -51,7 +52,7 @@ const META: Record<Game, {
     bgColor: 'rgba(255,61,80,0.10)',
     glowColor: 'rgba(255,61,80,0.45)',
     icon: (sel) => (
-      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={20} height={20} className="object-contain" aria-hidden />
+      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   chess: {
@@ -78,7 +79,7 @@ const META: Record<Game, {
     bgColor: 'rgba(255,122,24,0.10)',
     glowColor: 'rgba(255,122,24,0.45)',
     icon: (sel) => (
-      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} className="object-contain" aria-hidden />
+      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
 };
@@ -97,6 +98,7 @@ const MORPH = { type: 'tween' as const, duration: 0.42, ease: [0.33, 1, 0.68, 1]
  * est découplé du layout pour rester fluide malgré le morph en tween.
  */
 export function GameModeSwitch() {
+  const t = useT();
   const { game, setGame } = useGameMode();
   useGameModeTheme();
   const [open, setOpen] = useState(false);
@@ -140,11 +142,11 @@ export function GameModeSwitch() {
               transition={{ duration: 0.18, delay: 0.05 }}
             >
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-2">Univers</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-2">{t('settings.universe')}</span>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  aria-label="Fermer"
+                  aria-label={t('settings.close')}
                   className="grid h-6 w-6 place-items-center rounded-lg text-muted-2 transition-colors hover:bg-white/10 hover:text-text-strong"
                 >
                   ✕
@@ -180,7 +182,7 @@ export function GameModeSwitch() {
                         className="text-[10px] font-extrabold uppercase tracking-wider"
                         style={{ color: sel ? gm.color : 'rgba(255,255,255,0.5)' }}
                       >
-                        {gm.shortLabel}
+                        {t(`game.${g}`)}
                       </span>
                       {sel && (
                         <motion.span
@@ -201,7 +203,7 @@ export function GameModeSwitch() {
             layoutId="gm-switch"
             type="button"
             onClick={() => setOpen(true)}
-            aria-label={`Univers actuel : ${m.label}. Changer de jeu.`}
+            aria-label={`${t('settings.currentUniverse')} : ${t(`game.${game}`)}. ${t('settings.changeGame')}`}
             transition={{ layout: MORPH, default: { type: 'spring', stiffness: 500, damping: 28 } }}
             whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.92 }}
@@ -214,8 +216,7 @@ export function GameModeSwitch() {
             className="grid h-[52px] w-[52px] place-items-center backdrop-blur-md"
           >
             <motion.span
-              key={game}
-              initial={{ scale: 0.6, opacity: 0 }}
+              initial={false}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 600, damping: 24 }}
               style={{ color: m.color }}

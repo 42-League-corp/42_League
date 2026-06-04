@@ -11,6 +11,7 @@ import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useAuth } from '../../hooks/useAuth';
+import { useT } from '../../lib/i18n';
 import { haptic } from '../../mobile/feedback/useHaptic';
 
 export function ProfilMobile() {
@@ -18,11 +19,12 @@ export function ProfilMobile() {
   const { me, matches, refresh } = useLeagueData();
   const { game } = useGameMode();
   const { signOut } = useAuth();
+  const t = useT();
 
   if (!me?.user) {
     return (
-      <Panel title="Profil">
-        <div className="text-center text-muted-2 py-10">Profil indisponible.</div>
+      <Panel title={t('panel.profil.title')}>
+        <div className="text-center text-muted-2 py-10">{t('profil.unavailable')}</div>
       </Panel>
     );
   }
@@ -36,7 +38,7 @@ export function ProfilMobile() {
         {/* ELO evolution chart */}
         {myLogin && (
           <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
-            <SectionHeader title="Évolution ELO" />
+            <SectionHeader title={t('profil.eloEvolution')} />
             <EloChart
               matches={matches}
               myLogin={myLogin}
@@ -52,20 +54,20 @@ export function ProfilMobile() {
 
         {/* Following / Followers (style GitHub) */}
         <section>
-          <SectionHeader title="Réseau" />
+          <SectionHeader title={t('profil.network')} />
           <FollowLists />
         </section>
 
         {/* Recent matches */}
         <section>
-          <SectionHeader title="Derniers matches" badge={stats.total} />
+          <SectionHeader title={t('profil.recent')} badge={stats.total} />
           <RecentMatchesList matches={recentMatches} myLogin={myLogin} />
         </section>
 
         {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
         {game === 'babyfoot' && myLogin && (
           <section>
-            <SectionHeader title="Mes Équipes 2v2" />
+            <SectionHeader title={t('profil.myTeams')} />
             <MyTeamsSection myLogin={myLogin} />
           </section>
         )}
@@ -80,7 +82,7 @@ export function ProfilMobile() {
           className="w-full flex items-center justify-center gap-2 py-3 mt-4 rounded-xl border border-red/30 bg-red/5 active:bg-red/10 text-red text-xs font-extrabold uppercase tracking-[0.18em] tap-transparent transition-colors"
         >
           <LogOut className="w-4 h-4" strokeWidth={2.5} />
-          <span>Se déconnecter</span>
+          <span>{t('settings.logout')}</span>
         </button>
 
       </div>

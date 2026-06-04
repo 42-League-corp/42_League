@@ -7,6 +7,7 @@ import { StatCard } from '../../components/StatCard';
 import { TeamEloChart } from '../../components/TeamEloChart';
 import { TeamProfileTrophiesSection } from '../../components/TeamTrophiesSection';
 import type { TeamProfile } from '../../lib/api';
+import { useI18n, useT } from '../../lib/i18n';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ interface TeamProfileDesktopProps {
 
 export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
   const navigate = useNavigate();
+  const t = useT();
+  const { locale } = useI18n();
   const teamName = team.name ?? `${team.player1Login} & ${team.player2Login}`;
   const games = team.wins + team.losses;
   const winRate = games === 0 ? 0 : Math.round((team.wins / games) * 100);
@@ -67,13 +70,13 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
         className="flex items-center gap-1.5 text-muted-2 hover:text-gold transition-colors text-xs font-bold uppercase tracking-wider tap-transparent"
       >
         <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-        Retour
+        {t('team.back')}
       </button>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
         {/* ── Panneau gauche : identité + stats ─────────────────────────── */}
-        <Panel title="Équipe 2v2" sub="Babyfoot" accent="user">
+        <Panel title={t('team.panel.title')} sub={t('team.panel.sub')} accent="user">
 
           {/* Hero bloc */}
           <div
@@ -112,7 +115,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
                     <Shield className="w-3 h-3 text-gold/70" strokeWidth={2} />
-                    Babyfoot 2v2
+                    {t('team.badge.2v2')}
                   </span>
                   {team.rank > 0 && (
                     <motion.span
@@ -136,7 +139,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
                   {team.elo}
                 </div>
                 <div className="mt-1 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
-                  ELO ÉQUIPE
+                  {t('team.elo.label')}
                 </div>
               </div>
             </div>
@@ -144,19 +147,19 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
 
           {/* Stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            <StatCard value={String(team.elo)} label="ELO" tone="teal" />
-            <StatCard value={`${winRate}%`} label="Win Rate" tone={winRate >= 50 ? 'win' : 'loss'} />
-            <StatCard value={String(team.wins)} label="Victoires" tone="win" />
-            <StatCard value={String(team.losses)} label="Défaites" tone="loss" />
+            <StatCard value={String(team.elo)} label={t('team.col.elo')} tone="teal" />
+            <StatCard value={`${winRate}%`} label={t('team.winRate')} tone={winRate >= 50 ? 'win' : 'loss'} />
+            <StatCard value={String(team.wins)} label={t('team.wins')} tone="win" />
+            <StatCard value={String(team.losses)} label={t('team.losses')} tone="loss" />
           </div>
 
           {/* KV details */}
           <div className="space-y-1.5 card-hud rounded-xl px-4 py-3 mb-4">
-            <KV label="Matches joués" value={String(games)} tone="neutral" />
-            <KV label="Δ ELO total" value={`${deltaTotal >= 0 ? '+' : ''}${deltaTotal}`} tone={deltaTotal >= 0 ? 'win' : 'loss'} />
+            <KV label={t('team.matchesPlayed')} value={String(games)} tone="neutral" />
+            <KV label={t('team.deltaTotal')} value={`${deltaTotal >= 0 ? '+' : ''}${deltaTotal}`} tone={deltaTotal >= 0 ? 'win' : 'loss'} />
             <KV
-              label="Créée le"
-              value={new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(team.createdAt))}
+              label={t('team.createdAt')}
+              value={new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(team.createdAt))}
               tone="neutral"
             />
           </div>
@@ -165,7 +168,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
           <div className="mt-4">
             <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
               <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-              Trophées d'Équipe
+              {t('team.trophies')}
               <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
             </div>
             <TeamProfileTrophiesSection teamId={team.id} />
@@ -191,7 +194,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
                   <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
                     {login}
                   </div>
-                  <div className="text-[10px] text-muted font-medium">Voir le profil →</div>
+                  <div className="text-[10px] text-muted font-medium">{t('team.viewProfile')}</div>
                 </div>
               </PlayerLink>
             ))}
@@ -199,11 +202,11 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
         </Panel>
 
         {/* ── Panneau droit : ELO chart + historique ─────────────────────── */}
-        <Panel title="Performance" sub="Courbe ELO · historique">
+        <Panel title={t('team.performance')} sub={t('team.performance.sub')}>
 
           {/* ELO chart */}
           <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
-            <ChartLabel title="Progression ELO de l'Équipe" />
+            <ChartLabel title={t('team.eloProgress.full')} />
             <TeamEloChart points={team.eloHistory} height={240} uid={team.id} />
           </div>
 
@@ -211,24 +214,24 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
           {team.eloHistory.length > 0 && (
             <>
               <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3">
-                Historique des matches
+                {t('team.history')}
               </div>
               <div className="overflow-x-auto -mx-4 sm:mx-0">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wider text-muted">
-                      <th className="text-left px-3 py-2">Date</th>
-                      <th className="text-left px-3 py-2">Adversaires</th>
-                      <th className="text-right px-3 py-2">Score</th>
-                      <th className="text-right px-3 py-2">Résultat</th>
-                      <th className="text-right px-3 py-2">ELO</th>
+                      <th className="text-left px-3 py-2">{t('team.col.date')}</th>
+                      <th className="text-left px-3 py-2">{t('team.col.opponents')}</th>
+                      <th className="text-right px-3 py-2">{t('team.col.score')}</th>
+                      <th className="text-right px-3 py-2">{t('team.col.result')}</th>
+                      <th className="text-right px-3 py-2">{t('team.col.elo')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...team.eloHistory].reverse().slice(0, 25).map((p, i) => (
                       <tr key={i} className="border-t border-border/40">
                         <td className="px-3 py-2 text-muted-2 text-xs whitespace-nowrap">
-                          {new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(new Date(p.playedAt))}
+                          {new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short' }).format(new Date(p.playedAt))}
                         </td>
                         <td className="px-3 py-2 text-xs">
                           <span className="text-muted-2">vs </span>
@@ -244,7 +247,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
                           {p.scoreTeam}–{p.scoreOpponent}
                         </td>
                         <td className={`px-3 py-2 text-right text-[10px] uppercase font-extrabold ${p.won ? 'text-gold' : 'text-red'}`}>
-                          {p.won ? 'Victoire' : 'Défaite'}
+                          {p.won ? t('team.result.win') : t('team.result.loss')}
                         </td>
                         <td className={`px-3 py-2 text-right font-mono text-xs font-extrabold tabular-nums ${p.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
                           {p.delta >= 0 ? '+' : ''}{p.delta}
@@ -259,7 +262,7 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
 
           {team.eloHistory.length === 0 && (
             <div className="text-center text-muted-2 text-sm py-10 italic">
-              Aucun match confirmé pour l'instant.
+              {t('team.empty.desktop')}
             </div>
           )}
         </Panel>

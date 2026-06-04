@@ -4,12 +4,13 @@ import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
-import { RankedBadge } from '../../components/RankedBadge';
+import { RankBadge } from '../../components/RankBadge';
 import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
 import { displayTitle } from '../../lib/cosmeticTitles';
+import { TitlePicker } from '../../components/TitlePicker';
 import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
@@ -76,7 +77,7 @@ export function ProfilDesktop() {
   if (!me?.user) {
     return (
       <Panel title={t('panel.profil.title')}>
-        <div className="text-center text-muted-2 py-10">Profil indisponible.</div>
+        <div className="text-center text-muted-2 py-10">{t('profil.unavailable')}</div>
       </Panel>
     );
   }
@@ -129,7 +130,25 @@ export function ProfilDesktop() {
         {/* Filet laiton haut */}
         <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-gold/55 to-transparent pointer-events-none" />
 
-        <div className="relative z-10 p-5 flex items-center gap-5">
+        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
+        {displayTitle(u.login, u.title) && (
+          <div className="relative z-10 pt-3.5 pb-1 flex justify-center">
+            <span className="inline-flex items-center gap-1.5 max-w-[90%]">
+              <span className="text-gold/70 text-lg leading-none">❝</span>
+              <span className="text-gold italic text-lg font-bold tracking-wide truncate">
+                {displayTitle(u.login, u.title)}
+              </span>
+              <span className="text-gold/70 text-lg leading-none">❞</span>
+            </span>
+          </div>
+        )}
+
+        {/* Sélecteur de titre — uniquement sur SON profil (cette vue est toujours soi). */}
+        <div className="relative z-10 flex justify-center pt-1.5">
+          <TitlePicker />
+        </div>
+
+        <div className="relative z-10 p-5 pt-3 flex items-center gap-5">
           {/* Avatar + glow */}
           <div className="relative flex-shrink-0">
             <div
@@ -157,13 +176,6 @@ export function ProfilDesktop() {
               )}
             </div>
             <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>
-            {displayTitle(u.login, u.title) && (
-              <div className="mt-2 inline-flex items-center gap-1.5 max-w-full">
-                <span className="text-gold/70 text-xl leading-none">❝</span>
-                <span className="text-gold italic text-lg font-bold truncate">{displayTitle(u.login, u.title)}</span>
-                <span className="text-gold/70 text-xl leading-none">❞</span>
-              </div>
-            )}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
                 <MapPin className="w-3 h-3 text-gold/70" strokeWidth={2.5} />
@@ -186,9 +198,9 @@ export function ProfilDesktop() {
 
           {/* Bloc ELO mis en valeur — libellé "ELO" au-dessus du nombre, calé à gauche. */}
           <div className="text-left flex-shrink-0 pl-2">
-            <div className="-ml-0.5 mb-1 flex items-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
+            <div className="ml-1 mb-1 flex items-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
               ELO
-              <RankedBadge size="xs" />
+              <RankBadge elo={stats.elo} size="xs" />
             </div>
             <div
               className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
@@ -223,13 +235,13 @@ export function ProfilDesktop() {
       {/* Tournois remportés — amicaux vs officiels (coupe rouge = officiel). */}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <TitlesCard
-          label="Tournois officiels remportés"
+          label={t('profil.officialTitlesWon')}
           value={stats.officialTitles}
           accent="#ff6b6b"
           game={game}
         />
         <TitlesCard
-          label="Tournois amicaux remportés"
+          label={t('profil.friendlyTitlesWon')}
           value={stats.friendlyTitles}
           accent={isSmash ? '#ff4d5c' : game === 'streetfighter' ? '#ff7a18' : game === 'chess' ? '#56c46e' : '#ffc94a'}
           game={game}
@@ -246,12 +258,12 @@ export function ProfilDesktop() {
 
       </Panel>
 
-      <Panel title="Évolution & rivalité" sub="ELO · ops">
+      <Panel title={t('profil.evolutionRivalry')} sub={t('profil.evolutionRivalrySub')}>
       {/* ELO progression chart */}
       <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
         <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
           <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-          Évolution ELO
+          {t('profil.eloEvolution')}
           <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
         </div>
         <EloChart
@@ -269,7 +281,7 @@ export function ProfilDesktop() {
         </div>
       )}
 
-      <OpsWidget opsMe={opsMe} locale={locale} />
+      <OpsWidget opsMe={opsMe} locale={locale} t={t} />
 
       {/* Historique récent — même présentation que la fiche des autres joueurs. */}
       {myRecent.length > 0 && (
@@ -371,20 +383,21 @@ function KV({ label, value, tone }: { label: string; value: string; tone: 'win' 
 interface OpsWidgetProps {
   opsMe: ReturnType<typeof useLeagueData>['opsMe'];
   locale: string;
+  t: (key: string) => string;
 }
 
-function OpsWidget({ opsMe, locale }: OpsWidgetProps) {
+function OpsWidget({ opsMe, locale, t }: OpsWidgetProps) {
   return (
     <div className="mt-4 card-hud rounded-xl p-4 border-red/45">
       <div className="font-gaming flex items-center gap-2 mb-3 text-red font-extrabold text-xs uppercase tracking-[0.16em]">
         <span className="inline-block w-1 h-3 bg-red rounded-sm" />
         <span className="text-base">☠</span>
-        <span>OPS · ton ennemi juré</span>
+        <span>{t('profil.opsTitle')}</span>
       </div>
 
       {!opsMe && (
         <div className="text-sm text-muted-2">
-          Va sur la fiche d'un joueur (depuis le classement) pour le déclarer comme ton ops.
+          {t('profil.opsHint')}
         </div>
       )}
 
@@ -399,9 +412,9 @@ function OpsWidget({ opsMe, locale }: OpsWidgetProps) {
             <div className="min-w-0">
               <div className="font-extrabold text-text-strong">{opsMe.current.targetLogin}</div>
               <div className="text-[11px] text-muted-2">
-                traque jusqu'au{' '}
+                {t('profil.opsHuntsUntil')}{' '}
                 {new Date(opsMe.current.expiresAt).toLocaleDateString(locale)} ·{' '}
-                {fmtCountdown(opsMe.current.expiresAt)} restant
+                {fmtCountdown(opsMe.current.expiresAt)} {t('profil.opsRemaining')}
               </div>
             </div>
           </div>
@@ -410,14 +423,14 @@ function OpsWidget({ opsMe, locale }: OpsWidgetProps) {
 
       {!opsMe?.current && opsMe?.canDeclareAt && (
         <div className="text-sm text-muted-2">
-          ⏳ Cooldown actif · prochain ops dispo dans {fmtCountdown(opsMe.canDeclareAt)}
+          {t('profil.opsCooldown')} {fmtCountdown(opsMe.canDeclareAt)}
         </div>
       )}
 
       {opsMe?.targetedBy && (
         <>
           <div className="text-[10px] text-muted-2 uppercase tracking-wider mt-3 mb-1.5">
-            Tu es la cible de :
+            {t('profil.opsTargetedBy')}
           </div>
           <PlayerLink login={opsMe.targetedBy.ownerLogin} className="block">
             <div className="flex items-center gap-3">
@@ -429,7 +442,7 @@ function OpsWidget({ opsMe, locale }: OpsWidgetProps) {
               <div className="min-w-0">
                 <div className="font-extrabold text-text-strong">{opsMe.targetedBy.ownerLogin}</div>
                 <div className="text-[11px] text-muted-2">
-                  te traque · libère dans {fmtCountdown(opsMe.targetedBy.expiresAt)}
+                  {t('profil.opsHuntsYou')} {fmtCountdown(opsMe.targetedBy.expiresAt)}
                 </div>
               </div>
             </div>

@@ -25,6 +25,8 @@ import {
   OPS_DURATION_MS,
   OPS_FORCED_MATCHES,
   OPS_REFUSE_MULTIPLIER,
+  rankFloor,
+  ownedTitles,
 } from '@42-league/shared';
 import {
   GAME_IDS,
@@ -310,6 +312,31 @@ async function palmaresFor(login: string): Promise<
     }))
     .sort((a, b) => b._t - a._t)
     .map(({ _t, ...rest }) => rest);
+}
+
+// Titres POSSÉDÉS par un joueur (dérivés de ses accomplissements). On agrège
+// ses badges, le total de tournois gagnés (toutes disciplines) et son rang dans
+// sa discipline principale, puis on délègue la dérivation au module pur
+// `ownedTitles` (@42-league/shared/titles), partagé avec le frontend.
+async function ownedTitlesFor(
+  login: string,
+  role: string,
+  user: { tournamentsWon: number; tournamentsWonSmash: number; tournamentsWonChess: number; tournamentsWonSf: number; games: string[] } | null,
+): Promise<{ key: string; label: string }[]> {
+  if (!user) return [];
+  const badges = await badgesFor(login, role);
+  const tournamentsWon =
+    user.tournamentsWon + user.tournamentsWonSmash + user.tournamentsWonChess + user.tournamentsWonSf;
+  // Rang dans la discipline principale (1er mode adhéré, défaut babyfoot).
+  const primaryGame = parseGameId(user.games?.[0]);
+  const ranked = await prisma.user.findMany({
+    where: { ...VISIBLE_USER_WHERE, games: { has: primaryGame } },
+    orderBy: eloOrderBy(primaryGame),
+    select: { login: true },
+  });
+  const idx = ranked.findIndex((u) => u.login === login);
+  const rank = idx >= 0 ? idx + 1 : null;
+  return ownedTitles({ login, badges, tournamentsWon, rank });
 }
 
 async function getOrCreateUser(login: string, profile?: FtProfile) {
@@ -655,10 +682,14 @@ app.get('/me', async (c) => {
   const role = await getUserRole(login);
   const badges = user ? await badgesFor(login, role) : [];
   const palmares = user ? await palmaresFor(login) : [];
+  const ownedTitlesList = await ownedTitlesFor(login, role, user);
   return c.json({
     login,
     user,
     role,
+    // Titres que le joueur POSSÈDE (dérivés des accomplissements) — sert au
+    // sélecteur de titre côté front (cf. PUT /me/title).
+    ownedTitles: ownedTitlesList,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
     isAdmin: isAdmin(login),
@@ -671,6 +702,40 @@ app.get('/me', async (c) => {
     consentRequired: consentRequired(user),
     termsVersion: CURRENT_TERMS_VERSION,
   });
+});
+
+// ── Sélection de titre (self-service) ──────────────────────────────────────
+// Le joueur choisit lui-même un titre parmi ceux qu'il POSSÈDE (dérivés de ses
+// accomplissements, cf. ownedTitlesFor). `title: null` retire le titre. Pour
+// rester permissif avec les titres accordés par un admin (route admin distincte
+// inchangée), on autorise aussi la conservation du titre actuellement porté.
+app.put('/me/title', async (c) => {
+  const login = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const raw = body && typeof body.title === 'string' ? body.title.trim() : null;
+
+  await getOrCreateUser(login);
+  const user = await prisma.user.findUnique({ where: { login } });
+  if (!user) throw new HTTPException(404, { message: 'user not found' });
+
+  // Retrait du titre.
+  if (!raw) {
+    const updated = await prisma.user.update({ where: { login }, data: { title: null } });
+    return c.json({ login: updated.login, title: updated.title });
+  }
+
+  const role = await getUserRole(login);
+  const owned = await ownedTitlesFor(login, role, user);
+  const allowed = new Set(owned.map((o) => o.label));
+  // Tolère le titre déjà porté (potentiellement accordé par un admin).
+  if (user.title) allowed.add(user.title);
+
+  if (!allowed.has(raw)) {
+    throw new HTTPException(403, { message: 'titre non débloqué' });
+  }
+
+  const updated = await prisma.user.update({ where: { login }, data: { title: raw } });
+  return c.json({ login: updated.login, title: updated.title });
 });
 
 // ── RGPD / CGU 42 Art. 4.2 — Consentement explicite préalable ──
@@ -1000,6 +1065,141 @@ app.post('/notifications/read', async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Matchmaking ─────────────────────────────────────────────────────────────
+// File d'attente per-login (cf. modèle MatchmakingQueue). /queue/join insère mon
+// entrée puis tente d'apparier avec le plus ancien autre joueur de la même
+// discipline. L'appariement crée un défi (Challenge) et notifie LES DEUX joueurs.
+// Le joueur apparié "à distance" (par le join de l'autre) découvre le match via
+// /queue/status (polling).
+const MATCH_NOTIF_WINDOW_MS = 90_000;
+
+interface QueueOpponent {
+  login: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  imageUrl: string | null;
+}
+
+async function fetchQueueOpponent(login: string): Promise<QueueOpponent | null> {
+  const u = await prisma.user.findUnique({
+    where: { login },
+    select: { login: true, imageUrl: true },
+  });
+  if (!u) return null;
+  return { login: u.login, imageUrl: u.imageUrl };
+}
+
+app.post('/queue/join', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => ({}));
+  const game = parseGameId(body?.game);
+  await getOrCreateUser(me);
+  await assertNotBanned(me);
+
+  // Transaction : (re)pose mon entrée puis cherche le plus ancien autre joueur de
+  // la même discipline. Si trouvé, on retire les DEUX entrées atomiquement pour
+  // éviter le double-appariement (deux joins concurrents ne peuvent pas saisir le
+  // même partenaire — le second ne le retrouvera plus dans la file).
+  const paired = await prisma.$transaction(async (tx) => {
+    await tx.matchmakingQueue.upsert({
+      where: { login: me },
+      update: { game, joinedAt: new Date() },
+      create: { login: me, game },
+    });
+    const candidates = await tx.matchmakingQueue.findMany({
+      where: { game, login: { not: me } },
+      orderBy: { joinedAt: 'asc' },
+    });
+    for (const cand of candidates) {
+      // Exclut les comptes hors-jeu (bannis/désactivés/anonymisés).
+      const u = await tx.user.findUnique({
+        where: { login: cand.login },
+        select: { bannedAt: true, anonymizedAt: true, deletionScheduledAt: true },
+      });
+      if (!u || u.bannedAt || u.anonymizedAt || u.deletionScheduledAt) {
+        await tx.matchmakingQueue.delete({ where: { login: cand.login } }).catch(() => {});
+        continue;
+      }
+      // Appariement : on retire les deux entrées.
+      await tx.matchmakingQueue.deleteMany({ where: { login: { in: [me, cand.login] } } });
+      return cand.login as string;
+    }
+    return null;
+  });
+
+  if (!paired) {
+    return c.json({ matched: false });
+  }
+
+  const opponentLogin = paired;
+  // Défi entre les deux joueurs (planifié maintenant). Best-effort : un échec ne
+  // doit pas empêcher la notification d'appariement.
+  await prisma.challenge
+    .create({
+      data: {
+        id: randomUUID(),
+        challengerLogin: me,
+        opponentLogin,
+        status: 'pending',
+        game,
+        scheduledAt: new Date(),
+      },
+    })
+    .catch(() => {});
+
+  // Notifie LES DEUX joueurs. Le `link` porte le login de l'adversaire afin que
+  // /queue/status puisse re-récupérer l'avatar côté joueur appariné à distance.
+  await notify(opponentLogin, {
+    type: 'matchmaking',
+    title: 'Adversaire trouvé !',
+    body: `@${me} t'affronte en ${game}`,
+    link: `/challenges?vs=${encodeURIComponent(me)}&game=${encodeURIComponent(game)}`,
+  });
+  await notify(me, {
+    type: 'matchmaking',
+    title: 'Adversaire trouvé !',
+    body: `@${opponentLogin} t'affronte en ${game}`,
+    link: `/challenges?vs=${encodeURIComponent(opponentLogin)}&game=${encodeURIComponent(game)}`,
+  });
+  emit([me, opponentLogin], { type: 'challenge:received', payload: {} });
+
+  const opponent = await fetchQueueOpponent(opponentLogin);
+  return c.json({ matched: true, game, opponent });
+});
+
+app.post('/queue/leave', async (c) => {
+  const me = await getCurrentLogin(c);
+  await prisma.matchmakingQueue.deleteMany({ where: { login: me } });
+  return c.json({ ok: true });
+});
+
+app.get('/queue/status', async (c) => {
+  const me = await getCurrentLogin(c);
+  const row = await prisma.matchmakingQueue.findUnique({ where: { login: me } });
+  if (row) {
+    return c.json({ state: 'queued', game: row.game });
+  }
+  // Détection d'un appariement très récent (déclenché par le join de l'autre).
+  // On lit la dernière notif 'matchmaking' non lue dans la fenêtre, puis on la
+  // marque lue → 'matched' n'est rapporté qu'une fois (l'animation versus ne
+  // boucle pas).
+  const since = new Date(Date.now() - MATCH_NOTIF_WINDOW_MS);
+  const notif = await prisma.notification.findFirst({
+    where: { recipientLogin: me, type: 'matchmaking', read: false, createdAt: { gte: since } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (notif) {
+    await prisma.notification.update({ where: { id: notif.id }, data: { read: true } });
+    // Récupère le login adverse + le jeu depuis le lien stocké.
+    const params = new URLSearchParams((notif.link ?? '').split('?')[1] ?? '');
+    const vs = params.get('vs');
+    const game = parseGameId(params.get('game'));
+    const opponent = vs ? await fetchQueueOpponent(vs) : null;
+    return c.json({ state: 'matched', game, opponent });
+  }
+  return c.json({ state: 'idle' });
+});
+
 // ── Saisons ───────────────────────────────────────────────────────────────
 app.get('/seasons', async (c) => {
   await getCurrentLogin(c);
@@ -1112,18 +1312,24 @@ app.post('/seasons/close', async (c) => {
     }
 
     // Reset de toutes les disciplines pour la prochaine ère.
-    await tx.user.updateMany({
-      data: {
-        elo: 1000,
-        matchesPlayed: 0,
-        eloSmash: 1000,
-        matchesPlayedSmash: 0,
-        eloChess: 1000,
-        matchesPlayedChess: 0,
-        eloSf: 1000,
-        matchesPlayedSf: 0,
-      },
-    });
+    // On ne repart pas d'un plat 1000 : chaque ELO est ramené au PLANCHER de son
+    // grade courant (rankFloor) pour récompenser la progression de la saison.
+    // Les compteurs de matchs sont eux remis à zéro.
+    for (const u of allUsers) {
+      await tx.user.update({
+        where: { login: u.login },
+        data: {
+          elo: rankFloor(u.elo),
+          matchesPlayed: 0,
+          eloSmash: rankFloor(u.eloSmash),
+          matchesPlayedSmash: 0,
+          eloChess: rankFloor(u.eloChess),
+          matchesPlayedChess: 0,
+          eloSf: rankFloor(u.eloSf),
+          matchesPlayedSf: 0,
+        },
+      });
+    }
     await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
     const babyfootChamp =
       [...allUsers].filter((u) => (u.games ?? ['babyfoot']).includes('babyfoot')).sort((a, b) => b.elo - a.elo)[0]?.login ?? null;

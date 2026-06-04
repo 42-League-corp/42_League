@@ -6,6 +6,7 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { TeamEloChart } from '../../components/TeamEloChart';
 import { TeamProfileTrophiesSection } from '../../components/TeamTrophiesSection';
 import type { TeamProfile } from '../../lib/api';
+import { useI18n, useT } from '../../lib/i18n';
 
 // ─── Avatar en overlap pour un duo ───────────────────────────────────────────
 
@@ -41,6 +42,7 @@ function DuoAvatars({
 // ─── Hero card ────────────────────────────────────────────────────────────────
 
 function TeamHeroCard({ team }: { team: TeamProfile }) {
+  const t = useT();
   const games = team.wins + team.losses;
   const winRate = games === 0 ? 0 : Math.round((team.wins / games) * 100);
   const deltaTotal = team.eloHistory.reduce((s, p) => s + p.delta, 0);
@@ -89,7 +91,7 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
             )}
             {!team.name && (
               <div className="text-[10px] text-muted-2 font-medium mt-0.5 italic">
-                Équipe sans nom — 2v2 Babyfoot
+                {t('team.noName')}
               </div>
             )}
           </div>
@@ -115,7 +117,7 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
               {team.elo}
             </div>
             <div className="text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold mt-0.5">
-              ELO ÉQUIPE
+              {t('team.elo.label')}
             </div>
           </div>
           {deltaTotal !== 0 && (
@@ -125,7 +127,7 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
                 {isUp ? '+' : ''}{deltaTotal}
               </div>
               <div className="text-[9px] text-muted uppercase tracking-wider font-bold">
-                Total
+                {t('team.delta.total')}
               </div>
             </div>
           )}
@@ -134,8 +136,8 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
         {/* Stats pills */}
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: 'V', value: team.wins, tone: 'text-gold' },
-            { label: 'D', value: team.losses, tone: 'text-red' },
+            { label: t('lb.abbr.win'), value: team.wins, tone: 'text-gold' },
+            { label: t('lb.abbr.loss'), value: team.losses, tone: 'text-red' },
             { label: 'WR', value: `${winRate}%`, tone: winRate >= 50 ? 'text-gold' : 'text-red' },
             { label: 'GM', value: games, tone: 'text-text-strong' },
           ].map(({ label, value, tone }) => (
@@ -174,11 +176,13 @@ function SectionHeader({ title, badge }: { title: string; badge?: number }) {
 // ─── Historique des matches ───────────────────────────────────────────────────
 
 function TeamMatchHistory({ team }: { team: TeamProfile }) {
+  const t = useT();
+  const { locale } = useI18n();
   const history = [...team.eloHistory].reverse().slice(0, 20);
   if (history.length === 0) {
     return (
       <div className="text-center text-muted-2 text-sm py-6 italic">
-        Aucun match enregistré.
+        {t('team.empty.mobile')}
       </div>
     );
   }
@@ -192,7 +196,7 @@ function TeamMatchHistory({ team }: { team: TeamProfile }) {
           }`}
         >
           <div className={`text-[10px] font-extrabold uppercase tracking-wide w-10 flex-shrink-0 ${p.won ? 'text-gold' : 'text-red'}`}>
-            {p.won ? 'WIN' : 'LOSS'}
+            {p.won ? t('lb.abbr.win') : t('lb.abbr.loss')}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-text-strong truncate">
@@ -206,7 +210,7 @@ function TeamMatchHistory({ team }: { team: TeamProfile }) {
               </PlayerLink>
             </div>
             <div className="text-[10px] text-muted-2 font-mono">
-              {new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(new Date(p.playedAt))}
+              {new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short' }).format(new Date(p.playedAt))}
             </div>
           </div>
           <div className="flex-shrink-0 text-right">
@@ -232,6 +236,7 @@ interface TeamProfileMobileProps {
 
 export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
   const navigate = useNavigate();
+  const t = useT();
 
   return (
     <PullToRefresh onRefresh={onRefresh}>
@@ -242,7 +247,7 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
         className="flex items-center gap-1.5 text-muted-2 hover:text-gold transition-colors text-xs font-bold uppercase tracking-wider mb-4 tap-transparent"
       >
         <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-        Retour
+        {t('team.back')}
       </button>
 
       <div className="space-y-5">
@@ -251,13 +256,13 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
 
         {/* ELO chart */}
         <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
-          <SectionHeader title="Progression ELO" />
+          <SectionHeader title={t('team.eloProgress')} />
           <TeamEloChart points={team.eloHistory} height={150} uid={team.id} />
         </div>
 
         {/* Joueurs */}
         <section>
-          <SectionHeader title="Les Joueurs" />
+          <SectionHeader title={t('team.players')} />
           <div className="grid grid-cols-2 gap-2">
             {[
               { login: team.player1Login, img: team.player1ImageUrl },
@@ -275,7 +280,7 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-text-strong truncate">{login}</div>
-                  <div className="text-[9px] text-muted font-medium">Voir le profil →</div>
+                  <div className="text-[9px] text-muted font-medium">{t('team.viewProfile')}</div>
                 </div>
               </PlayerLink>
             ))}
@@ -284,13 +289,13 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
 
         {/* Trophées d'équipe */}
         <section>
-          <SectionHeader title="Trophées d'Équipe" />
+          <SectionHeader title={t('team.trophies')} />
           <TeamProfileTrophiesSection teamId={team.id} />
         </section>
 
         {/* Match history */}
         <section>
-          <SectionHeader title="Derniers matches" badge={team.eloHistory.length} />
+          <SectionHeader title={t('team.history.recent')} badge={team.eloHistory.length} />
           <TeamMatchHistory team={team} />
         </section>
       </div>

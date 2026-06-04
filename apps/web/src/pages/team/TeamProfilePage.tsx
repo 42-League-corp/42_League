@@ -5,6 +5,7 @@ import { ViewportSwitch } from '../../shell/ViewportSwitch';
 import { TeamProfileMobile } from './TeamProfileMobile';
 import { TeamProfileDesktop } from './TeamProfileDesktop';
 import { api, type TeamProfile } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /**
  * Page de profil d'une équipe Babyfoot 2v2.
@@ -14,6 +15,7 @@ import { api, type TeamProfile } from '../../lib/api';
  * adapté selon le viewport (mobile < 420px / desktop ≥ 420px).
  */
 export function TeamProfilePage() {
+  const t = useT();
   const { teamId = '' } = useParams<{ teamId: string }>();
 
   const [profile, setProfile] = useState<TeamProfile | null>(null);
@@ -28,12 +30,12 @@ export function TeamProfilePage() {
       const data = await api.teamProfile(teamId);
       setProfile(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur de chargement.');
+      setError(err instanceof Error ? err.message : t('team.loadError'));
       setProfile(null);
     } finally {
       setLoading(false);
     }
-  }, [teamId]);
+  }, [teamId, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -43,8 +45,8 @@ export function TeamProfilePage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 px-4 text-center">
         <div className="text-4xl opacity-50">⚽</div>
-        <div className="text-sm font-bold text-text-strong">Équipe introuvable</div>
-        <div className="text-xs text-muted-2">{error ?? 'Cette équipe n\'existe pas ou a été supprimée.'}</div>
+        <div className="text-sm font-bold text-text-strong">{t('team.notFound')}</div>
+        <div className="text-xs text-muted-2">{error ?? t('team.notFound.sub')}</div>
       </div>
     );
   }

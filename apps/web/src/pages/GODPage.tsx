@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, type ReactNode, type ClipboardEvent, 
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useServerEvents } from '../hooks/useServerEvents';
+import { useT } from '../lib/i18n';
 import {
   api,
   type AdminUser,
@@ -42,6 +43,7 @@ function RoleBadge({ role }: { role: string }) {
 
 // Pastilles des modes auxquels le joueur adhère, avec son ELO par discipline en tooltip.
 function GameModeBadges({ user }: { user: AdminUser }) {
+  const t = useT();
   const games = (user.games as string[] | undefined) ?? ['babyfoot'];
   const defs: { id: string; label: string; cls: string; elo: number }[] = [
     { id: 'babyfoot', label: 'B', cls: 'bg-amber-400/15 text-amber-400', elo: user.elo },
@@ -56,7 +58,7 @@ function GameModeBadges({ user }: { user: AdminUser }) {
         return (
           <span
             key={d.id}
-            title={`${d.id} · ${on ? `${d.elo} ELO` : 'non inscrit'}`}
+            title={`${d.id} · ${on ? `${d.elo} ELO` : t('god.status.notRegistered')}`}
             className={`w-5 h-5 grid place-items-center rounded text-[10px] font-mono font-bold ${
               on ? d.cls : 'bg-zinc-800 text-zinc-600'
             }`}
@@ -70,25 +72,28 @@ function GameModeBadges({ user }: { user: AdminUser }) {
 }
 
 function StatusBadge({ banned }: { banned: boolean }) {
+  const t = useT();
   if (banned)
-    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">BANNI</span>;
-  return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">ACTIF</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">{t('god.status.banned')}</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">{t('god.status.active')}</span>;
 }
 
 function FRStatusBadge({ status }: { status: string }) {
+  const t = useT();
   if (status === 'accepted')
-    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">ACCEPTÉE</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">{t('god.fr.accepted')}</span>;
   if (status === 'rejected')
-    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">REJETÉE</span>;
-  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">EN ATTENTE</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">{t('god.fr.rejected')}</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">{t('god.fr.pending')}</span>;
 }
 
 function BugStatusBadge({ status }: { status: string }) {
+  const t = useT();
   if (status === 'resolved')
-    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">RÉSOLU</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-emerald-400/15 text-emerald-400 rounded font-mono">{t('god.bug.resolved')}</span>;
   if (status === 'closed')
-    return <span className="px-1.5 py-0.5 text-xs bg-zinc-400/15 text-zinc-400 rounded font-mono">FERMÉ</span>;
-  return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">OUVERT</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-zinc-400/15 text-zinc-400 rounded font-mono">{t('god.bug.closed')}</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">{t('god.bug.open')}</span>;
 }
 
 function Btn({
@@ -169,7 +174,7 @@ function fmtDate(iso: string) {
 function ConfirmModal({
   message,
   danger,
-  confirmLabel = 'Confirmer',
+  confirmLabel,
   onConfirm,
   onCancel,
 }: {
@@ -179,6 +184,7 @@ function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/70 font-mono" onClick={onCancel}>
       <div
@@ -187,8 +193,8 @@ function ConfirmModal({
       >
         <div className="text-sm text-zinc-200 mb-4 whitespace-pre-wrap leading-relaxed">{message}</div>
         <div className="flex gap-2 justify-end">
-          <Btn variant="ghost" onClick={onCancel}>Annuler</Btn>
-          <Btn variant={danger ? 'danger' : 'default'} onClick={onConfirm}>{confirmLabel}</Btn>
+          <Btn variant="ghost" onClick={onCancel}>{t('god.cancel')}</Btn>
+          <Btn variant={danger ? 'danger' : 'default'} onClick={onConfirm}>{confirmLabel ?? t('god.confirm')}</Btn>
         </div>
       </div>
     </div>
@@ -263,7 +269,7 @@ function SudoBar({
   onToggle,
   selectedCount,
   onBulkDelete,
-  bulkLabel = 'Supprimer la sélection',
+  bulkLabel,
 }: {
   sudo: boolean;
   onToggle: () => void;
@@ -271,6 +277,7 @@ function SudoBar({
   onBulkDelete?: () => void;
   bulkLabel?: string;
 }) {
+  const t = useT();
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2">
       <button
@@ -281,14 +288,14 @@ function SudoBar({
         <span className={`relative w-9 h-5 rounded-full transition-colors ${sudo ? 'bg-red-500/70' : 'bg-zinc-700'}`}>
           <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${sudo ? 'left-[18px]' : 'left-0.5'}`} />
         </span>
-        <span className={sudo ? 'text-red-400 font-bold' : 'text-zinc-400'}>MODE SUDO {sudo ? 'ON' : 'OFF'}</span>
+        <span className={sudo ? 'text-red-400 font-bold' : 'text-zinc-400'}>{t('god.sudo.label')} {sudo ? t('god.sudo.on') : t('god.sudo.off')}</span>
         <span className="text-[10px] text-zinc-600">
-          {sudo ? '· suppressions sans confirmation' : '· suppressions confirmées'}
+          {sudo ? t('god.sudo.hintOn') : t('god.sudo.hintOff')}
         </span>
       </button>
       {onBulkDelete && (selectedCount ?? 0) > 0 && (
         <Btn variant="danger" onClick={onBulkDelete} className="border border-red-500/40">
-          {bulkLabel} ({selectedCount})
+          {bulkLabel ?? t('god.sudo.bulkDefault')} ({selectedCount})
         </Btn>
       )}
     </div>
@@ -324,6 +331,7 @@ function StatsEditModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const t = useT();
 
   const toggleGame = (g: 'babyfoot' | 'smash' | 'chess' | 'streetfighter') =>
     setGames((prev) => {
@@ -335,7 +343,7 @@ function StatsEditModal({
 
   async function handleSave() {
     if (games.size === 0) {
-      setError('Au moins un mode doit rester actif');
+      setError(t('god.stats.atLeastOne'));
       return;
     }
     setSaving(true);
@@ -360,7 +368,7 @@ function StatsEditModal({
       onSave();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally {
       setSaving(false);
     }
@@ -368,39 +376,39 @@ function StatsEditModal({
 
   const GAME_GROUPS: { title: string; accent: string; rows: { label: string; value: string; set: (v: string) => void }[] }[] = [
     {
-      title: '⚽ Babyfoot',
+      title: t('god.game.babyfoot'),
       accent: 'text-amber-400',
       rows: [
-        { label: 'ELO', value: elo, set: setElo },
-        { label: 'Matches', value: matches, set: setMatches },
-        { label: 'Tournois gagnés', value: trophies, set: setTrophies },
+        { label: t('god.stats.elo'), value: elo, set: setElo },
+        { label: t('god.stats.matches'), value: matches, set: setMatches },
+        { label: t('god.stats.tournamentsWon'), value: trophies, set: setTrophies },
       ],
     },
     {
-      title: '🎮 Smash',
+      title: t('god.game.smash'),
       accent: 'text-red-400',
       rows: [
-        { label: 'ELO', value: eloS, set: setEloS },
-        { label: 'Matches', value: matchesS, set: setMatchesS },
-        { label: 'Tournois gagnés', value: trophiesS, set: setTrophiesS },
+        { label: t('god.stats.elo'), value: eloS, set: setEloS },
+        { label: t('god.stats.matches'), value: matchesS, set: setMatchesS },
+        { label: t('god.stats.tournamentsWon'), value: trophiesS, set: setTrophiesS },
       ],
     },
     {
-      title: '♟️ Échecs',
+      title: t('god.game.chess'),
       accent: 'text-emerald-400',
       rows: [
-        { label: 'ELO', value: eloC, set: setEloC },
-        { label: 'Matches', value: matchesC, set: setMatchesC },
-        { label: 'Tournois gagnés', value: trophiesC, set: setTrophiesC },
+        { label: t('god.stats.elo'), value: eloC, set: setEloC },
+        { label: t('god.stats.matches'), value: matchesC, set: setMatchesC },
+        { label: t('god.stats.tournamentsWon'), value: trophiesC, set: setTrophiesC },
       ],
     },
     {
-      title: '🥊 Street Fighter',
+      title: t('god.game.streetfighter'),
       accent: 'text-orange-400',
       rows: [
-        { label: 'ELO', value: eloSf, set: setEloSf },
-        { label: 'Matches', value: matchesSf, set: setMatchesSf },
-        { label: 'Tournois gagnés', value: trophiesSf, set: setTrophiesSf },
+        { label: t('god.stats.elo'), value: eloSf, set: setEloSf },
+        { label: t('god.stats.matches'), value: matchesSf, set: setMatchesSf },
+        { label: t('god.stats.tournamentsWon'), value: trophiesSf, set: setTrophiesSf },
       ],
     },
   ];
@@ -412,12 +420,12 @@ function StatsEditModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-sm font-mono text-zinc-300 mb-4">
-          Modifier stats — <span className="text-zinc-100 font-bold">{user.login}</span>
+          {t('god.stats.title')} <span className="text-zinc-100 font-bold">{user.login}</span>
         </div>
 
         {/* Adhésion aux modes */}
         <div className="mb-4">
-          <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">Modes actifs</div>
+          <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">{t('god.stats.activeModes')}</div>
           <div className="flex gap-2">
             {(['babyfoot', 'smash', 'chess', 'streetfighter'] as const).map((g) => (
               <button
@@ -453,16 +461,16 @@ function StatsEditModal({
           ))}
           {/* Dodges (transversal) */}
           <div className="flex items-center gap-3 border-t border-zinc-800 pt-3">
-            <span className="text-xs font-mono text-zinc-400 w-28">Dodges</span>
+            <span className="text-xs font-mono text-zinc-400 w-28">{t('god.stats.dodges')}</span>
             <Input type="number" value={dodges} onChange={setDodges} className="flex-1" />
           </div>
         </div>
 
         {error && <div className="mt-3 text-xs text-red-400 font-mono">{error}</div>}
         <div className="mt-5 flex gap-2 justify-end">
-          <Btn onClick={onClose} variant="ghost">Annuler</Btn>
+          <Btn onClick={onClose} variant="ghost">{t('god.cancel')}</Btn>
           <Btn onClick={handleSave} disabled={saving} variant="default">
-            {saving ? 'Sauvegarde…' : 'Sauvegarder'}
+            {saving ? t('god.saving') : t('god.save')}
           </Btn>
         </div>
       </div>
@@ -480,10 +488,11 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ removedUsers: number; resetUsers: number } | null>(null);
+  const t = useT();
 
   const blockPaste = (e: ClipboardEvent | DragEvent) => {
     e.preventDefault();
-    setError('Copier-coller interdit — recopie la phrase à la main.');
+    setError(t('god.reset.noPaste'));
   };
 
   const ok = typed === RESET_CONFIRM_PHRASE;
@@ -497,7 +506,7 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
       setResult({ removedUsers: r.removedUsers, resetUsers: r.resetUsers });
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally {
       setResetting(false);
     }
@@ -511,33 +520,33 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
       >
         {result ? (
           <>
-            <div className="text-sm font-mono text-emerald-400 mb-3 font-bold">✓ Ligue réinitialisée</div>
+            <div className="text-sm font-mono text-emerald-400 mb-3 font-bold">{t('god.reset.done')}</div>
             <div className="text-xs font-mono text-zinc-400 space-y-1">
-              <div>{result.resetUsers} joueur{result.resetUsers !== 1 ? 's' : ''} remis à zéro (ELO 1000).</div>
-              <div>{result.removedUsers} compte{result.removedUsers !== 1 ? 's' : ''} supprimé{result.removedUsers !== 1 ? 's' : ''} (désactivés / supprimés).</div>
-              <div className="text-zinc-500">Tout l'historique de jeu a été effacé.</div>
+              <div>{result.resetUsers} {t('god.reset.resetUsers')}</div>
+              <div>{result.removedUsers} {t('god.reset.removedUsers')}</div>
+              <div className="text-zinc-500">{t('god.reset.historyWiped')}</div>
             </div>
             <div className="mt-5 flex justify-end">
-              <Btn onClick={onClose} variant="default">Fermer</Btn>
+              <Btn onClick={onClose} variant="default">{t('god.close')}</Btn>
             </div>
           </>
         ) : (
           <>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-lg">💣</span>
-              <span className="text-sm font-mono text-red-400 font-bold uppercase tracking-widest">Reset total de la ligue</span>
+              <span className="text-sm font-mono text-red-400 font-bold uppercase tracking-widest">{t('god.reset.title')}</span>
             </div>
             <div className="text-xs font-mono text-zinc-400 leading-relaxed space-y-2 mb-4">
-              <p>Cette action est <span className="text-red-400 font-bold">irréversible</span>. Elle va :</p>
+              <p>{t('god.reset.willA')} <span className="text-red-400 font-bold">{t('god.reset.irreversible')}</span>{t('god.reset.willB')}</p>
               <ul className="list-disc list-inside text-zinc-500 space-y-0.5">
-                <li>supprimer <span className="text-zinc-300">tous les matchs</span>, défis, ops, rejets et tournois ;</li>
-                <li>remettre chaque joueur à <span className="text-zinc-300">ELO 1000</span>, stats et trophées à 0 ;</li>
-                <li>supprimer les comptes <span className="text-zinc-300">désactivés / supprimés</span>.</li>
+                <li>{t('god.reset.li1.a')} <span className="text-zinc-300">{t('god.reset.li1.b')}</span>{t('god.reset.li1.c')}</li>
+                <li>{t('god.reset.li2.a')} <span className="text-zinc-300">{t('god.reset.li2.b')}</span>{t('god.reset.li2.c')}</li>
+                <li>{t('god.reset.li3.a')} <span className="text-zinc-300">{t('god.reset.li3.b')}</span>.</li>
               </ul>
-              <p className="text-zinc-500">Les SUPERADMIN et les comptes actifs sont conservés (mais remis à zéro).</p>
+              <p className="text-zinc-500">{t('god.reset.preserve')}</p>
             </div>
             <div className="text-xs font-mono text-zinc-400 mb-2">
-              Pour confirmer, recopie à la main (le copier-coller est bloqué) :
+              {t('god.reset.copyHint')}
             </div>
             <div className="bg-zinc-800/60 border border-zinc-700 rounded px-3 py-2 mb-2 text-sm font-mono text-zinc-200 select-none">
               {RESET_CONFIRM_PHRASE}
@@ -553,14 +562,14 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              placeholder="Recopie la phrase ici…"
+              placeholder={t('god.reset.copyPlaceholder')}
               className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-red-500/60"
             />
             {error && <div className="mt-3 text-xs text-red-400 font-mono">{error}</div>}
             <div className="mt-5 flex gap-2 justify-end">
-              <Btn onClick={onClose} variant="ghost">Annuler</Btn>
+              <Btn onClick={onClose} variant="ghost">{t('god.cancel')}</Btn>
               <Btn onClick={handleReset} disabled={!ok || resetting} variant="danger">
-                {resetting ? 'Reset en cours…' : 'Tout réinitialiser'}
+                {resetting ? t('god.reset.resetting') : t('god.reset.confirmBtn')}
               </Btn>
             </div>
           </>
@@ -587,6 +596,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const { selected, toggle, toggleAll, clear } = useSelection();
+  const t = useT();
 
   // Création d'un faux joueur (SUPERADMIN).
   const [newLogin, setNewLogin] = useState('');
@@ -611,7 +621,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     setPending(login);
     setError('');
     try { await fn(); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Erreur'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('god.error')); }
     finally { setPending(null); }
   }
 
@@ -628,14 +638,14 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       setNewLogin('');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally {
       setCreating(false);
     }
   }
 
   // Confirme l'action, SAUF si le mode sudo est actif (le toggle a déjà été confirmé).
-  async function confirmOrSudo(message: string, confirmLabel = 'Supprimer') {
+  async function confirmOrSudo(message: string, confirmLabel = t('god.delete')) {
     return sudo ? true : requestConfirm(message, { danger: true, confirmLabel });
   }
   async function toggleSudo() {
@@ -644,8 +654,8 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       return;
     }
     const ok = await requestConfirm(
-      'Activer le mode SUDO ?\nLes suppressions / bans ne demanderont plus de confirmation dans ce tableau.',
-      { danger: true, confirmLabel: 'Activer sudo' },
+      t('god.sudo.confirmUsers'),
+      { danger: true, confirmLabel: t('god.sudo.activate') },
     );
     if (ok) setSudo(true);
   }
@@ -657,20 +667,20 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       : [];
 
   async function deleteFakeUser(login: string) {
-    if (!(await confirmOrSudo(`Supprimer DÉFINITIVEMENT le faux joueur "${login}" et toutes ses données ? (irréversible)`)))
+    if (!(await confirmOrSudo(t('god.users.confirmDeleteFake').replace('{login}', login))))
       return;
     await withPending(login, () => api.adminDeleteUser(login));
   }
 
   async function banUser(login: string) {
-    if (!(await confirmOrSudo(`Bannir @${login} ? Ses défis/tournois en cours seront annulés.`, 'Bannir'))) return;
+    if (!(await confirmOrSudo(t('god.users.confirmBan').replace('{login}', login), t('god.users.confirmBanLabel')))) return;
     await withPending(login, () => api.adminBanUser(login));
   }
 
   async function bulkDelete() {
     const ids = [...selected].filter((l) => deletableLogins.includes(l));
     if (ids.length === 0) return;
-    if (!(await confirmOrSudo(`Supprimer DÉFINITIVEMENT ${ids.length} faux joueur(s) ? (irréversible)`))) return;
+    if (!(await confirmOrSudo(t('god.users.confirmBulk').replace('{n}', String(ids.length))))) return;
     setError('');
     for (const l of ids) await api.adminDeleteUser(l).catch((e) => setError(String(e)));
     clear();
@@ -680,9 +690,9 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   async function toggleStaging(login: string, currentRole: string) {
     const grant = currentRole !== 'SUPERADMIN';
     const msg = grant
-      ? `Donner l'accès à staging.42league.fr à @${login} ?`
-      : `Retirer l'accès staging à @${login} ? Son rôle repassera à USER.`;
-    if (!(await requestConfirm(msg, { danger: !grant, confirmLabel: grant ? 'Accorder' : 'Retirer' }))) return;
+      ? t('god.users.staging.grant').replace('{login}', login)
+      : t('god.users.staging.revoke').replace('{login}', login);
+    if (!(await requestConfirm(msg, { danger: !grant, confirmLabel: grant ? t('god.users.staging.grantLabel') : t('god.users.staging.revokeLabel') }))) return;
     await withPending(login, () => api.setStagingAccess(login, grant));
   }
 
@@ -699,14 +709,14 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
         <div className="mb-4 bg-red-500/5 border border-red-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs font-mono text-red-400 uppercase tracking-widest mb-0.5">
-              💣 Zone de danger
+              {t('god.users.danger.title')}
             </div>
             <div className="text-[11px] text-zinc-500 font-mono">
-              Reset complet : supprime matchs &amp; tournois, remet tous les joueurs à zéro (ELO 1000), retire les comptes désactivés/supprimés. Irréversible.
+              {t('god.users.danger.desc')}
             </div>
           </div>
           <Btn onClick={() => setShowReset(true)} variant="danger" className="border border-red-500/40 px-3 py-1.5">
-            Réinitialiser la ligue
+            {t('god.users.danger.btn')}
           </Btn>
         </div>
       )}
@@ -714,25 +724,25 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       {myRole === 'SUPERADMIN' && (
         <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-wrap items-end gap-3">
           <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest w-full mb-1">
-            Créer un faux joueur
+            {t('god.users.create.title')}
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Login</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.users.create.login')}</span>
             <Input value={newLogin} onChange={setNewLogin} placeholder="ex. test9" className="w-40" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Campus</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.users.create.campus')}</span>
             <Input value={newCampus} onChange={setNewCampus} placeholder="Le Havre" className="w-36" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">ELO</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.users.create.elo')}</span>
             <Input type="number" value={newElo} onChange={setNewElo} className="w-24" />
           </div>
           <Btn onClick={createUser} disabled={creating || !newLogin.trim()} variant="success">
-            {creating ? 'Création…' : '+ Créer'}
+            {creating ? t('god.users.create.creating') : t('god.users.create.btn')}
           </Btn>
           <span className="text-[10px] text-zinc-600 font-mono">
-            Compte factice (sans 42) — supprimable ensuite.
+            {t('god.users.create.hint')}
           </span>
         </div>
       )}
@@ -740,8 +750,8 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       {confirmNode}
 
       <div className="mb-3 flex items-center gap-3">
-        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
-        <span className="text-zinc-500 text-xs font-mono">{filtered.length} utilisateurs</span>
+        <Input value={filter} onChange={setFilter} placeholder={t('god.users.filter')} className="w-64" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.users.count')}</span>
       </div>
 
       <SudoBar
@@ -749,12 +759,12 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
         onToggle={toggleSudo}
         selectedCount={selected.size}
         onBulkDelete={deletableLogins.length > 0 ? bulkDelete : undefined}
-        bulkLabel="Supprimer les joueurs"
+        bulkLabel={t('god.users.bulkDelete')}
       />
 
       {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm font-mono border-collapse">
@@ -768,16 +778,16 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     />
                   )}
                 </th>
-                <th className="text-left py-2 px-3">Login</th>
-                <th className="text-left py-2 px-3">Rôle</th>
-                <th className="text-left py-2 px-3">Modes</th>
-                <th className="text-right py-2 px-3">ELO</th>
-                <th className="text-right py-2 px-3">Matches</th>
-                <th className="text-right py-2 px-3">Dodges</th>
+                <th className="text-left py-2 px-3">{t('god.users.col.login')}</th>
+                <th className="text-left py-2 px-3">{t('god.users.col.role')}</th>
+                <th className="text-left py-2 px-3">{t('god.users.col.modes')}</th>
+                <th className="text-right py-2 px-3">{t('god.users.col.elo')}</th>
+                <th className="text-right py-2 px-3">{t('god.users.col.matches')}</th>
+                <th className="text-right py-2 px-3">{t('god.users.col.dodges')}</th>
                 <th className="text-right py-2 px-3">🏆</th>
-                <th className="text-left py-2 px-3">Statut</th>
-                <th className="text-left py-2 px-3">Campus</th>
-                <th className="text-right py-2 px-3">Actions</th>
+                <th className="text-left py-2 px-3">{t('god.users.col.status')}</th>
+                <th className="text-left py-2 px-3">{t('god.users.col.campus')}</th>
+                <th className="text-right py-2 px-3">{t('god.users.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -806,7 +816,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                       {isLocked ? (
                         // Superadmins hardcodés : seul le bouton staging est masqué
                         // (accès permanent), mais on affiche quand même leur statut.
-                        <span className="text-zinc-600 text-xs font-mono">permanent</span>
+                        <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
                       ) : (
                         <div className="flex items-center gap-1.5 justify-end flex-wrap">
                           {myRole === 'SUPERADMIN' && !isSuperAdmin && (
@@ -819,16 +829,16 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                           {/* Accès staging — visible aux SUPERADMIN hardcodés uniquement */}
                           {myRole === 'SUPERADMIN' && (
                             isSuperAdmin
-                              ? <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">🔒 Retirer staging</Btn>
-                              : <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="ghost" className="border border-zinc-600">🔒 Staging</Btn>
+                              ? <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">{t('god.users.removeStaging')}</Btn>
+                              : <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="ghost" className="border border-zinc-600">{t('god.users.staging')}</Btn>
                           )}
                           {u.bannedAt
-                            ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">Unban</Btn>
-                            : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">Ban</Btn>
+                            ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">{t('god.users.unban')}</Btn>
+                            : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">{t('god.users.ban')}</Btn>
                           }
-                          <Btn onClick={() => setEditingStats(u)} variant="ghost">Stats</Btn>
+                          <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
                           {myRole === 'SUPERADMIN' && u.ftId === null && (
-                            <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">Suppr</Btn>
+                            <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">{t('god.users.deleteBtn')}</Btn>
                           )}
                         </div>
                       )}
@@ -852,6 +862,7 @@ function ModerationTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState('');
+  const t = useT();
 
   async function lookup() {
     if (!query.trim()) return;
@@ -862,7 +873,7 @@ function ModerationTab() {
       const data = await api.adminModerationStats(query.trim());
       setStats(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Joueur introuvable');
+      setError(e instanceof Error ? e.message : t('god.mod.notFound'));
     } finally {
       setLoading(false);
     }
@@ -902,7 +913,7 @@ function ModerationTab() {
         <Input
           value={query}
           onChange={setQuery}
-          placeholder="Login du joueur…"
+          placeholder={t('god.mod.lookup')}
           className="w-64"
         />
         <Btn
@@ -910,7 +921,7 @@ function ModerationTab() {
           disabled={loading || !query.trim()}
           variant="default"
         >
-          {loading ? 'Analyse…' : 'Analyser'}
+          {loading ? t('god.mod.analyzing') : t('god.mod.analyze')}
         </Btn>
       </div>
       {error && <div className="text-xs text-red-400 font-mono mb-4">{error}</div>}
@@ -927,10 +938,10 @@ function ModerationTab() {
               </div>
               <div className="grid grid-cols-4 gap-4 text-center">
                 {[
-                  { label: 'ELO', value: u.elo },
-                  { label: 'Matches', value: u.matchesPlayed },
-                  { label: 'Dodges', value: u.dodgeCount },
-                  { label: 'Trophées', value: u.tournamentsWon },
+                  { label: t('god.mod.elo'), value: u.elo },
+                  { label: t('god.mod.matches'), value: u.matchesPlayed },
+                  { label: t('god.mod.dodges'), value: u.dodgeCount },
+                  { label: t('god.mod.trophies'), value: u.tournamentsWon },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-zinc-800/60 rounded p-2">
                     <div className="text-xl font-mono font-bold text-zinc-100 tabular-nums">{value}</div>
@@ -940,8 +951,8 @@ function ModerationTab() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-4 text-center">
                 {[
-                  { label: 'Rejets émis', value: stats.rejectionsEmitted.length, color: 'text-orange-400' },
-                  { label: 'Rejets reçus', value: stats.rejectionsReceived.length, color: 'text-red-400' },
+                  { label: t('god.mod.rejEmitted'), value: stats.rejectionsEmitted.length, color: 'text-orange-400' },
+                  { label: t('god.mod.rejReceived'), value: stats.rejectionsReceived.length, color: 'text-red-400' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-zinc-800/60 rounded p-2">
                     <div className={`text-xl font-mono font-bold tabular-nums ${color}`}>{value}</div>
@@ -952,22 +963,22 @@ function ModerationTab() {
             </div>
             <div className="flex flex-col gap-2 shrink-0">
               {u.bannedAt
-                ? <Btn onClick={handleUnban} disabled={!!pending} variant="success">Unban</Btn>
-                : <Btn onClick={handleBan} disabled={!!pending} variant="danger">Bannir</Btn>
+                ? <Btn onClick={handleUnban} disabled={!!pending} variant="success">{t('god.mod.unban')}</Btn>
+                : <Btn onClick={handleBan} disabled={!!pending} variant="danger">{t('god.mod.ban')}</Btn>
               }
             </div>
           </div>
 
           {/* Top opponents */}
-          <Section title="Top adversaires (50 derniers matchs)">
+          <Section title={t('god.mod.topOpponents')}>
             <div className="flex flex-wrap gap-2">
               {stats.topOpponents.length === 0 ? (
-                <span className="text-zinc-600 text-xs font-mono">Aucun match</span>
+                <span className="text-zinc-600 text-xs font-mono">{t('god.mod.noMatch')}</span>
               ) : (
                 stats.topOpponents.map(({ login, count }) => (
                   <div key={login} className="bg-zinc-800 rounded px-3 py-1.5 flex items-center gap-2">
                     <span className="text-zinc-200 font-mono text-sm">{login}</span>
-                    <span className="text-zinc-500 font-mono text-xs">{count} match{count > 1 ? 's' : ''}</span>
+                    <span className="text-zinc-500 font-mono text-xs">{count} {count > 1 ? t('god.mod.matchs') : t('god.mod.match')}</span>
                   </div>
                 ))
               )}
@@ -975,15 +986,15 @@ function ModerationTab() {
           </Section>
 
           {/* Match history */}
-          <Section title={`Historique (${stats.recentMatches.length} matchs)`}>
+          <Section title={t('god.mod.history').replace('{n}', String(stats.recentMatches.length))}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-                    <th className="text-left py-1.5 px-2">Date</th>
-                    <th className="text-left py-1.5 px-2">Joueur A</th>
-                    <th className="text-center py-1.5 px-2">Score</th>
-                    <th className="text-left py-1.5 px-2">Joueur B</th>
+                    <th className="text-left py-1.5 px-2">{t('god.match.col.date')}</th>
+                    <th className="text-left py-1.5 px-2">{t('god.match.col.playerA')}</th>
+                    <th className="text-center py-1.5 px-2">{t('god.match.col.score')}</th>
+                    <th className="text-left py-1.5 px-2">{t('god.match.col.playerB')}</th>
                     <th className="text-right py-1.5 px-2">ΔA</th>
                     <th className="text-right py-1.5 px-2">ΔB</th>
                     <th className="text-center py-1.5 px-2">ELO</th>
@@ -1011,12 +1022,12 @@ function ModerationTab() {
 
           {/* Rejections */}
           {stats.rejectionsEmitted.length > 0 && (
-            <Section title={`Rejets émis par ${u.login} (${stats.rejectionsEmitted.length})`}>
+            <Section title={t('god.mod.rejEmittedBy').replace('{login}', u.login).replace('{n}', String(stats.rejectionsEmitted.length))}>
               <RejectionTable rows={stats.rejectionsEmitted} perspective="emitted" />
             </Section>
           )}
           {stats.rejectionsReceived.length > 0 && (
-            <Section title={`Rejets reçus par ${u.login} (${stats.rejectionsReceived.length})`}>
+            <Section title={t('god.mod.rejReceivedBy').replace('{login}', u.login).replace('{n}', String(stats.rejectionsReceived.length))}>
               <RejectionTable rows={stats.rejectionsReceived} perspective="received" />
             </Section>
           )}
@@ -1029,16 +1040,17 @@ function ModerationTab() {
 // ── Tab: REJETS ────────────────────────────────────────────────────────────
 
 function RejectionTable({ rows }: { rows: RejectedMatch[]; perspective?: 'emitted' | 'received' | 'all' }) {
+  const t = useT();
   return (
     <table className="w-full text-xs font-mono border-collapse">
       <thead>
         <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-          <th className="text-left py-1.5 px-2">Date</th>
-          <th className="text-left py-1.5 px-2">Déclarant</th>
-          <th className="text-left py-1.5 px-2">Opposant</th>
-          <th className="text-center py-1.5 px-2">Score</th>
-          <th className="text-left py-1.5 px-2">Raison</th>
-          <th className="text-left py-1.5 px-2">Message</th>
+          <th className="text-left py-1.5 px-2">{t('god.rej.col.date')}</th>
+          <th className="text-left py-1.5 px-2">{t('god.rej.col.declarer')}</th>
+          <th className="text-left py-1.5 px-2">{t('god.rej.col.opponent')}</th>
+          <th className="text-center py-1.5 px-2">{t('god.rej.col.score')}</th>
+          <th className="text-left py-1.5 px-2">{t('god.rej.col.reason')}</th>
+          <th className="text-left py-1.5 px-2">{t('god.rej.col.message')}</th>
         </tr>
       </thead>
       <tbody>
@@ -1050,7 +1062,7 @@ function RejectionTable({ rows }: { rows: RejectedMatch[]; perspective?: 'emitte
             <td className="py-1.5 px-2 text-center tabular-nums text-zinc-400">{r.scoreDeclarer}–{r.scoreOpponent}</td>
             <td className="py-1.5 px-2">
               <span className={`px-1 py-0.5 rounded text-xs ${r.contestReason === 'never_played' ? 'bg-red-400/15 text-red-400' : 'bg-orange-400/15 text-orange-400'}`}>
-                {r.contestReason === 'never_played' ? 'Jamais joué' : 'Score incorrect'}
+                {r.contestReason === 'never_played' ? t('god.rej.neverPlayed') : t('god.rej.wrongScore')}
               </span>
             </td>
             <td className="py-1.5 px-2 text-zinc-400 max-w-xs truncate" title={r.contestMessage}>{r.contestMessage || '—'}</td>
@@ -1066,6 +1078,7 @@ function RejetsTab() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -1088,14 +1101,14 @@ function RejetsTab() {
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center gap-3">
-        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login ou message…" className="w-72" />
-        <span className="text-zinc-500 text-xs font-mono">{filtered.length} rejet{filtered.length !== 1 ? 's' : ''}</span>
+        <Input value={filter} onChange={setFilter} placeholder={t('god.rej.filter')} className="w-72" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.rej.count')}</span>
       </div>
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucun rejet enregistré.</div>
+        <div className="text-zinc-600 text-sm font-mono">{t('god.rej.empty')}</div>
       ) : (
         <div className="overflow-x-auto">
           <RejectionTable rows={filtered} perspective="all" />
@@ -1121,6 +1134,7 @@ function MatchesTab() {
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const { selected, toggle, toggleAll, clear } = useSelection();
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -1149,11 +1163,11 @@ function MatchesTab() {
     const playerALogin = editPlayerA.trim();
     const playerBLogin = editPlayerB.trim();
     if (!playerALogin || !playerBLogin) {
-      setError('Les deux joueurs sont obligatoires.');
+      setError(t('god.matches.bothRequired'));
       return;
     }
     if (playerALogin === playerBLogin) {
-      setError('Les deux joueurs doivent être différents.');
+      setError(t('god.matches.bothDifferent'));
       return;
     }
     setPending(id);
@@ -1168,12 +1182,12 @@ function MatchesTab() {
       setEditId(null);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally { setPending(null); }
   }
 
   async function confirmOrSudo(message: string) {
-    return sudo ? true : requestConfirm(message, { danger: true, confirmLabel: 'Supprimer' });
+    return sudo ? true : requestConfirm(message, { danger: true, confirmLabel: t('god.delete') });
   }
   async function toggleSudo() {
     if (sudo) {
@@ -1181,28 +1195,28 @@ function MatchesTab() {
       return;
     }
     const ok = await requestConfirm(
-      'Activer le mode SUDO ?\nLes suppressions de matchs ne demanderont plus de confirmation.',
-      { danger: true, confirmLabel: 'Activer sudo' },
+      t('god.sudo.confirmMatches'),
+      { danger: true, confirmLabel: t('god.sudo.activate') },
     );
     if (ok) setSudo(true);
   }
 
   async function deleteMatch(id: string) {
-    if (!(await confirmOrSudo("Supprimer ce match ? L'ELO sera reversé."))) return;
+    if (!(await confirmOrSudo(t('god.matches.confirmDelete')))) return;
     setPending(id);
     setError('');
     try {
       await api.adminDeleteMatch(id);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally { setPending(null); }
   }
 
   async function bulkDelete() {
     const ids = [...selected];
     if (ids.length === 0) return;
-    if (!(await confirmOrSudo(`Supprimer ${ids.length} match(s) ? L'ELO sera reversé.`))) return;
+    if (!(await confirmOrSudo(t('god.matches.confirmBulk').replace('{n}', String(ids.length))))) return;
     setError('');
     for (const id of ids) await api.adminDeleteMatch(id).catch((e) => setError(String(e)));
     clear();
@@ -1213,19 +1227,19 @@ function MatchesTab() {
     <div className="p-4">
       {confirmNode}
       <div className="mb-3 flex items-center gap-3">
-        <Input value={filter} onChange={setFilter} placeholder="Filtrer par login…" className="w-64" />
-        <span className="text-zinc-500 text-xs font-mono">{filtered.length} affiché{filtered.length > 1 ? 's' : ''} / {matches.length} total</span>
+        <Input value={filter} onChange={setFilter} placeholder={t('god.matches.filter')} className="w-64" />
+        <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.matches.shown')} / {matches.length} {t('god.matches.total')}</span>
       </div>
       <SudoBar
         sudo={sudo}
         onToggle={toggleSudo}
         selectedCount={selected.size}
         onBulkDelete={bulkDelete}
-        bulkLabel="Supprimer les matchs"
+        bulkLabel={t('god.matches.bulkDelete')}
       />
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono border-collapse">
@@ -1239,14 +1253,14 @@ function MatchesTab() {
                     />
                   )}
                 </th>
-                <th className="text-left py-2 px-2">Date</th>
-                <th className="text-left py-2 px-2">Joueur A</th>
-                <th className="text-center py-2 px-2">Score</th>
-                <th className="text-left py-2 px-2">Joueur B</th>
+                <th className="text-left py-2 px-2">{t('god.match.col.date')}</th>
+                <th className="text-left py-2 px-2">{t('god.match.col.playerA')}</th>
+                <th className="text-center py-2 px-2">{t('god.match.col.score')}</th>
+                <th className="text-left py-2 px-2">{t('god.match.col.playerB')}</th>
                 <th className="text-right py-2 px-2">ΔA</th>
                 <th className="text-right py-2 px-2">ΔB</th>
                 <th className="text-center py-2 px-2">ELO</th>
-                <th className="text-right py-2 px-2">Actions</th>
+                <th className="text-right py-2 px-2">{t('god.match.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1290,7 +1304,7 @@ function MatchesTab() {
                     <div className="flex items-center gap-1.5 justify-end">
                       {editId === m.id ? (
                         <>
-                          <Btn onClick={() => saveEdit(m.id)} disabled={pending === m.id} variant="success">Sauver</Btn>
+                          <Btn onClick={() => saveEdit(m.id)} disabled={pending === m.id} variant="success">{t('god.matches.save')}</Btn>
                           <Btn onClick={() => setEditId(null)} variant="ghost">✕</Btn>
                         </>
                       ) : (
@@ -1319,6 +1333,7 @@ function IdeasTab() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all');
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -1340,7 +1355,7 @@ function IdeasTab() {
       await api.setFeatureRequestStatus(id, status);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally { setPending(null); }
   }
 
@@ -1360,15 +1375,15 @@ function IdeasTab() {
             onClick={() => setFilter(f)}
             className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filter === f ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
-            {f === 'all' ? `TOUT (${ideas.length})` : f === 'pending' ? `EN ATTENTE (${counts.pending})` : f === 'accepted' ? `ACCEPTÉES (${counts.accepted})` : `REJETÉES (${counts.rejected})`}
+            {f === 'all' ? `${t('god.ideas.all')} (${ideas.length})` : f === 'pending' ? `${t('god.ideas.pending')} (${counts.pending})` : f === 'accepted' ? `${t('god.ideas.accepted')} (${counts.accepted})` : `${t('god.ideas.rejected')} (${counts.rejected})`}
           </button>
         ))}
       </div>
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucune idée dans cette catégorie.</div>
+        <div className="text-zinc-600 text-sm font-mono">{t('god.ideas.empty')}</div>
       ) : (
         <div className="space-y-2">
           {filtered.map((idea) => (
@@ -1385,13 +1400,13 @@ function IdeasTab() {
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   {idea.status !== 'accepted' && (
-                    <Btn onClick={() => setStatus(idea.id, 'accepted')} disabled={pending === idea.id} variant="success">Accepter</Btn>
+                    <Btn onClick={() => setStatus(idea.id, 'accepted')} disabled={pending === idea.id} variant="success">{t('god.ideas.accept')}</Btn>
                   )}
                   {idea.status !== 'rejected' && (
-                    <Btn onClick={() => setStatus(idea.id, 'rejected')} disabled={pending === idea.id} variant="danger">Rejeter</Btn>
+                    <Btn onClick={() => setStatus(idea.id, 'rejected')} disabled={pending === idea.id} variant="danger">{t('god.ideas.reject')}</Btn>
                   )}
                   {idea.status !== 'pending' && (
-                    <Btn onClick={() => setStatus(idea.id, 'pending')} disabled={pending === idea.id} variant="ghost">En attente</Btn>
+                    <Btn onClick={() => setStatus(idea.id, 'pending')} disabled={pending === idea.id} variant="ghost">{t('god.ideas.setPending')}</Btn>
                   )}
                 </div>
               </div>
@@ -1411,6 +1426,7 @@ function BugsTab() {
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved' | 'closed'>('all');
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -1432,7 +1448,7 @@ function BugsTab() {
       await api.setBugReportStatus(id, status);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally { setPending(null); }
   }
 
@@ -1452,15 +1468,15 @@ function BugsTab() {
             onClick={() => setFilter(f)}
             className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filter === f ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
-            {f === 'all' ? `TOUT (${bugs.length})` : f === 'open' ? `OUVERTS (${counts.open})` : f === 'resolved' ? `RÉSOLUS (${counts.resolved})` : `FERMÉS (${counts.closed})`}
+            {f === 'all' ? `${t('god.bugs.all')} (${bugs.length})` : f === 'open' ? `${t('god.bugs.open')} (${counts.open})` : f === 'resolved' ? `${t('god.bugs.resolved')} (${counts.resolved})` : `${t('god.bugs.closed')} (${counts.closed})`}
           </button>
         ))}
       </div>
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucun bug dans cette catégorie.</div>
+        <div className="text-zinc-600 text-sm font-mono">{t('god.bugs.empty')}</div>
       ) : (
         <div className="space-y-2">
           {filtered.map((bug) => (
@@ -1477,13 +1493,13 @@ function BugsTab() {
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   {bug.status !== 'resolved' && (
-                    <Btn onClick={() => setStatus(bug.id, 'resolved')} disabled={pending === bug.id} variant="success">Résolu</Btn>
+                    <Btn onClick={() => setStatus(bug.id, 'resolved')} disabled={pending === bug.id} variant="success">{t('god.bugs.markResolved')}</Btn>
                   )}
                   {bug.status !== 'closed' && (
-                    <Btn onClick={() => setStatus(bug.id, 'closed')} disabled={pending === bug.id} variant="ghost">Fermer</Btn>
+                    <Btn onClick={() => setStatus(bug.id, 'closed')} disabled={pending === bug.id} variant="ghost">{t('god.bugs.markClosed')}</Btn>
                   )}
                   {bug.status !== 'open' && (
-                    <Btn onClick={() => setStatus(bug.id, 'open')} disabled={pending === bug.id} variant="warn">Rouvrir</Btn>
+                    <Btn onClick={() => setStatus(bug.id, 'open')} disabled={pending === bug.id} variant="warn">{t('god.bugs.reopen')}</Btn>
                   )}
                 </div>
               </div>
@@ -1498,19 +1514,13 @@ function BugsTab() {
 // ── Tab: ALERTES ───────────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: SuspiciousFlag['severity'] }) {
+  const t = useT();
   if (severity === 'high')
-    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">ÉLEVÉ</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-red-400/15 text-red-400 rounded font-mono">{t('god.alert.high')}</span>;
   if (severity === 'medium')
-    return <span className="px-1.5 py-0.5 text-xs bg-orange-400/15 text-orange-400 rounded font-mono">MOYEN</span>;
-  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">FAIBLE</span>;
+    return <span className="px-1.5 py-0.5 text-xs bg-orange-400/15 text-orange-400 rounded font-mono">{t('god.alert.medium')}</span>;
+  return <span className="px-1.5 py-0.5 text-xs bg-yellow-400/15 text-yellow-400 rounded font-mono">{t('god.alert.low')}</span>;
 }
-
-const FLAG_TYPE_LABEL: Record<SuspiciousFlag['type'], string> = {
-  pair_domination: 'Domination paire',
-  recent_farming: 'Farm récent',
-  elo_spike: 'Spike ELO',
-  victim_pattern: 'Victime ciblée',
-};
 
 const FLAG_TYPE_ICON: Record<SuspiciousFlag['type'], string> = {
   pair_domination: '⚖️',
@@ -1525,6 +1535,7 @@ function AlertesTab() {
   const [error, setError] = useState('');
   const [filterType, setFilterType] = useState<SuspiciousFlag['type'] | 'all'>('all');
   const [inspectLogin, setInspectLogin] = useState<string | null>(null);
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -1550,9 +1561,9 @@ function AlertesTab() {
       {/* Summary */}
       <div className="mb-5 grid grid-cols-3 gap-3 max-w-md">
         {[
-          { label: 'Élevé', count: counts.high, color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/20' },
-          { label: 'Moyen', count: counts.medium, color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/20' },
-          { label: 'Faible', count: counts.low, color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/20' },
+          { label: t('god.alert.high'), count: counts.high, color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/20' },
+          { label: t('god.alert.medium'), count: counts.medium, color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/20' },
+          { label: t('god.alert.low'), count: counts.low, color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/20' },
         ].map(({ label, count, color, bg }) => (
           <div key={label} className={`border rounded-lg p-3 text-center ${bg}`}>
             <div className={`text-2xl font-bold font-mono tabular-nums ${color}`}>{count}</div>
@@ -1563,13 +1574,13 @@ function AlertesTab() {
 
       {/* Type filter */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(['all', 'pair_domination', 'recent_farming', 'elo_spike', 'victim_pattern'] as const).map((t) => (
+        {(['all', 'pair_domination', 'recent_farming', 'elo_spike', 'victim_pattern'] as const).map((ft) => (
           <button
-            key={t}
-            onClick={() => setFilterType(t)}
-            className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filterType === t ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+            key={ft}
+            onClick={() => setFilterType(ft)}
+            className={`text-xs font-mono px-3 py-1.5 rounded transition-colors cursor-pointer ${filterType === ft ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
-            {t === 'all' ? `TOUT (${flags.length})` : `${FLAG_TYPE_ICON[t]} ${FLAG_TYPE_LABEL[t]}`}
+            {ft === 'all' ? `${t('god.alert.all')} (${flags.length})` : `${FLAG_TYPE_ICON[ft]} ${t(`god.alert.type.${ft}`)}`}
           </button>
         ))}
       </div>
@@ -1577,11 +1588,11 @@ function AlertesTab() {
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
 
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Analyse en cours…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.alert.analyzing')}</div>
       ) : filtered.length === 0 ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-center">
-          <div className="text-zinc-500 font-mono text-sm">Aucun comportement suspect détecté.</div>
-          <div className="text-zinc-600 font-mono text-xs mt-1">La communauté joue clean 👍</div>
+          <div className="text-zinc-500 font-mono text-sm">{t('god.alert.noneTitle')}</div>
+          <div className="text-zinc-600 font-mono text-xs mt-1">{t('god.alert.noneSub')}</div>
         </div>
       ) : (
         <div className="space-y-2">
@@ -1600,7 +1611,7 @@ function AlertesTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-base">{FLAG_TYPE_ICON[flag.type]}</span>
-                    <span className="text-xs font-mono text-zinc-300 font-medium">{FLAG_TYPE_LABEL[flag.type]}</span>
+                    <span className="text-xs font-mono text-zinc-300 font-medium">{t(`god.alert.type.${flag.type}`)}</span>
                     <SeverityBadge severity={flag.severity} />
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {flag.players.map((p) => (
@@ -1621,9 +1632,9 @@ function AlertesTab() {
                   <p className="text-sm text-zinc-400 leading-relaxed">{flag.detail}</p>
                   {(flag.matchCount !== undefined || flag.winRate !== undefined || flag.eloGain !== undefined) && (
                     <div className="mt-2 flex items-center gap-4 text-xs font-mono text-zinc-500">
-                      {flag.matchCount !== undefined && <span>Matchs : <span className="text-zinc-300">{flag.matchCount}</span></span>}
-                      {flag.winRate !== undefined && <span>Win rate : <span className="text-zinc-300">{Math.round(flag.winRate * 100)}%</span></span>}
-                      {flag.eloGain !== undefined && <span>Gain ELO : <span className="text-emerald-400">+{flag.eloGain}</span></span>}
+                      {flag.matchCount !== undefined && <span>{t('god.alert.matches')} <span className="text-zinc-300">{flag.matchCount}</span></span>}
+                      {flag.winRate !== undefined && <span>{t('god.alert.winRate')} <span className="text-zinc-300">{Math.round(flag.winRate * 100)}%</span></span>}
+                      {flag.eloGain !== undefined && <span>{t('god.alert.eloGain')} <span className="text-emerald-400">+{flag.eloGain}</span></span>}
                     </div>
                   )}
                 </div>
@@ -1644,6 +1655,7 @@ function AlertesTab() {
 function InlineModeration({ login, onClose }: { login: string; onClose: () => void }) {
   const [stats, setStats] = useState<import('../lib/api').ModerationStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const t = useT();
 
   useEffect(() => {
     setLoading(true);
@@ -1655,25 +1667,25 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
   return (
     <div className="mt-4 border-t border-zinc-800 pt-4">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-mono text-zinc-400">Vue rapide — <span className="text-zinc-200">{login}</span></span>
-        <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-xs font-mono cursor-pointer">✕ fermer</button>
+        <span className="text-xs font-mono text-zinc-400">{t('god.alert.quickView')} <span className="text-zinc-200">{login}</span></span>
+        <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-xs font-mono cursor-pointer">{t('god.alert.close')}</button>
       </div>
       {loading ? (
-        <div className="text-zinc-600 text-xs font-mono">Chargement…</div>
+        <div className="text-zinc-600 text-xs font-mono">{t('god.loading')}</div>
       ) : stats ? (
         <div className="grid grid-cols-2 gap-4 text-xs font-mono">
           <div>
-            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">Stats</div>
+            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">{t('god.alert.stats')}</div>
             <div className="space-y-1 text-zinc-300">
-              <div>ELO : <span className="text-zinc-100 font-bold">{stats.user.elo}</span></div>
-              <div>Matches : {stats.user.matchesPlayed}</div>
-              <div>Win rate : <span className="text-zinc-100">{stats.recentMatches.length > 0 ? Math.round(stats.recentMatches.filter(m => (m.playerALogin === login && m.winner === 'A') || (m.playerBLogin === login && m.winner === 'B')).length / stats.recentMatches.length * 100) : 0}%</span></div>
-              <div>Rejets émis : <span className="text-orange-400">{stats.rejectionsEmitted.length}</span></div>
-              <div>Rejets reçus : <span className="text-red-400">{stats.rejectionsReceived.length}</span></div>
+              <div>{t('god.alert.elo')} <span className="text-zinc-100 font-bold">{stats.user.elo}</span></div>
+              <div>{t('god.alert.matchesLabel')} {stats.user.matchesPlayed}</div>
+              <div>{t('god.alert.winRateLabel')} <span className="text-zinc-100">{stats.recentMatches.length > 0 ? Math.round(stats.recentMatches.filter(m => (m.playerALogin === login && m.winner === 'A') || (m.playerBLogin === login && m.winner === 'B')).length / stats.recentMatches.length * 100) : 0}%</span></div>
+              <div>{t('god.alert.rejEmitted')} <span className="text-orange-400">{stats.rejectionsEmitted.length}</span></div>
+              <div>{t('god.alert.rejReceived')} <span className="text-red-400">{stats.rejectionsReceived.length}</span></div>
             </div>
           </div>
           <div>
-            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">Top adversaires</div>
+            <div className="text-zinc-500 uppercase tracking-wider mb-1.5">{t('god.alert.topOpponents')}</div>
             <div className="space-y-1">
               {stats.topOpponents.slice(0, 5).map(({ login: opp, count }) => (
                 <div key={opp} className="flex items-center justify-between">
@@ -1681,12 +1693,12 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
                   <span className="text-zinc-500">{count}x</span>
                 </div>
               ))}
-              {stats.topOpponents.length === 0 && <div className="text-zinc-600">Aucun</div>}
+              {stats.topOpponents.length === 0 && <div className="text-zinc-600">{t('god.alert.none')}</div>}
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-zinc-600 text-xs font-mono">Erreur de chargement.</div>
+        <div className="text-zinc-600 text-xs font-mono">{t('god.alert.loadError')}</div>
       )}
     </div>
   );
@@ -1723,6 +1735,7 @@ function AuditTab() {
   const [actorFilter, setActorFilter] = useState('');
   const [targetFilter, setTargetFilter] = useState('');
   const [actionFilter, setActionFilter] = useState<AdminAuditAction | 'all'>('all');
+  const t = useT();
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -1736,11 +1749,11 @@ function AuditTab() {
       });
       setEntries(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : t('god.error'));
     } finally {
       setLoading(false);
     }
-  }, [actorFilter, targetFilter, actionFilter]);
+  }, [actorFilter, targetFilter, actionFilter, t]);
 
   useEffect(() => { load(); }, [load]);
   useServerEvents(() => load(true), PANEL_EVENTS);
@@ -1748,34 +1761,34 @@ function AuditTab() {
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input value={actorFilter} onChange={setActorFilter} placeholder="Filtre acteur…" className="w-44" />
-        <Input value={targetFilter} onChange={setTargetFilter} placeholder="Filtre cible…" className="w-44" />
+        <Input value={actorFilter} onChange={setActorFilter} placeholder={t('god.audit.actorFilter')} className="w-44" />
+        <Input value={targetFilter} onChange={setTargetFilter} placeholder={t('god.audit.targetFilter')} className="w-44" />
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value as AdminAuditAction | 'all')}
           className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono px-2 py-1.5 rounded cursor-pointer"
         >
-          <option value="all">Toutes actions</option>
+          <option value="all">{t('god.audit.allActions')}</option>
           {AUDIT_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <span className="text-zinc-500 text-xs font-mono ml-auto">{entries.length} entrées</span>
+        <span className="text-zinc-500 text-xs font-mono ml-auto">{entries.length} {t('god.audit.entries')}</span>
       </div>
       {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-xs font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-xs font-mono">{t('god.loading')}</div>
       ) : entries.length === 0 ? (
-        <div className="text-zinc-500 text-xs font-mono">Aucune entrée.</div>
+        <div className="text-zinc-500 text-xs font-mono">{t('god.audit.empty')}</div>
       ) : (
         <table className="w-full text-xs font-mono border-collapse">
           <thead>
             <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-              <th className="text-left py-1.5 px-2">Date</th>
-              <th className="text-left py-1.5 px-2">Acteur</th>
-              <th className="text-left py-1.5 px-2">Rôle</th>
-              <th className="text-left py-1.5 px-2">Action</th>
-              <th className="text-left py-1.5 px-2">Cible</th>
-              <th className="text-left py-1.5 px-2">Détails</th>
-              <th className="text-left py-1.5 px-2">IP</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.date')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.actor')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.role')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.action')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.target')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.details')}</th>
+              <th className="text-left py-1.5 px-2">{t('god.audit.col.ip')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1807,14 +1820,6 @@ function AuditTab() {
 
 // ── Tab: ALL HISTORY ──────────────────────────────────────────────────────
 
-const EVENT_TYPE_LABEL: Record<AllHistoryEventType, string> = {
-  challenge: 'Défi',
-  pending_match: 'Décl. partie',
-  played_match: 'Match joué',
-  rejected_match: 'Décl. refusée',
-  ops: 'OPS',
-};
-
 const EVENT_TYPE_COLOR: Record<AllHistoryEventType, string> = {
   challenge: 'text-blue-400 bg-blue-400/10',
   pending_match: 'text-yellow-400 bg-yellow-400/10',
@@ -1831,14 +1836,6 @@ const EVENT_TYPE_ICON: Record<AllHistoryEventType, string> = {
   ops: '🎯',
 };
 
-const CHALLENGE_STATUS_LABEL: Record<string, string> = {
-  pending: 'En attente',
-  accepted: 'Accepté',
-  declined: 'Refusé',
-  recorded: 'Enregistré',
-  cancelled: 'Annulé',
-};
-
 const CHALLENGE_STATUS_COLOR: Record<string, string> = {
   pending: 'text-yellow-400',
   accepted: 'text-emerald-400',
@@ -1848,15 +1845,16 @@ const CHALLENGE_STATUS_COLOR: Record<string, string> = {
 };
 
 function EventDetail({ ev }: { ev: AllHistoryEvent }) {
+  const t = useT();
   if (ev.type === 'challenge') {
     return (
       <span className="flex items-center gap-2 flex-wrap">
         <span className={`font-mono text-xs ${CHALLENGE_STATUS_COLOR[ev.status ?? ''] ?? 'text-zinc-400'}`}>
-          {CHALLENGE_STATUS_LABEL[ev.status ?? ''] ?? ev.status}
+          {ev.status ? t(`god.chStatus.${ev.status}`) : ev.status}
         </span>
         {ev.scheduledAt && (
           <span className="text-zinc-600 text-xs">
-            prévu {new Date(ev.scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+            {t('god.event.scheduled')} {new Date(ev.scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
           </span>
         )}
       </span>
@@ -1865,7 +1863,7 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
   if (ev.type === 'pending_match') {
     return (
       <span className="text-zinc-400 text-xs tabular-nums">
-        score déclaré : {ev.scoreA}–{ev.scoreB}
+        {t('god.event.declaredScore')} {ev.scoreA}–{ev.scoreB}
       </span>
     );
   }
@@ -1875,7 +1873,7 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
         <span className="tabular-nums text-zinc-100 font-mono text-xs">{ev.scoreA}–{ev.scoreB}</span>
         {ev.winner && (
           <span className="text-emerald-400 text-xs">
-            → {ev.winner === 'A' ? ev.playerA : ev.playerB} gagne
+            → {ev.winner === 'A' ? ev.playerA : ev.playerB} {t('god.event.wins')}
           </span>
         )}
         {typeof ev.deltaA === 'number' && (
@@ -1883,7 +1881,7 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
             ({ev.deltaA > 0 ? '+' : ''}{ev.deltaA} / {ev.deltaB! > 0 ? '+' : ''}{ev.deltaB})
           </span>
         )}
-        {!ev.countedForElo && <span className="text-zinc-600 text-xs">hors ELO</span>}
+        {!ev.countedForElo && <span className="text-zinc-600 text-xs">{t('god.event.offElo')}</span>}
       </span>
     );
   }
@@ -1892,7 +1890,7 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
       <span className="flex items-center gap-2 flex-wrap">
         <span className="text-xs tabular-nums text-zinc-400">{ev.scoreA}–{ev.scoreB}</span>
         <span className={`text-xs px-1 py-0.5 rounded ${ev.contestReason === 'never_played' ? 'bg-red-400/15 text-red-400' : 'bg-orange-400/15 text-orange-400'}`}>
-          {ev.contestReason === 'never_played' ? 'Jamais joué' : 'Score incorrect'}
+          {ev.contestReason === 'never_played' ? t('god.event.neverPlayed') : t('god.event.wrongScore')}
         </span>
         {ev.contestMessage && <span className="text-zinc-500 text-xs truncate max-w-xs" title={ev.contestMessage}>{ev.contestMessage}</span>}
       </span>
@@ -1901,9 +1899,9 @@ function EventDetail({ ev }: { ev: AllHistoryEvent }) {
   if (ev.type === 'ops') {
     return (
       <span className="flex items-center gap-2 text-xs">
-        <span className="text-zinc-400">{ev.forcedUsed}/3 matchs forcés</span>
+        <span className="text-zinc-400">{t('god.event.forcedMatches').replace('{n}', String(ev.forcedUsed))}</span>
         {ev.expiresAt && (
-          <span className="text-zinc-600">expire {new Date(ev.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+          <span className="text-zinc-600">{t('god.event.expires')} {new Date(ev.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
         )}
       </span>
     );
@@ -1916,6 +1914,7 @@ function QuickBanButton({ login, onDone }: { login: string; onDone: () => void }
   const [userData, setUserData] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     api.adminUsers().then((list) => {
@@ -1938,7 +1937,7 @@ function QuickBanButton({ login, onDone }: { login: string; onDone: () => void }
 
   return (
     <Btn onClick={toggle} disabled={pending} variant={userData.bannedAt ? 'success' : 'danger'}>
-      {userData.bannedAt ? 'Unban' : 'Ban'}
+      {userData.bannedAt ? t('god.users.unban') : t('god.users.ban')}
     </Btn>
   );
 }
@@ -1959,10 +1958,11 @@ function HistoryRowActions({
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState('');
   const [showModo, setShowModo] = useState(false);
+  const t = useT();
 
   async function handleDelete() {
-    const label = EVENT_TYPE_LABEL[ev.type];
-    if (!confirm(`Supprimer ce ${label} ? Cette action est irréversible.`)) return;
+    const label = t(`god.event.${ev.type}`);
+    if (!confirm(t('god.hist.confirmDelete').replace('{label}', label))) return;
     setPending(true);
     setErr('');
     try {
@@ -1972,7 +1972,7 @@ function HistoryRowActions({
       else if (ev.type === 'challenge') await api.adminDeleteChallenge(ev.id);
       else if (ev.type === 'ops') await api.adminDeleteOps(ev.id);
       onDelete();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    } catch (e) { setErr(e instanceof Error ? e.message : t('god.error')); }
     finally { setPending(false); }
   }
 
@@ -1988,7 +1988,7 @@ function HistoryRowActions({
       });
       setEditMode(false);
       onEditSaved();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); }
+    } catch (e) { setErr(e instanceof Error ? e.message : t('god.error')); }
     finally { setPending(false); }
   }
 
@@ -2034,7 +2034,7 @@ function HistoryRowActions({
       {/* Panel modo inline */}
       {showModo && (
         <div className="w-full mt-2 pt-2 border-t border-zinc-800 flex flex-wrap gap-3 items-center">
-          <span className="text-zinc-500 text-xs font-mono">Modération :</span>
+          <span className="text-zinc-500 text-xs font-mono">{t('god.hist.moderation')}</span>
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-300 text-xs font-mono">{ev.playerA}</span>
             <QuickBanButton login={ev.playerA} onDone={() => setShowModo(false)} />
@@ -2059,6 +2059,7 @@ function AllHistoryTab() {
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const { selected, toggle, toggleAll, clear } = useSelection();
+  const t = useT();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -2070,9 +2071,9 @@ function AllHistoryTab() {
       limit: 500,
     })
       .then(setEvents)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Erreur'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('god.error')))
       .finally(() => setLoading(false));
-  }, [loginFilter, typeFilter, gameFilter]);
+  }, [loginFilter, typeFilter, gameFilter, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -2095,8 +2096,8 @@ function AllHistoryTab() {
   async function toggleSudo() {
     if (sudo) { setSudo(false); return; }
     const ok = await requestConfirm(
-      'Activer le mode SUDO ?\nLes suppressions ne demanderont plus de confirmation.',
-      { danger: true, confirmLabel: 'Activer sudo' },
+      t('god.sudo.confirmHistory'),
+      { danger: true, confirmLabel: t('god.sudo.activate') },
     );
     if (ok) setSudo(true);
   }
@@ -2104,9 +2105,9 @@ function AllHistoryTab() {
     const picked = events.filter((e) => selected.has(keyOf(e)));
     if (picked.length === 0) return;
     if (!sudo) {
-      const ok = await requestConfirm(`Supprimer ${picked.length} événement(s) ? Irréversible.`, {
+      const ok = await requestConfirm(t('god.hist.confirmBulk').replace('{n}', String(picked.length)), {
         danger: true,
-        confirmLabel: 'Supprimer',
+        confirmLabel: t('god.delete'),
       });
       if (!ok) return;
     }
@@ -2120,15 +2121,15 @@ function AllHistoryTab() {
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input value={loginFilter} onChange={setLoginFilter} placeholder="Filtrer par login…" className="w-56" />
+        <Input value={loginFilter} onChange={setLoginFilter} placeholder={t('god.hist.filter')} className="w-56" />
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as AllHistoryEventType | 'all')}
           className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono px-2 py-1.5 rounded cursor-pointer"
         >
-          <option value="all">Tous les types</option>
-          {typeOrder.map((t) => (
-            <option key={t} value={t}>{EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]}</option>
+          <option value="all">{t('god.hist.allTypes')}</option>
+          {typeOrder.map((ty) => (
+            <option key={ty} value={ty}>{EVENT_TYPE_ICON[ty]} {t(`god.event.${ty}`)}</option>
           ))}
         </select>
         <div className="flex gap-1">
@@ -2143,29 +2144,29 @@ function AllHistoryTab() {
                   : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              {g === 'all' ? 'Tous jeux' : TOURN_GAME_LABEL[g]}
+              {g === 'all' ? t('god.hist.allGames') : t(`god.tourn.game.${g}`)}
             </button>
           ))}
         </div>
-        <Btn onClick={load} variant="default">Actualiser</Btn>
-        <span className="text-zinc-500 text-xs font-mono ml-auto">{events.length} événements</span>
+        <Btn onClick={load} variant="default">{t('god.refreshAction')}</Btn>
+        <span className="text-zinc-500 text-xs font-mono ml-auto">{events.length} {t('god.hist.events')}</span>
       </div>
 
       {/* Type pills */}
       <div className="mb-4 flex flex-wrap gap-2">
-        {typeOrder.map((t) => {
-          const count = events.filter((e) => e.type === t).length;
+        {typeOrder.map((ty) => {
+          const count = events.filter((e) => e.type === ty).length;
           return (
             <button
-              key={t}
-              onClick={() => setTypeFilter(typeFilter === t ? 'all' : t)}
+              key={ty}
+              onClick={() => setTypeFilter(typeFilter === ty ? 'all' : ty)}
               className={`px-2.5 py-1 text-xs font-mono rounded transition-colors cursor-pointer border ${
-                typeFilter === t
-                  ? EVENT_TYPE_COLOR[t] + ' border-current/40'
+                typeFilter === ty
+                  ? EVENT_TYPE_COLOR[ty] + ' border-current/40'
                   : 'text-zinc-500 border-zinc-800 hover:text-zinc-300'
               }`}
             >
-              {EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]} <span className="opacity-60">{count}</span>
+              {EVENT_TYPE_ICON[ty]} {t(`god.event.${ty}`)} <span className="opacity-60">{count}</span>
             </button>
           );
         })}
@@ -2177,15 +2178,15 @@ function AllHistoryTab() {
         onToggle={toggleSudo}
         selectedCount={selected.size}
         onBulkDelete={bulkDelete}
-        bulkLabel="Supprimer les événements"
+        bulkLabel={t('god.hist.bulkDelete')}
       />
 
       {error && <div className="text-xs text-red-400 font-mono mb-3">{error}</div>}
 
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : events.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucun événement trouvé.</div>
+        <div className="text-zinc-600 text-sm font-mono">{t('god.hist.empty')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono border-collapse">
@@ -2199,12 +2200,12 @@ function AllHistoryTab() {
                     />
                   )}
                 </th>
-                <th className="text-left py-1.5 px-2">Date</th>
-                <th className="text-left py-1.5 px-2">Type</th>
-                <th className="text-left py-1.5 px-2">Joueur A</th>
-                <th className="text-left py-1.5 px-2">Joueur B</th>
-                <th className="text-left py-1.5 px-2">Détail</th>
-                <th className="text-right py-1.5 px-2">Actions</th>
+                <th className="text-left py-1.5 px-2">{t('god.match.col.date')}</th>
+                <th className="text-left py-1.5 px-2">{t('god.hist.col.type')}</th>
+                <th className="text-left py-1.5 px-2">{t('god.match.col.playerA')}</th>
+                <th className="text-left py-1.5 px-2">{t('god.match.col.playerB')}</th>
+                <th className="text-left py-1.5 px-2">{t('god.hist.col.detail')}</th>
+                <th className="text-right py-1.5 px-2">{t('god.match.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2216,7 +2217,7 @@ function AllHistoryTab() {
                   <td className="py-2 px-2 text-zinc-500 whitespace-nowrap align-top">{fmtDate(ev.at)}</td>
                   <td className="py-2 px-2 align-top">
                     <span className={`px-1.5 py-0.5 rounded text-xs ${EVENT_TYPE_COLOR[ev.type]}`}>
-                      {EVENT_TYPE_ICON[ev.type]} {EVENT_TYPE_LABEL[ev.type]}
+                      {EVENT_TYPE_ICON[ev.type]} {t(`god.event.${ev.type}`)}
                     </span>
                   </td>
                   <td className="py-2 px-2 text-zinc-200 align-top">{ev.playerA}</td>
@@ -2253,6 +2254,7 @@ function PendingTab() {
   const [fScoreB, setFScoreB] = useState('0');
   const [forcing, setForcing] = useState(false);
   const [forceMsg, setForceMsg] = useState('');
+  const t = useT();
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -2269,7 +2271,7 @@ function PendingTab() {
     setPending(id);
     setError('');
     try { await fn(); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Erreur'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('god.error')); }
     finally { setPending(null); }
   }
 
@@ -2281,11 +2283,11 @@ function PendingTab() {
     setForceMsg('');
     try {
       await api.adminForceResult(a, b, Number(fScoreA), Number(fScoreB));
-      setForceMsg(`✓ Résultat enregistré : ${a} ${fScoreA}–${fScoreB} ${b}`);
+      setForceMsg(t('god.pending.forced').replace('{a}', a).replace('{sa}', fScoreA).replace('{sb}', fScoreB).replace('{b}', b));
       setFA('');
       setFB('');
     } catch (e) {
-      setForceMsg(e instanceof Error ? e.message : 'Erreur');
+      setForceMsg(e instanceof Error ? e.message : t('god.error'));
     } finally {
       setForcing(false);
     }
@@ -2296,57 +2298,57 @@ function PendingTab() {
       {/* Forcer un résultat directement */}
       <div className="mb-5 bg-zinc-900 border border-zinc-800 rounded-lg p-3">
         <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest mb-2">
-          Forcer un résultat (faux comme vrais joueurs)
+          {t('god.pending.force.title')}
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Joueur A</span>
-            <Input value={fA} onChange={setFA} placeholder="login A" className="w-36" />
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.pending.playerA')}</span>
+            <Input value={fA} onChange={setFA} placeholder={t('god.pending.loginA')} className="w-36" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Score A</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.pending.scoreA')}</span>
             <Input type="number" value={fScoreA} onChange={setFScoreA} className="w-20" />
           </div>
           <span className="text-zinc-600 pb-2">–</span>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Score B</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.pending.scoreB')}</span>
             <Input type="number" value={fScoreB} onChange={setFScoreB} className="w-20" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-zinc-500 font-mono">Joueur B</span>
-            <Input value={fB} onChange={setFB} placeholder="login B" className="w-36" />
+            <span className="text-[10px] text-zinc-500 font-mono">{t('god.pending.playerB')}</span>
+            <Input value={fB} onChange={setFB} placeholder={t('god.pending.loginB')} className="w-36" />
           </div>
           <Btn onClick={forceResult} disabled={forcing || !fA.trim() || !fB.trim()} variant="success">
-            {forcing ? 'Enregistrement…' : 'Forcer le résultat'}
+            {forcing ? t('god.pending.forcing') : t('god.pending.force')}
           </Btn>
         </div>
         {forceMsg && <div className="mt-2 text-xs font-mono text-zinc-300">{forceMsg}</div>}
         <div className="mt-1 text-[10px] text-zinc-600 font-mono">
-          L'ELO des deux joueurs est appliqué immédiatement. Il faut un vainqueur (scores différents).
+          {t('god.pending.forceHint')}
         </div>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
         <span className="text-zinc-500 text-xs font-mono">
-          {rows.length} match{rows.length !== 1 ? 's' : ''} en attente de confirmation
+          {t('god.pending.awaiting').replace('{n}', String(rows.length))}
         </span>
-        <Btn onClick={load} variant="ghost">↻ Rafraîchir</Btn>
+        <Btn onClick={load} variant="ghost">{t('god.refresh')}</Btn>
       </div>
       {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
       {loading ? (
-        <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
       ) : rows.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucun match en attente.</div>
+        <div className="text-zinc-600 text-sm font-mono">{t('god.pending.empty')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-                <th className="text-left py-2 px-2">Déclaré le</th>
-                <th className="text-left py-2 px-2">Déclarant</th>
-                <th className="text-center py-2 px-2">Score</th>
-                <th className="text-left py-2 px-2">Opposant (doit confirmer)</th>
-                <th className="text-right py-2 px-2">Actions</th>
+                <th className="text-left py-2 px-2">{t('god.pending.col.declaredAt')}</th>
+                <th className="text-left py-2 px-2">{t('god.pending.col.declarer')}</th>
+                <th className="text-center py-2 px-2">{t('god.match.col.score')}</th>
+                <th className="text-left py-2 px-2">{t('god.pending.col.opponent')}</th>
+                <th className="text-right py-2 px-2">{t('god.match.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2360,25 +2362,25 @@ function PendingTab() {
                     <div className="flex items-center gap-1.5 justify-end">
                       <Btn
                         onClick={() => {
-                          if (confirm(`Forcer la validation du score ${p.scoreDeclarer}–${p.scoreOpponent} (${p.declarerLogin} vs ${p.opponentLogin}) ? L'ELO s'appliquera immédiatement.`)) {
+                          if (confirm(t('god.pending.confirmForce').replace('{sa}', String(p.scoreDeclarer)).replace('{sb}', String(p.scoreOpponent)).replace('{a}', p.declarerLogin).replace('{b}', p.opponentLogin))) {
                             act(p.id, () => api.adminForceConfirmMatch(p.id));
                           }
                         }}
                         disabled={pending === p.id}
                         variant="success"
                       >
-                        Forcer ✓
+                        {t('god.pending.forceBtn')}
                       </Btn>
                       <Btn
                         onClick={() => {
-                          if (confirm('Annuler ce match en attente ? Aucun ELO ne bougera, le match est supprimé.')) {
+                          if (confirm(t('god.pending.confirmCancel'))) {
                             act(p.id, () => api.adminForceCancelMatch(p.id));
                           }
                         }}
                         disabled={pending === p.id}
                         variant="danger"
                       >
-                        Annuler
+                        {t('god.pending.cancel')}
                       </Btn>
                     </div>
                   </td>
@@ -2411,6 +2413,7 @@ function CloseSeasonModal({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ champion: string | null; players: number } | null>(null);
   const ok = typed.trim() === CLOSE_CONFIRM_PHRASE;
+  const t = useT();
 
   async function handleClose() {
     setBusy(true);
@@ -2428,25 +2431,24 @@ function CloseSeasonModal({
       <div className="bg-zinc-900 border border-red-500/40 rounded-lg w-full max-w-md p-5 font-mono" onClick={(e) => e.stopPropagation()}>
         {result ? (
           <div className="space-y-3 text-sm text-zinc-200">
-            <div className="text-emerald-400 font-bold">Saison clôturée ✓</div>
-            <div>{result.players} joueur·s remis à zéro (ELO 1000).</div>
-            {result.champion && <div>🏆 Champion : <span className="text-yellow-400 font-bold">{result.champion}</span></div>}
-            <Btn variant="default" onClick={() => { onDone(); onClose(); }} className="mt-2">Fermer</Btn>
+            <div className="text-emerald-400 font-bold">{t('god.season.closed')}</div>
+            <div>{result.players} {t('god.season.playersReset')}</div>
+            {result.champion && <div>{t('god.season.champion')} <span className="text-yellow-400 font-bold">{result.champion}</span></div>}
+            <Btn variant="default" onClick={() => { onDone(); onClose(); }} className="mt-2">{t('god.close')}</Btn>
           </div>
         ) : (
           <>
-            <div className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">Clôturer « {season.name} »</div>
+            <div className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">{t('god.season.closeTitle').replace('{name}', season.name)}</div>
             <p className="text-xs text-zinc-400 leading-relaxed mb-3">
-              Snapshot du classement final + badge champion, puis <span className="text-red-400 font-bold">reset ELO 1000 pour tous</span>.
-              L'historique des matchs est conservé (taggé saison). <span className="text-red-400">Irréversible.</span>
+              {t('god.season.closeDesc.a')} <span className="text-red-400 font-bold">{t('god.season.closeDesc.b')}</span>{t('god.season.closeDesc.c')} <span className="text-red-400">{t('god.season.closeDesc.irr')}</span>
             </p>
-            <p className="text-[11px] text-zinc-500 mb-1">Recopie pour confirmer :</p>
+            <p className="text-[11px] text-zinc-500 mb-1">{t('god.season.copyToConfirm')}</p>
             <div className="text-yellow-400 text-xs mb-2 select-none">{CLOSE_CONFIRM_PHRASE}</div>
             <Input value={typed} onChange={setTyped} placeholder={CLOSE_CONFIRM_PHRASE} className="w-full mb-3" />
             <div className="flex gap-2 justify-end">
-              <Btn variant="ghost" onClick={onClose}>Annuler</Btn>
+              <Btn variant="ghost" onClick={onClose}>{t('god.cancel')}</Btn>
               <Btn variant="danger" onClick={handleClose} disabled={!ok || busy}>
-                {busy ? 'Clôture…' : 'Clôturer la saison'}
+                {busy ? t('god.season.closing') : t('god.season.closeBtn')}
               </Btn>
             </div>
           </>
@@ -2460,6 +2462,7 @@ function CloseSeasonModal({
 function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
   const [game, setGame] = useState<'babyfoot' | 'smash' | 'chess'>('babyfoot');
   const [rows, setRows] = useState<import('../lib/api').SeasonStanding[] | null>(null);
+  const t = useT();
 
   useEffect(() => {
     let alive = true;
@@ -2482,22 +2485,22 @@ function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
               game === g ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            {TOURN_GAME_LABEL[g]}
+            {t(`god.tourn.game.${g}`)}
           </button>
         ))}
       </div>
       {rows === null ? (
-        <div className="text-zinc-600 text-xs font-mono">Chargement…</div>
+        <div className="text-zinc-600 text-xs font-mono">{t('god.loading')}</div>
       ) : rows.length === 0 ? (
-        <div className="text-zinc-600 text-xs font-mono">Aucun classement figé pour ce mode.</div>
+        <div className="text-zinc-600 text-xs font-mono">{t('god.season.noStandings')}</div>
       ) : (
         <table className="w-full text-xs">
           <thead>
             <tr className="text-zinc-500 font-mono uppercase tracking-wider">
               <th className="text-left py-1 px-2">#</th>
-              <th className="text-left py-1 px-2">Joueur</th>
-              <th className="text-right py-1 px-2">ELO</th>
-              <th className="text-right py-1 px-2">V-D</th>
+              <th className="text-left py-1 px-2">{t('god.season.col.player')}</th>
+              <th className="text-right py-1 px-2">{t('god.season.col.elo')}</th>
+              <th className="text-right py-1 px-2">{t('god.season.col.wl')}</th>
             </tr>
           </thead>
           <tbody>
@@ -2523,6 +2526,7 @@ function SeasonsTab() {
   const [msg, setMsg] = useState('');
   const [closing, setClosing] = useState(false);
   const [openSeason, setOpenSeason] = useState<string | null>(null);
+  const t = useT();
 
   const load = useCallback(async () => {
     try {
@@ -2545,7 +2549,7 @@ function SeasonsTab() {
     try {
       await api.createSeason(n);
       setName('');
-      setMsg('Saison créée ✓');
+      setMsg(t('god.season.created'));
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -2560,35 +2564,35 @@ function SeasonsTab() {
         <CloseSeasonModal season={active} onClose={() => setClosing(false)} onDone={load} />
       )}
 
-      <Section title="Saison en cours">
+      <Section title={t('god.season.current')}>
         {active ? (
           <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-800/50 border border-zinc-700 rounded p-3">
             <div className="text-sm text-zinc-200">
               <span className="text-emerald-400 font-bold">{active.name}</span>
-              <span className="text-zinc-500 text-xs ml-2">depuis {fmtDate(active.startedAt)}</span>
+              <span className="text-zinc-500 text-xs ml-2">{t('god.season.since')} {fmtDate(active.startedAt)}</span>
             </div>
-            <Btn variant="danger" onClick={() => setClosing(true)}>Clôturer la saison en cours</Btn>
+            <Btn variant="danger" onClick={() => setClosing(true)}>{t('god.season.closeCurrent')}</Btn>
           </div>
         ) : (
-          <div className="text-sm text-zinc-500">Aucune saison active.</div>
+          <div className="text-sm text-zinc-500">{t('god.season.noneActive')}</div>
         )}
       </Section>
 
-      <Section title="Créer une nouvelle saison">
+      <Section title={t('god.season.createTitle')}>
         {active ? (
-          <div className="text-xs text-zinc-500">Clôture d'abord la saison en cours.</div>
+          <div className="text-xs text-zinc-500">{t('god.season.closeFirst')}</div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Input value={name} onChange={setName} placeholder="Nom (ex. Saison 2)" className="flex-1 min-w-[180px]" />
+            <Input value={name} onChange={setName} placeholder={t('god.season.namePlaceholder')} className="flex-1 min-w-[180px]" />
             <Btn variant="success" onClick={create} disabled={busy || !name.trim()}>
-              {busy ? 'Création…' : 'Créer la saison'}
+              {busy ? t('god.season.creating') : t('god.season.create')}
             </Btn>
           </div>
         )}
         {msg && <div className="text-xs text-zinc-400 mt-2">{msg}</div>}
       </Section>
 
-      <Section title="Historique des saisons">
+      <Section title={t('god.season.historyTitle')}>
         <div className="space-y-1.5">
           {seasons.map((s) => (
             <div key={s.id} className="bg-zinc-800/30 border border-zinc-800 rounded">
@@ -2600,17 +2604,17 @@ function SeasonsTab() {
                 <span className="text-zinc-200 font-bold">{s.name}</span>
                 <span className="flex items-center gap-2 text-zinc-500">
                   {s.isActive ? (
-                    <span className="text-emerald-400">en cours</span>
+                    <span className="text-emerald-400">{t('god.season.ongoing')}</span>
                   ) : (
-                    `clôturée ${s.endedAt ? fmtDate(s.endedAt) : ''}`
+                    `${t('god.season.closedOn')} ${s.endedAt ? fmtDate(s.endedAt) : ''}`
                   )}
-                  {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : '▼ classements'}</span>}
+                  {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : t('god.season.standings')}</span>}
                 </span>
               </button>
               {openSeason === s.id && !s.isActive && <SeasonStandingsBlock seasonId={s.id} />}
             </div>
           ))}
-          {seasons.length === 0 && <div className="text-zinc-600 text-xs">Aucune saison.</div>}
+          {seasons.length === 0 && <div className="text-zinc-600 text-xs">{t('god.season.none')}</div>}
         </div>
       </Section>
     </div>
@@ -2619,20 +2623,15 @@ function SeasonsTab() {
 
 // ── Onglet TOURNOIS : liste complète + suppression précise ───────────────────
 
-const TOURN_STATUS: Record<Tournament['status'], { label: string; cls: string }> = {
-  registration: { label: 'INSCRIPTIONS', cls: 'bg-teal-400/15 text-teal-300' },
-  in_progress: { label: 'EN COURS', cls: 'bg-amber-400/15 text-amber-400' },
-  finished: { label: 'TERMINÉ', cls: 'bg-zinc-600/30 text-zinc-400' },
-  cancelled: { label: 'ANNULÉ', cls: 'bg-red-400/15 text-red-400' },
-};
-
-const TOURN_GAME_LABEL: Record<string, string> = {
-  babyfoot: '⚽ Babyfoot',
-  smash: '🎮 Smash',
-  chess: '♟️ Échecs',
+const TOURN_STATUS_CLS: Record<Tournament['status'], string> = {
+  registration: 'bg-teal-400/15 text-teal-300',
+  in_progress: 'bg-amber-400/15 text-amber-400',
+  finished: 'bg-zinc-600/30 text-zinc-400',
+  cancelled: 'bg-red-400/15 text-red-400',
 };
 
 function TournamentsTab() {
+  const tr = useT();
   const [rows, setRows] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -2662,8 +2661,10 @@ function TournamentsTab() {
   async function handleDelete(t: Tournament) {
     if (
       !confirm(
-        `Supprimer le tournoi « ${t.name} » (${t.kind}, ${TOURN_STATUS[t.status].label}) ?\n` +
-          `Cette action est irréversible — entries et matchs seront effacés.`,
+        tr('god.tourn.confirmDelete')
+          .replace('{name}', t.name)
+          .replace('{kind}', t.kind)
+          .replace('{status}', tr(`god.tourn.status.${t.status}`)),
       )
     )
       return;
@@ -2697,7 +2698,7 @@ function TournamentsTab() {
   return (
     <div className="p-4">
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <Input value={filter} onChange={setFilter} placeholder="Filtrer (nom, organisateur, vainqueur)…" className="w-72" />
+        <Input value={filter} onChange={setFilter} placeholder={tr('god.tourn.filter')} className="w-72" />
         <div className="flex gap-1">
           {(['all', 'babyfoot', 'smash', 'chess'] as const).map((g) => (
             <button
@@ -2710,33 +2711,33 @@ function TournamentsTab() {
                   : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              {g === 'all' ? 'Tous' : TOURN_GAME_LABEL[g]}
+              {g === 'all' ? tr('god.tourn.all') : tr(`god.tourn.game.${g}`)}
             </button>
           ))}
         </div>
-        <Btn onClick={() => load()} variant="ghost">↻ Recharger</Btn>
-        <span className="text-zinc-600 text-xs font-mono">{sorted.length} tournoi(s)</span>
+        <Btn onClick={() => load()} variant="ghost">{tr('god.reload')}</Btn>
+        <span className="text-zinc-600 text-xs font-mono">{sorted.length} {tr('god.tourn.count')}</span>
       </div>
       {error && <div className="text-red-400 text-xs font-mono mb-3">{error}</div>}
       {loading ? (
-        <div className="text-zinc-600 text-sm font-mono">Chargement…</div>
+        <div className="text-zinc-600 text-sm font-mono">{tr('god.loading')}</div>
       ) : sorted.length === 0 ? (
-        <div className="text-zinc-600 text-sm font-mono">Aucun tournoi.</div>
+        <div className="text-zinc-600 text-sm font-mono">{tr('god.tourn.empty')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-zinc-500 text-xs font-mono uppercase tracking-wider border-b border-zinc-800">
-                <th className="text-left py-2 px-3">Nom</th>
-                <th className="text-left py-2 px-3">Jeu</th>
-                <th className="text-left py-2 px-3">Type</th>
-                <th className="text-left py-2 px-3">Format</th>
-                <th className="text-center py-2 px-3">Joueurs</th>
-                <th className="text-left py-2 px-3">Statut</th>
-                <th className="text-left py-2 px-3">Organisateur</th>
-                <th className="text-left py-2 px-3">Vainqueur</th>
-                <th className="text-left py-2 px-3">Créé</th>
-                <th className="text-right py-2 px-3">Action</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.name')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.game')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.type')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.format')}</th>
+                <th className="text-center py-2 px-3">{tr('god.tourn.col.players')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.status')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.organizer')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.winner')}</th>
+                <th className="text-left py-2 px-3">{tr('god.tourn.col.created')}</th>
+                <th className="text-right py-2 px-3">{tr('god.tourn.col.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2751,23 +2752,23 @@ function TournamentsTab() {
                     </button>
                   </td>
                   <td className="py-2 px-3 text-zinc-300 font-mono text-xs whitespace-nowrap">
-                    {TOURN_GAME_LABEL[t.game ?? 'babyfoot']}
+                    {tr(`god.tourn.game.${t.game ?? 'babyfoot'}`)}
                   </td>
                   <td className="py-2 px-3">
                     <span className={t.kind === 'official' ? 'text-amber-400 font-mono text-xs' : 'text-zinc-400 font-mono text-xs'}>
-                      {t.kind === 'official' ? '★ OFFICIEL' : 'amical'}
+                      {t.kind === 'official' ? tr('god.tourn.official') : tr('god.tourn.friendly')}
                       {t.isPrivate ? ' 🔒' : ''}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-zinc-400 font-mono text-xs">
-                    {t.format === 'pools' ? 'poules' : 'élim.'}
+                    {t.format === 'pools' ? tr('god.tourn.pools') : tr('god.tourn.elim')}
                   </td>
                   <td className="py-2 px-3 text-center tabular-nums text-zinc-300">
                     {(t.entries?.length ?? 0)}/{t.capacity}
                   </td>
                   <td className="py-2 px-3">
-                    <span className={`px-1.5 py-0.5 text-xs rounded font-mono ${TOURN_STATUS[t.status].cls}`}>
-                      {TOURN_STATUS[t.status].label}
+                    <span className={`px-1.5 py-0.5 text-xs rounded font-mono ${TOURN_STATUS_CLS[t.status]}`}>
+                      {tr(`god.tourn.status.${t.status}`)}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-zinc-400 font-mono text-xs">{t.createdByLogin}</td>
@@ -2777,7 +2778,7 @@ function TournamentsTab() {
                   <td className="py-2 px-3 text-zinc-500 font-mono text-xs whitespace-nowrap">{fmtDate(t.createdAt)}</td>
                   <td className="py-2 px-3 text-right">
                     <Btn onClick={() => handleDelete(t)} disabled={busyId === t.id} variant="danger">
-                      🗑️ Supprimer
+                      {tr('god.tourn.delete')}
                     </Btn>
                   </td>
                 </tr>
@@ -2790,23 +2791,24 @@ function TournamentsTab() {
   );
 }
 
-const TABS: { id: Tab; label: string; superAdminOnly?: boolean }[] = [
-  { id: 'users', label: 'UTILISATEURS' },
-  { id: 'moderation', label: 'MODÉRATION' },
-  { id: 'rejets', label: 'REJETS' },
-  { id: 'matches', label: 'MATCHES' },
-  { id: 'pending', label: 'EN ATTENTE', superAdminOnly: true },
-  { id: 'ideas', label: 'IDÉES' },
-  { id: 'bugs', label: 'BUGS' },
-  { id: 'alertes', label: 'ALERTES' },
-  { id: 'audit', label: 'AUDIT' },
-  { id: 'history', label: 'ALL HISTORY' },
-  { id: 'tournaments', label: 'TOURNOIS' },
-  { id: 'seasons', label: 'SAISONS', superAdminOnly: true },
+const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
+  { id: 'users' },
+  { id: 'moderation' },
+  { id: 'rejets' },
+  { id: 'matches' },
+  { id: 'pending', superAdminOnly: true },
+  { id: 'ideas' },
+  { id: 'bugs' },
+  { id: 'alertes' },
+  { id: 'audit' },
+  { id: 'history' },
+  { id: 'tournaments' },
+  { id: 'seasons', superAdminOnly: true },
 ];
 
 export function GODPage() {
   const navigate = useNavigate();
+  const t = useT();
   const [myLogin, setMyLogin] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -2830,7 +2832,7 @@ export function GODPage() {
   if (authLoading) {
     return (
       <div className="h-screen bg-zinc-950 flex items-center justify-center overflow-hidden">
-        <span className="text-zinc-500 font-mono text-sm">Vérification des droits…</span>
+        <span className="text-zinc-500 font-mono text-sm">{t('god.checkingRights')}</span>
       </div>
     );
   }
@@ -2838,10 +2840,10 @@ export function GODPage() {
   if (!myRole || !myLogin) {
     return (
       <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 overflow-hidden">
-        <span className="text-red-400 font-mono text-2xl font-bold">403</span>
-        <span className="text-zinc-400 font-mono text-sm">Accès refusé. Admins uniquement.</span>
+        <span className="text-red-400 font-mono text-2xl font-bold">{t('god.denied.code')}</span>
+        <span className="text-zinc-400 font-mono text-sm">{t('god.denied.msg')}</span>
         <button onClick={() => navigate('/challenges')} className="text-zinc-500 font-mono text-xs hover:text-zinc-300 transition-colors cursor-pointer">
-          ← Retour
+          {t('god.back')}
         </button>
       </div>
     );
@@ -2855,12 +2857,12 @@ export function GODPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/challenges')}
-              aria-label="Retour à l'application"
+              aria-label={t('god.backApp.aria')}
               className="flex items-center justify-center w-8 h-8 -ml-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/70 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
-            <span className="text-zinc-300 font-bold tracking-widest text-sm">GOD PANEL</span>
+            <span className="text-zinc-300 font-bold tracking-widest text-sm">{t('god.panel')}</span>
             <span className="text-zinc-700">|</span>
             <span className="text-zinc-400 text-xs">{myLogin}</span>
             <RoleBadge role={myRole} />
@@ -2870,7 +2872,7 @@ export function GODPage() {
             className="flex items-center gap-1 text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-            Retour app
+            {t('god.backApp')}
           </button>
         </div>
       </div>
@@ -2888,7 +2890,7 @@ export function GODPage() {
                   : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-700'
               }`}
             >
-              {tab.label}
+              {t(`god.tab.${tab.id}`)}
             </button>
           ))}
         </div>

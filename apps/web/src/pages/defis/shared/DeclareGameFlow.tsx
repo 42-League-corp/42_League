@@ -8,6 +8,7 @@ import { SfCharIcon } from '../../../components/SfCharIcon';
 import { api, type LeaderboardEntry, type Game } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
 import { useGameMode } from '../../../hooks/useGameMode';
+import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
@@ -94,6 +95,7 @@ export function DeclareGameFlow({
   gameOverride,
 }: DeclareGameFlowProps) {
   const flash = useFlash();
+  const t = useT();
   const { game: globalGame } = useGameMode();
   const game = gameOverride ?? globalGame;
   const isSmash = game === 'smash';
@@ -132,7 +134,7 @@ export function DeclareGameFlow({
     try {
       if (isSetGame) {
         if (!charSelf || !charOpp) {
-          flash.show('Choisis les deux personnages', 'error');
+          flash.show(t('defis.chooseBothChars'), 'error');
           setBusy(false);
           setSending(false);
           return;
@@ -163,7 +165,7 @@ export function DeclareGameFlow({
         const scoreOpponent = iWon ? loserScore : WINNING_SCORE;
         await api.declareMatch({ opponentLogin: opponent.login, scoreSelf, scoreOpponent });
       }
-      flash.show(`Game déclarée — ${opponent.login} doit confirmer le score`);
+      flash.show(`${t('defis.gameDeclared')} ${opponent.login} ${t('defis.mustConfirmShort')}`);
       haptic('success');
       await onSubmitted();
     } catch (err) {
@@ -173,7 +175,7 @@ export function DeclareGameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, iWon, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted]);
+  }, [opponent, iWon, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted, t]);
 
   const triggerSend = () => {
     setSending(true);
@@ -214,7 +216,7 @@ export function DeclareGameFlow({
     >
       <div className="relative z-20">
         <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-          Adversaire
+          {t('defis.opponent')}
         </label>
         <PlayerSearch
           variant={variant}
@@ -231,11 +233,11 @@ export function DeclareGameFlow({
       {opponent && iWon === null && (
         <div className="relative mt-6 animate-slide-down">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3">
-            Résultat
+            {t('defis.result')}
           </label>
           <div className="grid grid-cols-2 gap-4">
-            <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>J'ai gagné</OutcomeButton>
-            <OutcomeButton kind="loss" onClick={() => handleOutcome(false)}>J'ai perdu</OutcomeButton>
+            <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>{t('defis.iWon')}</OutcomeButton>
+            <OutcomeButton kind="loss" onClick={() => handleOutcome(false)}>{t('defis.iLost')}</OutcomeButton>
           </div>
         </div>
       )}
@@ -243,12 +245,12 @@ export function DeclareGameFlow({
       {opponent && iWon !== null && (
         <div className="relative mt-6 animate-fade-in">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-            Résultat
+            {t('defis.result')}
           </label>
           <button
             type="button"
             onClick={() => setIWon(null)}
-            aria-label="Modifier le résultat"
+            aria-label={t('defis.editResult')}
             className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all shadow-sm hover:shadow-md tap-transparent active:scale-[0.98] ${
               iWon
                 ? 'border-teal/40 bg-teal/10 text-teal hover:bg-teal/20'
@@ -258,11 +260,11 @@ export function DeclareGameFlow({
             <span className="text-sm font-extrabold tracking-wide">
               {variant === 'mobile'
                 ? iWon
-                  ? "J'ai gagné"
-                  : "J'ai perdu"
+                  ? t('defis.iWon')
+                  : t('defis.iLost')
                 : iWon
-                  ? "🏆 J'ai gagné"
-                  : "💀 J'ai perdu"}
+                  ? t('defis.iWonTrophy')
+                  : t('defis.iLostSkull')}
             </span>
             <span className="text-muted-2 text-lg leading-none">×</span>
           </button>
@@ -293,7 +295,7 @@ export function DeclareGameFlow({
                 }`}
               >
                 <span className="text-[10px] uppercase tracking-[0.18em] font-extrabold text-muted truncate max-w-full px-2">
-                  {login === (myLogin ?? 'Moi') ? 'Toi' : login}
+                  {login === (myLogin ?? 'Moi') ? t('defis.you') : login}
                 </span>
                 <span
                   className={`font-display text-5xl font-black tabular-nums leading-none ${
@@ -308,10 +310,10 @@ export function DeclareGameFlow({
                   {score}
                 </span>
                 {isWinner && (
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">🔒 Verrouillé</span>
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-gold/60">{t('defis.locked')}</span>
                 )}
                 {!isWinner && (
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-2">← Fais glisser</span>
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-2">{t('defis.slideHint')}</span>
                 )}
               </div>
             ))}
@@ -327,12 +329,12 @@ export function DeclareGameFlow({
 
           <div className="mt-5">
             <Button size="md" loading={busy} onClick={triggerSend} className="w-full py-3.5 text-sm font-bold shadow-lg">
-              Envoyer la déclaration
+              {t('defis.sendDeclaration')}
             </Button>
           </div>
 
           <p className="mt-3 text-[10px] text-muted/70 leading-relaxed text-center font-medium">
-            {opponent.login} devra confirmer ce score pour valider la game.
+            {opponent.login} {t('defis.mustConfirmScore')}
           </p>
         </div>
       )}
@@ -342,7 +344,7 @@ export function DeclareGameFlow({
         <div className="relative mt-6 animate-slide-down space-y-5">
           {/* Format */}
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">Format</label>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.format')}</label>
             <div className="grid grid-cols-2 gap-2">
               {([3, 5] as const).map((bo) => (
                 <button
@@ -367,7 +369,7 @@ export function DeclareGameFlow({
           {/* Games du perdant (le gagnant atteint la cible) */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-              Games de {iWon ? opponent.login : (myLogin ?? 'moi')} (perdant) · gagnant {target}
+              {t('defis.gamesOf')} {iWon ? opponent.login : (myLogin ?? t('defis.me'))} {t('defis.loserSuffix')} · {t('defis.winnerTarget')} {target}
             </label>
             <div className="flex gap-2">
               {Array.from({ length: target }, (_, g) => (
@@ -391,7 +393,7 @@ export function DeclareGameFlow({
           {isSmash && (
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-                Vies restantes du gagnant (game décisif)
+                {t('defis.winnerStocks')}
               </label>
               <div className="flex gap-2">
                 {[1, 2, 3].map((s) => (
@@ -413,12 +415,12 @@ export function DeclareGameFlow({
           )}
 
           {/* Persos */}
-          <CharPicker label="Ton perso" value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
-          <CharPicker label={`Perso de ${opponent.login}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+          <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
+          <CharPicker label={`${t('defis.charOf')} ${opponent.login}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
 
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
             <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-            {' gagne le set '}
+            {' '}{t('defis.winsTheSet')}{' '}
             <span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>
             <span className="text-muted mx-1.5 opacity-50">-</span>
             <span className="font-extrabold text-text-strong font-mono tabular-nums">{loserGames}</span>
@@ -432,10 +434,10 @@ export function DeclareGameFlow({
             onClick={triggerSend}
             className="w-full py-3.5 text-sm font-bold shadow-lg"
           >
-            Envoyer la déclaration
+            {t('defis.sendDeclaration')}
           </Button>
           <p className="text-[10px] text-muted/70 leading-relaxed text-center font-medium">
-            {opponent.login} devra confirmer ce score pour valider la game.
+            {opponent.login} {t('defis.mustConfirmScore')}
           </p>
         </div>
       )}
@@ -445,9 +447,9 @@ export function DeclareGameFlow({
         <div className="relative mt-6 animate-slide-down space-y-4">
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
             <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-            {' a maté '}
+            {' '}{t('defis.checkmated')}{' '}
             <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
-            <div className="text-[11px] text-muted-2 mt-1">Aux échecs, seul le résultat compte.</div>
+            <div className="text-[11px] text-muted-2 mt-1">{t('defis.chessOnlyResult')}</div>
           </div>
           <Button
             size="md"
@@ -455,10 +457,10 @@ export function DeclareGameFlow({
             onClick={triggerSend}
             className="w-full py-3.5 text-sm font-bold shadow-lg"
           >
-            Envoyer la déclaration
+            {t('defis.sendDeclaration')}
           </Button>
           <p className="text-[10px] text-muted/70 leading-relaxed text-center font-medium">
-            {opponent.login} devra confirmer le résultat pour valider la partie.
+            {opponent.login} {t('defis.mustConfirmResult')}
           </p>
         </div>
       )}

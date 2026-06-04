@@ -4,15 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
-import { Trophy, Lock, X, Swords, Crown, ChevronRight, Users, Info } from 'lucide-react';
+import { Trophy, Lock, X, Swords, ChevronRight, Users, Info } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
-import { tournamentArt } from '../../lib/tournamentArt';
+import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
+import { useT } from '../../lib/i18n';
 
 type CapacityChoice = '6' | '8' | '16' | 'custom';
 const POOLS_MIN = 12;
@@ -27,6 +28,7 @@ function resolveCapacity(choice: CapacityChoice, custom: string): number {
 export function TournoisDesktop() {
   const { tournaments, me, refresh } = useLeagueData();
   const { game } = useGameMode();
+  const t = useT();
   const isAdmin = !!me?.isAdmin;
 
   // Un seul clic « Créer » ouvre directement le panneau de paramètres : nom,
@@ -45,11 +47,11 @@ export function TournoisDesktop() {
   };
 
   return (
-    <Panel title="Tournois" sub="Brackets · poules & élim" accent="trophy">
+    <Panel title={t('tournois.title')} sub={t('tournois.sub')} accent="trophy">
 
-      {/* ── Hero CTAs — les 2 chemins en évidence ─────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        {/* Amical — tout le monde · un clic ouvre directement les paramètres */}
+      {/* ── Hero CTA — un seul bouton « Créer un tournoi » ──────────────────── */}
+      {/* Le choix amical / officiel se fait dans le panneau de paramètres. */}
+      <div className="mb-8">
         <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
           <button
             type="button"
@@ -68,44 +70,15 @@ export function TournoisDesktop() {
             </span>
             <span className="relative min-w-0 flex-1">
               <span className="block font-display text-xl font-black text-gold tracking-tight mb-0.5">
-                Créer un tournoi amical
+                {t('tournois.create')}
               </span>
               <span className="block text-[11px] text-muted-2 uppercase tracking-[0.14em]">
-                Ouvert à tous · sans impact ELO
+                {t('tournois.create.subtitle')}
               </span>
             </span>
             <span className="relative text-gold/50 group-hover:text-gold group-hover:translate-x-1 transition-all">→</span>
           </button>
         </motion.div>
-
-        {/* Officiel — admins only. Scellé sous cire rouge + cadenas si non-admin. */}
-        {isAdmin ? (
-          <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-            <button
-              type="button"
-              onClick={() => openCreate('official')}
-              className="shine group relative w-full overflow-hidden rounded-2xl border-2 border-gold/40 hover:border-gold
-                flex items-center gap-5 px-6 py-5 text-left transition-all duration-300"
-              style={{ background: 'linear-gradient(135deg, rgba(40,28,10,0.75) 0%, rgba(16,13,6,0.92) 100%)' }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-gold/8 to-transparent pointer-events-none" />
-              <span className="relative flex-shrink-0 flex items-center justify-center w-14 h-14 rounded-xl bg-gold/12">
-                <Crown className="w-7 h-7 text-gold" strokeWidth={2.2} />
-              </span>
-              <span className="relative min-w-0 flex-1">
-                <span className="block font-display text-xl font-black text-gold tracking-tight mb-0.5">
-                  Créer un tournoi officiel
-                </span>
-                <span className="block text-[11px] text-muted-2 uppercase tracking-[0.14em]">
-                  ELO impacté · récompenses exclusives
-                </span>
-              </span>
-              <span className="relative text-gold/50 group-hover:text-gold group-hover:translate-x-1 transition-all">→</span>
-            </button>
-          </motion.div>
-        ) : (
-          <OfficialSealed />
-        )}
       </div>
 
       {/* Modal création (params) — nom, capacité et réglages tout-en-un */}
@@ -126,9 +99,9 @@ export function TournoisDesktop() {
         <EmptyTournois onCreateClick={() => openCreate('friendly')} game={game} />
       ) : (
         <div className="space-y-8">
-          {active.length > 0 && <TournoiGroup label="En cours" tone="gold" items={active} />}
-          {inPrep.length > 0 && <TournoiGroup label="Inscriptions ouvertes" tone="teal" items={inPrep} />}
-          {past.length > 0 && <TournoiGroup label="Historique" tone="muted" items={past} />}
+          {active.length > 0 && <TournoiGroup label={t('tournois.group.live')} tone="gold" items={active} />}
+          {inPrep.length > 0 && <TournoiGroup label={t('tournois.group.open')} tone="teal" items={inPrep} />}
+          {past.length > 0 && <TournoiGroup label={t('tournois.group.history')} tone="muted" items={past} />}
         </div>
       )}
 
@@ -137,7 +110,7 @@ export function TournoisDesktop() {
         <button type="button" onClick={() => setHelpOpen((o) => !o)}
           className="flex items-center gap-2 text-[11px] text-muted-2 hover:text-muted transition-colors">
           <Info className="w-3.5 h-3.5" strokeWidth={2} />
-          Comment ça marche ?
+          {t('tournois.help.toggle')}
         </button>
         <AnimatePresence>
           {helpOpen && (
@@ -146,14 +119,14 @@ export function TournoisDesktop() {
               className="overflow-hidden">
               <div className="grid grid-cols-2 gap-3 mt-3">
                 {[
-                  { n: '1', t: 'Clique sur "Créer" : un seul panneau pour nom, joueurs et réglages.' },
-                  { n: '2', t: 'Choisis format (Élimination / Poules) et visibilité.' },
-                  { n: '3', t: 'Les joueurs rejoignent — tu démarres quand tu veux.' },
-                  { n: '4', t: 'Chaque match : saisir le score et le faire confirmer.' },
-                ].map(({ n, t }) => (
+                  { n: '1', text: t('tournois.help.step1') },
+                  { n: '2', text: t('tournois.help.step2') },
+                  { n: '3', text: t('tournois.help.step3') },
+                  { n: '4', text: t('tournois.help.step4') },
+                ].map(({ n, text }) => (
                   <div key={n} className="flex gap-3 p-3 rounded-xl bg-white/[0.02] border border-border/30 text-[11px] text-muted-2">
                     <span className="w-5 h-5 rounded-full bg-gold/15 text-gold text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">{n}</span>
-                    <span>{t}</span>
+                    <span>{text}</span>
                   </div>
                 ))}
               </div>
@@ -165,57 +138,37 @@ export function TournoisDesktop() {
   );
 }
 
-// ─── Tournoi officiel scellé (non-admin) ─────────────────────────────────────
-// Affiché sous un sceau de cire rouge cadenassé : non cliquable pour les
-// utilisateurs qui ne sont pas admin / superadmin.
-function OfficialSealed() {
+// ─── Sceau de cire rouge cadenassé ───────────────────────────────────────────
+// Réutilisé sur l'option « Officiel » du panneau pour les non-admins.
+function RedWaxSeal({ size = 48 }: { size?: number }) {
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl border-2 border-red/40 flex items-center gap-5 px-6 py-5 cursor-not-allowed select-none"
-      style={{ background: 'linear-gradient(135deg, rgba(30,20,8,0.7) 0%, rgba(14,12,6,0.9) 100%)' }}
-      aria-disabled="true"
-      title="Réservé aux administrateurs"
+    <motion.div
+      initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
+      animate={{ scale: 1, rotate: -8, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 18 }}
+      className="relative flex-shrink-0 flex items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: 'radial-gradient(circle at 38% 32%, #d44 0%, #a31818 45%, #7a0e0e 100%)',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,140,140,0.35), inset 0 -3px 6px rgba(0,0,0,0.45)',
+        border: '2px solid rgba(120,8,8,0.9)',
+      }}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-gold/5 to-transparent pointer-events-none" />
-      {/* Contenu grisé sous le sceau */}
-      <span className="relative flex-shrink-0 flex items-center justify-center w-14 h-14 rounded-xl bg-gold/10 opacity-40">
-        <Crown className="w-7 h-7 text-gold/60" strokeWidth={2.2} />
-      </span>
-      <span className="relative min-w-0 flex-1 opacity-40">
-        <span className="block font-display text-xl font-black text-gold/70 tracking-tight mb-0.5">
-          Tournoi officiel
-        </span>
-        <span className="block text-[11px] text-muted-2 uppercase tracking-[0.14em]">
-          Réservé aux administrateurs
-        </span>
-      </span>
-
-      {/* Sceau de cire rouge cadenassé */}
-      <motion.div
-        initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
-        animate={{ scale: 1, rotate: -8, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 18 }}
-        className="relative flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-full"
-        style={{
-          background: 'radial-gradient(circle at 38% 32%, #d44 0%, #a31818 45%, #7a0e0e 100%)',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,140,140,0.35), inset 0 -3px 6px rgba(0,0,0,0.45)',
-          border: '2px solid rgba(120,8,8,0.9)',
-        }}
-      >
-        {/* Bord cranté du sceau de cire */}
-        <span
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ boxShadow: 'inset 0 0 0 3px rgba(180,30,30,0.55)' }}
-        />
-        <Lock className="relative w-7 h-7 text-[#3a0606]" strokeWidth={2.6} fill="rgba(58,6,6,0.25)" />
-      </motion.div>
-    </div>
+      {/* Bord cranté du sceau de cire */}
+      <span
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{ boxShadow: 'inset 0 0 0 3px rgba(180,30,30,0.55)' }}
+      />
+      <Lock className="relative text-[#3a0606]" style={{ width: size * 0.44, height: size * 0.44 }} strokeWidth={2.6} fill="rgba(58,6,6,0.25)" />
+    </motion.div>
   );
 }
 
 // ─── Empty state visuel ───────────────────────────────────────────────────────
 
 function EmptyTournois({ onCreateClick, game }: { onCreateClick: () => void; game: string }) {
+  const t = useT();
   const gameEmoji = game === 'smash' ? '🎮' : game === 'streetfighter' ? '🥊' : game === 'chess' ? '♟' : '⚽';
   return (
     <div className="flex flex-col items-center text-center py-16">
@@ -225,22 +178,21 @@ function EmptyTournois({ onCreateClick, game }: { onCreateClick: () => void; gam
         <span className="absolute -bottom-1 -right-1 text-2xl">{gameEmoji}</span>
       </div>
       <h3 className="font-display text-2xl font-black text-text-strong mb-2">
-        Lance le premier tournoi !
+        {t('tournois.empty.title')}
       </h3>
       <p className="text-sm text-muted-2 max-w-md mb-6 leading-relaxed">
-        Réunis tes collègues, génère un bracket en un clic, et que le meilleur gagne.
-        Amical (sans impact ELO) ou officiel avec récompenses.
+        {t('tournois.empty.body')}
       </p>
       <div className="flex gap-3 items-center">
         <button type="button" onClick={onCreateClick}
           className="shine flex items-center gap-2.5 px-6 py-3 rounded-xl border-2 border-gold/50 hover:border-gold
             bg-gold/10 hover:bg-gold/15 text-gold font-extrabold text-sm uppercase tracking-wider transition-all">
           <Swords className="w-4 h-4" strokeWidth={2.5} />
-          Créer un tournoi amical
+          {t('tournois.create')}
           <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
         </button>
         <div className="flex flex-wrap gap-2">
-          {['⚡ Élimination', '🏊 Poules', '6+ joueurs'].map((tag) => (
+          {[t('tournois.empty.tag.elim'), t('tournois.empty.tag.pools'), t('tournois.empty.tag.players')].map((tag) => (
             <span key={tag} className="text-[11px] text-muted-2 px-3 py-1.5 rounded-full border border-border/50 bg-white/[0.02]">
               {tag}
             </span>
@@ -282,8 +234,9 @@ function TournoiGroup({ label, tone, items }: { label: string; tone: GroupTone; 
 
 // ─── Carte tournoi ────────────────────────────────────────────────────────────
 
-const STATUS_LABEL: Record<Tournament['status'], string> = {
-  registration: 'INSCRIPTIONS', in_progress: 'EN COURS', finished: 'TERMINÉ', cancelled: 'ANNULÉ',
+const STATUS_KEY: Record<Tournament['status'], string> = {
+  registration: 'tournois.status.registration', in_progress: 'tournois.status.in_progress',
+  finished: 'tournois.status.finished', cancelled: 'tournois.status.cancelled',
 };
 const STATUS_TONE: Record<Tournament['status'], string> = {
   registration: 'border-teal text-teal', in_progress: 'border-gold text-gold',
@@ -291,8 +244,10 @@ const STATUS_TONE: Record<Tournament['status'], string> = {
 };
 
 function TournoiCard({ t }: { t: Tournament }) {
+  const tr = useT();
   const count = t.entries?.length ?? 0;
   const art = tournamentArt(t.id);
+  const cover = safeImageUrl(t.imageUrl);
   const fillPct = Math.min(100, Math.round((count / t.capacity) * 100));
   return (
     <Link
@@ -301,8 +256,8 @@ function TournoiCard({ t }: { t: Tournament }) {
     >
       {/* Art en haut (format 4:3) */}
       <div className="relative aspect-video overflow-hidden">
-        {t.imageUrl ? (
-          <img src={t.imageUrl} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+        {cover ? (
+          <img src={cover} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
         ) : (
           <>
             <div className="absolute inset-0" style={{ background: art.background }} />
@@ -317,7 +272,7 @@ function TournoiCard({ t }: { t: Tournament }) {
         {/* Badges haut */}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
           <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider border bg-black/50 backdrop-blur-sm ${STATUS_TONE[t.status]}`}>
-            {STATUS_LABEL[t.status]}
+            {tr(STATUS_KEY[t.status])}
           </span>
           {t.game && t.game !== 'babyfoot' && (
             <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-sm border border-accent/30 text-accent">
@@ -333,7 +288,7 @@ function TournoiCard({ t }: { t: Tournament }) {
           <span className={`inline-block text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${
             t.kind === 'official' ? 'text-gold border-gold/50 bg-gold/10' : 'text-muted-2 border-border bg-transparent'
           }`}>
-            {t.kind === 'official' ? '★ Officiel' : 'Amical'}
+            {t.kind === 'official' ? tr('tournois.kind.official') : tr('tournois.kind.friendly')}
           </span>
           {t.isPrivate && <Lock className="w-3 h-3 text-teal flex-shrink-0 mt-0.5" strokeWidth={2.5} />}
         </div>
@@ -374,6 +329,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const flash = useFlash();
   const navigate = useNavigate();
   const { game } = useGameMode();
+  const t = useT();
   const [name, setName] = useState('');
   const [capacityChoice, setCapacityChoice] = useState<CapacityChoice>('8');
   const [customCapacity, setCustomCapacity] = useState('12');
@@ -396,8 +352,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
 
   const submit = async () => {
     const n = name.trim();
-    if (n.length < 2) { flash.show('Nom requis (2 caractères min)', 'error'); return; }
-    if (capacity < 6) { flash.show('Capacité : 6 joueurs minimum', 'error'); return; }
+    if (n.length < 2) { flash.show(t('tournois.flash.nameRequired'), 'error'); return; }
+    if (capacity < 6) { flash.show(t('tournois.flash.capacityMin'), 'error'); return; }
     setBusy(true);
     try {
       const img = imageUrl.trim();
@@ -406,7 +362,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
         private: visibility === 'private',
         ...(img ? { imageUrl: img } : {}),
       });
-      flash.show(`Tournoi "${tNew.name}" créé`);
+      flash.show(t('tournois.flash.created').replace('{name}', tNew.name));
       await onCreated();
       navigate(`/tournaments/${encodeURIComponent(tNew.id)}`);
     } catch (err) {
@@ -431,29 +387,29 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
             : <TournamentCup accent="#ffc94a" className="w-10 h-10 shrink-0" />}
           <div className="min-w-0">
             <div className="font-gaming text-sm font-extrabold uppercase tracking-[0.12em] text-text-strong truncate">
-              Nouveau tournoi
+              {t('tournois.modal.title')}
             </div>
-            <div className="text-[11px] text-muted-2">Nom, joueurs &amp; réglages</div>
+            <div className="text-[11px] text-muted-2">{t('tournois.modal.subtitle')}</div>
           </div>
-          <button onClick={onClose} aria-label="Fermer"
+          <button onClick={onClose} aria-label={t('tournois.modal.close')}
             className="ml-auto grid place-items-center w-8 h-8 rounded-lg text-muted-2 hover:text-text hover:bg-bg-2 transition-colors">
             <X className="w-4 h-4" strokeWidth={2.5} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <Field label="Nom du tournoi">
+          <Field label={t('tournois.field.name')}>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
-              placeholder="Nom du tournoi…"
+              placeholder={t('tournois.field.name.placeholder')}
               maxLength={60}
               autoFocus
               className="w-full px-3 py-2.5 bg-bg-1 border border-border rounded-xl text-sm focus:border-gold outline-none transition-colors"
             />
           </Field>
-          <Field label="Nombre de joueurs">
+          <Field label={t('tournois.field.players')}>
             <div className="flex gap-1.5 items-center">
               {CAPACITY_OPTIONS.map((o) => (
                 <button key={o.value} type="button" onClick={() => setCapacityChoice(o.value)}
@@ -472,37 +428,56 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               )}
             </div>
           </Field>
-          <Field label="Type">
-            <Pills<'friendly' | 'official'> value={kind}
-              onChange={(v) => {
-                if (v === 'official' && !isAdmin) { flash.show('Officiel : réservé aux admins', 'error'); return; }
-                setKind(v);
-              }}
-              choices={[{ value: 'friendly', label: 'Amical' }, { value: 'official', label: isAdmin ? 'Officiel' : '🔒 Officiel' }]}
-            />
+          <Field label={t('tournois.field.type')} hint={isAdmin ? undefined : t('tournois.field.type.hint')}>
+            {isAdmin ? (
+              <Pills<'friendly' | 'official'> value={kind}
+                onChange={setKind}
+                choices={[{ value: 'friendly', label: t('tournois.type.friendly') }, { value: 'official', label: t('tournois.type.official') }]}
+              />
+            ) : (
+              <div className="inline-flex gap-2">
+                <button type="button" onClick={() => setKind('friendly')}
+                  className={`px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider rounded-lg border transition-all duration-200 ${
+                    kind === 'friendly'
+                      ? 'bg-gradient-to-b from-gold/25 to-gold/10 text-gold border-gold/40 shadow-[inset_0_1px_0_rgba(255,247,228,0.18)]'
+                      : 'text-muted-2 border-border hover:text-gold/90'
+                  }`}>
+                  {t('tournois.type.friendly')}
+                </button>
+                {/* Officiel scellé sous cire rouge — non sélectionnable */}
+                <button type="button"
+                  onClick={() => flash.show(t('tournois.official.adminsOnly'), 'error')}
+                  aria-disabled="true"
+                  title={t('tournois.official.sealTitle')}
+                  className="relative flex items-center gap-2 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider rounded-lg border border-red/40 cursor-not-allowed select-none">
+                  <span className="text-muted-2/60 opacity-50">{t('tournois.type.official')}</span>
+                  <RedWaxSeal size={28} />
+                </button>
+              </div>
+            )}
           </Field>
-          <Field label="Visibilité" hint={visibility === 'private' ? 'Sur invitation uniquement' : 'Inscription ouverte à tous'}>
+          <Field label={t('tournois.field.visibility')} hint={visibility === 'private' ? t('tournois.field.visibility.hint.private') : t('tournois.field.visibility.hint.public')}>
             <Pills<'public' | 'private'> value={visibility} onChange={setVisibility}
-              choices={[{ value: 'public', label: 'Public' }, { value: 'private', label: 'Privé' }]}
+              choices={[{ value: 'public', label: t('tournois.field.visibility.public') }, { value: 'private', label: t('tournois.field.visibility.private') }]}
             />
           </Field>
-          <Field label="Format" hint={poolsAllowed
-            ? effectiveFormat === 'pools' ? 'Poules de 4 · 2 qualifiés → bracket' : 'Bracket à élimination directe'
-            : `Poules disponibles à partir de ${POOLS_MIN} joueurs`
+          <Field label={t('tournois.field.format')} hint={poolsAllowed
+            ? effectiveFormat === 'pools' ? t('tournois.field.format.hint.pools') : t('tournois.field.format.hint.elim')
+            : t('tournois.field.format.hint.minpools').replace('{n}', String(POOLS_MIN))
           }>
             <Pills<'elimination' | 'pools'> value={effectiveFormat}
-              onChange={(v) => { if (v === 'pools' && !poolsAllowed) { flash.show(`Poules : ${POOLS_MIN} joueurs min`, 'error'); return; } setFormat(v); }}
-              choices={[{ value: 'elimination', label: 'Élimination' }, { value: 'pools', label: poolsAllowed ? 'Poules' : '🔒 Poules' }]}
+              onChange={(v) => { if (v === 'pools' && !poolsAllowed) { flash.show(t('tournois.flash.poolsMin').replace('{n}', String(POOLS_MIN)), 'error'); return; } setFormat(v); }}
+              choices={[{ value: 'elimination', label: t('tournois.field.format.elim') }, { value: 'pools', label: poolsAllowed ? t('tournois.field.format.pools') : t('tournois.field.format.pools.locked') }]}
             />
           </Field>
-          <Field label="Photo de couverture" hint="URL · sinon une coupe est générée">
+          <Field label={t('tournois.field.cover')} hint={t('tournois.field.cover.hint')}>
             <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
               placeholder="https://…" inputMode="url"
               className="w-full px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors" />
           </Field>
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" onClick={onClose} className="flex-1">Annuler</Button>
-            <Button loading={busy} onClick={submit} className="flex-[2]">Créer le tournoi</Button>
+            <Button variant="ghost" onClick={onClose} className="flex-1">{t('tournois.modal.cancel')}</Button>
+            <Button loading={busy} onClick={submit} className="flex-[2]">{t('tournois.modal.submit')}</Button>
           </div>
         </div>
       </motion.div>

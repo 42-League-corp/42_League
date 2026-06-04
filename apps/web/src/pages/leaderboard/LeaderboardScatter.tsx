@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGesture } from '@use-gesture/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart, Crown } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /** Marges réservées aux axes (ELO à gauche, Win % en bas) et titres d'axes (px). */
 const M = { l: 58, r: 16, t: 16, b: 50 };
@@ -76,6 +77,7 @@ export function LeaderboardScatter({
   winRates?: Map<string, number>;
   className?: string;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -225,13 +227,13 @@ export function LeaderboardScatter({
     <div className={`relative ${className}`}>
       {/* Contrôles de zoom */}
       <div className="absolute top-2 right-2 z-30 flex flex-col gap-1.5">
-        <ZoomBtn label="Zoomer" onClick={() => zoomAt(1.3, size.w / 2, size.h / 2)}>
+        <ZoomBtn label={t('lb.scatter.zoomIn')} onClick={() => zoomAt(1.3, size.w / 2, size.h / 2)}>
           <ZoomIn className="w-4 h-4" strokeWidth={2.5} />
         </ZoomBtn>
-        <ZoomBtn label="Dézoomer" onClick={() => zoomAt(1 / 1.3, size.w / 2, size.h / 2)}>
+        <ZoomBtn label={t('lb.scatter.zoomOut')} onClick={() => zoomAt(1 / 1.3, size.w / 2, size.h / 2)}>
           <ZoomOut className="w-4 h-4" strokeWidth={2.5} />
         </ZoomBtn>
-        <ZoomBtn label="Réinitialiser la vue" onClick={reset}>
+        <ZoomBtn label={t('lb.scatter.reset')} onClick={reset}>
           <Maximize2 className="w-4 h-4" strokeWidth={2.5} />
         </ZoomBtn>
       </div>
@@ -239,13 +241,13 @@ export function LeaderboardScatter({
       {/* Légende + explication */}
       <div className="absolute top-2 left-2 z-20 pointer-events-none flex flex-col gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2">
-          ELO ↑  ·  Win % →
+          {t('lb.scatter.legendTop')}
         </div>
         <div className="flex items-center gap-2 text-[9px] text-muted-2/80 font-medium">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold/70" />
-          Haut-droite = meilleur
+          {t('lb.scatter.legendBest')}
           <span className="opacity-40">·</span>
-          <span>×N = amas, tap pour déployer</span>
+          <span>{t('lb.scatter.legendCluster')}</span>
         </div>
       </div>
 
@@ -282,7 +284,7 @@ export function LeaderboardScatter({
             className="font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
-            ELO (ordonnée) ↑
+            {t('lb.scatter.axisY')}
           </span>
         </div>
 
@@ -429,7 +431,7 @@ export function LeaderboardScatter({
           ))}
           {/* Titre de l'axe X — « Win rate % » centré sous les graduations */}
           <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 font-bold uppercase tracking-[0.16em] text-[9px] text-muted-2">
-            Taux de victoire % (abscisse) →
+            {t('lb.scatter.axisX')}
           </span>
         </div>
 
@@ -447,6 +449,7 @@ export function LeaderboardScatter({
 }
 
 function ScatterTooltip({ entry, left, top }: { entry: LeaderboardEntry; left: number; top: number }) {
+  const t = useT();
   return (
     <div
       className="absolute z-50 pointer-events-none -translate-x-1/2 -translate-y-full"
@@ -456,7 +459,7 @@ function ScatterTooltip({ entry, left, top }: { entry: LeaderboardEntry; left: n
         <div className="text-xs font-extrabold text-text-strong leading-tight">{entry.login}</div>
         <div className="text-[10px] font-mono tabular-nums text-muted-2 leading-tight">
           #{entry.rank} · <span className="text-gold font-bold">{entry.elo}</span> ELO ·{' '}
-          {entry.matchesPlayed} matchs
+          {entry.matchesPlayed} {t('lb.scatter.matches')}
         </div>
       </div>
     </div>
@@ -484,18 +487,28 @@ export type RankingView = 'list' | 'graph';
 export function RankingViewToggle({
   view,
   onChange,
+  onGoat,
+  goatActive = false,
 }: {
   view: RankingView;
   onChange: (v: RankingView) => void;
+  onGoat?: () => void;
+  goatActive?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="inline-flex gap-1 p-1 rounded-lg bg-bg-2/60 border border-border/40">
       <ToggleBtn active={view === 'list'} onClick={() => onChange('list')} Icon={List}>
-        Liste
+        {t('lb.view.list')}
       </ToggleBtn>
       <ToggleBtn active={view === 'graph'} onClick={() => onChange('graph')} Icon={ScatterChart}>
-        Nuage
+        {t('lb.view.graph')}
       </ToggleBtn>
+      {onGoat && (
+        <ToggleBtn active={goatActive} onClick={onGoat} Icon={Crown}>
+          G.O.A.T
+        </ToggleBtn>
+      )}
     </div>
   );
 }

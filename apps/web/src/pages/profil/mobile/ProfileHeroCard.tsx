@@ -1,13 +1,16 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
-import { RankedBadge } from '../../../components/RankedBadge';
+import { RankBadge } from '../../../components/RankBadge';
+import { Tooltip } from '../../../components/Tooltip';
 import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { pickRating } from '../../../lib/gameStats';
+import { gameColor, GAME_EMOJI, GAME_LOGO_SRC } from '../../../lib/gameVisuals';
 import { displayTitle } from '../../../lib/cosmeticTitles';
+import { TitlePicker } from '../../../components/TitlePicker';
 import { useT } from '../../../lib/i18n';
 import type { ProfilStats } from '../shared/useProfilLogic';
 
@@ -94,6 +97,24 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
       />
 
       <div className="relative z-10 px-5 pt-5 pb-5">
+        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
+        {displayTitle(user.login, user.title) && (
+          <div className="flex justify-center mb-1">
+            <span className="inline-flex items-center gap-1.5 max-w-[90%]">
+              <span className="text-gold/70 text-base leading-none">❝</span>
+              <span className="text-gold italic text-base font-bold tracking-wide truncate">
+                {displayTitle(user.login, user.title)}
+              </span>
+              <span className="text-gold/70 text-base leading-none">❞</span>
+            </span>
+          </div>
+        )}
+
+        {/* Sélecteur de titre — cette vue est toujours SON propre profil. */}
+        <div className="flex justify-center mb-4">
+          <TitlePicker />
+        </div>
+
         {/* Header row : avatar + identity à gauche, rank badge à droite */}
         <div className="flex items-start gap-4 mb-5">
           <div className="relative flex-shrink-0">
@@ -125,11 +146,6 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               )}
             </div>
             <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
-            {displayTitle(user.login, user.title) && (
-              <div className="text-sm text-gold italic font-semibold mt-0.5 truncate">
-                « {displayTitle(user.login, user.title)} »
-              </div>
-            )}
             {user.campus && (
               <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
                 <MapPin className="w-3 h-3" strokeWidth={2.5} />
@@ -162,9 +178,9 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
         {/* ELO bloc */}
         <div className="flex items-end justify-between gap-4 mb-2 px-1">
           <div>
-            <div className="-ml-0.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
+            <div className="ml-1.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
               ELO
-              <RankedBadge size="xs" />
+              <RankBadge elo={stats.elo} size="xs" />
             </div>
             <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />
@@ -188,7 +204,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
                 </span>
               </div>
               <div className="text-[9px] text-muted uppercase tracking-wider font-bold">
-                7 derniers jours
+                {t('profil.last7days')}
               </div>
             </div>
           )}
@@ -211,7 +227,7 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
         {crossGameBadges.length > 0 && (
           <div className="mt-3 pt-3 border-t border-white/[0.07]">
             <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2">
-              Aussi actif sur
+              {t('profil.alsoActiveOn')}
             </div>
             <div className="flex items-center gap-2">
               {crossGameBadges.map(({ g, elo, played }) => (
@@ -220,10 +236,22 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
                   className="flex-1 rounded-xl px-2.5 py-2 flex flex-col items-center gap-0.5"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
-                  <span className="text-base leading-none">
-                    {g === 'smash' ? '🎮' : g === 'streetfighter' ? '🥊' : g === 'chess' ? '♟' : '⚽'}
+                  {GAME_LOGO_SRC[g] ? (
+                    <img
+                      src={GAME_LOGO_SRC[g]}
+                      alt=""
+                      aria-hidden
+                      className="w-6 h-6 object-contain"
+                    />
+                  ) : (
+                    <span className="text-2xl leading-none">{GAME_EMOJI[g]}</span>
+                  )}
+                  <span
+                    className="font-mono font-extrabold tabular-nums text-[11px]"
+                    style={{ color: gameColor(g) }}
+                  >
+                    {elo}
                   </span>
-                  <span className="font-mono font-extrabold tabular-nums text-[11px] text-gold/90">{elo}</span>
                   <span className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO</span>
                   <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
                 </div>
@@ -234,17 +262,24 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
 
         {/* Footer stats */}
         <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-3 gap-3 text-center">
-          <FooterStat label="Tournois remportés" value={titlesWon} tone="gold" />
+          <FooterStat label={t('profil.titlesWon')} value={titlesWon} tone="gold" />
           <FooterStat
-            label="Best Streak"
+            label={t('profil.bestStreak')}
             value={stats.longestWinStreak}
             suffix="W"
+            tooltip={
+              stats.longestWinStreak === 0
+                ? undefined
+                : stats.streakBrokenBy
+                  ? `${t('profil.streakBrokenBy')} @${stats.streakBrokenBy}`
+                  : t('profil.streakOngoing')
+            }
           />
           {topPercent > 0 && (
-            <FooterStat label="Du top" value={`${topPercent}%`} tone="teal" />
+            <FooterStat label={t('profil.fromTop')} value={`${topPercent}%`} tone="teal" />
           )}
           {topPercent === 0 && user.dodgeCount > 0 && (
-            <FooterStat label="Fuites" value={user.dodgeCount} tone="red" />
+            <FooterStat label={t('profil.dodges')} value={user.dodgeCount} tone="red" />
           )}
         </div>
       </div>
@@ -288,6 +323,8 @@ interface FooterStatProps {
   value: number | string;
   suffix?: string;
   tone?: 'gold' | 'teal' | 'red' | 'default';
+  /** Si présent, affiche une bulle au survol de la stat. */
+  tooltip?: React.ReactNode;
 }
 
 const TONE_FOOTER: Record<NonNullable<FooterStatProps['tone']>, string> = {
@@ -297,14 +334,22 @@ const TONE_FOOTER: Record<NonNullable<FooterStatProps['tone']>, string> = {
   default: 'text-text-strong',
 };
 
-function FooterStat({ label, value, suffix, tone = 'default' }: FooterStatProps) {
-  return (
-    <div>
+function FooterStat({ label, value, suffix, tone = 'default', tooltip }: FooterStatProps) {
+  const body = (
+    <>
       <div className={`text-sm font-extrabold font-mono tabular-nums ${TONE_FOOTER[tone]}`}>
         {value}
         {suffix && <span className="text-[10px] ml-0.5 opacity-70">{suffix}</span>}
       </div>
       <div className="text-[9px] text-muted uppercase tracking-wider font-bold">{label}</div>
-    </div>
+    </>
   );
+  if (tooltip) {
+    return (
+      <Tooltip label={tooltip} className="cursor-help">
+        <span className="flex flex-col items-center">{body}</span>
+      </Tooltip>
+    );
+  }
+  return <div>{body}</div>;
 }

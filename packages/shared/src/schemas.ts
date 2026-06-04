@@ -141,7 +141,22 @@ export const CreateTournamentSchema = z
     // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
     private: z.boolean().default(false),
     // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.
-    imageUrl: z.string().trim().url().max(500).optional(),
+    // Sécurité : `.url()` accepte des schémas dangereux (javascript:, data:, file:…)
+    // qui permettent une injection. On restreint donc explicitement à http(s).
+    imageUrl: z
+      .string()
+      .trim()
+      .url()
+      .max(500)
+      .refine((u) => {
+        try {
+          const p = new URL(u).protocol;
+          return p === 'http:' || p === 'https:';
+        } catch {
+          return false;
+        }
+      }, "l'URL doit commencer par http:// ou https://")
+      .optional(),
   })
   .refine((d) => d.format !== 'pools' || d.capacity >= 12, {
     message: 'les poules nécessitent au moins 12 joueurs',

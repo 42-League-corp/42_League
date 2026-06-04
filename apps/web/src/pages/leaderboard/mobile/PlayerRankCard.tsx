@@ -8,6 +8,7 @@ import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { WinRateBar } from '../../../components/WinRateBar';
+import { useT } from '../../../lib/i18n';
 
 interface PlayerRankCardProps {
   entry: LeaderboardEntry;
@@ -36,6 +37,7 @@ export function PlayerRankCard({
   host,
   onDefi,
 }: PlayerRankCardProps) {
+  const t = useT();
   const navigate = useNavigate();
 
   const rankColor =
@@ -79,7 +81,7 @@ export function PlayerRankCard({
         {targetedBy && (
           <span
             className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center ring-2 ring-bg-0"
-            title={`Ops de ${targetedBy.ownerLogin}`}
+            title={`${t('lb.opsOf')} ${targetedBy.ownerLogin}`}
           >
             <Skull className="w-3 h-3" strokeWidth={2.5} />
           </span>
@@ -97,7 +99,7 @@ export function PlayerRankCard({
           </span>
           {isMe && (
             <span className="text-[8px] font-extrabold text-[#1a1100] metal-plate-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-              Toi
+              {t('lb.me')}
             </span>
           )}
           {host && <OnlineBadge host={host} />}
@@ -132,7 +134,7 @@ export function PlayerRankCard({
     return (
       <SwipeableCard
         leftAction={{
-          label: 'Défier',
+          label: t('lb.defi'),
           color: 'teal',
           icon: Swords,
           onTrigger: () => onDefi(entry),

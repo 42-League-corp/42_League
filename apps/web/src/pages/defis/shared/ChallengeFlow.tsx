@@ -5,7 +5,7 @@ import { Button } from '../../../components/Button';
 import { TimePicker } from '../../../components/TimePicker';
 import { api, type LeaderboardEntry } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
-import { useI18n } from '../../../lib/i18n';
+import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDayLabel, fmtTime } from '../../../lib/format';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { PlayerSearch } from './PlayerSearch';
@@ -48,6 +48,7 @@ export function ChallengeFlow({
 }: ChallengeFlowProps) {
   const flash = useFlash();
   const { lang } = useI18n();
+  const t = useT();
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(presetOpponent);
   const [when, setWhen] = useState<Date>(defaultWhen);
   const [busy, setBusy] = useState(false);
@@ -61,7 +62,7 @@ export function ChallengeFlow({
         opponentLogin: opponent.login,
         scheduledAt: when.toISOString(),
       });
-      flash.show(`Défi envoyé à @${opponent.login}`);
+      flash.show(`${t('defis.challengeSentTo')} @${opponent.login}`);
       haptic('success');
       await onSubmitted();
     } catch (err) {
@@ -71,7 +72,7 @@ export function ChallengeFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, when, flash, onSubmitted]);
+  }, [opponent, when, flash, onSubmitted, t]);
 
   const triggerSend = () => {
     setSending(true);
@@ -117,7 +118,7 @@ export function ChallengeFlow({
         {!locked && (
           <div className="relative z-20">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-              Adversaire
+              {t('defis.opponent')}
             </label>
             <PlayerSearch
               variant={variant}
@@ -135,19 +136,19 @@ export function ChallengeFlow({
         {opponent && (
           <div className="relative mt-6 animate-slide-down">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-4 text-center">
-              Quand ?
+              {t('defis.when')}
             </label>
 
             <TimePicker value={when} onChange={setWhen} lang={lang} />
 
             <div className="mt-6 px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
-              {'Défi à '}
+              {t('defis.to')}{' '}
               <span className="font-extrabold text-teal">{opponent.login}</span>
-              {lang === 'fr' ? ' — ' : ' — '}
+              {' — '}
               <span className="font-extrabold text-text-strong">
                 {fmtDayLabel(when.toISOString(), lang).toLowerCase()}
               </span>
-              {' à '}
+              {' '}{t('defis.atTime')}{' '}
               <span className="font-extrabold text-text-strong font-mono tabular-nums">
                 {fmtTime(when)}
               </span>
@@ -161,12 +162,12 @@ export function ChallengeFlow({
                 className="w-full py-3.5 text-sm font-bold shadow-lg"
               >
                 <Swords className="w-4 h-4 mr-1.5" strokeWidth={2.5} />
-                Envoyer le défi
+                {t('defis.sendChallenge')}
               </Button>
             </div>
 
             <p className="mt-3 text-[10px] text-muted/70 leading-relaxed text-center font-medium">
-              {opponent.login} devra accepter le défi pour le programmer.
+              {opponent.login} {t('defis.mustAcceptChallenge')}
             </p>
           </div>
         )}
