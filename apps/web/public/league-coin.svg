@@ -1,65 +1,87 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="League Coin">
   <defs>
-    <!-- Face supérieure : métal violet, lumière en haut-gauche. -->
-    <radialGradient id="lc-face" cx="38%" cy="28%" r="88%">
-      <stop offset="0%" stop-color="#efe9ff"/>
-      <stop offset="38%" stop-color="#c3afef"/>
-      <stop offset="74%" stop-color="#8a6dd0"/>
-      <stop offset="100%" stop-color="#583ca0"/>
+    <!-- Flou doux pour halo + ombre. -->
+    <filter id="lc-soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+
+    <!-- Anneau OR — métal chaud, lumière haut-gauche. -->
+    <radialGradient id="lc-gold" cx="40%" cy="28%" r="85%">
+      <stop offset="0%"   stop-color="#fff8db"/>
+      <stop offset="34%"  stop-color="#ffe08a"/>
+      <stop offset="66%"  stop-color="#f3b13c"/>
+      <stop offset="100%" stop-color="#b9781a"/>
     </radialGradient>
-    <!-- Tranche (cylindre) : plus sombre vers le bas → effet d'épaisseur 3D. -->
-    <linearGradient id="lc-side" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#7c61c6"/>
-      <stop offset="45%" stop-color="#49318f"/>
-      <stop offset="100%" stop-color="#271853"/>
+    <!-- Tranche OR (épaisseur) : plus sombre vers le bas. -->
+    <linearGradient id="lc-gold-side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#dba43c"/>
+      <stop offset="45%"  stop-color="#9c6618"/>
+      <stop offset="100%" stop-color="#5a370b"/>
     </linearGradient>
-    <!-- Liseré lumineux à la jonction face/tranche. -->
-    <linearGradient id="lc-rimlight" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="50%" stop-color="#e9dfff" stop-opacity="0.6"/>
+    <!-- Cœur VIOLET métallisé. -->
+    <radialGradient id="lc-violet" cx="40%" cy="28%" r="90%">
+      <stop offset="0%"   stop-color="#f1eaff"/>
+      <stop offset="36%"  stop-color="#c4abf3"/>
+      <stop offset="72%"  stop-color="#8a63d6"/>
+      <stop offset="100%" stop-color="#472c8e"/>
+    </radialGradient>
+    <!-- Balayage métallique (sheen) diagonal. -->
+    <linearGradient id="lc-sheen" x1="0" y1="0" x2="1" y2="0.55">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="47%"  stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="53%"  stop-color="#ffffff" stop-opacity="0.45"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <!-- Glyphe « 42 » gravé, or premium. -->
-    <linearGradient id="lc-glyph" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff4c8"/>
-      <stop offset="55%" stop-color="#ffcf63"/>
-      <stop offset="100%" stop-color="#e7a52f"/>
+    <!-- Liseré lumineux du bord. -->
+    <linearGradient id="lc-rimlight" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#fff8db" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#fff8db" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#fff8db" stop-opacity="0"/>
     </linearGradient>
-    <!-- Reflet spéculaire diffus sur la face. -->
+    <!-- Glyphe « 42 » doré. -->
+    <linearGradient id="lc-glyph" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fff8db"/>
+      <stop offset="55%"  stop-color="#ffd368"/>
+      <stop offset="100%" stop-color="#e9a62f"/>
+    </linearGradient>
+    <!-- Reflet spéculaire. -->
     <radialGradient id="lc-gloss" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.7"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <!-- Ombre portée au sol -->
-  <ellipse cx="64" cy="108" rx="45" ry="6.5" fill="#190f3a" opacity="0.42"/>
+  <!-- Halo doré -->
+  <ellipse cx="64" cy="54" rx="57" ry="38" fill="#ffbf57" opacity="0.18" filter="url(#lc-soft)"/>
+  <!-- Ombre portée -->
+  <ellipse cx="64" cy="105" rx="46" ry="6.5" fill="#0d0820" opacity="0.42" filter="url(#lc-soft)"/>
 
-  <!-- Disque du dessous : sa partie basse non recouverte = l'épaisseur visible -->
-  <ellipse cx="64" cy="67" rx="52" ry="33" fill="url(#lc-side)"/>
-  <!-- Bord moleté (seul l'arc bas ressort sous la face) -->
-  <ellipse cx="64" cy="67" rx="52" ry="33" fill="none" stroke="#1c1046" stroke-opacity="0.5" stroke-width="3" stroke-dasharray="3 5"/>
-  <ellipse cx="64" cy="67" rx="52" ry="33" fill="none" stroke="#2a1a5e" stroke-opacity="0.55" stroke-width="1.5"/>
+  <!-- Épaisseur (disque du dessous → croissant doré sous la face) -->
+  <ellipse cx="64" cy="68" rx="55" ry="35" fill="url(#lc-gold-side)"/>
+  <ellipse cx="64" cy="68" rx="55" ry="35" fill="none" stroke="#3a2206" stroke-opacity="0.5" stroke-width="1.5"/>
 
-  <!-- Face supérieure -->
-  <ellipse cx="64" cy="52" rx="52" ry="33" fill="url(#lc-face)"/>
-  <!-- Liseré lumineux + arête de la face -->
-  <ellipse cx="64" cy="53.5" rx="50.5" ry="31.5" fill="none" stroke="url(#lc-rimlight)" stroke-width="2"/>
-  <ellipse cx="64" cy="52" rx="52" ry="33" fill="none" stroke="#37236c" stroke-opacity="0.5" stroke-width="1.4"/>
+  <!-- Face : anneau OR -->
+  <ellipse cx="64" cy="54" rx="55" ry="35" fill="url(#lc-gold)"/>
+  <ellipse cx="64" cy="54" rx="55" ry="35" fill="url(#lc-sheen)" opacity="0.4"/>
+  <ellipse cx="64" cy="55.5" rx="53.5" ry="33.5" fill="none" stroke="url(#lc-rimlight)" stroke-width="2"/>
+  <ellipse cx="64" cy="54" rx="55" ry="35" fill="none" stroke="#7a4d12" stroke-opacity="0.55" stroke-width="1.3"/>
 
-  <!-- Anneaux gravés concentriques -->
-  <ellipse cx="64" cy="52" rx="44" ry="27" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.3"/>
-  <ellipse cx="64" cy="52" rx="41" ry="25" fill="none" stroke="#33216a" stroke-opacity="0.35" stroke-width="1"/>
+  <!-- Sillon bi-métal autour du cœur -->
+  <ellipse cx="64" cy="54" rx="40" ry="25.5" fill="none" stroke="#6f4410" stroke-opacity="0.55" stroke-width="2.6"/>
+  <ellipse cx="64" cy="52.8" rx="40" ry="25.5" fill="none" stroke="#fff2c0" stroke-opacity="0.45" stroke-width="1"/>
 
-  <!-- Glyphe « 42 » — compressé verticalement pour épouser la face inclinée -->
-  <g transform="translate(64 52) scale(1 0.8)">
-    <text x="0" y="14" text-anchor="middle"
-          font-family="'Orbitron','Rajdhani',system-ui,sans-serif" font-weight="800"
-          font-size="42" fill="url(#lc-glyph)" letter-spacing="-1"
-          stroke="#7a5410" stroke-opacity="0.35" stroke-width="0.6"
-          paint-order="stroke">42</text>
+  <!-- Cœur VIOLET -->
+  <ellipse cx="64" cy="54" rx="37" ry="23.5" fill="url(#lc-violet)"/>
+  <ellipse cx="64" cy="54" rx="37" ry="23.5" fill="none" stroke="#2c1a60" stroke-opacity="0.55" stroke-width="1.2"/>
+  <ellipse cx="64" cy="52.8" rx="33" ry="20" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1"/>
+
+  <!-- Emblème « 42 » (ombre embossée + or) -->
+  <g transform="translate(64 54) scale(1 0.82)">
+    <text x="0.9" y="15" text-anchor="middle" font-family="'Orbitron','Rajdhani',system-ui,sans-serif" font-weight="800" font-size="38" fill="#190f3e" fill-opacity="0.5" letter-spacing="-1">42</text>
+    <text x="0" y="13.5" text-anchor="middle" font-family="'Orbitron','Rajdhani',system-ui,sans-serif" font-weight="800" font-size="38" fill="url(#lc-glyph)" letter-spacing="-1" stroke="#7a5410" stroke-opacity="0.3" stroke-width="0.5" paint-order="stroke">42</text>
   </g>
 
-  <!-- Reflet spéculaire -->
-  <ellipse cx="46" cy="39" rx="25" ry="12" fill="url(#lc-gloss)" transform="rotate(-18 46 39)"/>
+  <!-- Reflet + étincelle -->
+  <ellipse cx="44" cy="38" rx="26" ry="12" fill="url(#lc-gloss)" transform="rotate(-20 44 38)"/>
+  <circle cx="39" cy="33" r="2.2" fill="#ffffff" opacity="0.92"/>
 </svg>
