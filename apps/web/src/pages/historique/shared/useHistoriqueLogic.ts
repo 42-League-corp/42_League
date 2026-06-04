@@ -10,6 +10,10 @@ export interface MyMatchStat {
   /** Match nul (échecs) — ni victoire ni défaite, hors win-rate. */
   draw: boolean;
   opponent: string;
+  /** Second adversaire — présent uniquement en 2v2. */
+  opponent2?: string;
+  /** Mon partenaire — présent uniquement en 2v2. */
+  partner?: string;
   myScore: number;
   oppScore: number;
   /** Variation d'ELO pour moi sur cette game. */
@@ -82,29 +86,53 @@ export function useHistoriqueLogic(): HistoriqueData {
   const mine = useMemo<MineItem[]>(() => {
     if (!myLogin) return [];
 
-    // Mes matchs, rejoués dans l'ordre chronologique pour le win-rate cumulé.
+    // Mes matchs — inclut les slots 1v1 ET les coéquipiers 2v2.
     const asc = matches
-      .filter((m) => m.playerALogin === myLogin || m.playerBLogin === myLogin)
+      .filter((m) =>
+        m.playerALogin === myLogin || m.playerBLogin === myLogin ||
+        m.playerA2Login === myLogin || m.playerB2Login === myLogin,
+      )
       .sort((a, b) => +new Date(a.playedAt) - +new Date(b.playedAt));
 
     let wins = 0;
     let decisive = 0; // parties décisives (hors nulles) pour le win-rate cumulé
     const matchItems: MineItem[] = asc.map((m) => {
-      const youAreA = m.playerALogin === myLogin;
+      // 2v2 : je suis côté A si je suis playerA OU playerA2 (coéquipier A).
+      const youAreA = m.playerALogin === myLogin || m.playerA2Login === myLogin;
       const draw = m.winner === 'draw';
       const won = !draw && ((youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B'));
       const wrBefore = decisive === 0 ? 0 : (wins / decisive) * 100;
-      // La nulle ne change ni le numérateur ni le dénominateur du win-rate.
+      // La nulle (échecs) ne compte ni comme victoire ni comme défaite.
       if (!draw) { decisive++; if (won) wins++; }
       const wrAfter = decisive === 0 ? 0 : (wins / decisive) * 100;
+
+      // Delta ELO : slot précis selon ma position dans le match (2v2 aware).
+      const delta =
+        m.playerALogin === myLogin  ? m.deltaA :
+        m.playerA2Login === myLogin ? (m.deltaA2 ?? m.deltaA) :
+        m.playerBLogin === myLogin  ? m.deltaB :
+                                      (m.deltaB2 ?? m.deltaB);
+
+      // En 2v2 : mon partenaire et les 2 adversaires.
+      const partner = m.mode === '2v2'
+        ? (youAreA
+            ? (m.playerALogin === myLogin ? (m.playerA2Login ?? undefined) : m.playerALogin)
+            : (m.playerBLogin === myLogin ? (m.playerB2Login ?? undefined) : m.playerBLogin))
+        : undefined;
+      const opponent2 = m.mode === '2v2'
+        ? (youAreA ? (m.playerB2Login ?? undefined) : (m.playerA2Login ?? undefined))
+        : undefined;
+
       const stat: MyMatchStat = {
         match: m,
         won,
         draw,
         opponent: youAreA ? m.playerBLogin : m.playerALogin,
+        opponent2,
+        partner,
         myScore: youAreA ? m.scoreA : m.scoreB,
         oppScore: youAreA ? m.scoreB : m.scoreA,
-        delta: youAreA ? m.deltaA : m.deltaB,
+        delta,
         counted: m.countedForElo,
         wrAfter: Math.round(wrAfter),
         wrImpact: wrAfter - wrBefore,

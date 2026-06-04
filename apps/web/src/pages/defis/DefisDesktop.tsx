@@ -40,6 +40,8 @@ import { Declare2v2GameFlow } from './shared/Declare2v2GameFlow';
 import { Challenge2v2Flow } from './shared/Challenge2v2Flow';
 import { Mode1v1Toggle, type DuelMode } from './shared/Mode1v1Toggle';
 import { DeclareFfaGameFlow } from './shared/DeclareFfaGameFlow';
+import { NewTeamCelebration } from '../../components/NewTeamCelebration';
+import type { Declare2v2Response } from '../../lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Kind = 'incoming' | 'outgoing' | 'accepted';
@@ -244,9 +246,44 @@ function HeroCTAs({
   const { game } = useGameMode();
   const [declareMode, setDeclareMode] = useState<DuelMode>('1v1');
   const [challengeMode, setChallengeMode] = useState<DuelMode>('1v1');
+  const [celebration, setCelebration] = useState<{
+    teamId: string; teamElo: number;
+    player1: { login: string; elo?: number };
+    player2: { login: string; imageUrl?: string | null; elo?: number };
+  } | null>(null);
+
   const submitAndClose = async () => { await onDone(); onClose(); };
 
+  const submit2v2AndClose = async (result: Declare2v2Response, partnerLogin: string) => {
+    await onDone();
+    onClose();
+    if (result.myTeamIsNew && myLogin) {
+      const partnerEntry =
+        others.find((p) => p.login === partnerLogin) ??
+        recentOpponents.find((p) => p.login === partnerLogin);
+      setCelebration({
+        teamId: result.myTeamId,
+        teamElo: Math.round(
+          Math.max(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.65 +
+          Math.min(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.35,
+        ),
+        player1: { login: myLogin, elo: myElo },
+        player2: { login: partnerLogin, imageUrl: partnerEntry?.imageUrl, elo: partnerEntry?.elo },
+      });
+    }
+  };
+
   return (
+    <>
+    {celebration && (
+      <NewTeamCelebration
+        teamId={celebration.teamId}
+        teamElo={celebration.teamElo}
+        player1={celebration.player1}
+        player2={celebration.player2}
+        onClose={() => setCelebration(null)}
+      />
+    )}
     <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
       {/* initial={false} : les cartes déjà présentes à l'arrivée s'affichent
           instantanément (sinon leur animation d'entrée rejoue à chaque visite de
@@ -270,7 +307,7 @@ function HeroCTAs({
                 myLogin={myLogin}
                 myElo={myElo}
                 locations={locations}
-                onSubmitted={submitAndClose}
+                onSubmitted={submit2v2AndClose}
               />
             ) : (
               <DeclareGameFlow
@@ -347,6 +384,7 @@ function HeroCTAs({
         )}
       </AnimatePresence>
     </motion.div>
+    </>
   );
 }
 

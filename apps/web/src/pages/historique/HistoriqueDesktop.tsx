@@ -104,7 +104,7 @@ export function HistoriqueDesktop() {
                     key={item.id}
                     stat={item.stat}
                     lang={lang}
-                    imageUrl={imgByLogin.get(item.stat.opponent)}
+                    imgByLogin={imgByLogin}
                     delay={Math.min(i, 10) * 0.015}
                   />
                 ) : (

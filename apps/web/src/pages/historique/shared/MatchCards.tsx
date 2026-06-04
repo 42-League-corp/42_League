@@ -7,7 +7,7 @@ import { fmtDatePair } from '../../../lib/format';
 import { useT, type Lang } from '../../../lib/i18n';
 import type { MyMatchStat, MyFfaStat } from './useHistoriqueLogic';
 
-// ─── Pastille de discipline ──────────────────────────────────────────────────
+// ─── Pastilles de discipline et de mode ──────────────────────────────────────
 const GAME_BADGE: Record<string, string> = {
   babyfoot: '⚽',
   smash: '🎮',
@@ -17,10 +17,20 @@ const GAME_BADGE: Record<string, string> = {
 /** Petite pastille indiquant la discipline d'un match. */
 export function GamePill({ game }: { game?: Game }) {
   const g = game ?? 'babyfoot';
-  if (g === 'babyfoot') return null; // discipline par défaut : pas de pastille
+  if (g === 'babyfoot') return null;
   return (
     <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] px-1.5 py-0.5 rounded bg-accent/10 text-accent">
       {GAME_BADGE[g] ?? g}
+    </span>
+  );
+}
+
+/** Pastille « 2 VS 2 » visible sur les matchs en mode équipe. */
+function TwoVTwoPill() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] px-1.5 py-0.5 rounded bg-gold/10 text-gold border border-gold/25">
+      <Users className="w-2.5 h-2.5" strokeWidth={2.5} />
+      2v2
     </span>
   );
 }
@@ -79,14 +89,21 @@ export function WinRateImpact({ wrAfter, wrImpact }: { wrAfter: number; wrImpact
 interface MyMatchCardProps {
   stat: MyMatchStat;
   lang: Lang;
+  /** URL de l'avatar de l'adversaire principal (fallback si imgByLogin absent). */
   imageUrl?: string | null;
+  /** Map complète login → imageUrl (permet d'afficher les avatars 2v2). */
+  imgByLogin?: Map<string, string | null>;
   delay?: number;
 }
 
-export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProps) {
+export function MyMatchCard({ stat, lang, imageUrl, imgByLogin, delay = 0 }: MyMatchCardProps) {
   const t = useT();
-  const { won, draw, opponent, myScore, oppScore, delta, counted, wrAfter, wrImpact } = stat;
+  const { won, draw, opponent, opponent2, partner, myScore, oppScore, delta, counted, wrAfter, wrImpact } = stat;
   const game = stat.match.game;
+  const is2v2 = stat.match.mode === '2v2';
+  const oppImg = imgByLogin?.get(opponent) ?? imageUrl ?? null;
+  const opp2Img = opponent2 ? (imgByLogin?.get(opponent2) ?? null) : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -105,7 +122,15 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
         {draw ? t('lb.abbr.draw') : won ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
-      <Avatar login={opponent} imageUrl={imageUrl ?? null} size="sm" />
+      {/* Avatar(s) adversaire(s) */}
+      {is2v2 && opponent2 ? (
+        <div className="relative flex-shrink-0 w-10 h-8">
+          <Avatar login={opponent} imageUrl={oppImg} size="sm" className="absolute top-0 left-0" />
+          <Avatar login={opponent2} imageUrl={opp2Img} size="xs" className="absolute bottom-0 right-0 ring-1 ring-bg-1" />
+        </div>
+      ) : (
+        <Avatar login={opponent} imageUrl={oppImg} size="sm" />
+      )}
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -113,8 +138,27 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
           <PlayerLink login={opponent} className="text-sm font-bold text-text-strong truncate">
             {opponent}
           </PlayerLink>
+          {opponent2 && (
+            <>
+              <span className="text-[10px] text-muted-2">&amp;</span>
+              <PlayerLink login={opponent2} className="text-sm font-bold text-text-strong truncate">
+                {opponent2}
+              </PlayerLink>
+            </>
+          )}
+          {is2v2 && <TwoVTwoPill />}
           <GamePill game={game} />
         </div>
+        {/* Partenaire 2v2 */}
+        {partner && (
+          <div className="text-[10px] text-gold/80 font-medium mt-0.5 flex items-center gap-1">
+            <Users className="w-2.5 h-2.5" strokeWidth={2.5} />
+            avec{' '}
+            <PlayerLink login={partner} className="font-bold text-gold/90 truncate">
+              {partner}
+            </PlayerLink>
+          </div>
+        )}
         <div className="mt-1">
           <WinRateImpact wrAfter={wrAfter} wrImpact={wrImpact} />
         </div>
@@ -162,12 +206,16 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
   const isDraw = match.winner === 'draw';
   // Nulle : pas de vainqueur — on garde l'ordre A (gauche) / B (droite).
   const aWon = match.winner === 'A';
-  const winnerLogin = aWon || isDraw ? match.playerALogin : match.playerBLogin;
-  const loserLogin = aWon || isDraw ? match.playerBLogin : match.playerALogin;
-  const winnerScore = aWon || isDraw ? match.scoreA : match.scoreB;
-  const loserScore = aWon || isDraw ? match.scoreB : match.scoreA;
-  const winnerDelta = aWon || isDraw ? match.deltaA : match.deltaB;
-  const loserDelta = aWon || isDraw ? match.deltaB : match.deltaA;
+  const is2v2 = match.mode === '2v2';
+
+  const winnerLogin  = aWon || isDraw ? match.playerALogin  : match.playerBLogin;
+  const winner2Login = is2v2 ? (aWon || isDraw ? (match.playerA2Login ?? null) : (match.playerB2Login ?? null)) : null;
+  const loserLogin   = aWon || isDraw ? match.playerBLogin  : match.playerALogin;
+  const loser2Login  = is2v2 ? (aWon || isDraw ? (match.playerB2Login ?? null) : (match.playerA2Login ?? null)) : null;
+  const winnerScore  = aWon || isDraw ? match.scoreA : match.scoreB;
+  const loserScore   = aWon || isDraw ? match.scoreB : match.scoreA;
+  const winnerDelta  = aWon || isDraw ? match.deltaA : match.deltaB;
+  const loserDelta   = aWon || isDraw ? match.deltaB : match.deltaA;
 
   return (
     <motion.div
@@ -176,17 +224,30 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className="relative card-hud rounded-2xl p-3.5 flex items-center gap-2.5 hover-glow border border-gold/25"
     >
-      {/* Vainqueur — gauche (ou joueur A si nulle) */}
+      {/* Trophée ou poignée de main */}
       <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-gold/15 text-base">
         {isDraw ? '🤝' : '🏆'}
       </div>
 
-      <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" />
+      {/* Vainqueur — gauche */}
+      {is2v2 && winner2Login ? (
+        <div className="relative flex-shrink-0 w-10 h-8">
+          <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" className="absolute top-0 left-0" />
+          <Avatar login={winner2Login} imageUrl={imgByLogin.get(winner2Login) ?? null} size="xs" className="absolute bottom-0 right-0 ring-1 ring-bg-1" />
+        </div>
+      ) : (
+        <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" />
+      )}
 
-      <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
+      <div className="flex-1 min-w-0 flex flex-col items-start gap-0.5">
         <PlayerLink login={winnerLogin} className={`text-sm font-bold truncate max-w-full ${isDraw ? 'text-text-strong' : 'text-gold'}`}>
           {winnerLogin}
         </PlayerLink>
+        {winner2Login && (
+          <PlayerLink login={winner2Login} className="text-[11px] font-semibold text-gold/70 truncate max-w-full">
+            &amp; {winner2Login}
+          </PlayerLink>
+        )}
         <EloDeltaPill delta={winnerDelta} counted={match.countedForElo} />
       </div>
 
@@ -205,6 +266,7 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
           </div>
         )}
         <div className="flex items-center gap-1">
+          {is2v2 && <TwoVTwoPill />}
           <GamePill game={match.game} />
           <div className="text-[10px] text-muted font-medium whitespace-nowrap">
             {fmtDatePair(match.playedAt, lang).short}
@@ -213,14 +275,26 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
       </div>
 
       {/* Perdant — droite (miroir) */}
-      <div className="flex-1 min-w-0 flex flex-col items-end gap-1">
+      <div className="flex-1 min-w-0 flex flex-col items-end gap-0.5">
         <PlayerLink login={loserLogin} className="text-sm font-semibold text-muted-2 truncate max-w-full text-right">
           {loserLogin}
         </PlayerLink>
+        {loser2Login && (
+          <PlayerLink login={loser2Login} className="text-[11px] font-semibold text-muted/60 truncate max-w-full text-right">
+            &amp; {loser2Login}
+          </PlayerLink>
+        )}
         <EloDeltaPill delta={loserDelta} counted={match.countedForElo} />
       </div>
 
-      <Avatar login={loserLogin} imageUrl={imgByLogin.get(loserLogin) ?? null} size="sm" />
+      {is2v2 && loser2Login ? (
+        <div className="relative flex-shrink-0 w-10 h-8">
+          <Avatar login={loserLogin} imageUrl={imgByLogin.get(loserLogin) ?? null} size="sm" className="absolute top-0 right-0" />
+          <Avatar login={loser2Login} imageUrl={imgByLogin.get(loser2Login) ?? null} size="xs" className="absolute bottom-0 left-0 ring-1 ring-bg-1" />
+        </div>
+      ) : (
+        <Avatar login={loserLogin} imageUrl={imgByLogin.get(loserLogin) ?? null} size="sm" />
+      )}
     </motion.div>
   );
 }

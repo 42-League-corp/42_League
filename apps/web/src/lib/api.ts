@@ -97,6 +97,18 @@ export interface PlayedMatch {
   stocksB?: number | null;
   /** '2v2' pour les matchs en mode équipe Babyfoot, null/absent pour les 1v1. */
   mode?: '2v2' | null;
+  /** Coéquipier de l'équipe A (2v2). */
+  playerA2Login?: string | null;
+  /** Coéquipier de l'équipe B (2v2). */
+  playerB2Login?: string | null;
+  /** Variation ELO du coéquipier de A (2v2). */
+  deltaA2?: number | null;
+  /** Variation ELO du coéquipier de B (2v2). */
+  deltaB2?: number | null;
+  /** Équipe A (2v2). */
+  teamAId?: string | null;
+  /** Équipe B (2v2). */
+  teamBId?: string | null;
 }
 
 // ─── Smash FFA (Free-For-All) ─────────────────────────────────────────────────

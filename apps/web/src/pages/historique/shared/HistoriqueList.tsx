@@ -58,7 +58,7 @@ export function HistoriqueList({
                     key={item.id}
                     stat={item.stat}
                     lang={lang}
-                    imageUrl={imgByLogin.get(item.stat.opponent)}
+                    imgByLogin={imgByLogin}
                     delay={Math.min(i, 12) * 0.02}
                   />
                 ) : (
