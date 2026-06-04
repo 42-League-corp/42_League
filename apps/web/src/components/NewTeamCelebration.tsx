@@ -93,9 +93,14 @@ export function NewTeamCelebration({
     haptic('success');
   }, []);
 
+  // Si teamId est vide, le duo n'a pas encore été confirmé par tous les joueurs
+  // (l'équipe est créée seulement après validation des 4). On navigue vers /teams
+  // au lieu de /team/:id pour éviter un 404.
+  const teamTarget = teamId ? `/team/${teamId}` : '/teams';
+
   const handleSaveName = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { handleGoToTeam(); return; }
+    if (!trimmed || !teamId) { handleGoToTeam(); return; }
     setSaving(true);
     try {
       await api.nameTeam(teamId, trimmed);
@@ -113,7 +118,7 @@ export function NewTeamCelebration({
     setDismissed(true);
     setTimeout(() => {
       onClose();
-      navigate(`/team/${teamId}`);
+      navigate(teamTarget);
     }, 300);
   };
 

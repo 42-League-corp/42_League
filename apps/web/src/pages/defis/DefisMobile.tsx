@@ -7,6 +7,7 @@ import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/Se
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
 import { DeclareFfaGameSheet } from './mobile/DeclareFfaGameSheet';
+import { NewTeamCelebration } from '../../components/NewTeamCelebration';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
 import { ChallengeRecordSheet } from './mobile/ChallengeRecordSheet';
 import { BigActionButton } from './mobile/BigActionButton';
@@ -51,6 +52,14 @@ export function DefisMobile() {
   const [declareOpen, setDeclareOpen] = useState(false);
   const [ffaOpen, setFfaOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
+
+  // Célébration nouveau duo 2v2 — géré ici (niveau racine, jamais démonté)
+  // pour éviter les problèmes de cycle de vie dans DeclareGameSheet.
+  const [teamCelebration, setTeamCelebration] = useState<{
+    teamId: string; teamElo: number;
+    player1: { login: string; elo?: number };
+    player2: { login: string; imageUrl?: string | null; elo?: number };
+  } | null>(null);
 
   const myElo = leaderboard.find((u) => u.login === myLogin)?.elo;
   const [filter, setFilter] = useState<Filter>('received');
@@ -326,7 +335,7 @@ export function DefisMobile() {
           )}
       </div>
 
-      {/* Sheet de déclaration 1v1 (game passée) */}
+      {/* Sheet de déclaration 1v1 / 2v2 */}
       <DeclareGameSheet
         open={declareOpen}
         onClose={() => setDeclareOpen(false)}
@@ -336,7 +345,19 @@ export function DefisMobile() {
         myLogin={myLogin}
         locations={locations}
         onDone={refresh}
+        onNewTeam={setTeamCelebration}
       />
+
+      {/* Célébration nouveau duo — rendu au niveau racine pour survivre à onClose */}
+      {teamCelebration && (
+        <NewTeamCelebration
+          teamId={teamCelebration.teamId}
+          teamElo={teamCelebration.teamElo}
+          player1={teamCelebration.player1}
+          player2={teamCelebration.player2}
+          onClose={() => setTeamCelebration(null)}
+        />
+      )}
 
       {/* Sheet de déclaration FFA Smash */}
       <DeclareFfaGameSheet

@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Swords, TrendingUp, TrendingDown, Plus, ChevronRight } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
@@ -194,6 +194,7 @@ export function TeamsPage() {
   const { me } = useLeagueData();
   const myLogin = me?.login;
   const { isMobile } = useViewport();
+  const location = useLocation();
 
   const [teams, setTeams] = useState<BabyfootTeamEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,7 +212,8 @@ export function TeamsPage() {
     }
   };
 
-  useEffect(() => { void load(); }, [myLogin]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Recharge à chaque navigation vers cette page (location.key change à chaque visite).
+  useEffect(() => { void load(); }, [myLogin, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stats globales
   const stats = useMemo(() => {
