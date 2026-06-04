@@ -5,7 +5,6 @@ import { ChevronLeft, Gem, Shield, Crown } from 'lucide-react';
 import { RANK_TIERS, rankTier, type RankTier } from '@42-league/shared';
 import { Avatar } from '../components/Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
-import { useGameMode } from '../hooks/useGameMode';
 import type { LeaderboardEntry } from '../lib/api';
 
 // ─── Constantes de mise en page ────────────────────────────────────────────────
@@ -56,7 +55,6 @@ function buildClusters(entries: LeaderboardEntry[], toPct: (elo: number) => numb
 export function GradesPage() {
   const navigate = useNavigate();
   const { leaderboard, me } = useLeagueData();
-  const { game } = useGameMode();
   const myLogin = me?.login;
 
   const trackMax = useMemo(
