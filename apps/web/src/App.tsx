@@ -7,6 +7,7 @@ import { PageSkeleton } from './mobile/primitives/Skeleton';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { LeagueDataProvider, useLeagueData } from './hooks/useLeagueData';
+import { MatchmakingProvider } from './hooks/useMatchmaking';
 import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
 import { GODPage } from './pages/GODPage';
@@ -153,41 +154,43 @@ function AuthenticatedShell() {
   }
 
   return (
-    <AppShell>
-      {error && (
-        <div className="mb-4 p-3 border border-red/50 bg-red/10 rounded text-red text-sm">
-          {error}
-        </div>
-      )}
-      {loading ? (
-        <PageSkeleton />
-      ) : (
-        <ErrorBoundary>
-          <Suspense fallback={<PageSkeleton />}>
-            <Routes>
-              <Route path="/" element={<Navigate to="/challenges" replace />} />
-              <Route path="/challenges" element={<DefisPage />} />
-              <Route path="/tournaments" element={<TournoisPage />} />
-              <Route path="/tournaments/create" element={<CreateTournamentPage />} />
-              <Route path="/tournaments/:id" element={<TournoiDetailPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/goat" element={<GoatPage />} />
-              <Route path="/trophies" element={<TropheesPage />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/profile" element={<ProfilPage />} />
-              <Route path="/player/:login" element={<PlayerPage />} />
-              <Route path="/team/:teamId" element={<TeamProfilePage />} />
-              <Route path="/h2h" element={<H2HPage />} />
-              <Route path="/shop" element={<ShopPage />} />
-              <Route path="/shop-god" element={<ShopGODPage />} />
-              <Route path="/history" element={<HistoriquePage />} />
-              <Route path="/settings" element={<ReglagesPage />} />
-              <Route path="*" element={<Navigate to="/challenges" replace />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      )}
-      <Toast />
-    </AppShell>
+    <MatchmakingProvider>
+      <AppShell>
+        {error && (
+          <div className="mb-4 p-3 border border-red/50 bg-red/10 rounded text-red text-sm">
+            {error}
+          </div>
+        )}
+        {loading ? (
+          <PageSkeleton />
+        ) : (
+          <ErrorBoundary>
+            <Suspense fallback={<PageSkeleton />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/challenges" replace />} />
+                <Route path="/challenges" element={<DefisPage />} />
+                <Route path="/tournaments" element={<TournoisPage />} />
+                <Route path="/tournaments/create" element={<CreateTournamentPage />} />
+                <Route path="/tournaments/:id" element={<TournoiDetailPage />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/goat" element={<GoatPage />} />
+                <Route path="/trophies" element={<TropheesPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/profile" element={<ProfilPage />} />
+                <Route path="/player/:login" element={<PlayerPage />} />
+                <Route path="/team/:teamId" element={<TeamProfilePage />} />
+                <Route path="/h2h" element={<H2HPage />} />
+                <Route path="/shop" element={<ShopPage />} />
+                <Route path="/shop-god" element={<ShopGODPage />} />
+                <Route path="/history" element={<HistoriquePage />} />
+                <Route path="/settings" element={<ReglagesPage />} />
+                <Route path="*" element={<Navigate to="/challenges" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        )}
+        <Toast />
+      </AppShell>
+    </MatchmakingProvider>
   );
 }

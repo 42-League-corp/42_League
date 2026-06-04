@@ -8,6 +8,7 @@ import { GameModeSwitch } from '../components/GameModeSwitch';
 import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
+import { MatchmakingOverlay } from '../components/MatchmakingOverlay';
 
 interface AppShellProps {
   children: ReactNode;
@@ -38,6 +39,9 @@ export function AppShell({ children }: AppShellProps) {
       <GameOnboarding />
       {/* Overlay cinématique de changement d'univers — pointer-events-none */}
       <GameTransitionOverlay />
+      {/* Overlay VERSUS global : s'affiche sur n'importe quelle page quand le
+          matchmaking trouve un adversaire (recherche persistante inter-pages) */}
+      <MatchmakingOverlay />
     </>
   );
 }

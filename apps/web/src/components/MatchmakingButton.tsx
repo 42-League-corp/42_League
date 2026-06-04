@@ -1,31 +1,20 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Dices, Loader2, X } from 'lucide-react';
 import { useMatchmaking } from '../hooks/useMatchmaking';
-import { useLeagueData } from '../hooks/useLeagueData';
-import { useGameMode } from '../hooks/useGameMode';
 import { useT } from '../lib/i18n';
-import { VersusOverlay } from './VersusOverlay';
 
 /**
- * CTA « Match aléatoire » autonome : rejoint la file de matchmaking, affiche
- * l'animation de recherche (« Tu es dans la file »), puis l'overlay VERSUS quand
- * un adversaire est trouvé. Instancie son propre useMatchmaking.
+ * CTA « Match aléatoire » : rejoint la file de matchmaking et affiche l'animation
+ * de recherche (« Tu es dans la file »). L'état vit dans le MatchmakingProvider
+ * global → la recherche persiste si on quitte la page, et l'overlay VERSUS
+ * (MatchmakingOverlay, monté dans l'AppShell) s'affiche sur n'importe quelle page
+ * quand un adversaire est trouvé.
  */
 export function MatchmakingButton({ className = '' }: { className?: string }) {
   const t = useT();
-  const { me } = useLeagueData();
-  const { game } = useGameMode();
-  const { state, opponent, start, cancel, dismiss } = useMatchmaking();
+  const { state, start, cancel } = useMatchmaking();
 
   const searching = state === 'searching';
-
-  const myUser = me?.user;
-  const meName =
-    myUser?.firstName && myUser?.lastName ? `${myUser.firstName} ${myUser.lastName}` : myUser?.login ?? '—';
-  const oppName =
-    opponent?.firstName && opponent?.lastName
-      ? `${opponent.firstName} ${opponent.lastName}`
-      : opponent?.login ?? '';
 
   return (
     <div className={className}>
@@ -82,17 +71,6 @@ export function MatchmakingButton({ className = '' }: { className?: string }) {
           </button>
         </motion.div>
       )}
-
-      <AnimatePresence>
-        {state === 'matched' && opponent && (
-          <VersusOverlay
-            game={game}
-            me={{ login: myUser?.login ?? '—', imageUrl: myUser?.imageUrl ?? null, name: meName }}
-            opponent={{ login: opponent.login, imageUrl: opponent.imageUrl, name: oppName }}
-            onDone={dismiss}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

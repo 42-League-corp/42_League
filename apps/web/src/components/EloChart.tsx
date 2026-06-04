@@ -1,16 +1,17 @@
 /**
- * EloChart — ligne lisse style motion.dev
+ * EloChart — courbe ELO « SmoothLineGraph » (réf. démo motion sur :4242)
  *
- * Inspiré de https://motion.dev/examples/react-line-graph :
- *  - Ligne SVG cubique (bezier, pas de polyline rigide)
- *  - Gradient fill animé en opacité au montage
- *  - Cursor spring : le dot + la ligne verticale suivent la souris
- *    avec useMotionValue + useSpring (stiffness 300, damping 30)
- *  - Tooltip premium glass au survol
- *  - Zéro label texte sur le graphe (épuré)
+ *  - Spline monotone (Fritsch–Carlson) : lisse, sans overshoot
+ *  - Curseur libre qui glisse exactement sur la courbe (getPointAtLength)
+ *  - Tous les points-matchs affichés ; le plus proche grossit sur place
+ *  - Repère vertical + odomètre ELO à roulettes + flèche de tendance
+ *  - Grille discrète, glow sur la ligne, tooltip qui suit le point actif
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import {
+  AnimatePresence, motion,
+  useMotionValue, useMotionValueEvent, useTransform,
+} from 'framer-motion';
 import type { Game, PlayedMatch } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -39,6 +40,8 @@ interface EloPoint {
   scoreAgainst?: number;
 }
 
+interface MappedPoint extends EloPoint { x: number; y: number; }
+
 function computeEloHistory(matches: PlayedMatch[], myLogin: string, currentElo: number): EloPoint[] {
   const mine = matches
     .filter((m) => (m.playerALogin === myLogin || m.playerBLogin === myLogin) && m.countedForElo)
@@ -63,21 +66,30 @@ function computeEloHistory(matches: PlayedMatch[], myLogin: string, currentElo: 
   return points;
 }
 
-/** Chemin SVG cubique (lissé) entre les points. */
-function buildCubicPath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return pts.length === 1 ? `M ${pts[0]!.x} ${pts[0]!.y}` : '';
-  let d = `M ${pts[0]!.x} ${pts[0]!.y}`;
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1]!;
-    const curr = pts[i]!;
-    const tension = 0.35;
-    const cp1x = prev.x + (curr.x - prev.x) * tension;
-    const cp1y = prev.y;
-    const cp2x = curr.x - (curr.x - prev.x) * tension;
-    const cp2y = curr.y;
-    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
+/** Spline monotone (Fritsch–Carlson) : lisse, sans overshoot. */
+function monotonePath(pts: { x: number; y: number }[]): string {
+  const n = pts.length;
+  if (n < 2) return n === 1 ? `M${pts[0]!.x},${pts[0]!.y}` : '';
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const dx: number[] = [], d: number[] = [];
+  for (let i = 0; i < n - 1; i++) { const hx = xs[i + 1]! - xs[i]!; dx.push(hx); d.push((ys[i + 1]! - ys[i]!) / hx); }
+  const m = new Array<number>(n);
+  m[0] = d[0]!; m[n - 1] = d[n - 2]!;
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1]! * d[i]! <= 0 ? 0 : (d[i - 1]! + d[i]!) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; }
+    else {
+      const a = m[i]! / d[i]!, b = m[i + 1]! / d[i]!, s = a * a + b * b;
+      if (s > 9) { const tt = 3 / Math.sqrt(s); m[i] = tt * a * d[i]!; m[i + 1] = tt * b * d[i]!; }
+    }
   }
-  return d;
+  let p = `M${xs[0]},${ys[0]}`;
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = xs[i]! + dx[i]! / 3, c1y = ys[i]! + m[i]! * dx[i]! / 3;
+    const c2x = xs[i + 1]! - dx[i]! / 3, c2y = ys[i + 1]! - m[i + 1]! * dx[i]! / 3;
+    p += ` C${c1x},${c1y} ${c2x},${c2y} ${xs[i + 1]},${ys[i + 1]}`;
+  }
+  return p;
 }
 
 function fmtDate(iso: string): string {
@@ -139,6 +151,17 @@ function TrendArrow({ up }: { up: boolean }) {
   );
 }
 
+/** Point du graphe : le plus proche grossit un peu — rayon, jamais déplacé. */
+function GraphPoint({ p, color, active }: { p: MappedPoint; color: string; active: boolean }) {
+  return (
+    <motion.circle
+      cx={p.x} cy={p.y} stroke={color} strokeWidth="2.5" initial={false}
+      animate={{ r: active ? 5.5 : 3.5, fill: active ? color : '#0b1220' }}
+      transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+    />
+  );
+}
+
 // ─── Composant ────────────────────────────────────────────────────────────────
 
 export function EloChart({
@@ -154,7 +177,10 @@ export function EloChart({
     for (const e of leaderboard) map.set(e.login, e.imageUrl);
     return map;
   }, [leaderboard]);
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const pathRef = useRef<SVGPathElement>(null);
   const [W, setW] = useState(360);
 
   useEffect(() => {
@@ -170,19 +196,98 @@ export function EloChart({
     () => computeEloHistory(matches.filter((m) => (m.game ?? 'babyfoot') === game), myLogin, currentElo),
     [matches, myLogin, currentElo, game],
   );
-
-  const points = maxPoints ? history.slice(-maxPoints) : history;
-
-  // ─── Mouse cursor spring ──────────────────────────────────────────────────
-  const mouseX = useMotionValue(-1);
-  const springX = useSpring(mouseX, { stiffness: 300, damping: 30, mass: 0.5 });
-  const [hovered, setHovered] = useState<number | null>(null);
+  const points = useMemo(() => (maxPoints ? history.slice(-maxPoints) : history), [history, maxPoints]);
 
   const H = height;
-  const padL = 4; const padR = 4; const padTop = 12; const padBot = 8;
+  const padX = 14, padTop = 16, padBot = 18;
   const plotH = H - padTop - padBot;
+  const baseY = padTop + plotH;
 
-  if (points.length < 2) {
+  // ─── Géométrie (spline + points) ──────────────────────────────────────────
+  const geo = useMemo(() => {
+    if (points.length < 2) return null;
+    const elos = points.map((p) => p.elo);
+    const minE = Math.min(...elos), maxE = Math.max(...elos);
+    const range = (maxE - minE) || 80;
+    const padV = range * 0.25;
+    const yMin = minE - padV, yMax = maxE + padV;
+    const yOf = (e: number) => padTop + (1 - (e - yMin) / (yMax - yMin)) * plotH;
+    const plotW = W - padX * 2;
+    const mapped: MappedPoint[] = points.map((p, i) => ({
+      ...p,
+      x: padX + (i / Math.max(points.length - 1, 1)) * plotW,
+      y: yOf(p.elo),
+    }));
+    const linePath = monotonePath(mapped);
+    const areaPath = `${linePath} L${mapped.at(-1)!.x},${baseY} L${padX},${baseY} Z`;
+    return { mapped, linePath, areaPath };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, W, H]);
+
+  const isUp = (points.at(-1)?.elo ?? 0) >= (points[0]?.elo ?? 0);
+  const lineColor = isUp ? GOLD : RED;
+  const uid = `${myLogin.replace(/\W/g, '')}-${game}`;
+
+  // ─── Curseur libre qui glisse sur la courbe ───────────────────────────────
+  const mx = useMotionValue(0);
+  const cy = useMotionValue(0);
+  const idxRef = useRef(0);
+  const [idx, setIdx] = useState(0);
+  const [active, setActive] = useState(false);
+
+  // y exact sur la courbe pour une position x → le curseur glisse dessus
+  const sampleY = (xv: number): number | null => {
+    const path = pathRef.current; if (!path) return null;
+    const total = path.getTotalLength();
+    if (!total) return null;
+    let lo = 0, hi = total;
+    for (let k = 0; k < 22; k++) {
+      const mid = (lo + hi) / 2;
+      const pt = path.getPointAtLength(mid);
+      if (pt.x < xv) lo = mid; else hi = mid;
+    }
+    return path.getPointAtLength((lo + hi) / 2).y;
+  };
+  const nearest = (xv: number): number => {
+    const pts = geo?.mapped; if (!pts) return 0;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < pts.length; i++) { const dd = Math.abs(pts[i]!.x - xv); if (dd < bd) { bd = dd; best = i; } }
+    return best;
+  };
+
+  useMotionValueEvent(mx, 'change', (xv) => {
+    const y = sampleY(xv); if (y != null) cy.set(y);
+    const i = nearest(xv);
+    if (i !== idxRef.current) { idxRef.current = i; setIdx(i); }
+  });
+
+  // Position initiale = dernier match ; resync quand la géométrie change
+  useEffect(() => {
+    const pts = geo?.mapped; if (!pts || pts.length < 2) return;
+    const last = pts.length - 1;
+    idxRef.current = last; setIdx(last);
+    const lx = pts[last]!.x;
+    mx.set(lx);
+    const id = requestAnimationFrame(() => { const y = sampleY(lx); cy.set(y ?? pts[last]!.y); });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geo]);
+
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const sx = W / rect.width;
+    let xv = (e.clientX - rect.left) * sx;
+    xv = Math.max(padX, Math.min(W - padX, xv));
+    mx.set(xv);
+    if (!active) setActive(true);
+  };
+
+  // Tooltip : suit le curseur, recentré et borné dans la largeur
+  const ttHalf = Math.min(104, W / 2);
+  const ttX = useTransform(mx, (v) => Math.min(Math.max(v, ttHalf), W - ttHalf));
+
+  if (points.length < 2 || !geo) {
     return (
       <div className="flex items-center justify-center text-xs text-muted-2 italic" style={{ height: H }}>
         {t('profil.notEnoughMatches')}
@@ -190,174 +295,110 @@ export function EloChart({
     );
   }
 
-  const eloValues = points.map((p) => p.elo);
-  const minElo = Math.min(...eloValues);
-  const maxElo = Math.max(...eloValues);
-  const range = maxElo - minElo || 80;
-  const padV = range * 0.25;
-  const yMin = minElo - padV; const yMax = maxElo + padV;
-
-  const yOf = (elo: number) => padTop + (1 - (elo - yMin) / (yMax - yMin)) * plotH;
-
-  const mapped = points.map((p, i) => ({
-    x: padL + (i / Math.max(points.length - 1, 1)) * (W - padL - padR),
-    y: yOf(p.elo),
-    ...p,
-  }));
-
-  const isUp = (points.at(-1)?.elo ?? 0) >= (points[0]?.elo ?? 0);
-  const lineColor = isUp ? GOLD : RED;
-  const gradId = `eg-${myLogin.replace(/\W/g, '')}-${game}`;
-
-  const linePath = buildCubicPath(mapped);
-  const areaPath = linePath + ` L ${mapped.at(-1)!.x} ${H - padBot} L ${padL} ${H - padBot} Z`;
-
-  // Curseur actif (index du point le plus proche de la souris)
-  const hoveredPt = hovered !== null ? mapped[hovered] : null;
-
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const relX = e.clientX - rect.left;
-    mouseX.set(relX);
-    // Trouve le point le plus proche
-    let best = 0; let bestDist = Infinity;
-    mapped.forEach((p, i) => { const d = Math.abs(p.x - relX); if (d < bestDist) { bestDist = d; best = i; } });
-    setHovered(best);
-  };
-
-  const dotCx = useTransform(springX, () => hoveredPt?.x ?? -100);
+  const cur = geo.mapped[idx] ?? geo.mapped.at(-1)!;
+  const won = (cur.scoreFor ?? 0) > (cur.scoreAgainst ?? 0);
+  const below = cur.y < H * 0.42; // bascule le tooltip sous le point quand il est trop haut
 
   return (
     <div ref={containerRef} className="relative w-full select-none" style={{ height: H }}>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`} width="100%" height={H}
         className="overflow-visible"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => { setHovered(null); mouseX.set(-1); }}
+        style={{ touchAction: 'none' }}
+        onPointerMove={onMove}
+        onPointerDown={onMove}
+        onPointerLeave={() => setActive(false)}
       >
         <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineColor} stopOpacity="0.22" />
-            <stop offset="85%" stopColor={lineColor} stopOpacity="0" />
+          <linearGradient id={`a-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={lineColor} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
+          <filter id={`glow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
         </defs>
 
-        {/* Gradient fill */}
-        <motion.path
-          d={areaPath}
-          fill={`url(#${gradId})`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-        />
+        {/* Grille discrète */}
+        {[0, 0.5, 1].map((g) => (
+          <line key={g} x1={padX} x2={W - padX} y1={padTop + g * plotH} y2={padTop + g * plotH}
+            stroke="#fff" strokeOpacity="0.06" strokeWidth="1" />
+        ))}
 
-        {/* Main line — draw animation */}
-        <motion.path
-          d={linePath}
-          fill="none"
-          stroke={lineColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: 1 }}
-          transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-        />
+        {/* Aire dégradée */}
+        <motion.path d={geo.areaPath} fill={`url(#a-${uid})`}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }} />
 
-        {/* ELO actuel (dernier point) */}
-        {(() => {
-          const last = mapped.at(-1)!;
-          return (
-            <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>
-              <circle cx={last.x} cy={last.y} r={5} fill={lineColor} stroke="rgba(8,10,14,0.9)" strokeWidth="2" />
-              <circle cx={last.x} cy={last.y} r={9} fill={lineColor} fillOpacity="0.12" />
-            </motion.g>
-          );
-        })()}
+        {/* Ligne — draw animation */}
+        <motion.path ref={pathRef} d={geo.linePath} fill="none" stroke={lineColor} strokeWidth="3"
+          strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${uid})`}
+          initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }} />
 
-        {/* Cursor vertical line */}
-        {hoveredPt && (
-          <line
-            x1={hoveredPt.x} y1={padTop}
-            x2={hoveredPt.x} y2={H - padBot}
-            stroke={lineColor}
-            strokeWidth="1"
-            strokeOpacity="0.35"
-            strokeDasharray="3 3"
-          />
-        )}
+        {/* Repère vertical qui suit librement le curseur */}
+        <motion.line x1={mx} x2={mx} y1={padTop} y2={baseY}
+          stroke={lineColor} strokeOpacity="0.22" strokeWidth="1.5" strokeDasharray="4 5"
+          style={{ opacity: active ? 1 : 0 }} />
 
-        {/* Cursor dot (spring-animated) */}
-        {hoveredPt && (
-          <motion.circle
-            cx={dotCx}
-            cy={hoveredPt.y}
-            r="5"
-            fill={hoveredPt.delta >= 0 ? GOLD : RED}
-            stroke="rgba(8,10,14,0.85)"
-            strokeWidth="2"
-          />
-        )}
+        {/* Points-matchs : le plus proche est mis en avant, sur place */}
+        {geo.mapped.map((p, i) => <GraphPoint key={i} p={p} color={lineColor} active={idx === i} />)}
 
-        {/* Zone de survol transparente (pleine largeur) */}
-        <rect x={padL} y={padTop} width={W - padL - padR} height={plotH}
-          fill="transparent" style={{ cursor: 'crosshair' }} />
+        {/* Curseur libre qui glisse sur la courbe */}
+        <motion.circle cx={mx} cy={cy} r="7" fill={lineColor} fillOpacity="0.18" style={{ opacity: active ? 1 : 0 }} />
+        <motion.circle cx={mx} cy={cy} r="4" fill="#0b1220" stroke={lineColor} strokeWidth="2.5" style={{ opacity: active ? 1 : 0 }} />
       </svg>
 
-      {/* Tooltip premium glass — adversaire, ELO à roulettes, résultat */}
-      {hoveredPt && !hoveredPt.isStart && (() => {
-        const won = (hoveredPt.scoreFor ?? 0) > (hoveredPt.scoreAgainst ?? 0);
-        const opp = hoveredPt.opponent ?? '?';
-        return (
-          <div
-            className="absolute z-20 pointer-events-none -translate-x-1/2 rounded-xl overflow-hidden"
-            style={{
-              left: Math.min(Math.max(hoveredPt.x, 104), W - 104),
-              top: Math.max(hoveredPt.y - 104, 0),
-              background: 'linear-gradient(145deg, rgba(24,20,12,0.97) 0%, rgba(14,12,7,0.99) 100%)',
-              border: `1px solid ${won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)'}`,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,215,120,0.06)',
-              backdropFilter: 'blur(20px)',
-              minWidth: 196,
-            }}
-          >
-            {/* Barre de couleur en haut */}
+      {/* Tooltip détaillé du match, suit le point actif */}
+      <motion.div className="pointer-events-none absolute left-0 top-0 z-20"
+        style={{ x: ttX, y: cy }} animate={{ opacity: active ? 1 : 0.92 }}>
+        <div style={{ transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))' }}>
+          {below && <div className="mx-auto mb-[-5px] h-2.5 w-2.5 rotate-45 border-l border-t border-white/10 bg-slate-900/95" />}
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur"
+            style={{ minWidth: 196, border: `1px solid ${won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)'}` }}>
             <div className="h-[2px]" style={{ background: won ? WIN : LOSS }} />
-            <div className="px-3 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="rounded-full p-[1.5px]" style={{ background: won ? WIN : LOSS }}>
-                  <Avatar login={opp} imageUrl={imageByLogin.get(opp) ?? null} size="sm" />
-                </div>
-                <div className="min-w-0 leading-tight">
-                  <div className="text-[8px] font-bold uppercase tracking-wider text-muted">vs</div>
-                  <div className="max-w-[84px] truncate text-xs font-extrabold text-text-strong">{opp}</div>
-                </div>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <TrendArrow up={won} />
-                  <div className="text-right leading-tight">
-                    <div className="font-display text-base font-black tabular-nums" style={{ color: won ? WIN : LOSS }}>
-                      <RollingNumber value={hoveredPt.elo} up={won} />
+            {cur.isStart ? (
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">Départ</span>
+                <span className="font-display text-base font-black tabular-nums text-white">{Math.round(cur.elo)}</span>
+              </div>
+            ) : (
+              <div className="px-3 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-full p-[1.5px]" style={{ background: won ? WIN : LOSS }}>
+                    <Avatar login={cur.opponent ?? '?'} imageUrl={imageByLogin.get(cur.opponent ?? '') ?? null} size="sm" />
+                  </div>
+                  <div className="min-w-0 leading-tight">
+                    <div className="text-[8px] font-bold uppercase tracking-wider text-white/40">vs</div>
+                    <div className="max-w-[84px] truncate text-xs font-extrabold text-white">{cur.opponent ?? '?'}</div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <TrendArrow up={won} />
+                    <div className="text-right leading-tight">
+                      <div className="font-display text-base font-black tabular-nums" style={{ color: won ? WIN : LOSS }}>
+                        <RollingNumber value={cur.elo} up={won} />
+                      </div>
+                      <div className="text-[8px] font-bold uppercase tracking-wider text-white/40">elo</div>
                     </div>
-                    <div className="text-[8px] font-bold uppercase tracking-wider text-muted">elo</div>
                   </div>
                 </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5">
-                <span className="font-mono text-[11px] font-bold tabular-nums text-muted-2">
-                  {hoveredPt.scoreFor}–{hoveredPt.scoreAgainst}
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold" style={{ color: won ? WIN : LOSS }}>{won ? 'Victoire' : 'Défaite'}</span>
-                  <span className={`font-mono text-[10px] font-extrabold tabular-nums ${hoveredPt.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
-                    {hoveredPt.delta >= 0 ? '+' : ''}{hoveredPt.delta}
+                <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5">
+                  <span className="font-mono text-[11px] font-bold tabular-nums text-white/70">{cur.scoreFor}–{cur.scoreAgainst}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold" style={{ color: won ? WIN : LOSS }}>{won ? 'Victoire' : 'Défaite'}</span>
+                    <span className={`font-mono text-[10px] font-extrabold tabular-nums ${cur.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
+                      {cur.delta >= 0 ? '+' : ''}{cur.delta}
+                    </span>
                   </span>
-                </span>
+                </div>
+                <div className="mt-1 font-mono text-[8px] text-white/40">{fmtDate(cur.date)}</div>
               </div>
-              <div className="mt-1 font-mono text-[8px] text-muted opacity-60">{fmtDate(hoveredPt.date)}</div>
-            </div>
+            )}
           </div>
-        );
-      })()}
+          {!below && <div className="mx-auto mt-[-5px] h-2.5 w-2.5 rotate-45 border-b border-r border-white/10 bg-slate-900/95" />}
+        </div>
+      </motion.div>
     </div>
   );
 }
