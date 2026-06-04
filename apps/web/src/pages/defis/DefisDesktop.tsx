@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Swords, X, ChevronDown, Clock, Zap } from 'lucide-react';
+import { Plus, Swords, X, ChevronDown, Clock, Zap, Users } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -16,6 +16,7 @@ import {
   type LeaderboardEntry,
   type MatchResultInput,
   type PendingMatch,
+  type PendingFfa,
 } from '../../lib/api';
 import { useMemo } from 'react';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -34,10 +35,14 @@ import {
   LOSER_SCORE_MAX,
 } from './shared/DeclareGameFlow';
 import { ChallengeFlow } from './shared/ChallengeFlow';
+import { Declare2v2GameFlow } from './shared/Declare2v2GameFlow';
+import { Challenge2v2Flow } from './shared/Challenge2v2Flow';
+import { Mode1v1Toggle, type DuelMode } from './shared/Mode1v1Toggle';
+import { DeclareFfaGameFlow } from './shared/DeclareFfaGameFlow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Kind = 'incoming' | 'outgoing' | 'accepted';
-type OpenCard = 'declare' | 'challenge' | null;
+type OpenCard = 'declare' | 'challenge' | 'ffa' | null;
 const NOOP = () => {};
 
 // ─── Badges de discipline ─────────────────────────────────────────────────────
@@ -71,12 +76,17 @@ export function DefisDesktop() {
     accepted,
     pendingToConfirm,
     pendingWaiting,
+    ffaToConfirm,
+    ffaWaiting,
     others,
     recentOpponents,
     opponentCounts,
     refresh,
     handleAction,
     cancelDeclaration,
+    confirmFfa,
+    contestFfa,
+    cancelFfaDeclaration,
   } = useDefisLogic();
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
@@ -113,6 +123,8 @@ export function DefisDesktop() {
   const hasActivity =
     pendingToConfirm.length > 0 ||
     pendingWaiting.length > 0 ||
+    ffaToConfirm.length > 0 ||
+    ffaWaiting.length > 0 ||
     incoming.length > 0 ||
     accepted.length > 0 ||
     outgoing.length > 0;
@@ -151,6 +163,8 @@ export function DefisDesktop() {
         recentOpponents={recentOpponents}
         opponentCounts={opponentCounts}
         myLogin={myLogin}
+        myElo={gameStats?.elo}
+        isSmash={game === 'smash'}
         locations={locations}
         onOpen={(c) => {
           if (c === 'challenge') setPresetOpp(null);
@@ -165,6 +179,8 @@ export function DefisDesktop() {
         <ActivityStream
           pendingToConfirm={pendingToConfirm}
           pendingWaiting={pendingWaiting}
+          ffaToConfirm={ffaToConfirm}
+          ffaWaiting={ffaWaiting}
           incoming={incoming}
           accepted={accepted}
           outgoing={outgoing}
@@ -173,6 +189,9 @@ export function DefisDesktop() {
           refresh={refresh}
           handleAction={handleAction}
           cancelDeclaration={cancelDeclaration}
+          confirmFfa={confirmFfa}
+          contestFfa={contestFfa}
+          cancelFfaDeclaration={cancelFfaDeclaration}
         />
       )}
 
@@ -200,6 +219,9 @@ interface HeroCTAsProps {
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
   myLogin: string | undefined;
+  myElo?: number;
+  /** Le mode FFA n'est proposé qu'en Smash. */
+  isSmash: boolean;
   locations: Map<string, string>;
   onOpen: (card: Exclude<OpenCard, null>) => void;
   onClose: () => void;
@@ -208,13 +230,19 @@ interface HeroCTAsProps {
 
 function HeroCTAs({
   openCard, presetOpp, others, recentOpponents, opponentCounts,
-  myLogin, locations, onOpen, onClose, onDone,
+  myLogin, myElo, isSmash, locations, onOpen, onClose, onDone,
 }: HeroCTAsProps) {
+  const { game } = useGameMode();
+  const [declareMode, setDeclareMode] = useState<DuelMode>('1v1');
+  const [challengeMode, setChallengeMode] = useState<DuelMode>('1v1');
   const submitAndClose = async () => { await onDone(); onClose(); };
 
   return (
     <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-      <AnimatePresence mode="popLayout">
+      {/* initial={false} : les cartes déjà présentes à l'arrivée s'affichent
+          instantanément (sinon leur animation d'entrée rejoue à chaque visite de
+          la page → clignotement). L'ouverture/fermeture reste animée. */}
+      <AnimatePresence mode="popLayout" initial={false}>
         {(openCard === null || openCard === 'declare') && (
           <HeroCTACard
             key="declare"
@@ -223,15 +251,29 @@ function HeroCTAs({
             onOpen={() => onOpen('declare')}
             onClose={onClose}
           >
-            <DeclareGameFlow
-              variant="desktop"
-              others={others}
-              recentOpponents={recentOpponents}
-              opponentCounts={opponentCounts}
-              myLogin={myLogin}
-              locations={locations}
-              onSubmitted={submitAndClose}
-            />
+            <Mode1v1Toggle mode={declareMode} onChange={setDeclareMode} game={game} className="mb-4" />
+            {declareMode === '2v2' && game === 'babyfoot' ? (
+              <Declare2v2GameFlow
+                variant="desktop"
+                others={others}
+                recentOpponents={recentOpponents}
+                opponentCounts={opponentCounts}
+                myLogin={myLogin}
+                myElo={myElo}
+                locations={locations}
+                onSubmitted={submitAndClose}
+              />
+            ) : (
+              <DeclareGameFlow
+                variant="desktop"
+                others={others}
+                recentOpponents={recentOpponents}
+                opponentCounts={opponentCounts}
+                myLogin={myLogin}
+                locations={locations}
+                onSubmitted={submitAndClose}
+              />
+            )}
           </HeroCTACard>
         )}
 
@@ -243,15 +285,53 @@ function HeroCTAs({
             onOpen={() => onOpen('challenge')}
             onClose={onClose}
           >
-            <ChallengeFlow
-              key={presetOpp?.login ?? 'free'}
+            {/* Pas de toggle si un adversaire est pré-imposé (défi 1v1 ciblé). */}
+            {!presetOpp && (
+              <Mode1v1Toggle mode={challengeMode} onChange={setChallengeMode} game={game} className="mb-4" />
+            )}
+            {challengeMode === '2v2' && game === 'babyfoot' && !presetOpp ? (
+              <Challenge2v2Flow
+                variant="desktop"
+                others={others}
+                recentOpponents={recentOpponents}
+                opponentCounts={opponentCounts}
+                myLogin={myLogin}
+                locations={locations}
+                onSubmitted={submitAndClose}
+              />
+            ) : (
+              <ChallengeFlow
+                key={presetOpp?.login ?? 'free'}
+                variant="desktop"
+                others={others}
+                recentOpponents={recentOpponents}
+                opponentCounts={opponentCounts}
+                myLogin={myLogin}
+                locations={locations}
+                presetOpponent={presetOpp}
+                onSubmitted={submitAndClose}
+              />
+            )}
+          </HeroCTACard>
+        )}
+
+        {/* FFA — uniquement en Smash. */}
+        {isSmash && (openCard === null || openCard === 'ffa') && (
+          <HeroCTACard
+            key="ffa"
+            kind="ffa"
+            expanded={openCard === 'ffa'}
+            onOpen={() => onOpen('ffa')}
+            onClose={onClose}
+          >
+            <DeclareFfaGameFlow
               variant="desktop"
               others={others}
               recentOpponents={recentOpponents}
               opponentCounts={opponentCounts}
               myLogin={myLogin}
+              myElo={myElo}
               locations={locations}
-              presetOpponent={presetOpp}
               onSubmitted={submitAndClose}
             />
           </HeroCTACard>
@@ -281,6 +361,16 @@ const CTA_META = {
     glow: '0 0 36px rgba(var(--accent-gold),0.20)',
     iconBg: 'bg-accent/20',
     accent: 'text-accent',
+  },
+  ffa: {
+    Icon: Users,
+    labelKey: 'ffa.cta.title',
+    subKey: 'ffa.cta.sub',
+    gradient: 'from-red/20 via-red/6 to-transparent',
+    border: 'border-red/50 hover:border-red',
+    glow: '0 0 36px rgba(255,83,102,0.20)',
+    iconBg: 'bg-red/20',
+    accent: 'text-red',
   },
 } as const;
 
@@ -390,6 +480,8 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
 interface ActivityStreamProps {
   pendingToConfirm: PendingMatch[];
   pendingWaiting: PendingMatch[];
+  ffaToConfirm: PendingFfa[];
+  ffaWaiting: PendingFfa[];
   incoming: Challenge[];
   accepted: Challenge[];
   outgoing: Challenge[];
@@ -398,14 +490,18 @@ interface ActivityStreamProps {
   refresh: () => Promise<void>;
   handleAction: (id: string, action: 'accept' | 'decline') => Promise<void>;
   cancelDeclaration: (match: PendingMatch) => void;
+  confirmFfa: (id: string, position: number) => Promise<void>;
+  contestFfa: (id: string, claimedPosition: number, message?: string) => Promise<void>;
+  cancelFfaDeclaration: (id: string) => Promise<void>;
 }
 
 function ActivityStream({
-  pendingToConfirm, pendingWaiting, incoming, accepted, outgoing,
+  pendingToConfirm, pendingWaiting, ffaToConfirm, ffaWaiting, incoming, accepted, outgoing,
   myLogin, lang, refresh, handleAction, cancelDeclaration,
+  confirmFfa, contestFfa, cancelFfaDeclaration,
 }: ActivityStreamProps) {
   const t = useT();
-  const urgentCount = pendingToConfirm.length + incoming.length;
+  const urgentCount = pendingToConfirm.length + ffaToConfirm.length + incoming.length;
   const [open, setOpen] = useState(true);
 
   return (
@@ -436,6 +532,13 @@ function ActivityStream({
             <ActivityGroup label={t('defis.toConfirm')} badge={pendingToConfirm.length} urgent>
               {pendingToConfirm.map((p) => (
                 <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
+              ))}
+            </ActivityGroup>
+          )}
+          {ffaToConfirm.length > 0 && (
+            <ActivityGroup label={t('ffa.toConfirm')} badge={ffaToConfirm.length} urgent>
+              {ffaToConfirm.map((f) => (
+                <FfaConfirmRow key={f.id} ffa={f} myLogin={myLogin} onConfirm={confirmFfa} onContest={contestFfa} />
               ))}
             </ActivityGroup>
           )}
@@ -470,6 +573,13 @@ function ActivityStream({
             <ActivityGroup label={t('defis.waitingConfirm')} badge={pendingWaiting.length}>
               {pendingWaiting.map((p) => (
                 <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
+              ))}
+            </ActivityGroup>
+          )}
+          {ffaWaiting.length > 0 && (
+            <ActivityGroup label={t('ffa.waiting')} badge={ffaWaiting.length}>
+              {ffaWaiting.map((f) => (
+                <FfaWaitRow key={f.id} ffa={f} myLogin={myLogin} onCancel={cancelFfaDeclaration} />
               ))}
             </ActivityGroup>
           )}
@@ -719,6 +829,161 @@ function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: ()
         title={t('defis.cancel')} aria-label={t('defis.cancel')}>
         <X className="w-4 h-4" strokeWidth={2.5} />
       </button>
+    </div>
+  );
+}
+
+// ─── FFA Smash : lignes d'activité ────────────────────────────────────────────
+
+/** Récapitulatif compact du classement proposé : « 1.@a 2.@b … » (ma place en or). */
+function FfaRankingInline({ ffa, myLogin }: { ffa: PendingFfa; myLogin: string | undefined }) {
+  const ordered = [...ffa.participants].sort((a, b) => a.position - b.position);
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+      {ordered.map((p) => (
+        <span key={p.login} className={p.login === myLogin ? 'text-gold font-extrabold' : 'text-muted-2'}>
+          <span className="font-mono">{p.position}.</span>
+          {p.login}
+          {p.confirmed && <span className="text-teal ml-0.5">✓</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function FfaConfirmRow({
+  ffa, myLogin, onConfirm, onContest,
+}: {
+  ffa: PendingFfa;
+  myLogin: string | undefined;
+  onConfirm: (id: string, position: number) => Promise<void>;
+  onContest: (id: string, claimedPosition: number, message?: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [contesting, setContesting] = useState(false);
+  const mine = ffa.participants.find((p) => p.login === myLogin);
+  const confirmedCount = ffa.participants.filter((p) => p.confirmed).length;
+  const total = ffa.participants.length;
+  if (!mine) return null;
+
+  return (
+    <>
+      <div className="relative rounded-xl p-3 border border-gold/40 bg-gold/[0.05] animate-pop flex flex-wrap items-center gap-2.5">
+        <Users className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} />
+        <PlayerLink login={ffa.declarerLogin} className="font-semibold text-gold text-sm">
+          {ffa.declarerLogin}
+        </PlayerLink>
+        <span className="text-muted-2 text-sm">{t('ffa.placedYou')}</span>
+        <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
+          {t('ffa.positionShort')}{mine.position}
+        </span>
+        <GameTag game="smash" />
+        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded font-mono">{confirmedCount}/{total}</span>
+        <FfaRankingInline ffa={ffa} myLogin={myLogin} />
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { await onConfirm(ffa.id, mine.position); } finally { setBusy(false); } }}>
+            {t('ffa.confirmPlace')}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
+            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
+            {t('ffa.contest')}
+          </Button>
+        </div>
+      </div>
+      {contesting && (
+        <FfaContestModal
+          ffa={ffa}
+          myPosition={mine.position}
+          onSubmit={async (claimed, msg) => { setContesting(false); setBusy(true); try { await onContest(ffa.id, claimed, msg); } finally { setBusy(false); } }}
+          onClose={() => setContesting(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function FfaWaitRow({
+  ffa, myLogin, onCancel,
+}: {
+  ffa: PendingFfa;
+  myLogin: string | undefined;
+  onCancel: (id: string) => Promise<void>;
+}) {
+  const t = useT();
+  const confirmedCount = ffa.participants.filter((p) => p.confirmed).length;
+  const total = ffa.participants.length;
+  const isDeclarer = ffa.declarerLogin === myLogin;
+  return (
+    <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
+      <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
+      <span className="text-muted-2">{t('ffa.waitingFor')}</span>
+      <span className="font-mono font-extrabold text-text-strong">{confirmedCount}/{total}</span>
+      <GameTag game="smash" />
+      <FfaRankingInline ffa={ffa} myLogin={myLogin} />
+      <span className="ml-auto text-[10px] text-muted italic">{t('defis.waitingConfirmEllipsis')}</span>
+      {isDeclarer && (
+        <button type="button" onClick={() => onCancel(ffa.id)}
+          className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
+          title={t('defis.cancel')} aria-label={t('defis.cancel')}>
+          <X className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Modale de contestation FFA : le joueur revendique sa VRAIE position (annule le FFA). */
+function FfaContestModal({
+  ffa, myPosition, onSubmit, onClose,
+}: {
+  ffa: PendingFfa;
+  myPosition: number;
+  onSubmit: (claimedPosition: number, message?: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const total = ffa.participants.length;
+  const [claimed, setClaimed] = useState(myPosition);
+  const [message, setMessage] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-red/40 bg-bg-1 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-sm font-extrabold text-text-strong mb-1">{t('ffa.contest.title')}</div>
+        <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">{t('ffa.contest.sub')}</p>
+
+        <div className="text-[10px] uppercase tracking-wider font-bold text-muted mb-2">{t('ffa.contest.yourPlace')}</div>
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {Array.from({ length: total }, (_, i) => i + 1).map((pos) => (
+            <button
+              key={pos}
+              type="button"
+              onClick={() => setClaimed(pos)}
+              className={`w-9 h-9 rounded-lg font-mono font-extrabold text-sm transition-colors ${
+                claimed === pos ? 'bg-gold text-[#1a1100]' : 'bg-bg-2 text-muted-2 hover:bg-bg-2/70'
+              }`}
+            >
+              {pos}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          maxLength={500}
+          placeholder={t('ffa.contest.messagePlaceholder')}
+          className="w-full h-20 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs resize-none focus:border-red outline-none text-text-strong placeholder:text-muted mb-4"
+        />
+
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose} className="flex-1">{t('defis.confirm.keep')}</Button>
+          <Button size="sm" variant="danger" onClick={() => onSubmit(claimed, message.trim() || undefined)} className="flex-1">
+            {t('ffa.contest.submit')}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
