@@ -277,15 +277,17 @@ export function ProfilDesktop() {
         />
       </div>
 
-      {/* Persos favoris — une rangée par jeu de combat où je suis inscrit. */}
+      {/* Persos favoris — un gros rond logo par jeu de combat (clic = sélecteur). */}
       {fightingGames.length > 0 && (
-        <div className="mt-4 card-hud rounded-xl px-4 py-3 space-y-2">
-          <div className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-muted-2">
+        <div className="mt-4 card-hud rounded-xl px-4 py-3">
+          <div className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-muted-2 mb-2">
             {t('favorites.label')}
           </div>
-          {fightingGames.map((g) => (
-            <FavoriteCharsRow key={g} game={g} ids={favoritesForGame(u, g)} onEdit={() => setEditGame(g)} />
-          ))}
+          <div className="flex items-center gap-5">
+            {fightingGames.map((g) => (
+              <FavoriteCharsRow key={g} game={g} ids={favoritesForGame(u, g)} onEdit={() => setEditGame(g)} />
+            ))}
+          </div>
         </div>
       )}
 

@@ -354,20 +354,22 @@ export function ProfileHeroCard({
           </div>
         )}
 
-        {/* Persos favoris — sous les disciplines, une rangée par jeu de combat. */}
+        {/* Persos favoris — un gros rond logo par jeu de combat (clic = sélecteur). */}
         {fightingGames.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-white/[0.07] space-y-2">
-            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2">
+          <div className="mt-3 pt-3 border-t border-white/[0.07]">
+            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2">
               {t('favorites.label')}
             </div>
-            {fightingGames.map((g) => (
-              <FavoriteCharsRow
-                key={g}
-                game={g}
-                ids={favoritesForGame(user, g)}
-                onEdit={isMe ? () => setEditGame(g) : undefined}
-              />
-            ))}
+            <div className="flex items-center justify-center gap-5">
+              {fightingGames.map((g) => (
+                <FavoriteCharsRow
+                  key={g}
+                  game={g}
+                  ids={favoritesForGame(user, g)}
+                  onEdit={isMe ? () => setEditGame(g) : undefined}
+                />
+              ))}
+            </div>
           </div>
         )}
 
