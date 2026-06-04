@@ -28,8 +28,9 @@ ARG BUILD_DATE=unknown
 LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="frontend"
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 
-# FIX NGINX : Rediriger toutes les requêtes (SPA fallback) vers index.html
-RUN echo "server { listen 80; location / { root /usr/share/nginx/html; index index.html; try_files \$uri \$uri/ /index.html; } }" > /etc/nginx/conf.d/default.conf
+# Config nginx : SPA fallback + en-têtes de cache (assets hashés immuables 1 an,
+# images/polices 30 j, index.html / sw.js toujours revalidés). Cf. apps/web/nginx.conf.
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
