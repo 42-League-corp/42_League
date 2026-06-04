@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
+import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
+import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
+import { favoritesForGame, type FightingGame } from '../../../lib/chars';
 import { RankBadge } from '../../../components/RankBadge';
 import { Tooltip } from '../../../components/Tooltip';
 import { BadgesRow } from '../../../components/Badges';
@@ -11,6 +15,7 @@ import { pickRating } from '../../../lib/gameStats';
 import { gameColor, GAME_EMOJI, GAME_LOGO_SRC } from '../../../lib/gameVisuals';
 import { displayTitle } from '../../../lib/cosmeticTitles';
 import { TitlePicker } from '../../../components/TitlePicker';
+import { BannerPicker } from '../../../components/BannerPicker';
 import { useT } from '../../../lib/i18n';
 import type { MeResponse } from '../../../lib/api';
 import type { ProfilStats } from '../shared/useProfilLogic';
@@ -25,6 +30,10 @@ interface ProfileHeroCardProps {
   badges?: string[];
   /** true = profil perso → affiche le sélecteur de titre. Défaut true. */
   isMe?: boolean;
+  /** Cosmétiques équipés du joueur affiché (sinon ceux de `me` quand isMe). */
+  titleColor?: string | null;
+  equippedBadge?: MeResponse['equippedBadge'];
+  equippedBanner?: string | null;
 }
 
 /**
@@ -32,14 +41,32 @@ interface ProfileHeroCardProps {
  * affiche delta 7j, streak signée, % du top, longest streak.
  * Réutilisée telle quelle pour la fiche d'un autre joueur (`isMe=false`).
  */
-export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isMe = true }: ProfileHeroCardProps) {
-  const { me, leaderboard } = useLeagueData();
+export function ProfileHeroCard({
+  stats,
+  user: userProp,
+  badges: badgesProp,
+  isMe = true,
+  titleColor: titleColorProp,
+  equippedBadge: equippedBadgeProp,
+  equippedBanner: equippedBannerProp,
+}: ProfileHeroCardProps) {
+  const { me, leaderboard, refresh } = useLeagueData();
   const { game } = useGameMode();
   const t = useT();
   const reducedMotion = useReducedMotion();
+  const [editGame, setEditGame] = useState<FightingGame | null>(null);
+  // Cosmétiques équipés : props (autre joueur) sinon ceux de `me` (profil perso).
+  const titleColor = titleColorProp ?? (isMe ? me?.titleColor : null) ?? null;
+  const equippedBadge = equippedBadgeProp ?? (isMe ? me?.equippedBadge : null) ?? null;
+  const equippedBanner = equippedBannerProp ?? (isMe ? me?.equippedBanner : null) ?? null;
   const user = userProp ?? me?.user;
   const badges = badgesProp ?? me?.badges;
   if (!user) return null;
+
+  // Jeux de combat où ce joueur est inscrit → afficher ses persos favoris.
+  const fightingGames = (['smash', 'streetfighter'] as const).filter((g) =>
+    (user.games ?? ['babyfoot']).includes(g),
+  );
   const titlesWon = pickRating(user, game).tournamentsWon;
 
   // Badges cross-jeux : toutes les disciplines où ce joueur est INSCRIT
@@ -53,9 +80,11 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
+  // Affiche prénom + nom (depuis l'intra) plutôt que le login (évite la
+  // répétition avec le @login juste en dessous). Fallback login si absent.
   const fullName =
-    [user.lastName, user.firstName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.lastName, myEntry?.firstName].filter(Boolean).join(' ').trim() ||
+    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
     user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
@@ -69,6 +98,7 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
   const onWinStreak = stats.currentStreak > 0;
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: -8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -82,6 +112,18 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
           'inset 0 1px 0 rgba(255, 215, 120, 0.18), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 36px -8px rgba(255, 201, 74, 0.22)',
       }}
     >
+      {/* Bannière équipée (boutique) = fond de la carte, par-dessus le dégradé.
+          Voile sombre pour garder la lisibilité du contenu. */}
+      {equippedBanner && (
+        <>
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{ backgroundImage: `url(${equippedBanner})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          />
+          <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/45" />
+        </>
+      )}
       {/* Tubes laiton décoratifs */}
       <div className="absolute top-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
       <div className="absolute bottom-0 left-3 right-3 h-[2px] brass-pipe rounded-full pointer-events-none" />
@@ -108,25 +150,23 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
       />
 
       <div className="relative z-10 px-5 pt-5 pb-5">
-        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
-        {displayTitle(user.login, user.title) && (
-          <div className="flex justify-center mb-1">
-            <span className="inline-flex items-center gap-1.5 max-w-[90%]">
-              <span className="text-gold/70 text-base leading-none">❝</span>
-              <span className="text-gold italic text-base font-bold tracking-wide truncate">
-                {displayTitle(user.login, user.title)}
-              </span>
-              <span className="text-gold/70 text-base leading-none">❞</span>
+        {/* Titre équipé — bannière dorée centrée en HAUT de la carte. Par défaut
+            « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (sur SON
+            profil) est une simple flèche à droite. */}
+        <div className="relative flex items-center justify-center mb-4">
+          <span
+            className="inline-flex items-center gap-1.5 max-w-[80%]"
+            style={titleColor ? { color: titleColor } : undefined}
+          >
+            <span className={`text-base leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❝</span>
+            <span className={`italic text-base font-bold tracking-wide truncate ${titleColor ? '' : 'text-gold'}`}>
+              {displayTitle(user.login, user.title, t('profil.title.tarnished'))}
             </span>
-          </div>
-        )}
-
-        {/* Sélecteur de titre — uniquement sur SON propre profil. */}
-        {isMe && (
-          <div className="flex justify-center mb-4">
-            <TitlePicker />
-          </div>
-        )}
+            <span className={`text-base leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❞</span>
+          </span>
+          {isMe && <TitlePicker className="absolute right-0" />}
+          {isMe && <BannerPicker className="absolute left-0" />}
+        </div>
 
         {/* Header row : avatar + identity à gauche, rank badge à droite */}
         <div className="flex items-start gap-4 mb-5">
@@ -152,9 +192,9 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
               <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
                 {fullName}
               </h2>
-              {badges && badges.length > 0 && (
+              {((badges && badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
-                  <BadgesRow codes={badges} size="md" />
+                  <BadgesRow codes={badges ?? []} extra={equippedBadge ? [equippedBadge] : []} size="md" />
                 </div>
               )}
             </div>
@@ -195,7 +235,7 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
               ELO
               <RankBadge elo={stats.elo} size="xs" />
             </div>
-            <div className="font-display text-[56px] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
+            <div className="font-display text-[clamp(2.75rem,13vw,3.5rem)] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
           </div>
@@ -235,6 +275,19 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
             icon={onWinStreak && streakAbs >= 3 ? <Flame className="w-3 h-3" strokeWidth={2.5} /> : undefined}
           />
         </div>
+
+        {/* Solde League Coin — sur SON profil. Bandeau lisible avec libellé. */}
+        {isMe && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-violet-500/10 border border-violet-400/25">
+            <img src="/league-coin.svg" alt="" className="w-5 h-5 shrink-0" />
+            <span className="text-[11px] uppercase tracking-[0.16em] font-extrabold text-violet-200/90">
+              League Coins
+            </span>
+            <span className="ml-auto font-display text-xl font-black tabular-nums text-violet-100">
+              {me?.coins ?? 0}
+            </span>
+          </div>
+        )}
 
         {/* Autres disciplines — section lisible, intégrée dans la carte héro */}
         {crossGameBadges.length > 0 && (
@@ -294,30 +347,68 @@ export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isM
           </div>
         )}
 
+        {/* Persos favoris — sous les disciplines, une rangée par jeu de combat. */}
+        {fightingGames.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-white/[0.07] space-y-2">
+            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2">
+              {t('favorites.label')}
+            </div>
+            {fightingGames.map((g) => (
+              <FavoriteCharsRow
+                key={g}
+                game={g}
+                ids={favoritesForGame(user, g)}
+                onEdit={isMe ? () => setEditGame(g) : undefined}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Footer stats */}
-        <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-3 gap-3 text-center">
-          <FooterStat label={t('profil.titlesWon')} value={titlesWon} tone="gold" />
-          <FooterStat
-            label={t('profil.bestStreak')}
-            value={stats.longestWinStreak}
-            suffix="W"
-            tooltip={
-              stats.longestWinStreak === 0
-                ? undefined
-                : stats.streakBrokenBy
-                  ? `${t('profil.streakBrokenBy')} @${stats.streakBrokenBy}`
-                  : t('profil.streakOngoing')
-            }
-          />
-          {topPercent > 0 && (
-            <FooterStat label={t('profil.fromTop')} value={`${topPercent}%`} tone="teal" />
-          )}
-          {topPercent === 0 && user.dodgeCount > 0 && (
-            <FooterStat label={t('profil.dodges')} value={user.dodgeCount} tone="red" />
-          )}
-        </div>
+        {/* Footer stats — le nombre de colonnes suit le nombre de stats réellement
+            affichées (2 ou 3) → reste centré quelle que soit la largeur (ex.
+            « best streak » centré même sans % du top ni dodges). */}
+        {(() => {
+          const footStats: React.ReactNode[] = [
+            <FooterStat key="titles" label={t('profil.titlesWon')} value={titlesWon} tone="gold" />,
+            <FooterStat
+              key="streak"
+              label={t('profil.bestStreak')}
+              value={stats.longestWinStreak}
+              suffix="W"
+              tooltip={
+                stats.longestWinStreak === 0
+                  ? undefined
+                  : stats.streakBrokenBy
+                    ? `${t('profil.streakBrokenBy')} @${stats.streakBrokenBy}`
+                    : t('profil.streakOngoing')
+              }
+            />,
+          ];
+          if (topPercent > 0)
+            footStats.push(<FooterStat key="top" label={t('profil.fromTop')} value={`${topPercent}%`} tone="teal" />);
+          else if (user.dodgeCount > 0)
+            footStats.push(<FooterStat key="dodge" label={t('profil.dodges')} value={user.dodgeCount} tone="red" />);
+          return (
+            <div
+              className="mt-4 pt-3 border-t border-border/40 grid gap-3 text-center"
+              style={{ gridTemplateColumns: `repeat(${footStats.length}, minmax(0, 1fr))` }}
+            >
+              {footStats}
+            </div>
+          );
+        })()}
       </div>
     </motion.div>
+    {isMe && editGame && (
+      <FavoriteCharsEditor
+        games={[editGame]}
+        initial={{ [editGame]: favoritesForGame(user, editGame) }}
+        onClose={() => setEditGame(null)}
+        onSaved={refresh}
+      />
+    )}
+    </>
   );
 }
 
@@ -378,12 +469,18 @@ function FooterStat({ label, value, suffix, tone = 'default', tooltip }: FooterS
       <div className="text-[9px] text-muted uppercase tracking-wider font-bold">{label}</div>
     </>
   );
-  if (tooltip) {
-    return (
-      <Tooltip label={tooltip} className="cursor-help">
-        <span className="flex flex-col items-center">{body}</span>
-      </Tooltip>
-    );
-  }
-  return <div>{body}</div>;
+  // Même conteneur bloc (flex colonne centrée) dans les deux cas : sinon la stat
+  // avec tooltip (Tooltip = inline-flex) s'aligne sur la baseline et son chiffre
+  // se retrouve décalé verticalement par rapport aux <div> des autres stats.
+  return (
+    <div className="flex flex-col items-center justify-center">
+      {tooltip ? (
+        <Tooltip label={tooltip} className="cursor-help">
+          <span className="flex flex-col items-center">{body}</span>
+        </Tooltip>
+      ) : (
+        body
+      )}
+    </div>
+  );
 }
