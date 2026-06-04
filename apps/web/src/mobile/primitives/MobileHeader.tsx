@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Shield, Crosshair, Settings } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { NotificationBell } from '../../components/NotificationBell';
+import { TesterSwitchMobileIcon } from '../../components/TesterSwitch';
 import { useAuth } from '../../hooks/useAuth';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useOpsStatus } from '../../hooks/useOpsStatus';
@@ -103,6 +104,9 @@ export function MobileHeader() {
 
         {/* Les games à confirmer ne s'affichent plus ici : elles vivent dans la
             section Défis (badge sur l'onglet) + la bannière popup. */}
+
+        {/* Tester en mode user — petite icône à côté de Réglages (staging + admins) */}
+        <TesterSwitchMobileIcon />
 
         {/* Réglages — rouage, à gauche des notifs (comme la version web) */}
         <NavLink

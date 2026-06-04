@@ -233,9 +233,9 @@ export function ProfilDesktop() {
             </div>
           </div>
 
-          {/* Bloc ELO mis en valeur — libellé "ELO" au-dessus du nombre, calé à gauche. */}
-          <div className="text-left flex-shrink-0 pl-2">
-            <div className="ml-1 mb-1 flex items-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
+          {/* Bloc ELO mis en valeur — libellé "ELO" centré au-dessus du nombre. */}
+          <div className="text-center flex-shrink-0 pl-2">
+            <div className="mb-1 flex items-center justify-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
               ELO
               <RankBadge elo={stats.elo} size="xs" asLink />
             </div>

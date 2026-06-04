@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { UserPlus } from 'lucide-react';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
+import { useViewport } from '../hooks/useViewport';
 import { api } from '../lib/api';
 import { IS_STAGING } from '../lib/config';
 import { getImpersonatorLogin, startImpersonation, stopImpersonation } from '../lib/storage';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bouton flottant « Tester en mode user » — STAGING + admins UNIQUEMENT.
+// « Tester en mode user » — STAGING + admins UNIQUEMENT.
 //
 // Permet à un admin/superadmin de basculer sur le compte générique `tester`
 // (rôle USER) pour vivre l'expérience d'un joueur lambda, puis de revenir à son
@@ -16,8 +17,16 @@ import { getImpersonatorLogin, startImpersonation, stopImpersonation } from '../
 //
 // Le serveur ne délivre QUE le token du compte `tester` dédié, jamais celui d'un
 // joueur réel (cf. POST /admin/impersonate-tester) — staging only, fail-secure.
+//
+// Présentation :
+//   - Desktop  → bouton flottant bas-gauche (<TesterSwitch />).
+//   - Mobile   → petite icône dans le header, à côté de Réglages
+//                (<TesterSwitchMobileIcon />). Le bouton flottant est masqué.
+//   - Retour d'impersonation → bannière flottante, quel que soit le viewport.
 // ─────────────────────────────────────────────────────────────────────────────
-export function TesterSwitch() {
+
+/** Logique partagée entre le bouton flottant (desktop) et l'icône (mobile). */
+export function useTesterSwitch() {
   const { me } = useLeagueData();
   const { show } = useFlash();
   const [busy, setBusy] = useState(false);
@@ -27,7 +36,7 @@ export function TesterSwitch() {
 
   const isAdmin = me?.role === 'ADMIN' || me?.role === 'SUPERADMIN';
 
-  async function handleSwitch() {
+  async function switchToTester() {
     setBusy(true);
     try {
       const { token, login } = await api.impersonateTester();
@@ -41,7 +50,7 @@ export function TesterSwitch() {
   }
 
   // Variante : bascule sur un compte tester FRAÎCHEMENT créé (onboarding à refaire).
-  async function handleFresh() {
+  async function switchToFresh() {
     setBusy(true);
     try {
       const { token, login } = await api.impersonateFreshTester();
@@ -53,17 +62,38 @@ export function TesterSwitch() {
     }
   }
 
-  function handleReturn() {
+  function returnToSelf() {
     if (stopImpersonation()) {
       window.location.assign('/');
     }
   }
 
+  return {
+    busy,
+    impersonator,
+    /** true ⇒ un admin sur staging peut basculer en mode tester. */
+    canSwitch: IS_STAGING && isAdmin,
+    switchToTester,
+    switchToFresh,
+    returnToSelf,
+  };
+}
+
+/**
+ * Bouton flottant bas-gauche (desktop) + bannière de retour (tous viewports).
+ * Sur mobile, la bascule vit dans le header (cf. <TesterSwitchMobileIcon />),
+ * donc le bouton flottant de bascule est masqué.
+ */
+export function TesterSwitch() {
+  const { isMobile } = useViewport();
+  const { busy, impersonator, canSwitch, switchToTester, switchToFresh, returnToSelf } =
+    useTesterSwitch();
+
   // Impersonation en cours → bannière de retour (visible quel que soit le rôle).
   if (impersonator) {
     return (
       <button
-        onClick={handleReturn}
+        onClick={returnToSelf}
         className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/60 bg-gold/15 glass-strong shadow-lg hover:bg-gold/25 transition-colors animate-pop"
         title={`Revenir au compte ${impersonator}`}
       >
@@ -80,13 +110,13 @@ export function TesterSwitch() {
     );
   }
 
-  // Sinon : bouton de bascule, réservé aux admins sur staging.
-  if (!IS_STAGING || !isAdmin) return null;
+  // Bouton de bascule : desktop uniquement (sur mobile il vit dans le header).
+  if (!canSwitch || isMobile) return null;
 
   return (
     <div className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2">
       <button
-        onClick={handleSwitch}
+        onClick={switchToTester}
         disabled={busy}
         className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
         title="Basculer sur le compte tester (mode utilisateur)"
@@ -98,7 +128,7 @@ export function TesterSwitch() {
       </button>
       {/* Petit rond : se connecter avec un NOUVEAU compte tester (fraîchement créé). */}
       <button
-        onClick={handleFresh}
+        onClick={switchToFresh}
         disabled={busy}
         className="flex items-center justify-center w-9 h-9 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
         title="Se connecter avec un nouveau compte tester (fraîchement créé)"
@@ -107,5 +137,29 @@ export function TesterSwitch() {
         <UserPlus className="w-4 h-4 text-teal" strokeWidth={2.5} />
       </button>
     </div>
+  );
+}
+
+/**
+ * Petite icône tester pour le header mobile, à placer à côté du rouage Réglages.
+ * Reprend le « petit bouton » du widget desktop : bascule sur un compte tester
+ * FRAÎCHEMENT créé (onboarding à refaire). N'apparaît que pour un admin sur
+ * staging hors impersonation.
+ */
+export function TesterSwitchMobileIcon() {
+  const { busy, impersonator, canSwitch, switchToFresh } = useTesterSwitch();
+
+  if (impersonator || !canSwitch) return null;
+
+  return (
+    <button
+      onClick={switchToFresh}
+      disabled={busy}
+      aria-label="Nouveau compte tester"
+      title="Se connecter avec un nouveau compte tester (fraîchement créé)"
+      className="relative flex items-center justify-center w-9 h-9 rounded-full text-teal active:scale-90 active:text-teal transition-transform tap-transparent disabled:opacity-50"
+    >
+      <UserPlus className="w-[18px] h-[18px]" strokeWidth={2.2} />
+    </button>
   );
 }

@@ -87,30 +87,32 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
     >
       {/* V / N / D badge */}
       <div
-        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-mono font-black text-sm ${
+        className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center font-mono font-black text-sm ${
           isDraw ? 'bg-gold/15 text-gold' : youWon ? 'bg-teal/15 text-teal' : 'bg-red/15 text-red'
         }`}
       >
         {isDraw ? t('lb.abbr.draw') : youWon ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted">vs</span>
-          <PlayerLink login={opp} className="min-w-0">
-            <Avatar login={opp} imageUrl={oppImg} size="xs" />
+      {/* Adversaire : avatar en ancre à gauche, puis nom + méta en colonne.
+          Tout le bloc est un seul lien (un seul tap-target, une seule hover-card). */}
+      <PlayerLink login={opp} className="flex-1 min-w-0 gap-2.5">
+        <Avatar login={opp} imageUrl={oppImg} size="sm" />
+        <div className="min-w-0 flex flex-col">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[11px] text-muted shrink-0">vs</span>
             <span className="text-sm font-bold text-text-strong truncate">{opp}</span>
-          </PlayerLink>
-          {isSmash && oppChar && <SmashCharIcon id={oppChar} size={18} className="shrink-0" />}
-          {isSf && oppChar && <SfCharIcon id={oppChar} size={18} className="shrink-0" />}
-          <GamePill game={match.game} />
+            {isSmash && oppChar && <SmashCharIcon id={oppChar} size={16} className="shrink-0" />}
+            {isSf && oppChar && <SfCharIcon id={oppChar} size={16} className="shrink-0" />}
+            <GamePill game={match.game} />
+          </div>
+          <div className="text-[10px] text-muted font-medium mt-0.5">
+            {date.short}
+            <span className="mx-1 opacity-40">·</span>
+            <span className="text-muted-2">{date.long}</span>
+          </div>
         </div>
-        <div className="text-[10px] text-muted font-medium">
-          {date.short}
-          <span className="mx-1 opacity-40">·</span>
-          <span className="text-muted-2">{date.long}</span>
-        </div>
-      </div>
+      </PlayerLink>
 
       {/* Score atomic — rendu par discipline */}
       <MatchScore

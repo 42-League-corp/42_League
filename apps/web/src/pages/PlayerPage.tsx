@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, UserPlus, UserCheck } from 'lucide-react';
 import { Panel } from '../components/Panel';
+import { Tooltip } from '../components/Tooltip';
 import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
 import { Palmares } from '../components/Palmares';
@@ -136,17 +137,19 @@ export function PlayerPage() {
               </>
             )}
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1"
-            onClick={() =>
-              navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
-            }
-          >
-            <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-            Head-to-Head
-          </Button>
+          <Tooltip label={t('h2h.tip')} side="bottom" wide className="flex-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() =>
+                navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
+              }
+            >
+              <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+              Head-to-Head
+            </Button>
+          </Tooltip>
           {onlineHost && <OnlineBadge host={onlineHost} />}
         </div>
       )}

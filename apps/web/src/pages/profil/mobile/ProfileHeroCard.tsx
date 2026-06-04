@@ -257,8 +257,8 @@ export function ProfileHeroCard({
 
         {/* ELO bloc */}
         <div className="flex items-end justify-between gap-4 mb-2 px-1">
-          <div>
-            <div className="ml-1.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
+          <div className="text-center">
+            <div className="mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center justify-center gap-1.5">
               ELO
               <RankBadge elo={stats.elo} size="xs" asLink />
             </div>

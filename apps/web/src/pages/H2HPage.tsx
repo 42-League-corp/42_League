@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Info } from 'lucide-react';
 import { Panel } from '../components/Panel';
+import { Tooltip } from '../components/Tooltip';
 import { Avatar } from '../components/Avatar';
 import { RankedBadge } from '../components/RankedBadge';
 import { PlayerLink } from '../components/PlayerLink';
@@ -105,34 +108,85 @@ export function H2HPage() {
 
   return (
     <Panel title={t('h2h.title')} sub={t('h2h.sub.direct')} accent="swords">
-      {/* Deux profils côte à côte */}
+      {/* Explication de la page + rappel au survol de l'icône info */}
+      <div className="mb-5 flex items-start gap-2 card-hud rounded-xl px-3.5 py-3 border-gold/15">
+        <Tooltip label={t('h2h.tip')} side="bottom" wide>
+          <span
+            className="mt-0.5 grid h-5 w-5 flex-shrink-0 place-items-center rounded-full border border-gold/40 text-gold cursor-help"
+            aria-label={t('h2h.what')}
+          >
+            <Info className="h-3 w-3" strokeWidth={2.5} />
+          </span>
+        </Tooltip>
+        <p className="text-[11px] sm:text-xs leading-snug text-muted-2">
+          <span className="font-bold uppercase tracking-wider text-gold/90">{t('h2h.what')}</span>{' '}
+          {t('h2h.intro')}
+        </p>
+      </div>
+
+      {/* Deux profils qui se font face — entrée « clash » : chaque carte glisse
+          depuis son bord et le « VS » s'abat au centre avec une onde de choc.
+          (Volontairement différent de l'overlay plein écran du matchmaking.) */}
       <div className="flex items-stretch gap-3 sm:gap-4">
-        <ProfileSide
-          login={a}
-          imageUrl={ea?.imageUrl ?? null}
-          elo={ea?.elo}
-          winRate={statsA.winRate}
-          wins={statsA.wins}
-          losses={statsA.losses}
-          align="left"
-        />
-        <div className="flex flex-col items-center justify-center px-1">
-          <span className="font-display text-2xl font-black text-gold leading-none">VS</span>
+        <motion.div
+          className="flex flex-1 min-w-0"
+          initial={{ x: -48, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 130, damping: 17, delay: 0.05 }}
+        >
+          <ProfileSide
+            login={a}
+            imageUrl={ea?.imageUrl ?? null}
+            elo={ea?.elo}
+            winRate={statsA.winRate}
+            wins={statsA.wins}
+            losses={statsA.losses}
+            align="left"
+          />
+        </motion.div>
+        <div className="relative flex flex-col items-center justify-center px-1">
+          {/* Onde de choc : un anneau qui jaillit une fois au moment de l'impact */}
+          <motion.span
+            className="pointer-events-none absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-gold/60"
+            initial={{ scale: 0.2, opacity: 0.7 }}
+            animate={{ scale: 2.6, opacity: 0 }}
+            transition={{ duration: 0.55, ease: 'easeOut', delay: 0.42 }}
+          />
+          <motion.span
+            className="font-display text-2xl font-black text-gold leading-none"
+            initial={{ scale: 2.4, opacity: 0, rotate: -8 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 600, damping: 22, delay: 0.4 }}
+          >
+            VS
+          </motion.span>
           {data && data.n > 0 && (
-            <span className="mt-1 font-mono text-lg font-extrabold tabular-nums text-text-strong">
+            <motion.span
+              className="mt-1 font-mono text-lg font-extrabold tabular-nums text-text-strong"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.62 }}
+            >
               {data.winsA}<span className="text-muted-2">–</span>{data.winsB}
-            </span>
+            </motion.span>
           )}
         </div>
-        <ProfileSide
-          login={b}
-          imageUrl={eb?.imageUrl ?? null}
-          elo={eb?.elo}
-          winRate={statsB.winRate}
-          wins={statsB.wins}
-          losses={statsB.losses}
-          align="right"
-        />
+        <motion.div
+          className="flex flex-1 min-w-0"
+          initial={{ x: 48, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 130, damping: 17, delay: 0.05 }}
+        >
+          <ProfileSide
+            login={b}
+            imageUrl={eb?.imageUrl ?? null}
+            elo={eb?.elo}
+            winRate={statsB.winRate}
+            wins={statsB.wins}
+            losses={statsB.losses}
+            align="right"
+          />
+        </motion.div>
       </div>
 
       {/* Stats H2H */}

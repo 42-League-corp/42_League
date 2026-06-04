@@ -69,6 +69,9 @@ export const dict: Record<Lang, Dict> = {
     'h2h.loss': 'Défaite',
     'h2h.draw': 'Nulle',
     'h2h.back': '← Retour au classement',
+    'h2h.what': 'C\'est quoi un Head-to-Head ?',
+    'h2h.tip': 'Le face-à-face entre deux joueurs : uniquement leurs duels classés l\'un contre l\'autre, pas leurs stats globales.',
+    'h2h.intro': 'Cette page isole vos confrontations directes en match classé : qui mène le bilan, combien d\'ELO a changé de camp, le score moyen et l\'historique de vos derniers duels — peu importe votre niveau respectif ailleurs.',
 
     // ─── Fiche joueur ──────────────────────────────────────────────────────
     'player.defaultName': 'Joueur',
@@ -279,6 +282,9 @@ export const dict: Record<Lang, Dict> = {
     'h2h.loss': 'Loss',
     'h2h.draw': 'Draw',
     'h2h.back': '← Back to leaderboard',
+    'h2h.what': 'What is a Head-to-Head?',
+    'h2h.tip': 'The face-off between two players: only their ranked duels against each other, not their overall stats.',
+    'h2h.intro': 'This page isolates your direct ranked matchups: who leads the record, how much ELO changed hands, the average score and the history of your latest duels — regardless of how you each rank elsewhere.',
 
     'player.defaultName': 'Player',
     'player.following': 'Following',
@@ -479,6 +485,9 @@ export const dict: Record<Lang, Dict> = {
     'h2h.loss': 'Derrota',
     'h2h.draw': 'Tablas',
     'h2h.back': '← Volver a la clasificación',
+    'h2h.what': '¿Qué es un Head-to-Head?',
+    'h2h.tip': 'El cara a cara entre dos jugadores: solo sus duelos clasificados entre sí, no sus estadísticas globales.',
+    'h2h.intro': 'Esta página aísla vuestros enfrentamientos directos en partido clasificado: quién lidera el balance, cuánto ELO cambió de manos, el marcador medio y el historial de vuestros últimos duelos — sin importar vuestro nivel respectivo en otros lugares.',
 
     'player.defaultName': 'Jugador',
     'player.following': 'Siguiendo',

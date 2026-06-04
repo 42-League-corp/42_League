@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  animate,
   motion,
   useMotionValue, useMotionValueEvent, useTransform,
 } from 'framer-motion';
@@ -104,6 +105,13 @@ const LOSS = '#ff5366';
 
 /** Fondu des couleurs quand on passe d'une case (match) à l'autre. */
 const COLOR_T = { duration: 0.4, ease: [0.16, 1, 0.3, 1] } as const;
+
+/**
+ * Ressort du « snap aimanté » : fait glisser le repère d'un point à l'autre.
+ * Volontairement doux/amorti (pas d'overshoot) pour que l'odomètre ELO défile
+ * assez lentement pour être lu chiffre par chiffre.
+ */
+const SNAP_SPRING = { type: 'spring', stiffness: 80, damping: 20, mass: 1 } as const;
 
 // ─── Sous-composants tooltip ───────────────────────────────────────────────────
 
@@ -231,6 +239,7 @@ export function EloChart({
   const mx = useMotionValue(0);
   const cy = useMotionValue(0);
   const idxRef = useRef(0);
+  const snapAnim = useRef<ReturnType<typeof animate> | null>(null);
   const [idx, setIdx] = useState(0);
   const [active, setActive] = useState(false);
 
@@ -274,10 +283,12 @@ export function EloChart({
     return best;
   };
 
+  // Pendant le ressort de snap, le curseur glisse sur la courbe : on resuit juste
+  // la hauteur Y (l'odomètre ELO en découle, et défile au fil du ressort).
+  // L'index est figé sur le point cible dès le survol (cf. onMove) → pas de
+  // recalcul ici, ce qui évite tout flicker pendant l'animation.
   useMotionValueEvent(mx, 'change', (xv) => {
     const y = sampleY(xv); if (y != null) cy.set(y);
-    const i = nearest(xv);
-    if (i !== idxRef.current) { idxRef.current = i; setIdx(i); }
   });
 
   // Position initiale = dernier match ; resync quand la géométrie change
@@ -292,14 +303,26 @@ export function EloChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geo]);
 
+  // Snap « aimanté » : on ne déplace pas le repère librement sous la souris, on
+  // saute au point le plus proche (la bascule se fait au passage du milieu entre
+  // deux points — souris à droite du milieu → point de droite, et inversement).
+  // La souris n'est jamais capturée ; c'est juste le repère + l'odomètre qui se
+  // calent sur le point via un ressort doux.
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !geo) return;
     const rect = svgRef.current.getBoundingClientRect();
     const sx = W / rect.width;
     let xv = (e.clientX - rect.left) * sx;
     xv = Math.max(padX, Math.min(W - padX, xv));
-    mx.set(xv);
     if (!active) setActive(true);
+    const i = nearest(xv);
+    if (i === idxRef.current) return; // déjà calé sur ce point → rien à faire
+    idxRef.current = i;
+    setIdx(i);
+    const target = geo.mapped[i];
+    if (!target) return;
+    snapAnim.current?.stop();
+    snapAnim.current = animate(mx, target.x, SNAP_SPRING);
   };
 
   // Tooltip : suit le curseur, recentré et borné dans la largeur
@@ -317,7 +340,6 @@ export function EloChart({
   const cur = geo.mapped[idx] ?? geo.mapped.at(-1)!;
   const curColor = trendColors[idx] ?? lineColor;
   const won = (cur.scoreFor ?? 0) > (cur.scoreAgainst ?? 0);
-  const below = cur.y < H * 0.42; // bascule le tooltip sous le point quand il est trop haut
 
   return (
     <div ref={containerRef} className="relative w-full select-none" style={{ height: H }}>
@@ -385,8 +407,8 @@ export function EloChart({
         style={{ x: ttX, y: cy }}
         animate={{ opacity: active ? 1 : 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}>
-        <div style={{ transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))' }}>
-          {below && <div className="mx-auto mb-[-5px] h-2.5 w-2.5 rotate-45 border-l border-t border-white/10 bg-slate-900/95" />}
+        {/* Toujours au-dessus du point (flèche dirigée vers le bas, sous la carte). */}
+        <div style={{ transform: 'translate(-50%, calc(-100% - 16px))' }}>
           <motion.div className="overflow-hidden rounded-xl bg-slate-900/95 shadow-2xl backdrop-blur"
             style={{ minWidth: 196, borderWidth: 1, borderStyle: 'solid' }}
             animate={{ borderColor: won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)' }}
@@ -430,7 +452,7 @@ export function EloChart({
               </div>
             )}
           </motion.div>
-          {!below && <div className="mx-auto mt-[-5px] h-2.5 w-2.5 rotate-45 border-b border-r border-white/10 bg-slate-900/95" />}
+          <div className="mx-auto mt-[-5px] h-2.5 w-2.5 rotate-45 border-b border-r border-white/10 bg-slate-900/95" />
         </div>
       </motion.div>
     </div>
