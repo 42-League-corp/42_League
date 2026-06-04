@@ -67,6 +67,7 @@ export const dict: Record<Lang, Dict> = {
     'h2h.seenFrom': 'vus de',
     'h2h.win': 'Victoire',
     'h2h.loss': 'Défaite',
+    'h2h.draw': 'Nulle',
     'h2h.back': '← Retour au classement',
 
     // ─── Fiche joueur ──────────────────────────────────────────────────────
@@ -276,6 +277,7 @@ export const dict: Record<Lang, Dict> = {
     'h2h.seenFrom': 'from',
     'h2h.win': 'Win',
     'h2h.loss': 'Loss',
+    'h2h.draw': 'Draw',
     'h2h.back': '← Back to leaderboard',
 
     'player.defaultName': 'Player',
@@ -475,6 +477,7 @@ export const dict: Record<Lang, Dict> = {
     'h2h.seenFrom': 'vistos desde',
     'h2h.win': 'Victoria',
     'h2h.loss': 'Derrota',
+    'h2h.draw': 'Tablas',
     'h2h.back': '← Volver a la clasificación',
 
     'player.defaultName': 'Jugador',

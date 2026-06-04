@@ -69,6 +69,7 @@ export function LeaderboardMobile() {
     const map = new Map<string, { wins: number; losses: number }>();
     for (const u of leaderboard) map.set(u.login, { wins: 0, losses: 0 });
     for (const m of matches) {
+      if (m.winner === 'draw') continue; // nulle : ni V ni D
       for (const login of [m.playerALogin, m.playerBLogin]) {
         const cur = map.get(login);
         if (!cur) continue;

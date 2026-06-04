@@ -618,9 +618,12 @@ model ShopInventory {
 // d'un /queue/join, on apparie le joueur avec le plus ancien autre joueur de la
 // même discipline puis on retire les deux entrées.
 model MatchmakingQueue {
-  login    String   @id
+  login    String
   game     String
   joinedAt DateTime @default(now()) @map("joined_at")
 
+  // Clé composite : un joueur peut être dans la file de PLUSIEURS modes à la fois
+  // (une recherche « match aléatoire » indépendante par univers).
+  @@id([login, game])
   @@map("matchmaking_queue")
 }

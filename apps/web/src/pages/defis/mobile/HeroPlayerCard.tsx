@@ -48,6 +48,7 @@ export function HeroPlayerCard() {
     let streak = 0;
     let streakBroken = false;
     for (const m of mine) {
+      if (m.winner === 'draw') { streakBroken = true; continue; } // nulle : ni V ni D, casse la série
       const youAreA = m.playerALogin === myLogin;
       const youWon = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
       if (youWon) wins++;

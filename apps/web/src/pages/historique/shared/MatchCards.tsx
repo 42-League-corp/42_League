@@ -85,7 +85,7 @@ interface MyMatchCardProps {
 
 export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProps) {
   const t = useT();
-  const { won, opponent, myScore, oppScore, delta, counted, wrAfter, wrImpact } = stat;
+  const { won, draw, opponent, myScore, oppScore, delta, counted, wrAfter, wrImpact } = stat;
   const game = stat.match.game;
   return (
     <motion.div
@@ -93,16 +93,16 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className={`relative card-hud rounded-2xl p-3.5 flex items-center gap-3 hover-glow border ${
-        won ? 'border-accent/25' : 'border-red/20'
+        draw ? 'border-gold/25' : won ? 'border-accent/25' : 'border-red/20'
       }`}
     >
-      {/* Badge W/L */}
+      {/* Badge V / N / D */}
       <div
         className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center font-display font-black text-sm ${
-          won ? 'bg-accent/15 text-accent' : 'bg-red/15 text-red'
+          draw ? 'bg-gold/15 text-gold' : won ? 'bg-accent/15 text-accent' : 'bg-red/15 text-red'
         }`}
       >
-        {won ? t('lb.abbr.win') : t('lb.abbr.loss')}
+        {draw ? t('lb.abbr.draw') : won ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
       <Avatar login={opponent} imageUrl={imageUrl ?? null} size="sm" />
@@ -127,9 +127,15 @@ export function MyMatchCard({ stat, lang, imageUrl, delay = 0 }: MyMatchCardProp
 
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
         <div className="font-display tabular-nums text-base font-black">
-          <span className={won ? 'text-accent' : 'text-text-strong'}>{myScore}</span>
-          <span className="text-muted mx-1 opacity-60">–</span>
-          <span className={won ? 'text-text-strong' : 'text-red'}>{oppScore}</span>
+          {draw ? (
+            <span className="text-gold">{game === 'chess' ? '½–½' : `${myScore}–${oppScore}`}</span>
+          ) : (
+            <>
+              <span className={won ? 'text-accent' : 'text-text-strong'}>{myScore}</span>
+              <span className="text-muted mx-1 opacity-60">–</span>
+              <span className={won ? 'text-text-strong' : 'text-red'}>{oppScore}</span>
+            </>
+          )}
         </div>
         <EloDeltaPill delta={delta} counted={counted} />
       </div>
@@ -153,13 +159,15 @@ interface GlobalMatchCardProps {
  */
 export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMatchCardProps) {
   const t = useT();
+  const isDraw = match.winner === 'draw';
+  // Nulle : pas de vainqueur — on garde l'ordre A (gauche) / B (droite).
   const aWon = match.winner === 'A';
-  const winnerLogin = aWon ? match.playerALogin : match.playerBLogin;
-  const loserLogin = aWon ? match.playerBLogin : match.playerALogin;
-  const winnerScore = aWon ? match.scoreA : match.scoreB;
-  const loserScore = aWon ? match.scoreB : match.scoreA;
-  const winnerDelta = aWon ? match.deltaA : match.deltaB;
-  const loserDelta = aWon ? match.deltaB : match.deltaA;
+  const winnerLogin = aWon || isDraw ? match.playerALogin : match.playerBLogin;
+  const loserLogin = aWon || isDraw ? match.playerBLogin : match.playerALogin;
+  const winnerScore = aWon || isDraw ? match.scoreA : match.scoreB;
+  const loserScore = aWon || isDraw ? match.scoreB : match.scoreA;
+  const winnerDelta = aWon || isDraw ? match.deltaA : match.deltaB;
+  const loserDelta = aWon || isDraw ? match.deltaB : match.deltaA;
 
   return (
     <motion.div
@@ -168,15 +176,15 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className="relative card-hud rounded-2xl p-3.5 flex items-center gap-2.5 hover-glow border border-gold/25"
     >
-      {/* Vainqueur — gauche */}
+      {/* Vainqueur — gauche (ou joueur A si nulle) */}
       <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-gold/15 text-base">
-        🏆
+        {isDraw ? '🤝' : '🏆'}
       </div>
 
       <Avatar login={winnerLogin} imageUrl={imgByLogin.get(winnerLogin) ?? null} size="sm" />
 
       <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
-        <PlayerLink login={winnerLogin} className="text-sm font-bold text-gold truncate max-w-full">
+        <PlayerLink login={winnerLogin} className={`text-sm font-bold truncate max-w-full ${isDraw ? 'text-text-strong' : 'text-gold'}`}>
           {winnerLogin}
         </PlayerLink>
         <EloDeltaPill delta={winnerDelta} counted={match.countedForElo} />
@@ -185,9 +193,9 @@ export function GlobalMatchCard({ match, lang, imgByLogin, delay = 0 }: GlobalMa
       {/* Score + date — centre */}
       <div className="flex-shrink-0 flex flex-col items-center gap-0.5 px-1">
         {match.game === 'chess' ? (
-          /* Échecs : affiche Victoire / Défaite plutôt qu'un score 1-0 brut */
-          <div className="text-[11px] font-extrabold text-gold text-gold-emboss uppercase tracking-wide whitespace-nowrap">
-            {t('history.result.win')}
+          /* Échecs : Victoire / Nulle plutôt qu'un score 1-0 brut */
+          <div className={`text-[11px] font-extrabold uppercase tracking-wide whitespace-nowrap ${isDraw ? 'text-gold' : 'text-gold text-gold-emboss'}`}>
+            {isDraw ? t('history.result.draw') : t('history.result.win')}
           </div>
         ) : (
           <div className="font-display tabular-nums text-base font-black">

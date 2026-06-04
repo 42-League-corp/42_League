@@ -14,6 +14,7 @@ function sideOf(m: PlayedMatch, login: string) {
   const isA = m.playerALogin === login;
   return {
     won: (isA && m.winner === 'A') || (!isA && m.winner === 'B'),
+    draw: m.winner === 'draw',
     scoreFor: isA ? m.scoreA : m.scoreB,
     scoreAgainst: isA ? m.scoreB : m.scoreA,
     delta: isA ? m.deltaA : m.deltaB,
@@ -57,13 +58,15 @@ export function H2HPage() {
 
     let winsA = 0;
     let winsB = 0;
+    let draws = 0;
     let eloNetA = 0;
     let eloNetB = 0;
     let goalsA = 0;
     let goalsB = 0;
     for (const m of h2h) {
       const sa = sideOf(m, a);
-      if (sa.won) winsA++;
+      if (sa.draw) draws++;
+      else if (sa.won) winsA++;
       else winsB++;
       eloNetA += sa.delta;
       eloNetB += sideOf(m, b).delta;
@@ -76,6 +79,7 @@ export function H2HPage() {
       n,
       winsA,
       winsB,
+      draws,
       eloNetA,
       eloNetB,
       avgA: n ? Math.round((goalsA / n) * 10) / 10 : 0,
@@ -176,17 +180,17 @@ export function H2HPage() {
                   <div
                     key={i}
                     className={`card-hud rounded-lg px-2.5 py-2 flex flex-col items-center gap-0.5 min-w-[64px] border ${
-                      sa.won ? 'border-[#7fd66e]/30' : 'border-red/30'
+                      sa.draw ? 'border-gold/30' : sa.won ? 'border-[#7fd66e]/30' : 'border-red/30'
                     }`}
                     title={fmtDateFr(m.playedAt)}
                   >
                     <span
-                      className={`text-[10px] font-black uppercase ${sa.won ? 'text-[#7fd66e]' : 'text-red'}`}
+                      className={`text-[10px] font-black uppercase ${sa.draw ? 'text-gold' : sa.won ? 'text-[#7fd66e]' : 'text-red'}`}
                     >
-                      {sa.won ? t('h2h.win') : t('h2h.loss')}
+                      {sa.draw ? t('h2h.draw') : sa.won ? t('h2h.win') : t('h2h.loss')}
                     </span>
                     <span className="font-mono text-sm font-extrabold tabular-nums text-text-strong">
-                      {sa.scoreFor}–{sa.scoreAgainst}
+                      {sa.draw && m.game === 'chess' ? '½–½' : `${sa.scoreFor}–${sa.scoreAgainst}`}
                     </span>
                     <span className="text-[9px] text-muted-2 font-mono">{fmtDateFr(m.playedAt)}</span>
                   </div>

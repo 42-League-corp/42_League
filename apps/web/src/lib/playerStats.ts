@@ -1,8 +1,23 @@
 import type { PlayedMatch } from './api';
 
+/** Issue d'un match du point de vue d'un joueur donné. */
+export type Outcome = 'win' | 'loss' | 'draw';
+
+/**
+ * Issue d'un match (V / N / D) pour `login`. Source de vérité partagée par tous
+ * les compteurs front : un nul (`winner === 'draw'`, échecs) n'est ni V ni D.
+ */
+export function outcomeFor(m: PlayedMatch, login: string): Outcome {
+  if (m.winner === 'draw') return 'draw';
+  const isA = m.playerALogin === login;
+  return (isA && m.winner === 'A') || (!isA && m.winner === 'B') ? 'win' : 'loss';
+}
+
 /** Un match récent vu du point de vue d'un joueur donné. */
 export interface RecentMatch {
   won: boolean;
+  /** Match nul (échecs) — ni victoire ni défaite. */
+  draw?: boolean;
   scoreFor: number;
   scoreAgainst: number;
   opponent: string;
@@ -12,6 +27,8 @@ export interface RecentMatch {
 export interface PlayerStats {
   wins: number;
   losses: number;
+  /** Nuls (échecs) — exclus du win-rate. */
+  draws: number;
   games: number;
   /** 0–100 */
   winRate: number;
@@ -43,6 +60,7 @@ export function computePlayerStats(
 
   let wins = 0;
   let losses = 0;
+  let draws = 0;
   // Plus longues séries (V et D) sur tout l'historique.
   let maxWinStreak = 0;
   let maxLossStreak = 0;
@@ -51,21 +69,27 @@ export function computePlayerStats(
   const recent: RecentMatch[] = [];
   for (const m of mine) {
     const isA = m.playerALogin === login;
-    const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-    if (won) {
+    const outcome = outcomeFor(m, login);
+    if (outcome === 'win') {
       wins++;
       runWins++;
       runLosses = 0;
       if (runWins > maxWinStreak) maxWinStreak = runWins;
-    } else {
+    } else if (outcome === 'loss') {
       losses++;
       runLosses++;
       runWins = 0;
       if (runLosses > maxLossStreak) maxLossStreak = runLosses;
+    } else {
+      // Nulle : casse les deux séries, ne compte ni en V ni en D.
+      draws++;
+      runWins = 0;
+      runLosses = 0;
     }
     if (recent.length < recentCount) {
       recent.push({
-        won,
+        won: outcome === 'win',
+        draw: outcome === 'draw',
         scoreFor: isA ? m.scoreA : m.scoreB,
         scoreAgainst: isA ? m.scoreB : m.scoreA,
         opponent: isA ? m.playerBLogin : m.playerALogin,
@@ -74,23 +98,23 @@ export function computePlayerStats(
     }
   }
 
+  // Win-rate sur les parties décisives uniquement (les nuls n'y entrent pas).
   const games = wins + losses;
   const winRate = games === 0 ? 0 : Math.round((wins / games) * 100);
 
-  // Série en cours, calculée depuis le match le plus récent.
+  // Série en cours, calculée depuis le match le plus récent. Un nul l'interrompt.
   let streak = 0;
   const first = mine[0];
   if (first) {
-    const firstIsA = first.playerALogin === login;
-    const firstWon = (firstIsA && first.winner === 'A') || (!firstIsA && first.winner === 'B');
-    for (const m of mine) {
-      const isA = m.playerALogin === login;
-      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-      if (won === firstWon) streak++;
-      else break;
+    const firstOutcome = outcomeFor(first, login);
+    if (firstOutcome !== 'draw') {
+      for (const m of mine) {
+        if (outcomeFor(m, login) === firstOutcome) streak++;
+        else break;
+      }
+      if (firstOutcome === 'loss') streak = -streak;
     }
-    if (!firstWon) streak = -streak;
   }
 
-  return { wins, losses, games, winRate, streak, maxWinStreak, maxLossStreak, recent };
+  return { wins, losses, draws, games, winRate, streak, maxWinStreak, maxLossStreak, recent };
 }

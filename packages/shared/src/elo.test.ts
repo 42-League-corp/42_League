@@ -29,6 +29,18 @@ describe('calculateChessElo', () => {
     expect(left.deltaA).toBe(right.deltaB);
     expect(left.deltaB).toBe(right.deltaA);
   });
+  it('nulle à ratings égaux : ±0', () => {
+    const r = calculateChessElo(1000, 1000, 'draw');
+    expect(r.deltaA).toBe(0);
+    expect(r.deltaB).toBe(0);
+  });
+  it('nulle : le mieux classé concède des points à l\'outsider', () => {
+    const r = calculateChessElo(1300, 900, 'draw');
+    expect(r.deltaA).toBeLessThan(0); // favori perd
+    expect(r.deltaB).toBeGreaterThan(0); // outsider gagne
+    // somme ~ nulle (transfert quasi symétrique)
+    expect(Math.abs(r.deltaA + r.deltaB)).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('calculateSmashElo', () => {

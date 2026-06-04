@@ -105,6 +105,7 @@ export function computeGoat(
     return a;
   };
   for (const m of matches) {
+    if (m.winner === 'draw') continue; // nulle (échecs) : exclue du palmarès GOAT
     for (const login of [m.playerALogin, m.playerBLogin]) {
       if (!known.has(login)) continue;
       const isA = m.playerALogin === login;

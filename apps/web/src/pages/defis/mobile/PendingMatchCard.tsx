@@ -70,6 +70,8 @@ export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardPro
   // Vainqueur déterminé par comparaison de scores (et non « = 10 ») : valable
   // pour toutes les disciplines (babyfoot 10-x, échecs 1-0, smash 2-1).
   const iWon = match.scoreOpponent > match.scoreDeclarer;
+  // Nulle (échecs) : les deux scores égaux (0-0).
+  const isDraw = match.game === 'chess' && match.scoreDeclarer === match.scoreOpponent;
 
   // ── Confirmation 2v2 ──────────────────────────────────────────────────────────
   const handleConfirm2v2 = async () => {
@@ -233,27 +235,35 @@ export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardPro
             </div>
           )}
 
-          <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
-            <span
-              className={`text-4xl font-black tabular-nums ${
-                match.scoreDeclarer > match.scoreOpponent ? 'text-gold text-gold-emboss' : 'text-text-strong'
-              }`}
-            >
-              {match.game === 'chess' && match.scoreDeclarer > match.scoreOpponent ? 'V' : match.scoreDeclarer}
-            </span>
-            <span className="text-2xl text-muted">–</span>
-            <span
-              className={`text-4xl font-black tabular-nums ${
-                match.scoreOpponent > match.scoreDeclarer ? 'text-gold text-gold-emboss' : 'text-text-strong'
-              }`}
-            >
-              {match.game === 'chess' && match.scoreOpponent > match.scoreDeclarer ? 'V' : match.scoreOpponent}
-            </span>
-          </div>
+          {isDraw ? (
+            <div className="relative flex items-center justify-center gap-2 mb-3 font-display">
+              <span className="text-3xl font-black text-gold text-gold-emboss uppercase tracking-wide">
+                ♟ {t('defis.draw')} · ½–½
+              </span>
+            </div>
+          ) : (
+            <div className="relative flex items-baseline justify-center gap-2 mb-3 font-display">
+              <span
+                className={`text-4xl font-black tabular-nums ${
+                  match.scoreDeclarer > match.scoreOpponent ? 'text-gold text-gold-emboss' : 'text-text-strong'
+                }`}
+              >
+                {match.game === 'chess' && match.scoreDeclarer > match.scoreOpponent ? 'V' : match.scoreDeclarer}
+              </span>
+              <span className="text-2xl text-muted">–</span>
+              <span
+                className={`text-4xl font-black tabular-nums ${
+                  match.scoreOpponent > match.scoreDeclarer ? 'text-gold text-gold-emboss' : 'text-text-strong'
+                }`}
+              >
+                {match.game === 'chess' && match.scoreOpponent > match.scoreDeclarer ? 'V' : match.scoreOpponent}
+              </span>
+            </div>
+          )}
           <div className="text-center text-[10px] text-muted uppercase tracking-wider font-bold mb-4">
             {match.declarerLogin} <span className="opacity-50 mx-1">/</span> {t('common.toi')}
             <span className="block normal-case tracking-normal text-muted-2 mt-1">
-              {t('defis.accordingTo')} {match.declarerLogin}{t('defis.accordingToYouHave')} {iWon ? t('defis.won') : t('defis.lost')}. {t('defis.confirmIfExact')}
+              {t('defis.accordingTo')} {match.declarerLogin}{t('defis.accordingToYouHave')} {isDraw ? t('defis.drew') : iWon ? t('defis.won') : t('defis.lost')}. {t('defis.confirmIfExact')}
             </span>
           </div>
 

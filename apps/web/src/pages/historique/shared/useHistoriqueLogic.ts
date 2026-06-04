@@ -7,6 +7,8 @@ import type { PlayedMatch, PlayedFfa } from '../../../lib/api';
 export interface MyMatchStat {
   match: PlayedMatch;
   won: boolean;
+  /** Match nul (échecs) — ni victoire ni défaite, hors win-rate. */
+  draw: boolean;
   opponent: string;
   myScore: number;
   oppScore: number;
@@ -86,15 +88,19 @@ export function useHistoriqueLogic(): HistoriqueData {
       .sort((a, b) => +new Date(a.playedAt) - +new Date(b.playedAt));
 
     let wins = 0;
-    const matchItems: MineItem[] = asc.map((m, i) => {
+    let decisive = 0; // parties décisives (hors nulles) pour le win-rate cumulé
+    const matchItems: MineItem[] = asc.map((m) => {
       const youAreA = m.playerALogin === myLogin;
-      const won = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
-      const wrBefore = i === 0 ? 0 : (wins / i) * 100;
-      if (won) wins++;
-      const wrAfter = (wins / (i + 1)) * 100;
+      const draw = m.winner === 'draw';
+      const won = !draw && ((youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B'));
+      const wrBefore = decisive === 0 ? 0 : (wins / decisive) * 100;
+      // La nulle ne change ni le numérateur ni le dénominateur du win-rate.
+      if (!draw) { decisive++; if (won) wins++; }
+      const wrAfter = decisive === 0 ? 0 : (wins / decisive) * 100;
       const stat: MyMatchStat = {
         match: m,
         won,
+        draw,
         opponent: youAreA ? m.playerBLogin : m.playerALogin,
         myScore: youAreA ? m.scoreA : m.scoreB,
         oppScore: youAreA ? m.scoreB : m.scoreA,

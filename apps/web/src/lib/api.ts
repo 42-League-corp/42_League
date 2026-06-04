@@ -83,7 +83,8 @@ export interface PlayedMatch {
   playerBLogin: string;
   scoreA: number;
   scoreB: number;
-  winner: 'A' | 'B';
+  // 'draw' = match nul (échecs uniquement). Score 0-0.
+  winner: 'A' | 'B' | 'draw';
   playedAt: string;
   countedForElo: boolean;
   deltaA: number;
@@ -676,13 +677,15 @@ export const api = {
       '/queue/join',
       { method: 'POST', body: JSON.stringify({ game }) },
     ),
-  queueLeave: () =>
-    request<{ ok: boolean }>('/queue/leave', { method: 'POST', body: JSON.stringify({}) }),
+  // game omis = quitte toutes les files (cleanup au logout).
+  queueLeave: (game?: Game) =>
+    request<{ ok: boolean }>('/queue/leave', { method: 'POST', body: JSON.stringify(game ? { game } : {}) }),
+  // Statut multi-modes : `queued` = files où je suis en attente ; `matches` =
+  // appariements récents non encore affichés (consommés une seule fois côté serveur).
   queueStatus: () =>
     request<{
-      state: 'idle' | 'queued' | 'matched';
-      game?: Game;
-      opponent?: MatchmakingOpponent | null;
+      queued: Game[];
+      matches: Array<{ game: Game; opponent: MatchmakingOpponent | null }>;
     }>('/queue/status'),
   // RGPD / CGU 42 — enregistre (accept=true) ou refuse (accept=false, supprime le compte)
   // le consentement de l'utilisateur final.

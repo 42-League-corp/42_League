@@ -63,11 +63,12 @@ interface MatchScores {
 function makeRefiner(requireChars: boolean) {
   return (m: MatchScores, ctx: z.RefinementCtx): void => {
     if (m.game === 'chess') {
-      // Échecs : résultat binaire (1 = vainqueur, 0 = perdant), un seul vainqueur.
-      const hi = Math.max(m.scoreSelf, m.scoreOpponent);
-      const lo = Math.min(m.scoreSelf, m.scoreOpponent);
-      if (hi !== 1 || lo !== 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'chess score must be 1 (win) – 0 (loss)' });
+      // Échecs : victoire 1-0 / 0-1, ou nulle 0-0 (les deux camps à 0).
+      const win = (m.scoreSelf === 1 && m.scoreOpponent === 0) ||
+        (m.scoreSelf === 0 && m.scoreOpponent === 1);
+      const draw = m.scoreSelf === 0 && m.scoreOpponent === 0;
+      if (!win && !draw) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'chess score must be 1-0 (win), 0-1 (loss) or 0-0 (draw)' });
       }
       return;
     }

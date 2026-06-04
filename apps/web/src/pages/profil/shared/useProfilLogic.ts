@@ -9,6 +9,8 @@ export interface ProfilStats {
   matchesPlayed: number;
   wins: number;
   losses: number;
+  /** Nuls (échecs) — exclus du win-rate et du total V/D. */
+  draws: number;
   total: number;
   winRate: number;
   totalDelta: number;
@@ -39,6 +41,7 @@ const EMPTY_STATS: ProfilStats = {
   matchesPlayed: 0,
   wins: 0,
   losses: 0,
+  draws: 0,
   total: 0,
   winRate: 0,
   totalDelta: 0,
@@ -74,6 +77,7 @@ export function computeProfilStats(
 
     let wins = 0;
     let losses = 0;
+    let draws = 0;
     let totalDelta = 0;
     let delta7d = 0;
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -85,10 +89,13 @@ export function computeProfilStats(
     // Pass 1 : agrégats globaux (wins, losses, total delta, delta7d, longest streak).
     for (const m of mine) {
       const youAreA = m.playerALogin === myLogin;
-      const youWon = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
+      const isDraw = m.winner === 'draw';
+      const youWon = !isDraw && ((youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B'));
       const myDelta = youAreA ? m.deltaA : m.deltaB;
 
-      if (youWon) wins++;
+      // La nulle compte toujours pour l'ELO, mais ni en V ni en D.
+      if (isDraw) draws++;
+      else if (youWon) wins++;
       else losses++;
 
       if (m.countedForElo) {
@@ -104,6 +111,7 @@ export function computeProfilStats(
         const oppScore = youAreA ? m.scoreB : m.scoreA;
         opponentScoresOnWin.push(oppScore);
       } else {
+        // Défaite OU nulle : la série de victoires s'arrête.
         runningWinStreak = 0;
       }
     }
@@ -113,6 +121,7 @@ export function computeProfilStats(
     let currentStreakLen = 0;
     let currentSign: 'win' | 'loss' | null = null;
     for (const m of mine) {
+      if (m.winner === 'draw') break; // une nulle interrompt la série en cours
       const youAreA = m.playerALogin === myLogin;
       const youWon = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
       const sign: 'win' | 'loss' = youWon ? 'win' : 'loss';
@@ -143,16 +152,16 @@ export function computeProfilStats(
       let breaker: PlayedMatch | null = null; // match perdu qui a brisé la meilleure série
       for (const m of chrono) {
         const youAreA = m.playerALogin === myLogin;
-        const youWon = (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
+        const isDraw = m.winner === 'draw';
+        const youWon = !isDraw && ((youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B'));
         if (youWon) {
           run++;
         } else {
-          // Une défaite : si la série qui vient de s'achever est la nouvelle meilleure
-          // (strictement, pour garder la 1re occurrence en cas d'égalité), on note le
-          // match qui l'a brisée — c'est ce match perdu (m).
+          // Défaite ou nulle : la série s'achève. Si c'est la nouvelle meilleure,
+          // on note le match qui l'a stoppée — mais une nulle n'a pas de « briseur ».
           if (run > bestRun) {
             bestRun = run;
-            breaker = m;
+            breaker = isDraw ? null : m;
           }
           run = 0;
         }
@@ -186,6 +195,7 @@ export function computeProfilStats(
         matchesPlayed: rating.matchesPlayed,
         wins,
         losses,
+        draws,
         total,
         winRate,
         totalDelta,

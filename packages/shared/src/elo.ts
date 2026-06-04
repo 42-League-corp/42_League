@@ -15,7 +15,9 @@ export const UPSET_GAP_COEFF = 0.04;
 export const WINNER_BONUS_CAP = 50;
 export const MAX_DELTA_PER_MATCH = 400;
 
-export type Winner = 'A' | 'B';
+// 'draw' = match nul (échecs uniquement — cf. GAMES[*].hasDraw). Les jeux
+// directionnels (babyfoot, smash, SF) ne reçoivent jamais 'draw'.
+export type Winner = 'A' | 'B' | 'draw';
 
 export interface EloUpdate {
   newA: number;
@@ -196,6 +198,15 @@ export function calculateChessElo(
   ratingB: number,
   winner: Winner,
 ): EloUpdate {
+  // Nulle : transfert Elo classique sur un score de 0,5 (W=1, N=0,5, L=0). Le
+  // mieux classé concède quelques points au moins bien classé ; à rating égal, ±0.
+  if (winner === 'draw') {
+    const eA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+    const eB = 1 / (1 + Math.pow(10, (ratingA - ratingB) / 400));
+    const deltaA = Math.round(K * (0.5 - eA));
+    const deltaB = Math.round(K * (0.5 - eB));
+    return { newA: ratingA + deltaA, newB: ratingB + deltaB, deltaA, deltaB };
+  }
   const winnerRating = winner === 'A' ? ratingA : ratingB;
   const loserRating = winner === 'A' ? ratingB : ratingA;
 

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { useT } from '../lib/i18n';
+import { GAME_META } from '../lib/gameMeta';
 import type { Game } from '../lib/api';
 
 export interface VersusPlayer {
@@ -26,7 +27,7 @@ const AUTO_DISMISS_MS = 3500;
  * l'adversaire par la droite, et un grand « VS » apparaît au centre (spring).
  * On-brand (or / rouge). Tap n'importe où ou « Continuer » → onDone.
  */
-export function VersusOverlay({ me, opponent, onDone }: VersusOverlayProps) {
+export function VersusOverlay({ me, opponent, game, onDone }: VersusOverlayProps) {
   const t = useT();
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export function VersusOverlay({ me, opponent, onDone }: VersusOverlayProps) {
 
   const meName = me.name || me.login;
   const oppName = opponent.name || opponent.login;
+  const gm = game ? GAME_META[game] : null;
 
   return (
     <motion.div
@@ -59,13 +61,32 @@ export function VersusOverlay({ me, opponent, onDone }: VersusOverlayProps) {
 
       {/* Bandeau « Adversaire trouvé ! » */}
       <motion.div
-        className="relative z-10 mb-8 font-display font-black uppercase tracking-[0.18em] text-gold text-sm md:text-base"
+        className="relative z-10 mb-3 font-display font-black uppercase tracking-[0.18em] text-gold text-sm md:text-base"
         initial={{ y: -24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.15, type: 'spring', stiffness: 220, damping: 18 }}
       >
         {t('defis.versus.found')}
       </motion.div>
+
+      {/* Logo + nom du mode où l'appariement a eu lieu (utile quand on cherchait
+          sur plusieurs modes à la fois). */}
+      {gm && (
+        <motion.div
+          className="relative z-10 mb-7 inline-flex items-center gap-2 rounded-full px-3 py-1.5 backdrop-blur-md"
+          style={{ border: `1.5px solid ${gm.borderColor}`, background: gm.bgColor, boxShadow: `0 0 18px -6px ${gm.glowColor}` }}
+          initial={{ y: -12, opacity: 0, scale: 0.85 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          transition={{ delay: 0.28, type: 'spring', stiffness: 260, damping: 18 }}
+        >
+          <span className="grid h-5 w-5 place-items-center" style={{ color: gm.color }}>
+            {gm.icon(true)}
+          </span>
+          <span className="font-display text-xs font-extrabold uppercase tracking-wider" style={{ color: gm.color }}>
+            {gm.label}
+          </span>
+        </motion.div>
+      )}
 
       <div className="relative z-10 flex items-center justify-center gap-4 md:gap-10 px-6 w-full max-w-3xl">
         {/* Toi — entre par la gauche */}

@@ -102,6 +102,9 @@ const RED = '#ff5366';
 const WIN = '#7fd66e';
 const LOSS = '#ff5366';
 
+/** Fondu des couleurs quand on passe d'une case (match) à l'autre. */
+const COLOR_T = { duration: 0.4, ease: [0.16, 1, 0.3, 1] } as const;
+
 // ─── Sous-composants tooltip ───────────────────────────────────────────────────
 
 /** Flèche diagonale ↗ (victoire) / ↘ (défaite), rotation + couleur fluides. */
@@ -348,9 +351,11 @@ export function EloChart({
         transition={{ duration: 0.3, ease: 'easeOut' }}>
         <div style={{ transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))' }}>
           {below && <div className="mx-auto mb-[-5px] h-2.5 w-2.5 rotate-45 border-l border-t border-white/10 bg-slate-900/95" />}
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur"
-            style={{ minWidth: 196, border: `1px solid ${won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)'}` }}>
-            <div className="h-[2px]" style={{ background: won ? WIN : LOSS }} />
+          <motion.div className="overflow-hidden rounded-xl bg-slate-900/95 shadow-2xl backdrop-blur"
+            style={{ minWidth: 196, borderWidth: 1, borderStyle: 'solid' }}
+            animate={{ borderColor: won ? 'rgba(127,214,110,0.4)' : 'rgba(255,83,102,0.4)' }}
+            transition={COLOR_T}>
+            <motion.div className="h-[2px]" animate={{ backgroundColor: won ? WIN : LOSS }} transition={COLOR_T} />
             {cur.isStart ? (
               <div className="flex items-center justify-between px-3 py-2.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">Départ</span>
@@ -359,9 +364,9 @@ export function EloChart({
             ) : (
               <div className="px-3 py-2.5">
                 <div className="flex items-center gap-2.5">
-                  <div className="rounded-full p-[1.5px]" style={{ background: won ? WIN : LOSS }}>
+                  <motion.div className="rounded-full p-[1.5px]" animate={{ backgroundColor: won ? WIN : LOSS }} transition={COLOR_T}>
                     <Avatar login={cur.opponent ?? '?'} imageUrl={imageByLogin.get(cur.opponent ?? '') ?? null} size="sm" />
-                  </div>
+                  </motion.div>
                   <div className="min-w-0 leading-tight">
                     <div className="text-[8px] font-bold uppercase tracking-wider text-white/40">vs</div>
                     <div className="max-w-[84px] truncate text-xs font-extrabold text-white">{cur.opponent ?? '?'}</div>
@@ -369,9 +374,9 @@ export function EloChart({
                   <div className="ml-auto flex items-center gap-1.5">
                     <TrendArrow up={won} />
                     <div className="text-right leading-tight">
-                      <div className="font-display text-base font-black tabular-nums" style={{ color: won ? WIN : LOSS }}>
+                      <motion.div className="font-display text-base font-black tabular-nums" animate={{ color: won ? WIN : LOSS }} transition={COLOR_T}>
                         {displayElo}
-                      </div>
+                      </motion.div>
                       <div className="text-[8px] font-bold uppercase tracking-wider text-white/40">elo</div>
                     </div>
                   </div>
@@ -379,16 +384,16 @@ export function EloChart({
                 <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5">
                   <span className="font-mono text-[11px] font-bold tabular-nums text-white/70">{cur.scoreFor}–{cur.scoreAgainst}</span>
                   <span className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold" style={{ color: won ? WIN : LOSS }}>{won ? 'Victoire' : 'Défaite'}</span>
-                    <span className={`font-mono text-[10px] font-extrabold tabular-nums ${cur.delta >= 0 ? 'text-[#7fd66e]' : 'text-red'}`}>
+                    <motion.span className="text-[10px] font-extrabold" animate={{ color: won ? WIN : LOSS }} transition={COLOR_T}>{won ? 'Victoire' : 'Défaite'}</motion.span>
+                    <motion.span className="font-mono text-[10px] font-extrabold tabular-nums" animate={{ color: cur.delta >= 0 ? WIN : LOSS }} transition={COLOR_T}>
                       {cur.delta >= 0 ? '+' : ''}{cur.delta}
-                    </span>
+                    </motion.span>
                   </span>
                 </div>
                 <div className="mt-1 font-mono text-[8px] text-white/40">{fmtDate(cur.date)}</div>
               </div>
             )}
-          </div>
+          </motion.div>
           {!below && <div className="mx-auto mt-[-5px] h-2.5 w-2.5 rotate-45 border-b border-r border-white/10 bg-slate-900/95" />}
         </div>
       </motion.div>

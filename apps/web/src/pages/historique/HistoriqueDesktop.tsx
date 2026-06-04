@@ -33,6 +33,9 @@ export function HistoriqueDesktop() {
     const matchStats = data.mine.filter((i) => i.kind === 'match');
     const total = matchStats.length;
     const wins = matchStats.filter((i) => i.stat.won).length;
+    const draws = matchStats.filter((i) => i.stat.draw).length;
+    // Win-rate sur les parties décisives (les nulles n'y entrent pas).
+    const decisive = total - draws;
     const netElo = data.mine.reduce(
       (acc, i) => acc + (i.kind === 'match' ? i.stat.delta : i.stat.myDelta),
       0,
@@ -40,8 +43,9 @@ export function HistoriqueDesktop() {
     return {
       total,
       wins,
-      losses: total - wins,
-      wr: total ? Math.round((wins / total) * 100) : 0,
+      draws,
+      losses: total - wins - draws,
+      wr: decisive ? Math.round((wins / decisive) * 100) : 0,
       netElo,
     };
   }, [data.mine]);

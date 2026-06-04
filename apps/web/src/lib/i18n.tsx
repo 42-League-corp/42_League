@@ -96,6 +96,7 @@ const fr: Dict = {
   'lb.podium.champion': 'Champion',
   'lb.abbr.win': 'V',
   'lb.abbr.loss': 'D',
+  'lb.abbr.draw': 'N',
   'lb.win.full': 'Victoires',
   'lb.win.full1': 'Victoire',
   'lb.loss.full': 'Défaites',
@@ -154,6 +155,7 @@ const fr: Dict = {
   'history.col.delta': 'Δ ELO',
   'history.win': 'VICTOIRE',
   'history.loss': 'DÉFAITE',
+  'history.draw': 'NULLE',
 
   'panel.settings.title': 'Réglages',
   'settings.lang': 'Langue',
@@ -282,6 +284,7 @@ const en: Dict = {
   'lb.podium.champion': 'Champion',
   'lb.abbr.win': 'W',
   'lb.abbr.loss': 'L',
+  'lb.abbr.draw': 'D',
   'lb.win.full': 'Wins',
   'lb.win.full1': 'Win',
   'lb.loss.full': 'Losses',
@@ -340,6 +343,7 @@ const en: Dict = {
   'history.col.delta': 'Δ ELO',
   'history.win': 'WIN',
   'history.loss': 'LOSS',
+  'history.draw': 'DRAW',
 
   'panel.settings.title': 'Settings',
   'settings.lang': 'Language',
@@ -468,6 +472,7 @@ const es: Dict = {
   'lb.podium.champion': 'Campeón',
   'lb.abbr.win': 'V',
   'lb.abbr.loss': 'D',
+  'lb.abbr.draw': 'E',
   'lb.win.full': 'Victorias',
   'lb.win.full1': 'Victoria',
   'lb.loss.full': 'Derrotas',
@@ -526,6 +531,7 @@ const es: Dict = {
   'history.col.delta': 'Δ ELO',
   'history.win': 'VICTORIA',
   'history.loss': 'DERROTA',
+  'history.draw': 'TABLAS',
 
   'panel.settings.title': 'Ajustes',
   'settings.lang': 'Idioma',

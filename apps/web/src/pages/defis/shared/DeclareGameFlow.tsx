@@ -157,7 +157,11 @@ export function DeclareGameFlow({
   const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
   const isChess = game === 'chess';
   const [opponent, setOpponent] = useState<LeaderboardEntry | null>(null);
-  const [iWon, setIWon] = useState<boolean | null>(null);
+  // Issue déclarée : victoire / défaite / nulle (la nulle n'existe qu'aux échecs).
+  const [outcome, setOutcome] = useState<'win' | 'loss' | 'draw' | null>(null);
+  const iWon = outcome === 'win';
+  const isDraw = outcome === 'draw';
+  const hasOutcome = outcome !== null;
   const [loserScore, setLoserScore] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -170,9 +174,9 @@ export function DeclareGameFlow({
 
   const target = smashTargetOf(bestOf);
 
-  const handleOutcome = (won: boolean) => {
-    haptic(won ? 'success' : 'warning');
-    setIWon(won);
+  const handleOutcome = (o: 'win' | 'loss' | 'draw') => {
+    haptic(o === 'win' ? 'success' : o === 'draw' ? 'medium' : 'warning');
+    setOutcome(o);
     setLoserScore(0);
     setLoserGames(0);
   };
@@ -180,7 +184,7 @@ export function DeclareGameFlow({
   const smashReady = !isSetGame || (!!charSelf && !!charOpp);
 
   const handleSubmit = useCallback(async () => {
-    if (!opponent || iWon === null) return;
+    if (!opponent || !hasOutcome) return;
     setBusy(true);
     try {
       if (isSetGame) {
@@ -204,11 +208,11 @@ export function DeclareGameFlow({
           ...(isSmash ? { stocks: winnerStocks } : {}),
         });
       } else if (isChess) {
-        // Échecs : résultat binaire 1-0.
+        // Échecs : victoire 1-0, défaite 0-1, ou nulle 0-0.
         await api.declareMatch({
           opponentLogin: opponent.login,
-          scoreSelf: iWon ? 1 : 0,
-          scoreOpponent: iWon ? 0 : 1,
+          scoreSelf: isDraw ? 0 : iWon ? 1 : 0,
+          scoreOpponent: isDraw ? 0 : iWon ? 0 : 1,
           game: 'chess',
         });
       } else {
@@ -226,7 +230,7 @@ export function DeclareGameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, iWon, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted, t]);
+  }, [opponent, hasOutcome, iWon, isDraw, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted, t]);
 
   const triggerSend = () => {
     setSending(true);
@@ -276,53 +280,67 @@ export function DeclareGameFlow({
           opponentCounts={opponentCounts}
           selected={opponent}
           onSelect={setOpponent}
-          onClear={() => { setOpponent(null); setIWon(null); }}
+          onClear={() => { setOpponent(null); setOutcome(null); }}
           locations={locations}
         />
       </div>
 
-      {opponent && iWon === null && (
+      {opponent && !hasOutcome && (
         <div className="relative mt-6 animate-slide-down">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3">
             {t('defis.result')}
           </label>
           <div className="grid grid-cols-2 gap-4">
-            <OutcomeButton kind="win" onClick={() => handleOutcome(true)}>{t('defis.iWon')}</OutcomeButton>
-            <OutcomeButton kind="loss" onClick={() => handleOutcome(false)}>{t('defis.iLost')}</OutcomeButton>
+            <OutcomeButton kind="win" onClick={() => handleOutcome('win')}>{t('defis.iWon')}</OutcomeButton>
+            <OutcomeButton kind="loss" onClick={() => handleOutcome('loss')}>{t('defis.iLost')}</OutcomeButton>
           </div>
+          {/* Nulle : échecs uniquement (la seule discipline qui l'autorise). */}
+          {isChess && (
+            <button
+              type="button"
+              onClick={() => handleOutcome('draw')}
+              className="mt-3 w-full py-3 rounded-xl border border-gold/40 bg-gold/10 text-gold text-sm font-extrabold uppercase tracking-wide transition-all hover:bg-gold/20 active:scale-[0.98]"
+            >
+              {t('defis.iDrew')}
+            </button>
+          )}
         </div>
       )}
 
-      {opponent && iWon !== null && (
+      {opponent && hasOutcome && (
         <div className="relative mt-6 animate-fade-in">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
             {t('defis.result')}
           </label>
           <button
             type="button"
-            onClick={() => setIWon(null)}
+            onClick={() => setOutcome(null)}
             aria-label={t('defis.editResult')}
             className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all shadow-sm hover:shadow-md tap-transparent active:scale-[0.98] ${
-              iWon
-                ? 'border-teal/40 bg-teal/10 text-teal hover:bg-teal/20'
-                : 'border-red/40 bg-red/10 text-red hover:bg-red/20'
+              isDraw
+                ? 'border-gold/40 bg-gold/10 text-gold hover:bg-gold/20'
+                : iWon
+                  ? 'border-teal/40 bg-teal/10 text-teal hover:bg-teal/20'
+                  : 'border-red/40 bg-red/10 text-red hover:bg-red/20'
             }`}
           >
             <span className="text-sm font-extrabold tracking-wide">
-              {variant === 'mobile'
-                ? iWon
-                  ? t('defis.iWon')
-                  : t('defis.iLost')
-                : iWon
-                  ? t('defis.iWonTrophy')
-                  : t('defis.iLostSkull')}
+              {isDraw
+                ? t('defis.iDrew')
+                : variant === 'mobile'
+                  ? iWon
+                    ? t('defis.iWon')
+                    : t('defis.iLost')
+                  : iWon
+                    ? t('defis.iWonTrophy')
+                    : t('defis.iLostSkull')}
             </span>
             <span className="text-muted-2 text-lg leading-none">×</span>
           </button>
         </div>
       )}
 
-      {opponent && iWon !== null && game === 'babyfoot' && (
+      {opponent && hasOutcome && game === 'babyfoot' && (
         <div className="relative mt-6 animate-slide-down">
 
           {/* ── Affichage du score en direct ───────────────────────────────── */}
@@ -391,7 +409,7 @@ export function DeclareGameFlow({
       )}
 
       {/* ─── Variante SET (Smash / Street Fighter) : format, games, persos ──── */}
-      {opponent && iWon !== null && isSetGame && (
+      {opponent && hasOutcome && isSetGame && (
         <div className="relative mt-6 animate-slide-down space-y-5">
           {/* Format */}
           <div>
@@ -509,13 +527,21 @@ export function DeclareGameFlow({
         </div>
       )}
 
-      {/* ─── Variante ÉCHECS : résultat binaire (victoire / défaite) ──────── */}
-      {opponent && iWon !== null && isChess && (
+      {/* ─── Variante ÉCHECS : victoire / défaite / nulle ─────────────────── */}
+      {opponent && hasOutcome && isChess && (
         <div className="relative mt-6 animate-slide-down space-y-4">
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">
-            <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-            {' '}{t('defis.checkmated')}{' '}
-            <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
+            {isDraw ? (
+              <span className="font-extrabold text-gold">
+                {t('defis.chessDraw')} {opponent.login}
+              </span>
+            ) : (
+              <>
+                <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
+                {' '}{t('defis.checkmated')}{' '}
+                <span className={`font-extrabold ${iWon ? 'text-text-strong' : 'text-teal'}`}>{loserLogin}</span>
+              </>
+            )}
             <div className="text-[11px] text-muted-2 mt-1">{t('defis.chessOnlyResult')}</div>
           </div>
           <Button

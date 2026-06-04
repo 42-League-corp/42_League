@@ -10,6 +10,7 @@ import { GamePill, MatchScore } from '../../../components/MatchScore';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDatePair } from '../../../lib/format';
+import { outcomeFor } from '../../../lib/playerStats';
 
 interface RecentMatchesListProps {
   matches: PlayedMatch[];
@@ -57,7 +58,9 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
   const { lang } = useI18n();
   const { leaderboard } = useLeagueData();
   const youAreA = match.playerALogin === myLogin;
-  const youWon = (youAreA && match.winner === 'A') || (!youAreA && match.winner === 'B');
+  const outcome = outcomeFor(match, myLogin ?? '');
+  const youWon = outcome === 'win';
+  const isDraw = outcome === 'draw';
   const opp = youAreA ? match.playerBLogin : match.playerALogin;
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const isSmash = match.game === 'smash';
@@ -75,18 +78,20 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${
-        youWon
-          ? 'border-teal/20 bg-teal/[0.04]'
-          : 'border-red/20 bg-red/[0.04]'
+        isDraw
+          ? 'border-gold/20 bg-gold/[0.04]'
+          : youWon
+            ? 'border-teal/20 bg-teal/[0.04]'
+            : 'border-red/20 bg-red/[0.04]'
       }`}
     >
-      {/* W/L badge */}
+      {/* V / N / D badge */}
       <div
         className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-mono font-black text-sm ${
-          youWon ? 'bg-teal/15 text-teal' : 'bg-red/15 text-red'
+          isDraw ? 'bg-gold/15 text-gold' : youWon ? 'bg-teal/15 text-teal' : 'bg-red/15 text-red'
         }`}
       >
-        {youWon ? t('lb.abbr.win') : t('lb.abbr.loss')}
+        {isDraw ? t('lb.abbr.draw') : youWon ? t('lb.abbr.win') : t('lb.abbr.loss')}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -112,7 +117,7 @@ function RecentMatchRow({ match, myLogin, delay }: RecentMatchRowProps) {
         game={match.game}
         winnerScore={winnerScore}
         loserScore={loserScore}
-        myPerspective={youWon ? 'win' : 'loss'}
+        myPerspective={outcome}
         bestOf={match.bestOf}
         compact
       />

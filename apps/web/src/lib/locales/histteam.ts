@@ -14,6 +14,7 @@ export const dict: Record<Lang, Dict> = {
     // Historique — divers
     'history.outOfElo': 'hors ELO',
     'history.result.win': 'Victoire',
+    'history.result.draw': 'Nulle',
 
     // Team — page / erreurs
     'team.loadError': 'Erreur de chargement.',
@@ -67,6 +68,7 @@ export const dict: Record<Lang, Dict> = {
     'history.stat.eloNet': 'Net ELO',
     'history.outOfElo': 'no ELO',
     'history.result.win': 'Win',
+    'history.result.draw': 'Draw',
 
     'team.loadError': 'Loading error.',
     'team.notFound': 'Team not found',
@@ -114,6 +116,7 @@ export const dict: Record<Lang, Dict> = {
     'history.stat.eloNet': 'ELO neto',
     'history.outOfElo': 'sin ELO',
     'history.result.win': 'Victoria',
+    'history.result.draw': 'Tablas',
 
     'team.loadError': 'Error de carga.',
     'team.notFound': 'Equipo no encontrado',

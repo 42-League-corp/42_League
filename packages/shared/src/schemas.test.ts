@@ -295,6 +295,16 @@ describe('DeclareMatchSchema', () => {
     });
   });
 
+  describe('échecs : 1-0 / 0-1 / nulle 0-0', () => {
+    const chess = (scoreSelf: number, scoreOpponent: number) =>
+      DeclareMatchSchema.safeParse({ opponentLogin: 'bob', game: 'chess', scoreSelf, scoreOpponent }).success;
+    it('accepte la victoire 1-0', () => expect(chess(1, 0)).toBe(true));
+    it('accepte la défaite 0-1', () => expect(chess(0, 1)).toBe(true));
+    it('accepte la nulle 0-0', () => expect(chess(0, 0)).toBe(true));
+    it('rejette 1-1', () => expect(chess(1, 1)).toBe(false));
+    it('rejette 2-0', () => expect(chess(2, 0)).toBe(false));
+  });
+
   describe('validation des champs imbriqués', () => {
     it('rejette un opponentLogin invalide (majuscules)', () => {
       expect(

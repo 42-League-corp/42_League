@@ -104,6 +104,12 @@ export function computeTrophies(
     const b = ensure(m.playerBLogin);
     a.played++;
     b.played++;
+    // Nulle (échecs) : ni V ni D, casse les séries des deux joueurs.
+    if (m.winner === 'draw') {
+      a.curWinStreak = 0; a.curLossStreak = 0;
+      b.curWinStreak = 0; b.curLossStreak = 0;
+      continue;
+    }
     const winner = m.winner === 'A' ? a : b;
     const loser = m.winner === 'A' ? b : a;
     winner.wins++;
@@ -582,8 +588,10 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
   const gamesPlayed = new Map<string, Set<string>>();
   for (const m of matches) {
     const g = m.game ?? 'babyfoot';
-    const winner = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
-    wins.set(winner, (wins.get(winner) ?? 0) + 1);
+    if (m.winner !== 'draw') {
+      const winner = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
+      wins.set(winner, (wins.get(winner) ?? 0) + 1);
+    }
     for (const login of [m.playerALogin, m.playerBLogin]) {
       const s = gamesPlayed.get(login) ?? new Set<string>();
       s.add(g);

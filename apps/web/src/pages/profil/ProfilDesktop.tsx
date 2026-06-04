@@ -51,8 +51,11 @@ export function ProfilDesktop() {
       const youAreA = m.playerALogin === myLogin;
       return (youAreA && m.winner === 'A') || (!youAreA && m.winner === 'B');
     }).length;
+    const draws = my.filter((m) => m.winner === 'draw').length;
     const total = my.length;
-    const winRate = total === 0 ? 0 : Math.round((wins / total) * 100);
+    // Win-rate sur les parties décisives (les nulles n'y entrent pas).
+    const decisive = total - draws;
+    const winRate = decisive === 0 ? 0 : Math.round((wins / decisive) * 100);
     const moves = my
       .filter((m) => m.countedForElo)
       .map((m) => (m.playerALogin === myLogin ? m.deltaA : m.deltaB));
@@ -72,7 +75,8 @@ export function ProfilDesktop() {
       matchesPlayed: rating.matchesPlayed,
       total,
       wins,
-      losses: total - wins,
+      draws,
+      losses: total - wins - draws,
       winRate,
       totalDelta,
       officialTitles,
@@ -351,6 +355,7 @@ export function ProfilDesktop() {
                 {myRecent.slice(0, 20).map((m) => {
                   const isA = m.playerALogin === u.login;
                   const opp = isA ? m.playerBLogin : m.playerALogin;
+                  const isDraw = m.winner === 'draw';
                   const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
                   const sYou = isA ? m.scoreA : m.scoreB;
                   const sOpp = isA ? m.scoreB : m.scoreA;
@@ -365,12 +370,12 @@ export function ProfilDesktop() {
                         <PlayerLink login={opp}>{opp}</PlayerLink>
                       </td>
                       <td className="px-2 sm:px-3 py-2 text-right tabular-nums">
-                        {sYou}–{sOpp}
+                        {isDraw && m.game === 'chess' ? '½–½' : `${sYou}–${sOpp}`}
                       </td>
                       <td
-                        className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${won ? 'text-gold' : 'text-red'}`}
+                        className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${isDraw ? 'text-gold' : won ? 'text-gold' : 'text-red'}`}
                       >
-                        {won ? t('history.win') : t('history.loss')}
+                        {isDraw ? t('history.draw') : won ? t('history.win') : t('history.loss')}
                       </td>
                     </tr>
                   );

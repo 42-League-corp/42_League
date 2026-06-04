@@ -9,53 +9,71 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type MatchmakingOpponent } from '../lib/api';
-import { useGameMode } from './useGameMode';
+import type { Game } from '../lib/gameMode';
+import { setGame } from '../lib/gameMode';
 import { useLeagueData } from './useLeagueData';
 
 export type MatchmakingState = 'idle' | 'searching' | 'matched';
 
 const POLL_INTERVAL_MS = 2500;
 
-interface MatchmakingContextValue {
-  state: MatchmakingState;
+/** Appariement à afficher dans l'overlay VERSUS. */
+interface Matched {
+  game: Game;
   opponent: MatchmakingOpponent | null;
-  start: () => Promise<void>;
-  cancel: () => Promise<void>;
+}
+
+interface MatchmakingContextValue {
+  /** Modes dont la recherche « match aléatoire » est en cours (indépendants). */
+  searching: Game[];
+  /** Appariement courant à afficher (overlay VERSUS), ou null. */
+  matched: Matched | null;
+  /** Lance/rejoint la file du mode donné. */
+  start: (game: Game) => Promise<void>;
+  /** Quitte la file du mode donné. */
+  cancel: (game: Game) => Promise<void>;
+  /** Ferme l'overlay courant (et enchaîne sur l'appariement suivant s'il y en a). */
   dismiss: () => void;
 }
 
 const MatchmakingContext = createContext<MatchmakingContextValue | null>(null);
 
 /**
- * Provider global du flux « Match aléatoire » (matchmaking queue) :
- *   idle → start() → searching (polling) → matched → dismiss() → idle.
+ * Provider global du flux « Match aléatoire » (matchmaking queue), désormais
+ * INDÉPENDANT PAR MODE de jeu : on peut chercher un adversaire en babyfoot ET en
+ * smash ET en SF en même temps. Chaque recherche a sa propre pastille (cf.
+ * MatchmakingButton) ; un seul polling global suffit (un joueur = une connexion).
  *
- * Monté HAUT dans l'arbre (au-dessus de l'AppShell, cf. AuthenticatedShell), il
- * survit aux changements de page : on peut lancer une recherche sur les défis,
- * naviguer ailleurs, et rester dans la file (le polling continue). Quand un
- * adversaire est trouvé, l'overlay VERSUS (cf. MatchmakingOverlay, monté lui aussi
- * globalement dans l'AppShell) s'affiche QUELLE QUE SOIT la page courante.
+ * Monté HAUT dans l'arbre (au-dessus de l'AppShell) → survit aux changements de
+ * page : on lance une recherche, on navigue, et l'overlay VERSUS (cf.
+ * MatchmakingOverlay) s'affiche QUELLE QUE SOIT la page quand un mode trouve un
+ * adversaire — en montrant le LOGO du mode concerné.
  *
- * - start()   : rejoint la file (api.queueJoin). Si déjà apparié, passe direct
- *               en `matched`. Sinon `searching` + polling de api.queueStatus.
- * - cancel()  : quitte la file (api.queueLeave) et revient à `idle`.
- * - dismiss() : ferme l'overlay versus, revient à `idle`, et navigue vers les
- *               défis pour jouer le duel créé.
- * - cleanup   : au démontage (= logout / sortie du shell) pendant la recherche,
- *               quitte la file + clear timer. Un simple changement de route ne
- *               démonte PAS le provider → la recherche persiste.
+ * - start(game)  : rejoint la file `game`. Apparié direct → overlay ; sinon
+ *                  ajout à `searching` + (re)démarrage du polling global.
+ * - cancel(game) : quitte la file `game`.
+ * - dismiss()    : ferme l'overlay, bascule sur le mode apparié (pour voir le
+ *                  duel), enchaîne sur l'appariement suivant en attente s'il y en
+ *                  a, sinon navigue vers les défis.
+ * - cleanup      : au démontage (logout) en pleine recherche → quitte TOUTES les
+ *                  files. Un changement de route ne démonte pas le provider.
  */
 export function MatchmakingProvider({ children }: { children: ReactNode }) {
-  const { game } = useGameMode();
   const navigate = useNavigate();
   const { refresh } = useLeagueData();
 
-  const [state, setState] = useState<MatchmakingState>('idle');
-  const [opponent, setOpponent] = useState<MatchmakingOpponent | null>(null);
+  const [searching, setSearching] = useState<Game[]>([]);
+  const searchingRef = useRef<Game[]>([]);
+  searchingRef.current = searching;
+
+  const [matched, setMatched] = useState<Matched | null>(null);
+  const matchedRef = useRef<Matched | null>(null);
+  matchedRef.current = matched;
+  // Appariements supplémentaires en attente d'affichage (plusieurs modes trouvés
+  // au même tick) — défilés un par un via dismiss().
+  const pendingRef = useRef<Matched[]>([]);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Permet au cleanup de démontage de savoir s'il faut quitter la file.
-  const searchingRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -64,84 +82,86 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Bascule en `matched` : stoppe le polling, retient l'adversaire, et rafraîchit
-  // les données ligue pour que le duel (Challenge `accepted`) apparaisse aussitôt
-  // dans la liste « duels à jouer ».
-  const onMatched = useCallback(
-    (opp: MatchmakingOpponent | null) => {
-      stopPolling();
-      searchingRef.current = false;
-      setOpponent(opp);
-      setState('matched');
+  // Empile un appariement : affiché tout de suite si l'overlay est libre, sinon
+  // mis en file d'attente. Rafraîchit les données ligue pour que le duel créé
+  // (Challenge `accepted`) apparaisse aussitôt dans « duels à jouer ».
+  const pushMatch = useCallback(
+    (m: Matched) => {
+      if (matchedRef.current) pendingRef.current.push(m);
+      else setMatched(m);
       void refresh();
     },
-    [refresh, stopPolling],
+    [refresh],
   );
 
-  const start = useCallback(async () => {
-    if (searchingRef.current) return;
-    searchingRef.current = true;
-    setState('searching');
-    setOpponent(null);
-    try {
-      const res = await api.queueJoin(game);
-      if (res.matched) {
-        onMatched(res.opponent ?? null);
-        return;
-      }
-      // Toujours en recherche : démarre le polling.
-      stopPolling();
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await api.queueStatus();
-          if (status.state === 'matched') {
-            onMatched(status.opponent ?? null);
-          }
-        } catch {
-          /* erreur réseau transitoire : on retentera au prochain tick */
+  const ensurePolling = useCallback(() => {
+    if (pollRef.current !== null) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await api.queueStatus();
+        for (const m of status.matches ?? []) {
+          setSearching((prev) => prev.filter((g) => g !== m.game));
+          pushMatch({ game: m.game, opponent: m.opponent ?? null });
         }
-      }, POLL_INTERVAL_MS);
-    } catch {
-      searchingRef.current = false;
-      stopPolling();
-      setState('idle');
-    }
-  }, [game, onMatched, stopPolling]);
+        // Plus aucune file active et aucun match à venir → on arrête de poller.
+        if (searchingRef.current.length === 0) stopPolling();
+      } catch {
+        /* erreur réseau transitoire : on retentera au prochain tick */
+      }
+    }, POLL_INTERVAL_MS);
+  }, [pushMatch, stopPolling]);
 
-  const cancel = useCallback(async () => {
-    stopPolling();
-    searchingRef.current = false;
-    setState('idle');
-    setOpponent(null);
+  const start = useCallback(
+    async (game: Game) => {
+      if (searchingRef.current.includes(game)) return;
+      setSearching((prev) => (prev.includes(game) ? prev : [...prev, game]));
+      try {
+        const res = await api.queueJoin(game);
+        if (res.matched) {
+          setSearching((prev) => prev.filter((g) => g !== game));
+          pushMatch({ game: res.game ?? game, opponent: res.opponent ?? null });
+          return;
+        }
+        ensurePolling();
+      } catch {
+        setSearching((prev) => prev.filter((g) => g !== game));
+      }
+    },
+    [ensurePolling, pushMatch],
+  );
+
+  const cancel = useCallback(async (game: Game) => {
+    setSearching((prev) => prev.filter((g) => g !== game));
     try {
-      await api.queueLeave();
+      await api.queueLeave(game);
     } catch {
       /* best-effort */
     }
-  }, [stopPolling]);
+  }, []);
 
   const dismiss = useCallback(() => {
-    stopPolling();
-    searchingRef.current = false;
-    setState('idle');
-    setOpponent(null);
-    navigate('/challenges');
-  }, [navigate, stopPolling]);
+    const cur = matchedRef.current;
+    const next = pendingRef.current.shift() ?? null;
+    setMatched(next);
+    // Bascule sur le mode apparié pour que le duel soit visible, puis navigue
+    // (seulement quand plus aucun overlay ne suit).
+    if (cur) setGame(cur.game);
+    if (!next) navigate('/challenges');
+  }, [navigate]);
 
-  // Nettoyage au démontage du provider (logout / sortie du shell) : quitte la file
-  // si on cherchait encore. Une navigation entre pages ne démonte pas le provider.
+  // Nettoyage au démontage du provider (logout / sortie du shell) : quitte toutes
+  // les files si on cherchait encore. Une navigation entre pages ne démonte pas.
   useEffect(() => {
     return () => {
       stopPolling();
-      if (searchingRef.current) {
-        searchingRef.current = false;
+      if (searchingRef.current.length > 0) {
         void api.queueLeave().catch(() => {});
       }
     };
   }, [stopPolling]);
 
   return (
-    <MatchmakingContext.Provider value={{ state, opponent, start, cancel, dismiss }}>
+    <MatchmakingContext.Provider value={{ searching, matched, start, cancel, dismiss }}>
       {children}
     </MatchmakingContext.Provider>
   );

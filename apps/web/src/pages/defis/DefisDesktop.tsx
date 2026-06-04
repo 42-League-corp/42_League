@@ -111,6 +111,7 @@ export function DefisDesktop() {
     );
     let wins = 0; let losses = 0; let streak = 0; let streakBroken = false;
     for (const m of [...mine].sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt))) {
+      if (m.winner === 'draw') { streakBroken = true; continue; } // nulle : ni V ni D, casse la série
       const isA = m.playerALogin === login;
       const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
       if (won) wins++; else losses++;

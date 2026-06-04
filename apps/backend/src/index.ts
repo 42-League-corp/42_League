@@ -40,6 +40,7 @@ import {
   GAME_IDS,
   applyGameElo,
   eloOrderBy,
+  getGameDef,
   parseGameId,
   projectStats,
   ratingUpdate,
@@ -1197,7 +1198,8 @@ app.get('/users/:login', async (c) => {
     const isA = m.playerALogin === login;
     return (isA && m.winner === 'A') || (!isA && m.winner === 'B');
   }).length;
-  const losses = played.length - wins;
+  const draws = played.filter((m) => m.winner === 'draw').length;
+  const losses = played.length - wins - draws;
   const badges = await badgesFor(login, user.role);
   // Statut de suivi du visiteur vis-à-vis de ce profil.
   const follow =
@@ -1213,6 +1215,7 @@ app.get('/users/:login', async (c) => {
     rank: rank || null,
     wins,
     losses,
+    draws,
     recent: played,
     badges,
     palmares,
@@ -1315,8 +1318,8 @@ app.post('/queue/join', async (c) => {
   // même partenaire — le second ne le retrouvera plus dans la file).
   const paired = await prisma.$transaction(async (tx) => {
     await tx.matchmakingQueue.upsert({
-      where: { login: me },
-      update: { game, joinedAt: new Date() },
+      where: { login_game: { login: me, game } },
+      update: { joinedAt: new Date() },
       create: { login: me, game },
     });
     const candidates = await tx.matchmakingQueue.findMany({
@@ -1330,11 +1333,14 @@ app.post('/queue/join', async (c) => {
         select: { bannedAt: true, anonymizedAt: true, deletionScheduledAt: true },
       });
       if (!u || u.bannedAt || u.anonymizedAt || u.deletionScheduledAt) {
-        await tx.matchmakingQueue.delete({ where: { login: cand.login } }).catch(() => {});
+        await tx.matchmakingQueue
+          .delete({ where: { login_game: { login: cand.login, game } } })
+          .catch(() => {});
         continue;
       }
-      // Appariement : on retire les deux entrées.
-      await tx.matchmakingQueue.deleteMany({ where: { login: { in: [me, cand.login] } } });
+      // Appariement : on retire les deux entrées de CE mode uniquement (chacun
+      // peut rester en file pour d'autres modes en parallèle).
+      await tx.matchmakingQueue.deleteMany({ where: { game, login: { in: [me, cand.login] } } });
       return cand.login as string;
     }
     return null;
@@ -1388,35 +1394,46 @@ app.post('/queue/join', async (c) => {
 
 app.post('/queue/leave', async (c) => {
   const me = await getCurrentLogin(c);
-  await prisma.matchmakingQueue.deleteMany({ where: { login: me } });
+  const body = await c.req.json().catch(() => ({}));
+  // game fourni = quitte uniquement cette file ; sinon quitte TOUTES mes files
+  // (cleanup au logout / démontage du provider).
+  if (body?.game !== undefined && body?.game !== null) {
+    const game = parseGameId(body.game);
+    await prisma.matchmakingQueue.deleteMany({ where: { login: me, game } });
+  } else {
+    await prisma.matchmakingQueue.deleteMany({ where: { login: me } });
+  }
   return c.json({ ok: true });
 });
 
 app.get('/queue/status', async (c) => {
   const me = await getCurrentLogin(c);
-  const row = await prisma.matchmakingQueue.findUnique({ where: { login: me } });
-  if (row) {
-    return c.json({ state: 'queued', game: row.game });
-  }
-  // Détection d'un appariement très récent (déclenché par le join de l'autre).
-  // On lit la dernière notif 'matchmaking' non lue dans la fenêtre, puis on la
-  // marque lue → 'matched' n'est rapporté qu'une fois (l'animation versus ne
-  // boucle pas).
+  // Files où je suis encore en attente (un mode par entrée).
+  const rows = await prisma.matchmakingQueue.findMany({ where: { login: me } });
+  const queued = rows.map((r) => parseGameId(r.game));
+
+  // Appariements récents (déclenchés par le join d'un autre joueur, sur un ou
+  // plusieurs modes). On lit les notifs 'matchmaking' non lues dans la fenêtre
+  // puis on les marque lues → chaque appariement n'est rapporté qu'une fois
+  // (l'animation versus ne boucle pas). On dédoublonne par mode (dernier gagne).
   const since = new Date(Date.now() - MATCH_NOTIF_WINDOW_MS);
-  const notif = await prisma.notification.findFirst({
+  const notifs = await prisma.notification.findMany({
     where: { recipientLogin: me, type: 'matchmaking', read: false, createdAt: { gte: since } },
     orderBy: { createdAt: 'desc' },
   });
-  if (notif) {
+  const seen = new Set<string>();
+  const matches: Array<{ game: ReturnType<typeof parseGameId>; opponent: QueueOpponent | null }> = [];
+  for (const notif of notifs) {
     await prisma.notification.update({ where: { id: notif.id }, data: { read: true } });
-    // Récupère le login adverse + le jeu depuis le lien stocké.
     const params = new URLSearchParams((notif.link ?? '').split('?')[1] ?? '');
     const vs = params.get('vs');
     const game = parseGameId(params.get('game'));
+    if (seen.has(game)) continue;
+    seen.add(game);
     const opponent = vs ? await fetchQueueOpponent(vs) : null;
-    return c.json({ state: 'matched', game, opponent });
+    matches.push({ game, opponent });
   }
-  return c.json({ state: 'idle' });
+  return c.json({ queued, matches });
 });
 
 // ── Saisons ───────────────────────────────────────────────────────────────
@@ -1495,6 +1512,7 @@ app.post('/seasons/close', async (c) => {
           const rec = wl.get(login);
           if (!rec) continue;
           const isA = m.playerALogin === login;
+          if (m.winner === 'draw') continue; // nulle : ni V ni D au classement de saison
           const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
           if (won) rec.w++;
           else rec.l++;
@@ -1872,8 +1890,10 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
   const declarerIsA = p.declarerLogin === a;
   const scoreA = declarerIsA ? p.scoreDeclarer : p.scoreOpponent;
   const scoreB = declarerIsA ? p.scoreOpponent : p.scoreDeclarer;
-  const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
   const game = parseGameId(p.game);
+  // Égalité (échecs : 0-0) → 'draw' ; sinon le plus haut score gagne.
+  const winner: 'A' | 'B' | 'draw' =
+    scoreA === scoreB && getGameDef(game).hasDraw ? 'draw' : scoreA > scoreB ? 'A' : 'B';
   // Smash uniquement : les « stocks » (vies) sont spécifiques au Smash. Street
   // Fighter partage la mécanique de set mais n'a pas de stocks.
   const isSmash = game === 'smash';
@@ -2101,13 +2121,15 @@ app.post('/matches/:id/confirm', async (c) => {
       type: 'ops:update',
       payload: { reason: 'forced_played' },
     });
-    // Le perdant d'un match OPS forcé → ses abonnés sont prévenus.
-    const loser = match.winner === 'A' ? match.playerBLogin : match.playerALogin;
-    void notifyFollowers(loser, 'notifyOps', {
-      type: 'follow_ops',
-      title: `@${loser} a perdu un match OPS`,
-      link: `/player/${encodeURIComponent(loser)}`,
-    });
+    // Le perdant d'un match OPS forcé → ses abonnés sont prévenus. Pas de perdant si nulle.
+    if (match.winner !== 'draw') {
+      const loser = match.winner === 'A' ? match.playerBLogin : match.playerALogin;
+      void notifyFollowers(loser, 'notifyOps', {
+        type: 'follow_ops',
+        title: `@${loser} a perdu un match OPS`,
+        link: `/player/${encodeURIComponent(loser)}`,
+      });
+    }
   }
   return c.json(match);
 });
@@ -4466,8 +4488,10 @@ app.patch('/admin/matches/:id', async (c) => {
     throw new HTTPException(400, { message: 'players must be different' });
   }
 
-  const winner: 'A' | 'B' = scoreA > scoreB ? 'A' : 'B';
   const game = parseGameId(match.game);
+  // Nulle possible uniquement si la discipline l'autorise (échecs).
+  const winner: 'A' | 'B' | 'draw' =
+    scoreA === scoreB && getGameDef(game).hasDraw ? 'draw' : scoreA > scoreB ? 'A' : 'B';
 
   const updated = await prisma.$transaction(async (tx) => {
     if (match.countedForElo) {
@@ -4689,6 +4713,7 @@ app.get('/admin/suspicious', async (c) => {
   const pairs = new Map<string, PairEntry>();
 
   for (const m of allMatches) {
+    if (m.winner === 'draw') continue; // les nuls ne nourrissent pas les heuristiques de domination
     const [a, b] = m.playerALogin < m.playerBLogin
       ? [m.playerALogin, m.playerBLogin]
       : [m.playerBLogin, m.playerALogin];
@@ -4705,6 +4730,7 @@ app.get('/admin/suspicious', async (c) => {
   // ── Per-player overall win rates (for victim_pattern) ─────────────────
   const playerWins = new Map<string, { wins: number; total: number }>();
   for (const m of allMatches) {
+    if (m.winner === 'draw') continue;
     const winnerLogin = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
     const loserLogin  = m.winner === 'A' ? m.playerBLogin : m.playerALogin;
     const w = playerWins.get(winnerLogin) ?? { wins: 0, total: 0 };

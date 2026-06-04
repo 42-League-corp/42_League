@@ -1,7 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
 import { useMatchmaking } from '../hooks/useMatchmaking';
 import { useLeagueData } from '../hooks/useLeagueData';
-import { useGameMode } from '../hooks/useGameMode';
 import { VersusOverlay } from './VersusOverlay';
 
 /**
@@ -9,17 +8,21 @@ import { VersusOverlay } from './VersusOverlay';
  * s'affiche au-dessus de N'IMPORTE QUELLE page quand le matchmaking trouve un
  * adversaire, même si l'utilisateur a quitté la page des défis pendant la
  * recherche. Source de vérité : le MatchmakingProvider (cf. useMatchmaking).
+ *
+ * Le mode affiché (logo) est celui de l'APPARIEMENT (`matched.game`), pas le mode
+ * de la page courante : on peut chercher en smash, être sur une autre page en
+ * babyfoot, et voir « Adversaire trouvé · Smash ».
  */
 export function MatchmakingOverlay() {
-  const { state, opponent, dismiss } = useMatchmaking();
+  const { matched, dismiss } = useMatchmaking();
   const { me } = useLeagueData();
-  const { game } = useGameMode();
 
   const myUser = me?.user;
   const meName =
     myUser?.firstName && myUser?.lastName
       ? `${myUser.firstName} ${myUser.lastName}`
       : myUser?.login ?? '—';
+  const opponent = matched?.opponent ?? null;
   const oppName =
     opponent?.firstName && opponent?.lastName
       ? `${opponent.firstName} ${opponent.lastName}`
@@ -27,9 +30,9 @@ export function MatchmakingOverlay() {
 
   return (
     <AnimatePresence>
-      {state === 'matched' && opponent && (
+      {matched && opponent && (
         <VersusOverlay
-          game={game}
+          game={matched.game}
           me={{ login: myUser?.login ?? '—', imageUrl: myUser?.imageUrl ?? null, name: meName }}
           opponent={{ login: opponent.login, imageUrl: opponent.imageUrl, name: oppName }}
           onDone={dismiss}

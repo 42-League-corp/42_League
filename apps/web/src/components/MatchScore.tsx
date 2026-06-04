@@ -18,7 +18,7 @@ import type { Game } from '../lib/api';
  *   />
  */
 
-export type MatchPerspective = 'win' | 'loss';
+export type MatchPerspective = 'win' | 'loss' | 'draw';
 
 interface MatchScoreProps {
   game?: Game;
@@ -61,19 +61,22 @@ export function GamePill({ game }: { game?: Game }) {
 
 export function MatchScore({ game, winnerScore, loserScore, myPerspective, bestOf, compact = false }: MatchScoreProps) {
   const won = myPerspective === 'win';
+  const draw = myPerspective === 'draw';
 
-  // ── Échecs : pill lisible ──────────────────────────────────────────────────
+  // ── Échecs : pill lisible (Victoire / Nulle / Défaite) ─────────────────────
   if (game === 'chess') {
     return (
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <span
           className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border leading-none ${
-            won
-              ? 'bg-teal/10 border-teal/30 text-teal'
-              : 'bg-red/10 border-red/30 text-red'
+            draw
+              ? 'bg-gold/10 border-gold/30 text-gold'
+              : won
+                ? 'bg-teal/10 border-teal/30 text-teal'
+                : 'bg-red/10 border-red/30 text-red'
           }`}
         >
-          {won ? '♟ Victoire' : '♟ Défaite'}
+          {draw ? '♟ Nulle' : won ? '♟ Victoire' : '♟ Défaite'}
         </span>
       </div>
     );

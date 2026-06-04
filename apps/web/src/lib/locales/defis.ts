@@ -160,6 +160,10 @@ export const dict: Record<Lang, Dict> = {
     // Chess
     'defis.checkmated': 'a maté',
     'defis.chessOnlyResult': 'Aux échecs, seul le résultat compte.',
+    'defis.iDrew': 'Match nul',
+    'defis.chessDraw': 'Partie nulle contre',
+    'defis.draw': 'Nulle',
+    'defis.drew': 'fait nulle',
     'defis.mustConfirmResult': 'devra confirmer le résultat pour valider la partie.',
 
     // Challenge result form (desktop accepted)
@@ -385,6 +389,10 @@ export const dict: Record<Lang, Dict> = {
 
     'defis.checkmated': 'checkmated',
     'defis.chessOnlyResult': 'In chess, only the result matters.',
+    'defis.iDrew': 'Draw',
+    'defis.chessDraw': 'Draw against',
+    'defis.draw': 'Draw',
+    'defis.drew': 'drew',
     'defis.mustConfirmResult': 'will have to confirm the result to validate the game.',
 
     'defis.scoreSent': 'Score sent — awaiting confirmation',
@@ -604,6 +612,10 @@ export const dict: Record<Lang, Dict> = {
 
     'defis.checkmated': 'dio jaque mate a',
     'defis.chessOnlyResult': 'En ajedrez, solo cuenta el resultado.',
+    'defis.iDrew': 'Tablas',
+    'defis.chessDraw': 'Tablas contra',
+    'defis.draw': 'Tablas',
+    'defis.drew': 'hiciste tablas',
     'defis.mustConfirmResult': 'deberá confirmar el resultado para validar la partida.',
 
     'defis.scoreSent': 'Marcador enviado — a la espera de confirmación',

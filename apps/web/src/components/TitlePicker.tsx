@@ -78,6 +78,9 @@ export function TitlePicker({ className }: { className?: string }) {
 
   return (
     <div ref={rootRef} className={`inline-block ${className ?? ''}`}>
+      {/* Wrapper relatif : le menu s'ancre au bouton (et non à un ancêtre
+          positionné lointain), qu'on soit en desktop ou en mobile. */}
+      <div className="relative inline-block">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -123,6 +126,7 @@ export function TitlePicker({ className }: { className?: string }) {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

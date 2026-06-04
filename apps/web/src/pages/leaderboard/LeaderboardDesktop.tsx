@@ -103,6 +103,7 @@ export function LeaderboardDesktop() {
 
     // W/L cumulés
     for (const m of matches) {
+      if (m.winner === 'draw') continue; // nulle : ni V ni D
       for (const login of [m.playerALogin, m.playerBLogin]) {
         const cur = map.get(login);
         if (!cur) continue;
@@ -120,6 +121,7 @@ export function LeaderboardDesktop() {
     // Série en cours : on parcourt les matches récents → anciens par joueur.
     const byPlayer = new Map<string, { won: boolean; at: number; opp: string }[]>();
     for (const m of matches) {
+      if (m.winner === 'draw') continue; // nulle : hors série V/D
       for (const login of [m.playerALogin, m.playerBLogin]) {
         if (!map.has(login)) continue;
         const isA = m.playerALogin === login;

@@ -391,7 +391,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               value={capacity}
               onChange={setCapacity}
               min={6}
-              max={64}
+              max={32}
               label={t('tournois.mobile.players')}
             />
           </Field>
