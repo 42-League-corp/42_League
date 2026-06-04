@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
@@ -101,6 +101,10 @@ export function Declare2v2GameFlow({
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
 
+  // Refs pour auto-scroll à chaque nouvelle étape visible.
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  const scoreRef = useRef<HTMLDivElement>(null);
+
   // Pools filtrés — chaque picker exclut les joueurs déjà choisis + moi.
   const excluded = useMemo(
     () =>
@@ -132,6 +136,25 @@ export function Declare2v2GameFlow({
   );
 
   const allSelected = !!partner && !!opponent1 && !!opponent2;
+
+  // ── Auto-scroll ──────────────────────────────────────────────────────────────
+  // Scroll vers le résultat quand les 4 joueurs sont sélectionnés.
+  useEffect(() => {
+    if (!allSelected || iWon !== null) return;
+    const id = window.setTimeout(() => {
+      outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 120); // laisse l'animation slide-down démarrer
+    return () => window.clearTimeout(id);
+  }, [allSelected, iWon]);
+
+  // Scroll vers le score dès que le résultat est choisi.
+  useEffect(() => {
+    if (iWon === null) return;
+    const id = window.setTimeout(() => {
+      scoreRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [iWon]);
 
   const winnerLabel = iWon ? t('defis.myTeamPlain') : `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}`;
   const loserLabel = iWon ? `${opponent1?.login ?? ''} & ${opponent2?.login ?? ''}` : t('defis.myTeamPlain');
@@ -278,7 +301,7 @@ export function Declare2v2GameFlow({
 
         {/* ── Phase 2 : Résultat ─────────────────────────────────────────── */}
         {allSelected && iWon === null && (
-          <div className="animate-slide-down">
+          <div ref={outcomeRef} className="animate-slide-down">
             <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-3">
               {t('defis.result')}
             </label>
@@ -318,7 +341,7 @@ export function Declare2v2GameFlow({
 
         {/* ── Phase 3 : Score ─────────────────────────────────────────────── */}
         {allSelected && iWon !== null && (
-          <div className="animate-slide-down space-y-5">
+          <div ref={scoreRef} className="animate-slide-down space-y-5">
             {/* Affichage score en direct */}
             <div className="flex items-stretch gap-2">
               {[
@@ -370,6 +393,46 @@ export function Declare2v2GameFlow({
               min={LOSER_SCORE_MIN}
               max={LOSER_SCORE_MAX}
             />
+
+            {/* ── Récap lisible avant envoi ────────────────────────────── */}
+            <div className="px-4 py-3.5 rounded-2xl border text-center leading-relaxed shadow-inner"
+              style={{
+                background: iWon ? 'rgba(255,201,74,0.05)' : 'rgba(255,83,102,0.05)',
+                borderColor: iWon ? 'rgba(255,201,74,0.25)' : 'rgba(255,83,102,0.25)',
+              }}
+            >
+              {/* Équipe gagnante */}
+              <div className="text-xs">
+                <span className={`font-extrabold ${iWon ? 'text-gold' : 'text-text-strong'}`}>
+                  {myLogin ?? 'Toi'}
+                </span>
+                <span className="text-muted-2"> &amp; </span>
+                <span className={`font-extrabold ${iWon ? 'text-gold' : 'text-text-strong'}`}>
+                  {partner?.login}
+                </span>
+                <span className="text-muted-2"> {iWon ? 'ont gagné' : 'ont perdu'} </span>
+                {/* Score */}
+                <span className="font-display font-black tabular-nums text-base"
+                  style={{ color: iWon ? '#ffc94a' : undefined }}
+                >
+                  {iWon ? WINNING_SCORE : loserScore}
+                </span>
+                <span className="text-muted-2 mx-1">–</span>
+                <span className="font-display font-black tabular-nums text-base"
+                  style={{ color: !iWon ? '#ffc94a' : undefined }}
+                >
+                  {iWon ? loserScore : WINNING_SCORE}
+                </span>
+                <span className="text-muted-2"> face à </span>
+                <span className={`font-extrabold ${!iWon ? 'text-gold' : 'text-text-strong'}`}>
+                  {opponent1?.login}
+                </span>
+                <span className="text-muted-2"> &amp; </span>
+                <span className={`font-extrabold ${!iWon ? 'text-gold' : 'text-text-strong'}`}>
+                  {opponent2?.login}
+                </span>
+              </div>
+            </div>
 
             <Button
               size="md"
