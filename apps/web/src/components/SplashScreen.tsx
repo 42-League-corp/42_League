@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 
 // ── Static data ──────────────────────────────────────────────────────────────
@@ -10,9 +10,9 @@ const CHESS_CORNERS = [
   { piece: '♟', left: '89%', top: '75%', size: 36, rotate:   8, color: '#ffc94a' },
 ] as const;
 
-const BURST_LINES = Array.from({ length: 14 }, (_, i) => ({
+const BURST_LINES = Array.from({ length: 8 }, (_, i) => ({
   id: i,
-  angle: (i * 360) / 14,
+  angle: (i * 360) / 8,
   width: i % 2 === 0 ? '50vmax' : '38vmax',
   thickness: i % 3 === 0 ? 2 : 1,
   color:
@@ -84,6 +84,10 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
   const [ready, setReady]           = useState(false);
   const [phase, setPhase]           = useState(0);
   const [showSparks, setShowSparks] = useState(false);
+  // Respecte « animations réduites » : on coupe le décor animé (burst, étincelles,
+  // shockwave, pièces, tiges) et on garde l'essentiel (logo + LEAGUE) → zéro saccade.
+  const reduce = useReducedMotion();
+  const decor = !reduce; // décor animé lourd uniquement si l'utilisateur l'accepte
 
   // Préchargement de l'image avant de démarrer l'animation
   useEffect(() => {
@@ -143,7 +147,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       />
 
       {/* ── Tiges babyfoot ── */}
-      {phase >= 1 &&
+      {decor && phase >= 1 &&
         BABY_RODS.map((rod, ri) => (
           <motion.div
             key={ri}
@@ -174,7 +178,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         ))}
 
       {/* ── Starburst ── */}
-      {phase >= 1 &&
+      {decor && phase >= 1 &&
         BURST_LINES.map((line) => (
           <motion.div
             key={line.id}
@@ -196,7 +200,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         ))}
 
       {/* ── Pièces d'échecs (coins) ── */}
-      {phase >= 1 &&
+      {decor && phase >= 1 &&
         CHESS_CORNERS.map((item, i) => (
           <motion.div
             key={i}
@@ -295,8 +299,11 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       )}
 
       {/* ── Spotlight derrière le logo ── */}
-      {phase >= 1 && (
-        <div
+      {/* IMPORTANT : apparaît AVEC le logo (phase 2) et en fondu — sinon un disque
+          sombre « pop » seul au centre avant le logo (le « point noir »). Cœur
+          adouci pour ne pas laisser de blob sombre pendant le cross-dissolve. */}
+      {phase >= 2 && (
+        <motion.div
           className="absolute pointer-events-none"
           style={{
             left: '50%',
@@ -306,10 +313,13 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             marginLeft: -140,
             marginTop: -140,
             background:
-              'radial-gradient(ellipse at center, rgba(12,10,8,0.96) 30%, rgba(12,10,8,0.5) 58%, transparent 72%)',
+              'radial-gradient(ellipse at center, rgba(12,10,8,0.82) 24%, rgba(12,10,8,0.4) 52%, transparent 70%)',
             zIndex: 7,
             borderRadius: '50%',
           }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
         />
       )}
 
@@ -325,7 +335,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       )}
 
       {/* ── Shockwave ring ── */}
-      {phase >= 2 && (
+      {decor && phase >= 2 && (
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
@@ -345,7 +355,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       )}
 
       {/* ── Particules d'impact ── */}
-      {showSparks &&
+      {decor && showSparks &&
         SPARKS.map((spark) => (
           <motion.div
             key={spark.id}
