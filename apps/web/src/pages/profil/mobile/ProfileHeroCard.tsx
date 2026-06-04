@@ -279,7 +279,7 @@ export function ProfileHeroCard({
         {/* Solde League Coin — sur SON profil. Bandeau lisible avec libellé. */}
         {isMe && (
           <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-violet-500/10 border border-violet-400/25">
-            <img src="/league-coin.svg" alt="" className="w-5 h-5 shrink-0" />
+            <img src="/42coin.png" alt="" className="w-5 h-5 shrink-0" />
             <span className="text-[11px] uppercase tracking-[0.16em] font-extrabold text-violet-200/90">
               League Coins
             </span>

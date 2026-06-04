@@ -25,7 +25,7 @@ const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'cosmetic'];
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 tabular-nums ${className}`}>
-      <img src="/league-coin.svg" alt="" className="w-4 h-4" />
+      <img src="/42coin.png" alt="" className="w-4 h-4" />
       {value}
     </span>
   );
@@ -145,7 +145,7 @@ export function ShopPage() {
           <div className="relative flex-1 card-hud overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-gradient-to-br from-violet-500/10 via-bg-1 to-bg-0 border border-violet-400/25">
             <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
             <div className="relative shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-gold/20 to-violet-500/10 border border-gold/30 flex items-center justify-center shadow-gold-glow">
-              <img src="/league-coin.svg" alt="League Coin" className="w-9 h-9" />
+              <img src="/42coin.png" alt="League Coin" className="w-9 h-9" />
             </div>
             <div className="relative min-w-0">
               <div className="text-[10px] uppercase tracking-[0.18em] font-extrabold text-muted">

@@ -145,7 +145,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
                     {pickRating(me.user, game).elo} ELO
                   </div>
                   <div className="text-[10px] text-violet-300 uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
-                    <img src="/league-coin.svg" alt="" className="w-3.5 h-3.5" />
+                    <img src="/42coin.png" alt="" className="w-3.5 h-3.5" />
                     {me.coins ?? 0}
                   </div>
                 </div>
