@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   USER
+  MODERATOR
   ADMIN
   SUPERADMIN
 }
@@ -60,6 +61,10 @@ model User {
   // (cf. index.ts) refuse tout traitement de données 42 côté serveur (403).
   termsAcceptedAt     DateTime? @map("terms_accepted_at")
   termsVersion        String?   @map("terms_version")
+  // Accès staging : flag indépendant du rôle. Positionné par /admin/users/:login/staging-access.
+  stagingAllowed      Boolean   @default(false) @map("staging_allowed")
+  // Permissions granulaires d'un MODERATOR (null = aucune permission). Voir ModeratorPermission.
+  moderatorPermissions Json?    @map("moderator_permissions")
   createdAt           DateTime  @default(now()) @map("created_at")
 
   declaredPending           PendingMatch[]          @relation("declarer")
@@ -524,6 +529,7 @@ model SeasonStanding {
 
 enum AdminAction {
   SET_ROLE
+  SET_MODERATOR_PERMISSIONS
   BAN_USER
   UNBAN_USER
   EDIT_STATS

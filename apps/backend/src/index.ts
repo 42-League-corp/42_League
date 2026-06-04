@@ -123,13 +123,37 @@ function isConsentExempt(path: string): boolean {
   return CONSENT_EXEMPT_PATHS.has(path) || path.startsWith('/auth/');
 }
 
-async function getUserRole(login: string): Promise<'USER' | 'ADMIN' | 'SUPERADMIN'> {
+// =========================================================================
+// PERMISSIONS MODÉRATEUR
+// =========================================================================
+// Clé → route(s) débloquée(s). ADMIN/SUPERADMIN passent partout sans vérification.
+const MODERATOR_PERMISSIONS = [
+  'canBan',                  // ban / unban users
+  'canEditStats',            // PATCH /admin/users/:login/stats
+  'canDeleteMatches',        // DELETE /admin/matches/:id
+  'canEditMatches',          // PATCH  /admin/matches/:id
+  'canDeletePendingMatches', // DELETE /admin/pending-matches/:id
+  'canDeleteRejectedMatches',// GET + DELETE /admin/rejected-matches
+  'canDeleteChallenges',     // DELETE /admin/challenges/:id
+  'canDeleteOps',            // DELETE /admin/ops/:id
+  'canDeleteTournaments',    // DELETE /admin/tournaments/:id
+  'canViewSuspicious',       // GET /admin/suspicious
+  'canViewAuditLog',         // GET /admin/audit-log
+  'canViewHistory',          // GET /admin/all-history
+] as const;
+
+type ModeratorPermission = (typeof MODERATOR_PERMISSIONS)[number];
+type ModeratorPermissions = Partial<Record<ModeratorPermission, boolean>>;
+
+async function getUserRole(login: string): Promise<'USER' | 'MODERATOR' | 'ADMIN' | 'SUPERADMIN'> {
   if (SUPERADMINS.has(login.toLowerCase())) return 'SUPERADMIN';
   const u = await prisma.user.findUnique({ where: { login }, select: { role: true } });
-  return (u?.role as 'USER' | 'ADMIN' | 'SUPERADMIN') ?? 'USER';
+  return (u?.role as 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPERADMIN') ?? 'USER';
 }
 
 async function requireSuperAdmin(login: string): Promise<void> {
+  // Garde-fou absolu : SUPERADMIN est uniquement abidaux et throbert (hardcodé).
+  // Aucune route API ne peut accorder ce statut.
   if (!SUPERADMINS.has(login.toLowerCase())) {
     throw new HTTPException(403, { message: 'superadmins only' });
   }
@@ -140,6 +164,31 @@ async function requireAdmin(login: string): Promise<void> {
   if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
     throw new HTTPException(403, { message: 'admins only' });
   }
+}
+
+/** Tout admin ou modérateur (pour les routes de consultation basique). */
+async function requireAdminOrModerator(login: string): Promise<void> {
+  const role = await getUserRole(login);
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN' && role !== 'MODERATOR') {
+    throw new HTTPException(403, { message: 'admins only' });
+  }
+}
+
+/**
+ * Vérifie qu'un login a la permission demandée :
+ * - ADMIN/SUPERADMIN → toujours autorisé
+ * - MODERATOR → autorisé si la permission est dans moderatorPermissions
+ * - USER → toujours refusé
+ */
+async function requirePerm(login: string, perm: ModeratorPermission): Promise<void> {
+  const role = await getUserRole(login);
+  if (role === 'ADMIN' || role === 'SUPERADMIN') return;
+  if (role === 'MODERATOR') {
+    const u = await prisma.user.findUnique({ where: { login }, select: { moderatorPermissions: true } });
+    const perms = u?.moderatorPermissions as ModeratorPermissions | null;
+    if (perms?.[perm]) return;
+  }
+  throw new HTTPException(403, { message: 'insufficient permissions' });
 }
 
 async function assertNotBanned(login: string): Promise<void> {
@@ -598,7 +647,12 @@ if (process.env.APP_ENV === 'staging') {
     const login = await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
     if (!STAGING_ALLOWED.has(login.toLowerCase()) && !isTesterLogin(login.toLowerCase())) {
-      throw new HTTPException(403, { message: 'staging: accès réservé' });
+      // Vérifie le flag stagingAllowed en base (accordé via /admin/users/:login/staging-access).
+      // Basé sur APP_ENV (var serveur) + DB → non falsifiable par un header client.
+      const user = await prisma.user.findUnique({ where: { login }, select: { stagingAllowed: true } });
+      if (!user?.stagingAllowed) {
+        throw new HTTPException(403, { message: 'staging: accès réservé' });
+      }
     }
     return next();
   });
@@ -3729,10 +3783,10 @@ app.post('/admin/users/:login/role', async (c) => {
   return c.json({ login: updated.login, role: updated.role });
 });
 
-// Accès staging : accorde ou retire le rôle SUPERADMIN en DB à un utilisateur,
-// ce qui lui donne (ou lui retire) l'accès à staging.42league.fr.
-// Réservé aux superadmins hardcodés (abidaux / throbert).
-// Les superadmins hardcodés ne peuvent pas être modifiés (ils ont leurs propres accès).
+// Accorde ou retire l'accès staging à un utilisateur (flag stagingAllowed, indépendant du rôle).
+// BUG CORRIGÉ : l'ancienne version accordait SUPERADMIN, ce qui était dangereux.
+// Désormais : le rôle DB n'est PAS modifié — USER reste USER, ADMIN reste ADMIN, etc.
+// Seul le flag `stagingAllowed` change. Le SUPERADMIN reste exclusivement abidaux/throbert.
 app.post('/admin/users/:login/staging-access', async (c) => {
   const me = await getCurrentLogin(c);
   await requireSuperAdmin(me);
@@ -3745,20 +3799,19 @@ app.post('/admin/users/:login/staging-access', async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = z.object({ grant: z.boolean() }).safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  // Accord → SUPERADMIN. Révocation → USER (rôle neutre par défaut).
-  const newRole = parsed.data.grant ? 'SUPERADMIN' : 'USER';
+  // On modifie UNIQUEMENT stagingAllowed — le rôle est préservé.
   const updated = await prisma.user.update({
     where: { login: targetLogin },
-    data: { role: newRole },
+    data: { stagingAllowed: parsed.data.grant },
   });
   await logAdminAction(c, {
     actor: me,
     actorRole: await getUserRole(me),
     action: 'SET_ROLE',
     target: targetLogin,
-    payload: { from: target.role, to: newRole, stagingAccess: parsed.data.grant },
+    payload: { stagingAccess: parsed.data.grant },
   });
-  return c.json({ login: updated.login, role: updated.role, stagingAccess: parsed.data.grant });
+  return c.json({ login: updated.login, role: updated.role, stagingAllowed: updated.stagingAllowed });
 });
 
 // =========================================================================
@@ -4126,7 +4179,7 @@ app.delete('/admin/rate-limit/me', async (c) => {
 
 app.get('/admin/users', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requireAdminOrModerator(me);
   const users = await prisma.user.findMany({
     orderBy: [{ role: 'desc' }, { elo: 'desc' }],
   });
@@ -4135,7 +4188,7 @@ app.get('/admin/users', async (c) => {
 
 app.patch('/admin/users/:login/stats', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canEditStats');
   const login = c.req.param('login');
   if (SUPERADMINS.has(login.toLowerCase()) && !SUPERADMINS.has(me.toLowerCase())) {
     throw new HTTPException(403, { message: "cannot modify a superadmin's stats" });
@@ -4194,7 +4247,7 @@ app.patch('/admin/users/:login/stats', async (c) => {
 
 app.post('/admin/users/:login/ban', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canBan');
   const login = c.req.param('login');
   if (SUPERADMINS.has(login.toLowerCase())) {
     throw new HTTPException(400, { message: 'cannot ban a superadmin' });
@@ -4222,7 +4275,7 @@ app.post('/admin/users/:login/ban', async (c) => {
 
 app.post('/admin/users/:login/unban', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canBan');
   const login = c.req.param('login');
   const user = await prisma.user.update({ where: { login }, data: { bannedAt: null } })
     .catch(() => { throw new HTTPException(404, { message: 'user not found' }); });
@@ -4237,7 +4290,7 @@ app.post('/admin/users/:login/unban', async (c) => {
 
 app.get('/admin/users/:login/moderation', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requireAdminOrModerator(me);
   const login = c.req.param('login');
   const [user, recentMatches, rejectionsEmitted, rejectionsReceived] = await Promise.all([
     prisma.user.findUnique({ where: { login } }),
@@ -4267,14 +4320,25 @@ app.get('/admin/users/:login/moderation', async (c) => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([opp, count]) => ({ login: opp, count }));
-  return c.json({ user, recentMatches, topOpponents, rejectionsEmitted, rejectionsReceived });
+  return c.json({
+    user,
+    recentMatches,
+    topOpponents,
+    rejectionsEmitted,
+    rejectionsReceived,
+    // Permissions du modérateur (null si pas MODERATOR).
+    moderatorPermissions: user.role === 'MODERATOR'
+      ? (user.moderatorPermissions as ModeratorPermissions | null) ?? {}
+      : null,
+    availablePermissions: MODERATOR_PERMISSIONS,
+  });
 });
 
 /* ============ ADMIN — MATCHES ============ */
 
 app.delete('/admin/matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteMatches');
   const id = c.req.param('id');
   const match = await prisma.playedMatch.findUnique({ where: { id } });
   if (!match) throw new HTTPException(404, { message: 'match not found' });
@@ -4309,7 +4373,7 @@ app.delete('/admin/matches/:id', async (c) => {
 
 app.patch('/admin/matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canEditMatches');
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => null);
   const schema = z.object({
@@ -4425,7 +4489,7 @@ app.patch('/admin/matches/:id', async (c) => {
 
 app.get('/admin/rejected-matches', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteRejectedMatches');
   const list = await prisma.rejectedMatch.findMany({
     orderBy: { rejectedAt: 'desc' },
     take: 200,
@@ -4435,7 +4499,7 @@ app.get('/admin/rejected-matches', async (c) => {
 
 app.delete('/admin/rejected-matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteRejectedMatches');
   const { id } = c.req.param();
   const row = await prisma.rejectedMatch.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'rejected match not found' });
@@ -4451,7 +4515,7 @@ app.delete('/admin/rejected-matches/:id', async (c) => {
 
 app.delete('/admin/pending-matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeletePendingMatches');
   const { id } = c.req.param();
   const row = await prisma.pendingMatch.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'pending match not found' });
@@ -4468,7 +4532,7 @@ app.delete('/admin/pending-matches/:id', async (c) => {
 
 app.delete('/admin/challenges/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteChallenges');
   const { id } = c.req.param();
   const row = await prisma.challenge.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'challenge not found' });
@@ -4484,7 +4548,7 @@ app.delete('/admin/challenges/:id', async (c) => {
 
 app.delete('/admin/ops/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteOps');
   const { id } = c.req.param();
   const row = await prisma.ops.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'ops not found' });
@@ -4503,7 +4567,7 @@ app.delete('/admin/ops/:id', async (c) => {
 // Si le tournoi était terminé, on décrémente le compteur de victoires du vainqueur.
 app.delete('/admin/tournaments/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canDeleteTournaments');
   const { id } = c.req.param();
   const row = await prisma.tournament.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'tournament not found' });
@@ -4529,7 +4593,7 @@ app.delete('/admin/tournaments/:id', async (c) => {
 
 app.get('/admin/suspicious', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canViewSuspicious');
 
   const [allMatches, allUsers] = await Promise.all([
     prisma.playedMatch.findMany({ orderBy: { playedAt: 'asc' } }),
@@ -4701,7 +4765,7 @@ const AuditQuerySchema = z.object({
 
 app.get('/admin/audit-log', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canViewAuditLog');
   const url = new URL(c.req.url);
   const parsed = AuditQuerySchema.safeParse({
     limit: url.searchParams.get('limit') ?? undefined,
@@ -4728,7 +4792,7 @@ app.get('/admin/audit-log', async (c) => {
 // ── Admin all-history : timeline unifiée ──────────────────────────────────
 app.get('/admin/all-history', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requirePerm(me, 'canViewHistory');
   const url = new URL(c.req.url);
   const loginFilter = url.searchParams.get('login') ?? undefined;
   const typeFilter = url.searchParams.get('type') ?? undefined;
@@ -5074,6 +5138,49 @@ const ShopItemUpdateSchema = z.object({
   payload: z.record(z.any()).nullish(),
   active: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
+});
+
+// ── Permissions des modérateurs ──────────────────────────────────────────────
+// Seuls les ADMIN/SUPERADMIN peuvent attribuer des permissions à un modérateur.
+// Le corps doit être un objet partiel { canBan: true, canDeleteMatches: false, … }.
+// Les clés non reconnues sont ignorées (liste blanche stricte → pas d'injection).
+app.patch('/admin/users/:login/moderator-permissions', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const targetLogin = c.req.param('login');
+  if (SUPERADMINS.has(targetLogin.toLowerCase())) {
+    throw new HTTPException(400, { message: 'cannot modify a hardcoded superadmin' });
+  }
+  const target = await prisma.user.findUnique({
+    where: { login: targetLogin },
+    select: { login: true, role: true },
+  });
+  if (!target) throw new HTTPException(404, { message: 'user not found' });
+  if (target.role !== 'MODERATOR') {
+    throw new HTTPException(400, { message: 'user is not a MODERATOR — change their role first' });
+  }
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new HTTPException(400, { message: 'invalid body' });
+  }
+  const permissions: Partial<Record<ModeratorPermission, boolean>> = {};
+  for (const perm of MODERATOR_PERMISSIONS) {
+    if (typeof (body as Record<string, unknown>)[perm] === 'boolean') {
+      permissions[perm] = (body as Record<string, boolean>)[perm];
+    }
+  }
+  const updated = await prisma.user.update({
+    where: { login: targetLogin },
+    data: { moderatorPermissions: permissions },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'SET_MODERATOR_PERMISSIONS',
+    target: targetLogin,
+    payload: { permissions },
+  });
+  return c.json({ login: updated.login, moderatorPermissions: updated.moderatorPermissions });
 });
 
 // GET /admin/shop/items — catalogue complet (objets inactifs inclus).

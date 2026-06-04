@@ -8,6 +8,9 @@ import {
   type AdminUser,
   type RejectedMatch,
   type ModerationStats,
+  MODERATOR_PERMISSION_KEYS,
+  MODERATOR_PERMISSION_LABELS,
+  type ModeratorPermissionKey,
   type FeatureRequestWithAuthor,
   type BugReportWithAuthor,
   type PlayedMatch,
@@ -22,7 +25,7 @@ import {
 } from '../lib/api';
 
 type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
-type Role = 'ADMIN' | 'SUPERADMIN';
+type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
 //  - `data:update`  : émis sur toute mutation /admin/* (actions d'un autre admin).
@@ -38,6 +41,8 @@ function RoleBadge({ role }: { role: string }) {
     return <span className="px-1.5 py-0.5 text-xs bg-amber-400/15 text-amber-400 rounded font-mono tracking-wide">SUPERADMIN</span>;
   if (role === 'ADMIN')
     return <span className="px-1.5 py-0.5 text-xs bg-blue-400/15 text-blue-400 rounded font-mono tracking-wide">ADMIN</span>;
+  if (role === 'MODERATOR')
+    return <span className="px-1.5 py-0.5 text-xs bg-violet-400/15 text-violet-400 rounded font-mono tracking-wide">MODO</span>;
   return <span className="px-1.5 py-0.5 text-xs bg-zinc-700/50 text-zinc-400 rounded font-mono tracking-wide">USER</span>;
 }
 
@@ -579,6 +584,79 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
   );
 }
 
+// ── Éditeur de permissions modérateur ─────────────────────────────────────
+
+function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [perms, setPerms] = useState<Partial<Record<ModeratorPermissionKey, boolean>>>(
+    (user.moderatorPermissions as Partial<Record<ModeratorPermissionKey, boolean>>) ?? {},
+  );
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  function toggle(k: ModeratorPermissionKey) {
+    setPerms((p) => ({ ...p, [k]: !p[k] }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setErr('');
+    try {
+      await api.setModeratorPermissions(user.login, perms);
+      onSaved();
+      setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activeCount = MODERATOR_PERMISSION_KEYS.filter((k) => !!perms[k]).length;
+
+  return (
+    <>
+      <Btn
+        onClick={() => { setPerms((user.moderatorPermissions as Partial<Record<ModeratorPermissionKey, boolean>>) ?? {}); setOpen(true); }}
+        variant="ghost"
+        className="border border-violet-500/30 text-violet-400"
+      >
+        🔑 {activeCount}/{MODERATOR_PERMISSION_KEYS.length}
+      </Btn>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-80 shadow-2xl">
+            <div className="text-sm font-mono text-zinc-100 font-bold mb-1">Permissions de @{user.login}</div>
+            <div className="text-xs text-zinc-500 font-mono mb-3">MODO — cocher = accès accordé</div>
+            <div className="space-y-1.5 mb-4">
+              {MODERATOR_PERMISSION_KEYS.map((k) => (
+                <label key={k} className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={!!perms[k]}
+                    onChange={() => toggle(k)}
+                    className="accent-violet-500 w-3.5 h-3.5"
+                  />
+                  <span className="text-xs font-mono text-zinc-300 group-hover:text-zinc-100 transition-colors">
+                    {MODERATOR_PERMISSION_LABELS[k]}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {err && <div className="text-xs text-red-400 font-mono mb-2">{err}</div>}
+            <div className="flex gap-2 justify-end">
+              <Btn onClick={() => setOpen(false)} variant="ghost">Annuler</Btn>
+              <Btn onClick={save} disabled={saving} variant="default">
+                {saving ? 'Sauvegarde…' : 'Enregistrer'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Tab: UTILISATEURS ──────────────────────────────────────────────────────
 
 // Logins hardcodés côté serveur — on ne leur propose pas le toggle staging
@@ -687,13 +765,14 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     load();
   }
 
-  async function toggleStaging(login: string, currentRole: string) {
-    const grant = currentRole !== 'SUPERADMIN';
+  async function toggleStaging(login: string, currentStaging: boolean) {
+    const grant = !currentStaging;
     const msg = grant
       ? t('god.users.staging.grant').replace('{login}', login)
       : t('god.users.staging.revoke').replace('{login}', login);
     if (!(await requestConfirm(msg, { danger: !grant, confirmLabel: grant ? t('god.users.staging.grantLabel') : t('god.users.staging.revokeLabel') }))) return;
     await withPending(login, () => api.setStagingAccess(login, grant));
+    load();
   }
 
   return (
@@ -794,17 +873,24 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
               {filtered.map((u) => {
                 const isSelf = u.login === myLogin;
                 const isHardcoded = HARDCODED_SUPERADMINS.has(u.login.toLowerCase());
-                const isSuperAdmin = u.role === 'SUPERADMIN';
                 // Hardcodés + soi-même : on ne touche pas au rôle ni au ban.
                 const isLocked = isSelf || isHardcoded;
                 const isDeletable = deletableLogins.includes(u.login);
+                const isStagingAllowed = !!u.stagingAllowed;
                 return (
                   <tr key={u.login} className={`border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors ${selected.has(u.login) ? 'bg-red-500/5' : ''}`}>
                     <td className="py-2 px-3">
                       {isDeletable && <Check checked={selected.has(u.login)} onChange={() => toggle(u.login)} />}
                     </td>
                     <td className="py-2 px-3 text-zinc-100">{u.login}</td>
-                    <td className="py-2 px-3"><RoleBadge role={u.role} /></td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-1">
+                        <RoleBadge role={u.role} />
+                        {isStagingAllowed && !isHardcoded && (
+                          <span className="px-1 py-0.5 text-[10px] bg-teal-400/10 text-teal-400 rounded font-mono" title="Accès staging accordé">β</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 px-3"><GameModeBadges user={u} /></td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{u.elo}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.matchesPlayed}</td>
@@ -814,23 +900,38 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
                     <td className="py-2 px-3">
                       {isLocked ? (
-                        // Superadmins hardcodés : seul le bouton staging est masqué
-                        // (accès permanent), mais on affiche quand même leur statut.
                         <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
                       ) : (
                         <div className="flex items-center gap-1.5 justify-end flex-wrap">
-                          {myRole === 'SUPERADMIN' && !isSuperAdmin && (
-                            u.role === 'USER'
-                              ? <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'ADMIN'))} disabled={pending === u.login} variant="default">→ ADMIN</Btn>
-                              : u.role === 'ADMIN'
-                                ? <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
-                                : null
+                          {/* Promotion / rétrogradation de rôle (SUPERADMIN uniquement) */}
+                          {myRole === 'SUPERADMIN' && u.role !== 'SUPERADMIN' && (
+                            <>
+                              {u.role === 'USER' && (
+                                <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'MODERATOR'))} disabled={pending === u.login} variant="ghost" className="border border-violet-500/40 text-violet-400">→ MODO</Btn>
+                              )}
+                              {u.role === 'MODERATOR' && (
+                                <>
+                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
+                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'ADMIN'))} disabled={pending === u.login} variant="default">→ ADMIN</Btn>
+                                </>
+                              )}
+                              {u.role === 'ADMIN' && (
+                                <>
+                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'MODERATOR'))} disabled={pending === u.login} variant="ghost" className="border border-violet-500/40 text-violet-400">→ MODO</Btn>
+                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
+                                </>
+                              )}
+                            </>
                           )}
-                          {/* Accès staging — visible aux SUPERADMIN hardcodés uniquement */}
+                          {/* Permissions moderateur — bouton visible pour ADMIN/SUPERADMIN si le user est MODO */}
+                          {(myRole === 'ADMIN' || myRole === 'SUPERADMIN') && u.role === 'MODERATOR' && (
+                            <ModeratorPermissionsButton user={u} onSaved={load} />
+                          )}
+                          {/* Accès staging (flag indépendant du rôle) — SUPERADMIN seulement */}
                           {myRole === 'SUPERADMIN' && (
-                            isSuperAdmin
-                              ? <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">{t('god.users.removeStaging')}</Btn>
-                              : <Btn onClick={() => toggleStaging(u.login, u.role)} disabled={pending === u.login} variant="ghost" className="border border-zinc-600">{t('god.users.staging')}</Btn>
+                            isStagingAllowed
+                              ? <Btn onClick={() => toggleStaging(u.login, true)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">{t('god.users.removeStaging')}</Btn>
+                              : <Btn onClick={() => toggleStaging(u.login, false)} disabled={pending === u.login} variant="ghost" className="border border-teal-600/50 text-teal-500">{t('god.users.staging')}</Btn>
                           )}
                           {u.bannedAt
                             ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">{t('god.users.unban')}</Btn>
@@ -968,6 +1069,24 @@ function ModerationTab() {
               }
             </div>
           </div>
+
+          {/* Permissions du modérateur */}
+          {u.role === 'MODERATOR' && (
+            <div className="bg-zinc-900 border border-violet-500/20 rounded-lg p-4">
+              <div className="text-xs font-mono text-violet-400 uppercase tracking-widest mb-3">Permissions MODO</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {MODERATOR_PERMISSION_KEYS.map((k) => {
+                  const active = !!(stats.moderatorPermissions?.[k as ModeratorPermissionKey]);
+                  return (
+                    <div key={k} className={`flex items-center gap-1.5 text-xs font-mono ${active ? 'text-violet-300' : 'text-zinc-600'}`}>
+                      <span>{active ? '✅' : '⬜'}</span>
+                      <span>{MODERATOR_PERMISSION_LABELS[k as ModeratorPermissionKey]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Top opponents */}
           <Section title={t('god.mod.topOpponents')}>

@@ -290,11 +290,36 @@ export interface MeResponse {
   } | null;
 }
 
+export const MODERATOR_PERMISSION_KEYS = [
+  'canBan', 'canEditStats', 'canDeleteMatches', 'canEditMatches',
+  'canDeletePendingMatches', 'canDeleteRejectedMatches', 'canDeleteChallenges',
+  'canDeleteOps', 'canDeleteTournaments', 'canViewSuspicious', 'canViewAuditLog', 'canViewHistory',
+] as const;
+
+export type ModeratorPermissionKey = (typeof MODERATOR_PERMISSION_KEYS)[number];
+
+export const MODERATOR_PERMISSION_LABELS: Record<ModeratorPermissionKey, string> = {
+  canBan: 'Bannir / Débannir',
+  canEditStats: 'Modifier stats',
+  canDeleteMatches: 'Supprimer matchs',
+  canEditMatches: 'Modifier matchs',
+  canDeletePendingMatches: 'Supprimer matchs en attente',
+  canDeleteRejectedMatches: 'Voir + supprimer rejets',
+  canDeleteChallenges: 'Supprimer défis',
+  canDeleteOps: 'Supprimer OPS',
+  canDeleteTournaments: 'Supprimer tournois',
+  canViewSuspicious: 'Voir alertes',
+  canViewAuditLog: 'Voir audit log',
+  canViewHistory: 'Voir historique complet',
+};
+
 export interface AdminUser {
   login: string;
   /** Null = faux compte créé manuellement (jamais passé par OAuth 42) → supprimable. */
   ftId: number | null;
-  role: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  role: 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
+  stagingAllowed?: boolean;
+  moderatorPermissions?: Partial<Record<ModeratorPermissionKey, boolean>> | null;
   elo: number;
   matchesPlayed: number;
   dodgeCount: number;
@@ -335,6 +360,9 @@ export interface ModerationStats {
   topOpponents: { login: string; count: number }[];
   rejectionsEmitted: RejectedMatch[];
   rejectionsReceived: RejectedMatch[];
+  /** Permissions accordées si l'utilisateur est MODERATOR, null sinon. */
+  moderatorPermissions?: Partial<Record<ModeratorPermissionKey, boolean>> | null;
+  availablePermissions?: readonly ModeratorPermissionKey[];
 }
 
 export interface FeatureRequestWithAuthor {
@@ -926,11 +954,11 @@ export const api = {
       method: 'POST',
     }),
   setStagingAccess: (login: string, grant: boolean) =>
-    request<{ login: string; role: string; stagingAccess: boolean }>(
+    request<{ login: string; role: string; stagingAllowed: boolean }>(
       `/admin/users/${encodeURIComponent(login)}/staging-access`,
       { method: 'POST', body: JSON.stringify({ grant }) },
     ),
-  setUserRole: (login: string, role: 'USER' | 'ADMIN') =>
+  setUserRole: (login: string, role: 'USER' | 'MODERATOR' | 'ADMIN') =>
     request<{ login: string; role: string }>(
       `/admin/users/${encodeURIComponent(login)}/role`,
       { method: 'POST', body: JSON.stringify({ role }) },
@@ -970,6 +998,11 @@ export const api = {
     }),
   adminModerationStats: (login: string) =>
     request<ModerationStats>(`/admin/users/${encodeURIComponent(login)}/moderation`),
+  setModeratorPermissions: (login: string, permissions: Partial<Record<ModeratorPermissionKey, boolean>>) =>
+    request<{ login: string; moderatorPermissions: Record<string, boolean> }>(
+      `/admin/users/${encodeURIComponent(login)}/moderator-permissions`,
+      { method: 'PATCH', body: JSON.stringify(permissions) },
+    ),
   adminDeleteMatch: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/matches/${encodeURIComponent(id)}`, {
       method: 'DELETE',

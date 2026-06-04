@@ -217,9 +217,10 @@ export const SetBugReportStatusSchema = z.object({
 
 export type SetBugReportStatusInput = z.infer<typeof SetBugReportStatusSchema>;
 
-// SUPERADMIN only — 'SUPERADMIN' role cannot be granted via API
+// SUPERADMIN only — 'SUPERADMIN' role cannot be granted via API (garde-fou critique).
+// MODERATOR est accordable (entre USER et ADMIN, avec permissions fines).
 export const SetRoleSchema = z.object({
-  role: z.enum(['USER', 'ADMIN']),
+  role: z.enum(['USER', 'MODERATOR', 'ADMIN']),
 });
 
 export type SetRoleInput = z.infer<typeof SetRoleSchema>;

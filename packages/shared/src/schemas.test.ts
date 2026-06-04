@@ -907,12 +907,15 @@ describe('SetRoleSchema', () => {
   it('accepte USER', () => {
     expect(SetRoleSchema.safeParse({ role: 'USER' }).success).toBe(true);
   });
+  it('accepte MODERATOR', () => {
+    expect(SetRoleSchema.safeParse({ role: 'MODERATOR' }).success).toBe(true);
+  });
   it('accepte ADMIN', () => {
     expect(SetRoleSchema.safeParse({ role: 'ADMIN' }).success).toBe(true);
   });
 
-  // GARDE-FOU CRITIQUE contre l'escalade de privilèges : le rôle SUPERADMIN
-  // ne doit JAMAIS pouvoir être accordé via l'API.
+  // GARDE-FOU CRITIQUE contre l'escalade de privilèges : SUPERADMIN ne peut
+  // JAMAIS être accordé via l'API — uniquement hardcodé dans le code source.
   it('SÉCURITÉ : rejette SUPERADMIN (anti escalade de privilèges)', () => {
     expect(SetRoleSchema.safeParse({ role: 'SUPERADMIN' }).success).toBe(false);
   });
@@ -922,6 +925,7 @@ describe('SetRoleSchema', () => {
   it('SÉCURITÉ : est sensible à la casse (user minuscule rejeté)', () => {
     expect(SetRoleSchema.safeParse({ role: 'user' }).success).toBe(false);
     expect(SetRoleSchema.safeParse({ role: 'admin' }).success).toBe(false);
+    expect(SetRoleSchema.safeParse({ role: 'moderator' }).success).toBe(false);
   });
   it('rejette un rôle vide', () => {
     expect(SetRoleSchema.safeParse({ role: '' }).success).toBe(false);

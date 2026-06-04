@@ -12,6 +12,7 @@ interface LogParams {
 
 const ACTION_EMOJI: Record<AdminAction, string> = {
   SET_ROLE: '👑',
+  SET_MODERATOR_PERMISSIONS: '🔑',
   BAN_USER: '🔨',
   UNBAN_USER: '🕊️',
   EDIT_STATS: '✏️',
@@ -68,6 +69,10 @@ export async function logAdminAction(c: Context, params: LogParams): Promise<voi
 }
 
 async function notifyDiscord(action: AdminAction): Promise<void> {
+  // En staging, on ne notifie pas Discord : les admins testent des actions
+  // fictives et les notifications pollueraient le canal de sécurité réel.
+  // Ce filtre est basé sur APP_ENV (variable serveur, non falsifiable par un client).
+  if (process.env.APP_ENV === 'staging') return;
   const url = process.env.DISCORD_AUDIT_WEBHOOK_URL;
   if (!url) return;
 

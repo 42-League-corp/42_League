@@ -125,6 +125,22 @@ describe('logAdminAction — robustesse', () => {
   });
 });
 
+describe('notifyDiscord — silencieux sur staging', () => {
+  it("n'appelle pas le webhook quand APP_ENV=staging (actions de test, pas de bruit Discord)", async () => {
+    process.env.DISCORD_AUDIT_WEBHOOK_URL = 'https://discord.test/webhook';
+    const saved = process.env.APP_ENV;
+    process.env.APP_ENV = 'staging';
+    try {
+      await logAdminAction(ctx(), base);
+      await flush();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (saved === undefined) delete process.env.APP_ENV;
+      else process.env.APP_ENV = saved;
+    }
+  });
+});
+
 describe('notifyDiscord — RGPD : aucune donnée personnelle', () => {
   it('n’appelle pas le webhook si l’URL n’est pas configurée', async () => {
     await logAdminAction(ctx({ 'cf-connecting-ip': '1.1.1.1' }), {
