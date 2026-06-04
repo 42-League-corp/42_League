@@ -201,6 +201,32 @@ export function EloChart({
   const lineColor = isUp ? GOLD : RED;
   const uid = `${myLogin.replace(/\W/g, '')}-${game}`;
 
+  // Couleur par point selon la tendance locale : vert quand le match fait monter
+  // l'ELO, rouge quand il le fait descendre. Le point de départ adopte la couleur
+  // du premier segment (pas de delta propre). Le dégradé de la ligne interpole
+  // ensuite entre ces couleurs → fondu fluide vert↔rouge aux retournements, et
+  // teinte pleine sur les séries de victoires/défaites.
+  const trendColors = useMemo(() => {
+    const m = geo?.mapped;
+    if (!m || m.length === 0) return [] as string[];
+    return m.map((p, i) => {
+      if (i === 0) return (m[1]?.elo ?? p.elo) >= p.elo ? WIN : LOSS;
+      return (p.delta ?? 0) >= 0 ? WIN : LOSS;
+    });
+  }, [geo]);
+
+  // Stops du dégradé positionnés à l'abscisse exacte de chaque point (userSpace).
+  const lineStops = useMemo(() => {
+    const m = geo?.mapped;
+    if (!m || m.length === 0) return [] as { offset: number; color: string }[];
+    const plotW = Math.max(W - padX * 2, 1);
+    return m.map((p, i) => ({
+      offset: Math.max(0, Math.min(1, (p.x - padX) / plotW)),
+      color: trendColors[i] ?? lineColor,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geo, trendColors, W]);
+
   // ─── Curseur libre qui glisse sur la courbe ───────────────────────────────
   const mx = useMotionValue(0);
   const cy = useMotionValue(0);
@@ -289,6 +315,7 @@ export function EloChart({
   }
 
   const cur = geo.mapped[idx] ?? geo.mapped.at(-1)!;
+  const curColor = trendColors[idx] ?? lineColor;
   const won = (cur.scoreFor ?? 0) > (cur.scoreAgainst ?? 0);
   const below = cur.y < H * 0.42; // bascule le tooltip sous le point quand il est trop haut
 
@@ -308,6 +335,14 @@ export function EloChart({
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.28" />
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
+          {/* Dégradé de tendance le long du temps : interpole en douceur entre la
+              couleur de chaque point (vert montée / rouge descente). */}
+          <linearGradient id={`line-${uid}`} gradientUnits="userSpaceOnUse"
+            x1={padX} y1="0" x2={W - padX} y2="0">
+            {lineStops.map((s, i) => (
+              <stop key={i} offset={`${s.offset * 100}%`} stopColor={s.color} />
+            ))}
+          </linearGradient>
           <filter id={`glow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2.5" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
@@ -324,23 +359,24 @@ export function EloChart({
         <motion.path d={geo.areaPath} fill={`url(#a-${uid})`}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }} />
 
-        {/* Ligne — draw animation */}
-        <motion.path ref={pathRef} d={geo.linePath} fill="none" stroke={lineColor} strokeWidth="3"
+        {/* Ligne — draw animation, teintée par le dégradé de tendance */}
+        <motion.path ref={pathRef} d={geo.linePath} fill="none" stroke={`url(#line-${uid})`} strokeWidth="3"
           strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${uid})`}
           initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
           transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }} />
 
         {/* Repère vertical qui suit librement le curseur */}
         <motion.line x1={mx} x2={mx} y1={padTop} y2={baseY}
-          stroke={lineColor} strokeOpacity="0.22" strokeWidth="1.5" strokeDasharray="4 5"
+          stroke={curColor} strokeOpacity="0.22" strokeWidth="1.5" strokeDasharray="4 5"
           style={{ opacity: active ? 1 : 0 }} />
 
-        {/* Points-matchs : le plus proche est mis en avant, sur place */}
-        {geo.mapped.map((p, i) => <GraphPoint key={i} p={p} color={lineColor} active={idx === i} />)}
+        {/* Points-matchs : le plus proche est mis en avant, sur place.
+            Chaque point prend la couleur de sa propre tendance. */}
+        {geo.mapped.map((p, i) => <GraphPoint key={i} p={p} color={trendColors[i] ?? lineColor} active={idx === i} />)}
 
         {/* Curseur libre qui glisse sur la courbe */}
-        <motion.circle cx={mx} cy={cy} r="7" fill={lineColor} fillOpacity="0.18" style={{ opacity: active ? 1 : 0 }} />
-        <motion.circle cx={mx} cy={cy} r="4" fill="#0b1220" stroke={lineColor} strokeWidth="2.5" style={{ opacity: active ? 1 : 0 }} />
+        <motion.circle cx={mx} cy={cy} r="7" fill={curColor} fillOpacity="0.18" style={{ opacity: active ? 1 : 0 }} />
+        <motion.circle cx={mx} cy={cy} r="4" fill="#0b1220" stroke={curColor} strokeWidth="2.5" style={{ opacity: active ? 1 : 0 }} />
       </svg>
 
       {/* Tooltip détaillé du match : visible UNIQUEMENT quand la souris est dans

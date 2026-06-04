@@ -1,4 +1,4 @@
-import { Crown, Shield, ShieldCheck, FlaskConical, Trophy, Award, type LucideIcon } from 'lucide-react';
+import { Crown, ShieldCheck, FlaskConical, Trophy, Award, type LucideIcon } from 'lucide-react';
 
 export interface BadgeDef {
   label: string;
@@ -19,12 +19,6 @@ export const BADGE_CATALOG: Record<string, BadgeDef> = {
     description: "À l'origine de 42 League — du premier commit au déploiement.",
     color: '#ffc94a',
     icon: Crown,
-  },
-  superadmin: {
-    label: 'G.O.D',
-    description: 'Super administrateur de la league.',
-    color: '#c97bff',
-    icon: Shield,
   },
   admin: {
     label: 'Admin',

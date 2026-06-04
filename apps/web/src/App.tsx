@@ -129,7 +129,6 @@ export function App() {
           <Route path="/auth/return" element={<AuthReturnPage />} />
           {!authenticated && <Route path="/about" element={<AboutPage />} />}
           <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
-          <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
           <Route
             path="*"
             element={
@@ -214,6 +213,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
                 <Route path="/h2h" element={<H2HPage />} />
                 <Route path="/shop" element={<ShopPage />} />
                 <Route path="/shop-god" element={<ShopGODPage />} />
+                <Route path="/GOD" element={<GODPage />} />
                 <Route path="/grades" element={<GradesPage />} />
                 <Route path="/history" element={<HistoriquePage />} />
                 <Route path="/settings" element={<ReglagesPage />} />

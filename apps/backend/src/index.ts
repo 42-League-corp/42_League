@@ -377,8 +377,7 @@ async function badgesFor(login: string, role: string): Promise<string[]> {
   });
   const out: string[] = [];
   if (login.toLowerCase() === 'throbert') out.push('founder');
-  if (role === 'SUPERADMIN') out.push('superadmin');
-  else if (role === 'ADMIN') out.push('admin');
+  if (role === 'ADMIN') out.push('admin');
   for (const e of earned) out.push(e.code);
   return [...new Set(out)];
 }
@@ -1167,6 +1166,12 @@ app.get('/users/:login', async (c) => {
   if (!user || user.deletionScheduledAt) {
     // Compte inexistant ou en cours de suppression → traité comme absent.
     throw new HTTPException(404, { message: 'user not found' });
+  }
+  if (!user.imageUrl) {
+    // Photo jamais renseignée (compte seedé / jamais connecté) : on rattrape
+    // depuis l'intra 42 en tâche de fond — même logique qu'au login. La fiche se
+    // répare d'elle-même au prochain affichage (ex. carrousel « About / Team »).
+    fetchAndSavePublicUser(login).catch(() => {});
   }
   const [allUsers, played, followingRows, followersRows] = await Promise.all([
     prisma.user.findMany({

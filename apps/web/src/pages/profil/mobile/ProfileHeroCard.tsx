@@ -11,6 +11,7 @@ import { Tooltip } from '../../../components/Tooltip';
 import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useViewport } from '../../../hooks/useViewport';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { pickRating } from '../../../lib/gameStats';
 import { gameColor, GAME_EMOJI, GAME_LOGO_SRC } from '../../../lib/gameVisuals';
@@ -58,6 +59,9 @@ export function ProfileHeroCard({
   const { game } = useGameMode();
   const t = useT();
   const reducedMotion = useReducedMotion();
+  // Desktop : badges en grand avec libellé. Mobile : pastilles icône-seule
+  // (label dans la modale au clic) pour ne pas écraser le nom.
+  const { isMobile } = useViewport();
   const [editGame, setEditGame] = useState<FightingGame | null>(null);
   // Cosmétiques équipés : props (autre joueur) sinon ceux de `me` (profil perso).
   const titleColor = titleColorProp ?? (isMe ? me?.titleColor : null) ?? null;
@@ -207,14 +211,16 @@ export function ProfileHeroCard({
               </h2>
               {((badges && badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
-                  {/* Espace serré à côté du nom : pastilles icône-seule (label dans la
-                      modale au clic), au plus 3 puis « +N » → le nom n'est jamais écrasé. */}
+                  {/* Desktop : badges EN GRAND avec libellé (plus de place).
+                      Mobile : pastilles icône-seule (label dans la modale) → le nom
+                      n'est jamais écrasé. Au-delà de `max`, un « +N » à droite ouvre
+                      la modale avec le reste des badges. */}
                   <BadgesRow
                     codes={badges ?? []}
                     extra={equippedBadge ? [equippedBadge] : []}
                     size="md"
-                    iconOnly
-                    max={3}
+                    iconOnly={isMobile}
+                    max={isMobile ? 3 : 4}
                   />
                 </div>
               )}

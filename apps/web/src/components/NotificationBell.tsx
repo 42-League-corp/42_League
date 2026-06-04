@@ -70,14 +70,18 @@ type Tab = 'todo' | 'inbox';
 
 /**
  * Cloche de notifications : pastille rouge avec le compte non-lu. Au clic, un
- * panneau OPAQUE s'ouvre par-dessus le site, ancré en haut à droite, avec deux
+ * panneau OPAQUE s'ouvre par-dessus le site, ancré SUR la cloche, avec deux
  * onglets :
  *   • À traiter → uniquement les notifs non lues (à actionner).
  *   • Inbox     → tout l'historique (lues comprises).
  * Chaque notif a un fond plein de la couleur de sa discipline.
  * Polling 30s + rafraîchissement instantané via SSE.
+ *
+ * `placement` : « up » (cloche en bas de la sidebar desktop) ouvre le panneau À
+ * DROITE de la cloche, aligné en bas ; « down » (topbar mobile) l'ouvre SOUS la
+ * cloche, aligné à droite. Dans les deux cas il reste accroché à l'icône.
  */
-export function NotificationBell(_props?: { placement?: 'up' | 'down' }) {
+export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'down' } = {}) {
   const navigate = useNavigate();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -159,7 +163,9 @@ export function NotificationBell(_props?: { placement?: 'up' | 'down' }) {
       {open && (
         <div
           style={{ zIndex: 2147483645 }}
-          className="fixed top-3 right-3 sm:top-4 sm:right-4 w-80 max-w-[calc(100vw-1.5rem)] rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60"
+          className={`absolute w-80 max-w-[calc(100vw-1.5rem)] rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60 ${
+            placement === 'up' ? 'bottom-0 left-full ml-2' : 'right-0 top-full mt-2'
+          }`}
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-gold/15 bg-bg-1">
             <span className="text-[11px] uppercase tracking-wider text-gold font-extrabold">Notifications</span>
