@@ -24,9 +24,27 @@ const DUO_MIN_MATCHES = 5;
 /** Amélioration minimale du WR 2v2 vs WR individuel moyen (en points de %, 0–100). */
 const DUO_WR_DELTA_THRESHOLD = 20;
 
+/** Matchs 2v2 minimum pour figer le trophée « Le Sommet » (meilleur ELO). */
+const SOMMET_MIN_MATCHES = 3;
+
+/** Victoires 2v2 minimum pour décerner « Machine de Guerre ». */
+const MACHINE_MIN_WINS = 8;
+
+/** Matchs 2v2 minimum pour décerner « La Muraille » (meilleur win rate). */
+const MURAILLE_MIN_MATCHES = 8;
+
+/** Matchs 2v2 minimum pour décerner « Les Increvables » (le plus actif). */
+const INCREVABLES_MIN_MATCHES = 12;
+
 // ─── Types publics ────────────────────────────────────────────────────────────
 
-export type TeamTrophyCode = 'carry' | 'duo_de_choc';
+export type TeamTrophyCode =
+  | 'carry'
+  | 'duo_de_choc'
+  | 'sommet'
+  | 'machine_de_guerre'
+  | 'muraille'
+  | 'increvables';
 
 export interface TeamTrophyResult {
   code: TeamTrophyCode;
@@ -55,10 +73,215 @@ export interface TeamTrophyResult {
 export async function computeTeamTrophies(
   prisma: PrismaClient,
 ): Promise<TeamTrophyResult[]> {
-  return Promise.all([
+  const [carry, duo, records] = await Promise.all([
     computeCarryTrophy(prisma),
     computeDuoDeChocTrophy(prisma),
+    loadTeamRecords(prisma),
   ]);
+
+  return [
+    computeSommetTrophy(records),
+    computeMachineTrophy(records),
+    computeMurailleTrophy(records),
+    duo,
+    carry,
+    computeIncrevablesTrophy(records),
+  ];
+}
+
+// ─── Récapitulatif par équipe (réutilisé par 4 trophées) ──────────────────────
+
+interface TeamRecord {
+  id: string;
+  name: string | null;
+  player1Login: string;
+  player2Login: string;
+  elo: number;
+  wins: number;
+  losses: number;
+  total: number;
+}
+
+/**
+ * Charge tous les duos avec leur bilan 2v2 (victoires / défaites / total),
+ * en ne comptant que les matchs comptabilisés pour l'ELO.
+ */
+async function loadTeamRecords(prisma: PrismaClient): Promise<TeamRecord[]> {
+  const teams = await prisma.babyfootTeam.findMany({
+    include: {
+      matchesAsTeamA: {
+        where: { mode: '2v2', countedForElo: true },
+        select: { winner: true },
+      },
+      matchesAsTeamB: {
+        where: { mode: '2v2', countedForElo: true },
+        select: { winner: true },
+      },
+    },
+  });
+
+  return teams.map((t) => {
+    const wins =
+      t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
+      t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
+    const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
+    return {
+      id: t.id,
+      name: t.name,
+      player1Login: t.player1Login,
+      player2Login: t.player2Login,
+      elo: t.elo,
+      wins,
+      losses: total - wins,
+      total,
+    };
+  });
+}
+
+/** Sérialise un TeamRecord gagnant vers la forme TeamTrophyResult. */
+function awarded(
+  base: Omit<TeamTrophyResult, 'teamId' | 'teamName' | 'player1Login' | 'player2Login' | 'teamElo'>,
+  winner: TeamRecord | null,
+): TeamTrophyResult {
+  const earned = base.earned && winner !== null;
+  return {
+    ...base,
+    earned,
+    teamId: earned ? winner!.id : null,
+    teamName: earned ? winner!.name : null,
+    player1Login: earned ? winner!.player1Login : null,
+    player2Login: earned ? winner!.player2Login : null,
+    teamElo: earned ? winner!.elo : null,
+  };
+}
+
+// ─── Trophée 3 : Le Sommet ────────────────────────────────────────────────────
+
+/** Duo au plus haut ELO 2v2 (min. SOMMET_MIN_MATCHES matchs). */
+function computeSommetTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let maxElo = -Infinity;
+
+  for (const t of records) {
+    if (t.total < SOMMET_MIN_MATCHES) continue;
+    if (t.elo > maxElo) {
+      maxElo = t.elo;
+      winner = t;
+    }
+  }
+
+  return awarded(
+    {
+      code: 'sommet',
+      emoji: '👑',
+      title: 'Le Sommet',
+      subtitle: 'Duo le mieux classé du Babyfoot 2v2',
+      description:
+        `Décerné à l'équipe au plus haut ELO 2v2 parmi tous les duos ayant disputé au moins ` +
+        `${SOMMET_MIN_MATCHES} matchs. Le duo n°1 du classement, le roi du terrain.`,
+      earned: winner !== null,
+      value: winner !== null ? `${maxElo} ELO` : '—',
+    },
+    winner,
+  );
+}
+
+// ─── Trophée 4 : Machine de Guerre ────────────────────────────────────────────
+
+/** Duo totalisant le plus de victoires 2v2 (min. MACHINE_MIN_WINS). */
+function computeMachineTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let maxWins = 0;
+
+  for (const t of records) {
+    if (t.wins > maxWins) {
+      maxWins = t.wins;
+      winner = t;
+    }
+  }
+
+  const earned = winner !== null && maxWins >= MACHINE_MIN_WINS;
+
+  return awarded(
+    {
+      code: 'machine_de_guerre',
+      emoji: '⚔️',
+      title: 'Machine de Guerre',
+      subtitle: 'Le duo qui empile le plus de victoires',
+      description:
+        `Récompense l'équipe ayant remporté le plus de matchs 2v2 au total. ` +
+        `La quantité brute de victoires : ces deux-là ne lâchent rien. Minimum ${MACHINE_MIN_WINS} victoires.`,
+      earned,
+      value: earned ? `${maxWins} victoires` : '—',
+    },
+    earned ? winner : null,
+  );
+}
+
+// ─── Trophée 5 : La Muraille ──────────────────────────────────────────────────
+
+/** Duo au meilleur win rate 2v2 (min. MURAILLE_MIN_MATCHES matchs). */
+function computeMurailleTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let bestWR = -Infinity;
+  let winnerWRPct = 0;
+
+  for (const t of records) {
+    if (t.total < MURAILLE_MIN_MATCHES) continue;
+    const wr = t.wins / t.total;
+    if (wr > bestWR) {
+      bestWR = wr;
+      winner = t;
+      winnerWRPct = Math.round(wr * 100);
+    }
+  }
+
+  return awarded(
+    {
+      code: 'muraille',
+      emoji: '🛡️',
+      title: 'La Muraille',
+      subtitle: 'Meilleur win rate 2v2 de la ligue',
+      description:
+        `Attribué à l'équipe au plus haut pourcentage de victoires 2v2, sur un minimum de ` +
+        `${MURAILLE_MIN_MATCHES} matchs. Une défense impénétrable doublée d'une efficacité redoutable.`,
+      earned: winner !== null,
+      value: winner !== null ? `${winnerWRPct}% WR (${winner.wins}V-${winner.losses}D)` : '—',
+    },
+    winner,
+  );
+}
+
+// ─── Trophée 6 : Les Increvables ──────────────────────────────────────────────
+
+/** Duo ayant disputé le plus de matchs 2v2 (min. INCREVABLES_MIN_MATCHES). */
+function computeIncrevablesTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let maxTotal = 0;
+
+  for (const t of records) {
+    if (t.total > maxTotal) {
+      maxTotal = t.total;
+      winner = t;
+    }
+  }
+
+  const earned = winner !== null && maxTotal >= INCREVABLES_MIN_MATCHES;
+
+  return awarded(
+    {
+      code: 'increvables',
+      emoji: '🔁',
+      title: 'Les Increvables',
+      subtitle: 'Le duo le plus actif sur la table',
+      description:
+        `Pour l'équipe ayant disputé le plus grand nombre de matchs 2v2. ` +
+        `Toujours partants pour une partie : l'endurance avant tout. Minimum ${INCREVABLES_MIN_MATCHES} matchs.`,
+      earned,
+      value: earned ? `${maxTotal} matchs` : '—',
+    },
+    earned ? winner : null,
+  );
 }
 
 // ─── Trophée 1 : Le Plus Gros Carry ──────────────────────────────────────────

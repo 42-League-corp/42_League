@@ -73,7 +73,7 @@ export function TeamTrophiesHallOfFame() {
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {[1, 2].map((i) => (
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="card-hud rounded-xl h-28 animate-pulse opacity-50" />
         ))}
       </div>
