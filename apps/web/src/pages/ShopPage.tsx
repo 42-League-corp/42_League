@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Lock, Check } from 'lucide-react';
 import { Panel } from '../components/Panel';
+import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
@@ -152,7 +153,7 @@ export function ShopPage() {
                 {t('shop.balance')}
               </div>
               <div className="font-gaming text-3xl font-extrabold text-text-strong tabular-nums leading-tight flex items-center gap-1.5">
-                {coins}
+                <CoinCount login={me?.login} value={coins} />
                 <span className="text-sm text-violet-300 font-bold">League Coin</span>
               </div>
             </div>

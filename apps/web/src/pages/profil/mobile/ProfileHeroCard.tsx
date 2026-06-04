@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
+import { CoinCount } from '../../../components/CoinCount';
 import { OnlineBadge } from '../../../components/OnlineBadge';
 import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
@@ -311,7 +312,7 @@ export function ProfileHeroCard({
               League Coins
             </span>
             <span className="ml-auto font-display text-xl font-black tabular-nums text-violet-100">
-              {me?.coins ?? 0}
+              <CoinCount login={me?.login} value={me?.coins ?? 0} />
             </span>
           </div>
         )}

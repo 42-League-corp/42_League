@@ -17,6 +17,7 @@ import {
   Store,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { CoinCount } from '../components/CoinCount';
 import { NotificationBell } from '../components/NotificationBell';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -148,7 +149,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
                   </div>
                   <div className="text-[10px] text-violet-300 uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
                     <img src="/42coin.png" alt="" className="w-3.5 h-3.5" />
-                    {me.coins ?? 0}
+                    <CoinCount login={login} value={me.coins ?? 0} />
                   </div>
                 </div>
               </NavLink>
