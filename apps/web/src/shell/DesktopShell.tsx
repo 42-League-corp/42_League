@@ -7,6 +7,7 @@ import {
   BarChart3,
   Award,
   User,
+  Users,
   History,
   Settings,
   Cog,
@@ -36,6 +37,7 @@ const NAV: NavDef[] = [
   { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
   { to: '/shop', labelKey: 'nav.shop', Icon: ShoppingBag },
   { to: '/profile', labelKey: 'nav.profil', Icon: User },
+  { to: '/teams', labelKey: 'nav.teams', Icon: Users },
 ];
 
 const NAV_SECONDARY: NavDef[] = [

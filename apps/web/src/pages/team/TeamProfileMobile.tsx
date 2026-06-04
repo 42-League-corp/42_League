@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowLeft, Check, Pencil, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { PlayerLink } from '../../components/PlayerLink';
 import { TeamEloChart } from '../../components/TeamEloChart';
 import { TeamProfileTrophiesSection } from '../../components/TeamTrophiesSection';
-import type { TeamProfile } from '../../lib/api';
+import { api, type TeamProfile } from '../../lib/api';
+import { useLeagueData } from '../../hooks/useLeagueData';
+import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT } from '../../lib/i18n';
 
 // ─── Avatar en overlap pour un duo ───────────────────────────────────────────
@@ -41,13 +44,40 @@ function DuoAvatars({
 
 // ─── Hero card ────────────────────────────────────────────────────────────────
 
-function TeamHeroCard({ team }: { team: TeamProfile }) {
+function TeamHeroCard({ team, nameOverride, onRenamed }: {
+  team: TeamProfile;
+  nameOverride?: string;
+  onRenamed: (name: string) => void;
+}) {
   const t = useT();
+  const flash = useFlash();
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(nameOverride ?? team.name ?? '');
+  const [saving, setSaving] = useState(false);
+
   const games = team.wins + team.losses;
   const winRate = games === 0 ? 0 : Math.round((team.wins / games) * 100);
   const deltaTotal = team.eloHistory.reduce((s, p) => s + p.delta, 0);
-  const teamName = team.name ?? `${team.player1Login} & ${team.player2Login}`;
+  const displayName = nameOverride ?? team.name ?? `${team.player1Login} & ${team.player2Login}`;
   const isUp = deltaTotal >= 0;
+
+  const handleSave = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await api.nameTeam(team.id, trimmed);
+      onRenamed(trimmed);
+      flash.show('Nom d\'équipe mis à jour ✓');
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const teamName = displayName;
 
   return (
     <motion.div
@@ -75,25 +105,45 @@ function TeamHeroCard({ team }: { team: TeamProfile }) {
             size={56}
           />
           <div className="flex-1 min-w-0">
-            <div className="font-display text-xl font-black text-text-strong truncate tracking-tight">
-              {teamName}
+            {editing ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleSave(); if (e.key === 'Escape') setEditing(false); }}
+                  maxLength={30}
+                  className="flex-1 min-w-0 bg-bg-1/80 border border-gold/50 rounded-lg px-2 py-1 text-sm font-bold text-text-strong outline-none allow-select"
+                  style={{ caretColor: '#ffc94a' }}
+                />
+                <button type="button" onClick={() => void handleSave()} disabled={saving} className="text-[#7fd66e] tap-transparent">
+                  <Check className="w-4 h-4" strokeWidth={3} />
+                </button>
+                <button type="button" onClick={() => setEditing(false)} className="text-muted-2 tap-transparent">
+                  <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setNameInput(team.name ?? ''); setEditing(true); }}
+                className="flex items-center gap-1.5 group tap-transparent text-left"
+              >
+                <span className="font-display text-xl font-black text-text-strong truncate tracking-tight group-hover:text-gold transition-colors">
+                  {teamName}
+                </span>
+                <Pencil className="w-3 h-3 text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" strokeWidth={2.5} />
+              </button>
+            )}
+            <div className="text-[11px] text-muted-2 font-mono mt-0.5">
+              <PlayerLink login={team.player1Login} className="hover:text-gold transition-colors">
+                {team.player1Login}
+              </PlayerLink>
+              {' & '}
+              <PlayerLink login={team.player2Login} className="hover:text-gold transition-colors">
+                {team.player2Login}
+              </PlayerLink>
             </div>
-            {team.name && (
-              <div className="text-[11px] text-muted-2 font-mono mt-0.5">
-                <PlayerLink login={team.player1Login} className="hover:text-gold transition-colors">
-                  {team.player1Login}
-                </PlayerLink>
-                {' & '}
-                <PlayerLink login={team.player2Login} className="hover:text-gold transition-colors">
-                  {team.player2Login}
-                </PlayerLink>
-              </div>
-            )}
-            {!team.name && (
-              <div className="text-[10px] text-muted-2 font-medium mt-0.5 italic">
-                {t('team.noName')}
-              </div>
-            )}
           </div>
 
           {/* Rank badge */}
@@ -237,6 +287,12 @@ interface TeamProfileMobileProps {
 export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
   const navigate = useNavigate();
   const t = useT();
+  const { leaderboard } = useLeagueData();
+  const [nameOverride, setNameOverride] = useState<string | undefined>();
+
+  // ELO individuels depuis le classement live
+  const p1Entry = leaderboard.find((u) => u.login === team.player1Login);
+  const p2Entry = leaderboard.find((u) => u.login === team.player2Login);
 
   return (
     <PullToRefresh onRefresh={onRefresh}>
@@ -252,7 +308,7 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
 
       <div className="space-y-5">
         {/* Hero */}
-        <TeamHeroCard team={team} />
+        <TeamHeroCard team={team} nameOverride={nameOverride} onRenamed={setNameOverride} />
 
         {/* ELO chart */}
         <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
@@ -260,28 +316,39 @@ export function TeamProfileMobile({ team, onRefresh }: TeamProfileMobileProps) {
           <TeamEloChart points={team.eloHistory} height={150} uid={team.id} />
         </div>
 
-        {/* Joueurs */}
+        {/* Joueurs + ELO individuel */}
         <section>
           <SectionHeader title={t('team.players')} />
           <div className="grid grid-cols-2 gap-2">
             {[
-              { login: team.player1Login, img: team.player1ImageUrl },
-              { login: team.player2Login, img: team.player2ImageUrl },
-            ].map(({ login, img }) => (
+              { login: team.player1Login, img: team.player1ImageUrl, entry: p1Entry },
+              { login: team.player2Login, img: team.player2ImageUrl, entry: p2Entry },
+            ].map(({ login, img, entry }) => (
               <PlayerLink
                 key={login}
                 login={login}
-                className="flex items-center gap-2.5 card-hud rounded-xl px-3 py-2.5 hover:border-gold/30 border border-transparent transition-colors"
+                className="flex flex-col gap-2 card-hud rounded-xl px-3 py-3 hover:border-gold/30 border border-transparent transition-colors"
               >
-                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-gold/30">
-                  {img
-                    ? <img src={img} alt={login} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center font-display font-black text-[10px] text-[#1a1100]" style={{ background: GOLD_GRAD }}>{login[0]?.toUpperCase()}</div>}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-gold/30">
+                    {img
+                      ? <img src={img} alt={login} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center font-display font-black text-[10px] text-[#1a1100]" style={{ background: GOLD_GRAD }}>{login[0]?.toUpperCase()}</div>}
+                  </div>
+                  <span className="text-xs font-bold text-text-strong truncate">{login}</span>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-text-strong truncate">{login}</div>
-                  <div className="text-[9px] text-muted font-medium">{t('team.viewProfile')}</div>
-                </div>
+                {entry && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-display text-base font-black text-gold tabular-nums leading-none">{entry.elo}</div>
+                      <div className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO perso</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-2 font-mono tabular-nums">#{entry.rank}</div>
+                      <div className="text-[8px] text-muted uppercase tracking-wider font-bold">rang</div>
+                    </div>
+                  </div>
+                )}
               </PlayerLink>
             ))}
           </div>

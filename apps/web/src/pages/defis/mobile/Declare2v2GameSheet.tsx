@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { Declare2v2GameFlow } from '../shared/Declare2v2GameFlow';
-import { TeamNameModal } from '../../../components/TeamNameModal';
+import { NewTeamCelebration } from '../../../components/NewTeamCelebration';
 import { useT } from '../../../lib/i18n';
 import type { LeaderboardEntry, Declare2v2Response } from '../../../lib/api';
 
@@ -17,11 +17,19 @@ interface Declare2v2GameSheetProps {
   onDone: () => Promise<void>;
 }
 
+interface CelebState {
+  teamId: string;
+  teamElo: number;
+  player1: { login: string; imageUrl?: string | null; elo?: number };
+  player2: { login: string; imageUrl?: string | null; elo?: number };
+}
+
 /**
  * Wrapper du Declare2v2GameFlow dans une BottomSheet mobile.
  *
- * Gère également l'ouverture automatique de la TeamNameModal si le duo
- * formé par le déclarant et son partenaire est nouveau.
+ * Quand un nouveau duo est détecté (`myTeamIsNew === true`), remplace
+ * la TeamNameModal par la NewTeamCelebration — animation plein écran qui
+ * intègre le naming et redirige ensuite vers la page équipe.
  */
 export function Declare2v2GameSheet({
   open,
@@ -35,21 +43,31 @@ export function Declare2v2GameSheet({
   onDone,
 }: Declare2v2GameSheetProps) {
   const t = useT();
-  const [teamModal, setTeamModal] = useState<{
-    teamId: string;
-    player1Login: string;
-    player2Login: string;
-  } | null>(null);
+  const [celebration, setCelebration] = useState<CelebState | null>(null);
 
   const handleSubmitted = async (result: Declare2v2Response, partnerLogin: string) => {
     await onDone();
     onClose();
-    // Si l'équipe formée par le déclarant est nouvelle, proposer de la nommer.
+
     if (result.myTeamIsNew && myLogin) {
-      setTeamModal({
+      // Enrichit avec les données du partenaire depuis le classement.
+      const partnerEntry = others.find((p) => p.login === partnerLogin)
+        ?? recentOpponents.find((p) => p.login === partnerLogin);
+
+      setCelebration({
         teamId: result.myTeamId,
-        player1Login: myLogin,
-        player2Login: partnerLogin,
+        // ELO équipe calculé côté back (65 / 35) — on l'approche localement
+        // pour l'affichage immédiat (avant fetch de la vraie page équipe).
+        teamElo: Math.round(
+          Math.max(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.65 +
+          Math.min(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.35,
+        ),
+        player1: { login: myLogin, elo: myElo },
+        player2: {
+          login: partnerLogin,
+          imageUrl: partnerEntry?.imageUrl,
+          elo: partnerEntry?.elo,
+        },
       });
     }
   };
@@ -83,13 +101,16 @@ export function Declare2v2GameSheet({
         </div>
       </BottomSheet>
 
-      {/* Modale de naming — monte par-dessus tout, indépendante du sheet */}
-      <TeamNameModal
-        teamId={teamModal?.teamId ?? null}
-        player1Login={teamModal?.player1Login ?? ''}
-        player2Login={teamModal?.player2Login ?? ''}
-        onClose={() => setTeamModal(null)}
-      />
+      {/* Célébration plein-écran — remplace TeamNameModal pour les nouveaux duos */}
+      {celebration && (
+        <NewTeamCelebration
+          teamId={celebration.teamId}
+          teamElo={celebration.teamElo}
+          player1={celebration.player1}
+          player2={celebration.player2}
+          onClose={() => setCelebration(null)}
+        />
+      )}
     </>
   );
 }

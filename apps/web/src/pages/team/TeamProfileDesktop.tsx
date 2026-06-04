@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Shield } from 'lucide-react';
+import { ArrowLeft, Check, Pencil, Shield, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { StatCard } from '../../components/StatCard';
 import { TeamEloChart } from '../../components/TeamEloChart';
 import { TeamProfileTrophiesSection } from '../../components/TeamTrophiesSection';
-import type { TeamProfile } from '../../lib/api';
+import { api, type TeamProfile } from '../../lib/api';
+import { useLeagueData } from '../../hooks/useLeagueData';
+import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT } from '../../lib/i18n';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -56,8 +59,36 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
   const navigate = useNavigate();
   const t = useT();
   const { locale } = useI18n();
-  const teamName = team.name ?? `${team.player1Login} & ${team.player2Login}`;
+  const flash = useFlash();
+  const { leaderboard } = useLeagueData();
+
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(team.name ?? '');
+  const [saving, setSaving] = useState(false);
+  const [nameOverride, setNameOverride] = useState<string | undefined>();
+
+  const teamName = nameOverride ?? team.name ?? `${team.player1Login} & ${team.player2Login}`;
   const games = team.wins + team.losses;
+
+  // ELO individuels depuis le classement live
+  const p1Entry = leaderboard.find((u) => u.login === team.player1Login);
+  const p2Entry = leaderboard.find((u) => u.login === team.player2Login);
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await api.nameTeam(team.id, trimmed);
+      setNameOverride(trimmed);
+      flash.show('Nom d\'équipe mis à jour ✓');
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
   const winRate = games === 0 ? 0 : Math.round((team.wins / games) * 100);
   const deltaTotal = team.eloHistory.reduce((s, p) => s + p.delta, 0);
 
@@ -102,16 +133,42 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
 
               {/* Identité */}
               <div className="flex-1 min-w-0">
-                <div className="font-display text-2xl font-black text-text-strong truncate tracking-tight">
-                  {teamName}
-                </div>
-                {team.name && (
-                  <div className="text-xs text-muted-2 font-mono mt-0.5">
-                    <PlayerLink login={team.player1Login} className="hover:text-gold transition-colors">{team.player1Login}</PlayerLink>
-                    {' & '}
-                    <PlayerLink login={team.player2Login} className="hover:text-gold transition-colors">{team.player2Login}</PlayerLink>
+                {/* Nom inline-editable */}
+                {editing ? (
+                  <div className="flex items-center gap-2 mb-1">
+                    <input
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveName(); if (e.key === 'Escape') setEditing(false); }}
+                      maxLength={30}
+                      className="flex-1 min-w-0 bg-bg-1/80 border border-gold/50 rounded-lg px-3 py-1.5 text-base font-bold text-text-strong outline-none allow-select"
+                      style={{ caretColor: '#ffc94a' }}
+                    />
+                    <button type="button" onClick={() => void handleSaveName()} disabled={saving} className="text-[#7fd66e] tap-transparent hover:scale-110 transition-transform">
+                      <Check className="w-4 h-4" strokeWidth={3} />
+                    </button>
+                    <button type="button" onClick={() => setEditing(false)} className="text-muted-2 tap-transparent">
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setNameInput(nameOverride ?? team.name ?? ''); setEditing(true); }}
+                    className="flex items-center gap-2 group tap-transparent text-left mb-1"
+                  >
+                    <span className="font-display text-2xl font-black text-text-strong truncate tracking-tight group-hover:text-gold transition-colors">
+                      {teamName}
+                    </span>
+                    <Pencil className="w-3.5 h-3.5 text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" strokeWidth={2.5} />
+                  </button>
                 )}
+                <div className="text-xs text-muted-2 font-mono mt-0.5">
+                  <PlayerLink login={team.player1Login} className="hover:text-gold transition-colors">{team.player1Login}</PlayerLink>
+                  {' & '}
+                  <PlayerLink login={team.player2Login} className="hover:text-gold transition-colors">{team.player2Login}</PlayerLink>
+                </div>
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
                     <Shield className="w-3 h-3 text-gold/70" strokeWidth={2} />
@@ -174,28 +231,43 @@ export function TeamProfileDesktop({ team }: TeamProfileDesktopProps) {
             <TeamProfileTrophiesSection teamId={team.id} />
           </div>
 
-          {/* Player profiles */}
+          {/* Player profiles + ELO individuel */}
           <div className="grid grid-cols-2 gap-3 mt-4">
             {[
-              { login: team.player1Login, img: team.player1ImageUrl },
-              { login: team.player2Login, img: team.player2ImageUrl },
-            ].map(({ login, img }) => (
+              { login: team.player1Login, img: team.player1ImageUrl, entry: p1Entry },
+              { login: team.player2Login, img: team.player2ImageUrl, entry: p2Entry },
+            ].map(({ login, img, entry }) => (
               <PlayerLink
                 key={login}
                 login={login}
-                className="flex items-center gap-3 card-hud rounded-xl px-4 py-3 border border-transparent hover:border-gold/25 transition-all group"
+                className="flex flex-col gap-2 card-hud rounded-xl px-4 py-3 border border-transparent hover:border-gold/25 transition-all group"
               >
-                <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gold/30">
-                  {img
-                    ? <img src={img} alt={login} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center font-display font-black text-xs text-[#1a1100]" style={{ background: GOLD_GRAD }}>{login[0]?.toUpperCase()}</div>}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
-                    {login}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gold/30">
+                    {img
+                      ? <img src={img} alt={login} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center font-display font-black text-xs text-[#1a1100]" style={{ background: GOLD_GRAD }}>{login[0]?.toUpperCase()}</div>}
                   </div>
-                  <div className="text-[10px] text-muted font-medium">{t('team.viewProfile')}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
+                      {login}
+                    </div>
+                    {entry && (
+                      <div className="text-[10px] text-muted font-mono tabular-nums">#{entry.rank}</div>
+                    )}
+                  </div>
                 </div>
+                {entry && (
+                  <div className="flex items-center justify-between pt-1 border-t border-gold/10">
+                    <div>
+                      <div className="font-display text-lg font-black text-gold tabular-nums leading-none">{entry.elo}</div>
+                      <div className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO solo</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-2 font-medium">{t('team.viewProfile')}</div>
+                    </div>
+                  </div>
+                )}
               </PlayerLink>
             ))}
           </div>

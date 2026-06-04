@@ -1,4 +1,5 @@
-import { LogOut } from 'lucide-react';
+import { ChevronRight, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
@@ -21,6 +22,7 @@ export function ProfilMobile() {
   const { game } = useGameMode();
   const { signOut } = useAuth();
   const t = useT();
+  const navigate = useNavigate();
 
   if (!me?.user) {
     return (
@@ -72,7 +74,23 @@ export function ProfilMobile() {
         {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
         {game === 'babyfoot' && myLogin && (
           <section>
-            <SectionHeader title={t('profil.myTeams')} />
+            {/* Header avec lien vers la page complète */}
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+                <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90">
+                  {t('profil.myTeams')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/teams')}
+                className="flex items-center gap-1 text-[10px] font-bold text-muted-2 hover:text-gold transition-colors tap-transparent"
+              >
+                Tout voir
+                <ChevronRight className="w-3 h-3" strokeWidth={2.5} />
+              </button>
+            </div>
             <MyTeamsSection myLogin={myLogin} />
           </section>
         )}
