@@ -23,7 +23,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.col.eloFinal': 'ELO final',
     'lb.col.wd': 'V-D',
     // Série « none »
-    'lb.streak.none': 'none',
+    'lb.streak.none': '-',
     // Stats mobiles
     'lb.stat.players': 'Joueurs',
     'lb.stat.matches': 'Matches',
@@ -64,7 +64,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.snapshot.emptyShort': 'No archived ranking.',
     'lb.col.eloFinal': 'Final ELO',
     'lb.col.wd': 'W-L',
-    'lb.streak.none': 'none',
+    'lb.streak.none': '-',
     'lb.stat.players': 'Players',
     'lb.stat.matches': 'Matches',
     'lb.search.placeholder': 'Search for a player…',
@@ -99,7 +99,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.snapshot.emptyShort': 'No hay clasificación archivada.',
     'lb.col.eloFinal': 'ELO final',
     'lb.col.wd': 'V-D',
-    'lb.streak.none': 'ninguna',
+    'lb.streak.none': '-',
     'lb.stat.players': 'Jugadores',
     'lb.stat.matches': 'Partidos',
     'lb.search.placeholder': 'Buscar un jugador…',

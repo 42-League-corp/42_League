@@ -22,6 +22,12 @@ import { useT } from '../../lib/i18n';
 type LeaderboardTab = 'personal' | 'teams';
 
 // ─── Stats dérivées par joueur ───────────────────────────────────────────────
+/** Adversaire ayant mis fin à une plus longue série (photo Intra pour le tooltip). */
+interface StreakBreaker {
+  login: string;
+  imageUrl: string | null;
+}
+
 interface PlayerStats {
   wins: number;
   losses: number;
@@ -33,6 +39,10 @@ interface PlayerStats {
   maxWinStreak: number;
   /** Plus longue série de défaites consécutives. */
   maxLossStreak: number;
+  /** Qui a brisé la plus longue série de V (l'a battu). null si série encore en cours. */
+  maxWinBreaker: StreakBreaker | null;
+  /** Qui a mis fin à la plus longue série de D (battu par le joueur). null si en cours. */
+  maxLossBreaker: StreakBreaker | null;
 }
 
 const EMPTY_STATS: PlayerStats = {
@@ -43,6 +53,8 @@ const EMPTY_STATS: PlayerStats = {
   streak: 0,
   maxWinStreak: 0,
   maxLossStreak: 0,
+  maxWinBreaker: null,
+  maxLossBreaker: null,
 };
 
 type SortKey =
@@ -101,15 +113,20 @@ export function LeaderboardDesktop() {
       }
     }
 
+    // Photo Intra par login (pour le tooltip « brisée par … »).
+    const infoByLogin = new Map<string, string | null>();
+    for (const u of leaderboard) infoByLogin.set(u.login, u.imageUrl);
+
     // Série en cours : on parcourt les matches récents → anciens par joueur.
-    const byPlayer = new Map<string, { won: boolean; at: number }[]>();
+    const byPlayer = new Map<string, { won: boolean; at: number; opp: string }[]>();
     for (const m of matches) {
       for (const login of [m.playerALogin, m.playerBLogin]) {
         if (!map.has(login)) continue;
         const isA = m.playerALogin === login;
         const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+        const opp = isA ? m.playerBLogin : m.playerALogin;
         const arr = byPlayer.get(login) ?? [];
-        arr.push({ won, at: new Date(m.playedAt).getTime() });
+        arr.push({ won, at: new Date(m.playedAt).getTime(), opp });
         byPlayer.set(login, arr);
       }
     }
@@ -124,27 +141,53 @@ export function LeaderboardDesktop() {
         }
         if (!first.won) streak = -streak;
       }
-      // Plus longues séries (V / D) sur tout l'historique (longueur des runs
-      // invariante par renversement de l'ordre).
+      // Plus longues séries (V / D) + qui y a mis fin. On parcourt en ordre
+      // chronologique (ancien → récent). Un run n'est comptabilisé qu'à sa
+      // CLÔTURE (match de signe opposé) : c'est cet adversaire qui « brise » la
+      // série. Le run final, jamais clos, est le record « en cours » → pas de
+      // briseur (on ne montrera pas « brisée par … »).
+      const chrono = results.slice().reverse();
       let maxWin = 0;
       let maxLoss = 0;
-      let runWin = 0;
-      let runLoss = 0;
-      for (const r of results) {
-        if (r.won) {
-          runWin++;
-          runLoss = 0;
-          if (runWin > maxWin) maxWin = runWin;
-        } else {
-          runLoss++;
-          runWin = 0;
-          if (runLoss > maxLoss) maxLoss = runLoss;
+      let winBreaker: string | null = null; // adversaire qui a battu le joueur
+      let lossBreaker: string | null = null; // adversaire battu par le joueur
+      let winOngoing = false;
+      let lossOngoing = false;
+      let run = 0;
+      let runSign: 'W' | 'L' | null = null;
+      for (const r of chrono) {
+        const sign: 'W' | 'L' = r.won ? 'W' : 'L';
+        if (runSign === null || sign === runSign) {
+          run++;
+          runSign = sign;
+          continue;
         }
+        // Le run précédent (runSign) est clos par r (signe opposé) → r.opp l'a brisé.
+        if (runSign === 'W') {
+          if (run > maxWin) { maxWin = run; winBreaker = r.opp; winOngoing = false; }
+        } else if (run > maxLoss) {
+          maxLoss = run; lossBreaker = r.opp; lossOngoing = false;
+        }
+        run = 1;
+        runSign = sign;
       }
+      // Run final encore ouvert : record « en cours » s'il bat les précédents.
+      if (runSign === 'W') {
+        if (run > maxWin) { maxWin = run; winOngoing = true; winBreaker = null; }
+      } else if (runSign === 'L' && run > maxLoss) {
+        maxLoss = run; lossOngoing = true; lossBreaker = null;
+      }
+
       const s = map.get(login)!;
       s.streak = streak;
       s.maxWinStreak = maxWin;
       s.maxLossStreak = maxLoss;
+      s.maxWinBreaker = winBreaker && !winOngoing
+        ? { login: winBreaker, imageUrl: infoByLogin.get(winBreaker) ?? null }
+        : null;
+      s.maxLossBreaker = lossBreaker && !lossOngoing
+        ? { login: lossBreaker, imageUrl: infoByLogin.get(lossBreaker) ?? null }
+        : null;
     }
 
     for (const s of map.values()) {
@@ -423,10 +466,10 @@ export function LeaderboardDesktop() {
                         <StreakCell streak={stats.streak} />
                       </td>
                       <td className="px-1 sm:px-3 py-2.5 text-right">
-                        <MaxStreakCell value={stats.maxWinStreak} kind="win" />
+                        <MaxStreakCell value={stats.maxWinStreak} kind="win" breaker={stats.maxWinBreaker} />
                       </td>
                       <td className="px-1 sm:px-3 py-2.5 text-right">
-                        <MaxStreakCell value={stats.maxLossStreak} kind="loss" />
+                        <MaxStreakCell value={stats.maxLossStreak} kind="loss" breaker={stats.maxLossBreaker} />
                       </td>
                     </tr>
                   );
@@ -619,26 +662,47 @@ function StreakCell({ streak }: { streak: number }) {
 }
 
 // ─── Cellule plus longue série (V ou D) ──────────────────────────────────────
-// Même règle : une série commence à 2, sinon « none ».
-function MaxStreakCell({ value, kind }: { value: number; kind: 'win' | 'loss' }) {
+// Même règle : une série commence à 2, sinon « - ». Au survol, si la série a été
+// brisée par quelqu'un (record clos, pas « en cours »), le tooltip montre la
+// photo Intra de l'adversaire qui y a mis fin.
+function MaxStreakCell({
+  value,
+  kind,
+  breaker,
+}: {
+  value: number;
+  kind: 'win' | 'loss';
+  breaker?: StreakBreaker | null;
+}) {
   const t = useT();
   if (value < 2) {
     return <span className="text-muted/40 text-xs uppercase tracking-wide">{t('lb.streak.none')}</span>;
   }
-  if (kind === 'win') {
-    return (
-      <Tooltip label={`${value} ${t('lb.streak.wins')} 🔥`}>
-        <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#ff8c3a]">
-          <Flame className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
-          {value}
+  const isWin = kind === 'win';
+  const color = isWin ? '#ff8c3a' : '#5fb4ff';
+  const Icon = isWin ? Flame : Snowflake;
+  const countLabel = `${value} ${isWin ? t('lb.streak.wins') : t('lb.streak.losses')} ${isWin ? '🔥' : '❄️'}`;
+  // Tooltip enrichi (photo + « brisée par … ») uniquement si un briseur existe.
+  const label = breaker ? (
+    <span className="inline-flex items-center gap-2 py-0.5">
+      <Avatar login={breaker.login} imageUrl={breaker.imageUrl} size="xs" />
+      <span className="flex flex-col items-start leading-tight">
+        <span className="text-[9px] uppercase tracking-wider text-muted-2">
+          {isWin ? t('lb.streak.brokenBy') : t('lb.streak.endedVs')}
         </span>
-      </Tooltip>
-    );
-  }
+        <span className="font-semibold">@{breaker.login}</span>
+      </span>
+    </span>
+  ) : (
+    countLabel
+  );
   return (
-    <Tooltip label={`${value} ${t('lb.streak.losses')} ❄️`}>
-      <span className="inline-flex items-center gap-1 font-mono font-bold tabular-nums text-[#5fb4ff]">
-        <Snowflake className="w-3.5 h-3.5" strokeWidth={2.5} />
+    <Tooltip label={label}>
+      <span
+        className="inline-flex items-center gap-1 font-mono font-bold tabular-nums"
+        style={{ color }}
+      >
+        <Icon className="w-3.5 h-3.5" strokeWidth={2.5} fill={isWin ? 'currentColor' : 'none'} />
         {value}
       </span>
     </Tooltip>
