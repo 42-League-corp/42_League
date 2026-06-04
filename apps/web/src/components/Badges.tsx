@@ -28,15 +28,48 @@ export function BadgeChip({
   code,
   def,
   size = 'sm',
+  iconOnly = false,
   onClick,
 }: {
   code?: string;
   def?: BadgeRenderDef;
   size?: 'xs' | 'sm' | 'md';
+  /** Pastille ronde icône-seule (label dans la modale) — gain de place à côté
+   *  d'un nom, évite que le label pousse / tronque le texte voisin. */
+  iconOnly?: boolean;
   onClick?: () => void;
 }) {
   const b = def ?? badgeDef(code ?? '');
   const Icon = b.icon;
+  const commonStyle = {
+    color: b.color,
+    borderColor: `${b.color}55`,
+    // Dégradé tricolore (teinte du badge) balayé en boucle → effet brillant.
+    background: `linear-gradient(110deg, ${b.color}14 0%, ${b.color}33 45%, ${b.color}14 70%)`,
+    backgroundSize: '220% 100%',
+  } as const;
+  const sheen = {
+    animate: { backgroundPosition: ['0% 0%', '220% 0%'] },
+    transition: { duration: 3.2, repeat: Infinity, ease: 'linear' as const },
+  };
+
+  if (iconOnly) {
+    const boxCls = size === 'xs' ? 'w-5 h-5' : size === 'md' ? 'w-7 h-7' : 'w-6 h-6';
+    const iconCls = size === 'xs' ? 'w-3 h-3' : size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5';
+    return (
+      <motion.button
+        type="button"
+        onClick={onClick}
+        title={b.label}
+        className={`inline-flex items-center justify-center rounded-full border shrink-0 ${boxCls}`}
+        style={commonStyle}
+        {...sheen}
+      >
+        <Icon className={iconCls} strokeWidth={2.6} />
+      </motion.button>
+    );
+  }
+
   const sizeCls =
     size === 'xs'
       ? 'text-[8px] px-1.5 py-0.5 gap-0.5'
@@ -50,15 +83,8 @@ export function BadgeChip({
       onClick={onClick}
       title={b.label}
       className={`inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`}
-      style={{
-        color: b.color,
-        borderColor: `${b.color}55`,
-        // Dégradé tricolore (teinte du badge) balayé en boucle → effet brillant.
-        background: `linear-gradient(110deg, ${b.color}14 0%, ${b.color}33 45%, ${b.color}14 70%)`,
-        backgroundSize: '220% 100%',
-      }}
-      animate={{ backgroundPosition: ['0% 0%', '220% 0%'] }}
-      transition={{ duration: 3.2, repeat: Infinity, ease: 'linear' }}
+      style={commonStyle}
+      {...sheen}
     >
       <Icon className={iconCls} strokeWidth={2.6} />
       {b.label}
@@ -66,35 +92,93 @@ export function BadgeChip({
   );
 }
 
+/** Pastille « +N » repliant les badges en trop — ouvre la modale au clic. */
+function OverflowChip({
+  count,
+  size = 'sm',
+  iconOnly = false,
+  onClick,
+}: {
+  count: number;
+  size?: 'xs' | 'sm' | 'md';
+  iconOnly?: boolean;
+  onClick?: () => void;
+}) {
+  // En mode icône-seule, pastille ronde de même gabarit que les icônes.
+  const sizeCls = iconOnly
+    ? `${size === 'xs' ? 'w-5 h-5 text-[8px]' : size === 'md' ? 'w-7 h-7 text-[10px]' : 'w-6 h-6 text-[9px]'} justify-center px-0`
+    : size === 'xs'
+      ? 'text-[8px] px-1.5 py-0.5'
+      : size === 'md'
+        ? 'text-xs px-2.5 py-1.5'
+        : 'text-[10px] px-2 py-0.5';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`+${count}`}
+      className={`inline-flex items-center shrink-0 rounded-full font-extrabold tabular-nums leading-none border border-gold/35 bg-gold/10 text-gold/90 ${sizeCls}`}
+    >
+      +{count}
+    </button>
+  );
+}
+
 /**
  * Rangée de badges d'un joueur. Cliquer ouvre une modale listant tous ses badges
  * avec leur description (« clique sur le badge pour voir ceux qu'on a »).
+ *
+ * Ne déborde JAMAIS : au plus `max` pastilles sont affichées, le reste est replié
+ * dans un « +N » cliquable (évite que trop de badges cassent / chevauchent la mise
+ * en page, notamment à côté du nom sur mobile).
  */
 export function BadgesRow({
   codes,
   extra,
   size = 'sm',
+  max = 3,
+  iconOnly = false,
 }: {
   codes: string[];
   /** Badge(s) acheté(s) & équipé(s) (boutique), rendus avec leur def inline. */
   extra?: EquippedBadge[];
   size?: 'xs' | 'sm' | 'md';
+  /** Nb max de pastilles affichées avant de replier le reste dans un « +N ». */
+  max?: number;
+  /** Pastilles rondes icône-seule (label dans la modale) — pour les espaces serrés
+   *  comme la rangée à côté du nom sur les cartes héro mobiles. */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const extras = extra ?? [];
-  if ((!codes || codes.length === 0) && extras.length === 0) return null;
+  const safeCodes = codes ?? [];
+  const total = safeCodes.length + extras.length;
+  if (total === 0) return null;
+
+  // Liste unifiée (catalogue + boutique), dans l'ordre d'affichage.
+  const chips = [
+    ...safeCodes.map((code) => (
+      <BadgeChip key={code} code={code} size={size} iconOnly={iconOnly} onClick={() => setOpen(true)} />
+    )),
+    ...extras.map((b) => (
+      <BadgeChip key={`shop-${b.code}`} def={defFromEquipped(b)} size={size} iconOnly={iconOnly} onClick={() => setOpen(true)} />
+    )),
+  ];
+  const visible = chips.slice(0, max);
+  const overflow = total - visible.length;
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {codes.map((code) => (
-          <BadgeChip key={code} code={code} size={size} onClick={() => setOpen(true)} />
-        ))}
-        {extras.map((b) => (
-          <BadgeChip key={`shop-${b.code}`} def={defFromEquipped(b)} size={size} onClick={() => setOpen(true)} />
-        ))}
+      {/* flex-nowrap + min-w-0 : la rangée ne casse pas sur plusieurs lignes et ne
+          pousse pas le reste de la carte ; au-delà de `max` on replie en « +N ». */}
+      <div className="flex flex-nowrap items-center gap-1.5 min-w-0">
+        {visible}
+        {overflow > 0 && (
+          <OverflowChip count={overflow} size={size} iconOnly={iconOnly} onClick={() => setOpen(true)} />
+        )}
       </div>
       <AnimatePresence>
-        {open && <BadgesModal codes={codes} extra={extras} onClose={() => setOpen(false)} />}
+        {open && <BadgesModal codes={safeCodes} extra={extras} onClose={() => setOpen(false)} />}
       </AnimatePresence>
     </>
   );

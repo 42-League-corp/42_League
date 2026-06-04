@@ -207,7 +207,15 @@ export function ProfileHeroCard({
               </h2>
               {((badges && badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
-                  <BadgesRow codes={badges ?? []} extra={equippedBadge ? [equippedBadge] : []} size="md" />
+                  {/* Espace serré à côté du nom : pastilles icône-seule (label dans la
+                      modale au clic), au plus 3 puis « +N » → le nom n'est jamais écrasé. */}
+                  <BadgesRow
+                    codes={badges ?? []}
+                    extra={equippedBadge ? [equippedBadge] : []}
+                    size="md"
+                    iconOnly
+                    max={3}
+                  />
                 </div>
               )}
             </div>
