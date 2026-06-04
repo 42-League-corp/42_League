@@ -20,6 +20,8 @@ const SOMMET_MIN_MATCHES = 3; // matchs 2v2 mini pour figer le "Sommet"
 const MACHINE_MIN_WINS = 8; // victoires 2v2 mini pour "Machine de Guerre"
 const MURAILLE_MIN_MATCHES = 8; // matchs 2v2 mini pour "La Muraille"
 const INCREVABLES_MIN_MATCHES = 12; // matchs 2v2 mini pour "Les Increvables"
+const JUMEAUX_MIN_MATCHES = 6; // matchs 2v2 mini pour "Les Jumeaux" (duo le plus équilibré)
+const INVAINCUS_MIN_WINS = 5; // victoires mini (0 défaite) pour "Les Invaincus"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +31,9 @@ export type TeamTrophyCode =
   | 'sommet'
   | 'machine_de_guerre'
   | 'muraille'
-  | 'increvables';
+  | 'increvables'
+  | 'jumeaux'
+  | 'invaincus';
 
 /** Équipe gagnante enrichie pour l'affichage (avatars dénormalisés). */
 export interface TeamTrophyWinner extends BabyfootTeamEntry {
@@ -74,6 +78,8 @@ export function computeTeamTrophies(
     computeDuoDeChocTrophy(teams, matches),
     computeCarryTrophy(teams, leaderboard),
     computeIncrevablesTrophy(teams),
+    computeJumeauxTrophy(teams, leaderboard),
+    computeInvaincusTrophy(teams),
   ];
 }
 
@@ -323,6 +329,89 @@ function computeIncrevablesTrophy(teams: TeamTrophyWinner[]): TeamTrophyResult {
     winner: earned ? winner : null,
     value: earned ? `${maxTotal} matchs` : '—',
     hint: `≥${INCREVABLES_MIN_MATCHES} matchs 2v2 requis`,
+  };
+}
+
+// ─── Trophée 7 : Les Jumeaux ──────────────────────────────────────────────────
+
+/**
+ * Duo le plus ÉQUILIBRÉ : plus petit écart d'ELO individuel entre les deux
+ * joueurs (à partir d'un volume minimal de matchs). L'exact opposé du Carry —
+ * ici les deux partenaires sont de force égale, la vraie symbiose.
+ */
+function computeJumeauxTrophy(
+  teams: TeamTrophyWinner[],
+  leaderboard: LeaderboardEntry[],
+): TeamTrophyResult {
+  const eloByLogin = new Map(leaderboard.map((u) => [u.login, u.elo]));
+
+  let winner: TeamTrophyWinner | null = null;
+  let minGap = Infinity;
+
+  for (const team of teams) {
+    if (team.wins + team.losses < JUMEAUX_MIN_MATCHES) continue;
+    const elo1 = eloByLogin.get(team.player1Login) ?? 1000;
+    const elo2 = eloByLogin.get(team.player2Login) ?? 1000;
+    const gap = Math.abs(elo1 - elo2);
+    if (gap < minGap) {
+      minGap = gap;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null;
+
+  return {
+    code: 'jumeaux',
+    emoji: '🪞',
+    title: 'Les Jumeaux',
+    subtitle: 'Le duo le plus équilibré de la ligue',
+    description:
+      `Décerné à l'équipe (≥${JUMEAUX_MIN_MATCHES} matchs 2v2) dont les deux joueurs ont l'ELO ` +
+      `individuel le plus proche. Aucun ne porte l'autre : deux moitiés d'un même tout, ` +
+      `parfaitement synchronisées. L'opposé du Carry.`,
+    color: 'magenta',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${minGap} pts d'écart` : '—',
+    hint: `≥${JUMEAUX_MIN_MATCHES} matchs, plus petit écart d'ELO`,
+  };
+}
+
+// ─── Trophée 8 : Les Invaincus ────────────────────────────────────────────────
+
+/**
+ * Duo encore jamais battu en 2v2 (0 défaite) avec un minimum de victoires.
+ * Parmi les équipes invaincues, on couronne celle au plus grand nombre de wins.
+ */
+function computeInvaincusTrophy(teams: TeamTrophyWinner[]): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let maxWins = 0;
+
+  for (const team of teams) {
+    if (team.losses !== 0) continue;
+    if (team.wins > maxWins) {
+      maxWins = team.wins;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null && maxWins >= INVAINCUS_MIN_WINS;
+
+  return {
+    code: 'invaincus',
+    emoji: '💎',
+    title: 'Les Invaincus',
+    subtitle: 'Duo encore jamais battu en 2v2',
+    description:
+      `Pour l'équipe qui n'a JAMAIS perdu un match 2v2, avec au moins ${INVAINCUS_MIN_WINS} victoires ` +
+      `à son actif. Un parcours sans la moindre tache : tant que personne ne les fait tomber, ` +
+      `le trophée est à eux.`,
+    color: 'crimson',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${maxWins}-0, invaincus` : '—',
+    hint: `0 défaite, ≥${INVAINCUS_MIN_WINS} victoires`,
   };
 }
 

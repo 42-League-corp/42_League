@@ -11,7 +11,8 @@ import {
   type TrophyColor,
   type TrophyResult,
 } from '../lib/trophies';
-import { api, type LeaderboardEntry } from '../lib/api';
+import { computeFfaTrophies } from '../lib/trophiesFfa';
+import { api, type LeaderboardEntry, type PlayedFfa } from '../lib/api';
 import { TeamTrophiesHallOfFame } from './TeamTrophiesSection';
 
 interface TrophyHolder {
@@ -274,10 +275,32 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const { leaderboard, matches } = useLeagueData();
   const { game } = useGameMode();
   const [sortMode, setSortMode] = useState<SortMode>('category');
-  const [view, setView] = useState<'mode' | 'mix' | 'teams'>('mode');
+  const [view, setView] = useState<'mode' | 'mix' | 'teams' | 'ffa'>('mode');
   const trophies = useMemo(
     () => computeTrophies(leaderboard, matches, game),
     [leaderboard, matches, game],
+  );
+
+  // Changer de discipline réinitialise la vue (les onglets « Équipes 2v2 » /
+  // « FFA Smash » sont spécifiques à un jeu → on évite de rester sur un onglet
+  // qui n'existe plus).
+  useEffect(() => {
+    setView('mode');
+  }, [game]);
+
+  // Onglet « FFA Smash » : historique des Free-For-All, chargé à la demande.
+  const [ffas, setFfas] = useState<PlayedFfa[] | null>(null);
+  useEffect(() => {
+    if (view !== 'ffa' || ffas) return;
+    api
+      .playedFfas()
+      .then(setFfas)
+      .catch(() => setFfas([]));
+  }, [view, ffas]);
+
+  const ffaTrophies = useMemo(
+    () => (ffas ? computeFfaTrophies(ffas, leaderboard) : []),
+    [ffas, leaderboard],
   );
 
   // Onglet « Mix » : trophées inter-jeux → nécessite les 3 classements.
@@ -369,7 +392,9 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
             { v: 'mix',   label: '🌐 Mix inter-jeux' },
             // Onglet Équipes uniquement en Babyfoot — les équipes 2v2 n'existent que dans ce jeu.
             ...(game === 'babyfoot' ? [{ v: 'teams', label: '⚽ Équipes 2v2' }] : []),
-          ] as { v: 'mode' | 'mix' | 'teams'; label: string }[]
+            // Onglet FFA uniquement en Smash — le Free-For-All n'existe que là.
+            ...(game === 'smash' ? [{ v: 'ffa', label: '🎮 FFA Smash' }] : []),
+          ] as { v: 'mode' | 'mix' | 'teams' | 'ffa'; label: string }[]
         ).map(({ v, label }) => (
           <button
             key={v}
@@ -379,7 +404,9 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
               view === v
                 ? v === 'teams'
                   ? 'bg-red/10 border border-red/30 text-red'
-                  : 'bg-gold/10 border border-gold/30 text-gold'
+                  : v === 'ffa'
+                    ? 'bg-[#a259ff]/10 border border-[#a259ff]/30 text-[#c79bff]'
+                    : 'bg-gold/10 border border-gold/30 text-gold'
                 : 'border border-transparent text-muted-2 hover:text-text'
             }`}
           >
@@ -391,6 +418,22 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
       {view === 'teams' ? (
         /* ── Trophées d'équipe 2v2 Babyfoot ── */
         <TeamTrophiesHallOfFame />
+      ) : view === 'ffa' ? (
+        /* ── Trophées Smash FFA (Free-For-All) ── */
+        ffas === null ? (
+          <div className="text-center text-muted-2 py-8 text-sm">Chargement des FFA…</div>
+        ) : ffaTrophies.length === 0 ? (
+          <div className="text-center text-muted-2 py-8 text-sm">
+            Pas encore de FFA Smash joué — lance une mêlée à 3+ joueurs !
+          </div>
+        ) : (
+          <>
+            <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">
+              Récompenses du mode Free-For-All Smash (mêlées à 3 joueurs ou plus).
+            </p>
+            <TrophyGrid trophies={ffaTrophies} leaderboard={leaderboard} />
+          </>
+        )
       ) : view === 'mix' ? (
         boards === null ? (
           <div className="text-center text-muted-2 py-8 text-sm">Chargement des classements…</div>

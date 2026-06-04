@@ -1258,6 +1258,41 @@ app.get('/leaderboard', async (c) => {
   return c.json(users.map((u, i) => ({ rank: i + 1, ...u, ...projectStats(u, game) })));
 });
 
+// ── Classement des équipes Babyfoot 2v2 ───────────────────────────────────────
+// Renvoie tous les duos avec leur bilan 2v2 (elo / wins / losses / rang), enrichi
+// des avatars des deux joueurs. Alimente le classement équipes + les trophées 2v2.
+app.get('/teams/leaderboard', async (c) => {
+  await getCurrentLogin(c);
+  const teams = await prisma.babyfootTeam.findMany({
+    include: {
+      player1: { select: { imageUrl: true } },
+      player2: { select: { imageUrl: true } },
+      matchesAsTeamA: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
+      matchesAsTeamB: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
+    },
+  });
+  const enriched = teams.map((t) => {
+    const wins =
+      t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
+      t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
+    const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
+    return {
+      id: t.id,
+      player1Login: t.player1Login,
+      player2Login: t.player2Login,
+      elo: t.elo,
+      name: t.name,
+      createdAt: t.createdAt,
+      wins,
+      losses: total - wins,
+      player1ImageUrl: t.player1.imageUrl,
+      player2ImageUrl: t.player2.imageUrl,
+    };
+  });
+  enriched.sort((a, b) => b.elo - a.elo);
+  return c.json(enriched.map((t, i) => ({ rank: i + 1, ...t })));
+});
+
 // ── Notifications in-app ──────────────────────────────────────────────────
 app.get('/notifications', async (c) => {
   const me = await getCurrentLogin(c);

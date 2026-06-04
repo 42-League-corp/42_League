@@ -36,6 +36,12 @@ const MURAILLE_MIN_MATCHES = 8;
 /** Matchs 2v2 minimum pour décerner « Les Increvables » (le plus actif). */
 const INCREVABLES_MIN_MATCHES = 12;
 
+/** Matchs 2v2 minimum pour « Les Jumeaux » (duo le plus équilibré). */
+const JUMEAUX_MIN_MATCHES = 6;
+
+/** Victoires minimum (0 défaite) pour « Les Invaincus ». */
+const INVAINCUS_MIN_WINS = 5;
+
 // ─── Types publics ────────────────────────────────────────────────────────────
 
 export type TeamTrophyCode =
@@ -44,7 +50,9 @@ export type TeamTrophyCode =
   | 'sommet'
   | 'machine_de_guerre'
   | 'muraille'
-  | 'increvables';
+  | 'increvables'
+  | 'jumeaux'
+  | 'invaincus';
 
 export interface TeamTrophyResult {
   code: TeamTrophyCode;
@@ -86,6 +94,8 @@ export async function computeTeamTrophies(
     duo,
     carry,
     computeIncrevablesTrophy(records),
+    computeJumeauxTrophy(records),
+    computeInvaincusTrophy(records),
   ];
 }
 
@@ -97,6 +107,9 @@ interface TeamRecord {
   player1Login: string;
   player2Login: string;
   elo: number;
+  /** ELO individuel courant de chaque joueur (pour « Les Jumeaux »). */
+  player1Elo: number;
+  player2Elo: number;
   wins: number;
   losses: number;
   total: number;
@@ -109,6 +122,8 @@ interface TeamRecord {
 async function loadTeamRecords(prisma: PrismaClient): Promise<TeamRecord[]> {
   const teams = await prisma.babyfootTeam.findMany({
     include: {
+      player1: { select: { elo: true } },
+      player2: { select: { elo: true } },
       matchesAsTeamA: {
         where: { mode: '2v2', countedForElo: true },
         select: { winner: true },
@@ -131,6 +146,8 @@ async function loadTeamRecords(prisma: PrismaClient): Promise<TeamRecord[]> {
       player1Login: t.player1Login,
       player2Login: t.player2Login,
       elo: t.elo,
+      player1Elo: t.player1.elo,
+      player2Elo: t.player2.elo,
       wins,
       losses: total - wins,
       total,
@@ -279,6 +296,71 @@ function computeIncrevablesTrophy(records: TeamRecord[]): TeamTrophyResult {
         `Toujours partants pour une partie : l'endurance avant tout. Minimum ${INCREVABLES_MIN_MATCHES} matchs.`,
       earned,
       value: earned ? `${maxTotal} matchs` : '—',
+    },
+    earned ? winner : null,
+  );
+}
+
+// ─── Trophée 7 : Les Jumeaux ──────────────────────────────────────────────────
+
+/** Duo le plus équilibré : plus petit écart d'ELO individuel (min. de matchs). */
+function computeJumeauxTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let minGap = Infinity;
+
+  for (const t of records) {
+    if (t.total < JUMEAUX_MIN_MATCHES) continue;
+    const gap = Math.abs(t.player1Elo - t.player2Elo);
+    if (gap < minGap) {
+      minGap = gap;
+      winner = t;
+    }
+  }
+
+  return awarded(
+    {
+      code: 'jumeaux',
+      emoji: '🪞',
+      title: 'Les Jumeaux',
+      subtitle: 'Le duo le plus équilibré de la ligue',
+      description:
+        `Décerné à l'équipe (≥${JUMEAUX_MIN_MATCHES} matchs 2v2) dont les deux joueurs ont l'ELO ` +
+        `individuel le plus proche. Aucun ne porte l'autre : la vraie symbiose, l'opposé du Carry.`,
+      earned: winner !== null,
+      value: winner !== null ? `${minGap} pts d'écart` : '—',
+    },
+    winner,
+  );
+}
+
+// ─── Trophée 8 : Les Invaincus ────────────────────────────────────────────────
+
+/** Duo encore jamais battu (0 défaite), au plus grand nombre de victoires. */
+function computeInvaincusTrophy(records: TeamRecord[]): TeamTrophyResult {
+  let winner: TeamRecord | null = null;
+  let maxWins = 0;
+
+  for (const t of records) {
+    if (t.losses !== 0) continue;
+    if (t.wins > maxWins) {
+      maxWins = t.wins;
+      winner = t;
+    }
+  }
+
+  const earned = winner !== null && maxWins >= INVAINCUS_MIN_WINS;
+
+  return awarded(
+    {
+      code: 'invaincus',
+      emoji: '💎',
+      title: 'Les Invaincus',
+      subtitle: 'Duo encore jamais battu en 2v2',
+      description:
+        `Pour l'équipe qui n'a JAMAIS perdu un match 2v2, avec au moins ${INVAINCUS_MIN_WINS} ` +
+        `victoires. Un parcours immaculé : le trophée est à eux tant que personne ne les fait tomber.`,
+      earned,
+      value: earned ? `${maxWins}-0, invaincus` : '—',
     },
     earned ? winner : null,
   );
