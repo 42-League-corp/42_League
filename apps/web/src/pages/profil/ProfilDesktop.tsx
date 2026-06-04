@@ -109,7 +109,6 @@ export function ProfilDesktop() {
   const realName =
     [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
     [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
-  const fullName = realName || u.login;
   const myOnlineHost = locations.get(u.login);
 
   // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.

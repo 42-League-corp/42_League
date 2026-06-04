@@ -96,7 +96,6 @@ export function ProfileHeroCard({
   const realName =
     [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
     [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
-  const fullName = realName || user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
   const isTop10 = myRank > 0 && myRank <= 10;

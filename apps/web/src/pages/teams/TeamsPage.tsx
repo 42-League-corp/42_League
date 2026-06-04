@@ -71,7 +71,7 @@ function DuoAvatars({ team, size = 36 }: { team: BabyfootTeamEntry; size?: numbe
 
 // ─── Carte d'équipe ───────────────────────────────────────────────────────────
 
-function TeamCard({ team, index }: { team: BabyfootTeamEntry; index: number }) {
+function TeamCard({ team, index: _index }: { team: BabyfootTeamEntry; index: number }) {
   const navigate = useNavigate();
   const games = team.wins + team.losses;
   const wr = games === 0 ? 0 : Math.round((team.wins / games) * 100);

@@ -33,13 +33,14 @@ interface Cluster {
 function buildClusters(entries: LeaderboardEntry[], trackMax: number): Cluster[] {
   if (!entries.length) return [];
   const sorted = [...entries].sort((a, b) => a.elo - b.elo);
-  const groups: LeaderboardEntry[][] = [[sorted[0]]];
-  for (let i = 1; i < sorted.length; i++) {
+  const groups: LeaderboardEntry[][] = [];
+  for (const entry of sorted) {
     const last = groups[groups.length - 1];
-    if (sorted[i].elo - last[last.length - 1].elo <= CLUSTER_RADIUS) {
-      last.push(sorted[i]);
+    const tail = last?.[last.length - 1];
+    if (last && tail && entry.elo - tail.elo <= CLUSTER_RADIUS) {
+      last.push(entry);
     } else {
-      groups.push([sorted[i]]);
+      groups.push([entry]);
     }
   }
   return groups.map((g) => {
