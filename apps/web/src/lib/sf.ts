@@ -111,3 +111,12 @@ export function sfCharName(id: string | null | undefined): string {
   if (!id) return '—';
   return BY_ID.get(id)?.name ?? id;
 }
+
+/**
+ * Portrait local du perso (assets téléchargés dans public/sf/, cf.
+ * scripts/fetch_sf_portraits.py). En cas d'absence/erreur de chargement,
+ * SfCharIcon retombe sur la pastille colorée.
+ */
+export function sfCharImg(c: SfChar): string {
+  return `/sf/${c.id}.png`;
+}

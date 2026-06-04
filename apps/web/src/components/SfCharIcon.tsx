@@ -1,9 +1,11 @@
-import { sfChar, type SfChar } from '../lib/sf';
+import { useState } from 'react';
+import { sfChar, sfCharImg, type SfChar } from '../lib/sf';
 
 /**
- * Vignette d'un personnage Street Fighter : pastille en dégradé coloré avec
- * l'initiale du perso. Pas de dépendance image distante (robuste hors-ligne),
- * à l'image de la branche fallback de SmashCharIcon.
+ * Vignette d'un personnage Street Fighter : portrait officiel (assets locaux
+ * public/sf/, cf. scripts/fetch_sf_portraits.py) si l'image charge, sinon
+ * pastille en dégradé coloré avec l'initiale (fallback robuste hors-ligne /
+ * image manquante), à l'image de SmashCharIcon.
  */
 export function SfCharIcon({
   id,
@@ -15,6 +17,7 @@ export function SfCharIcon({
   className?: string;
 }) {
   const c = sfChar(id);
+  const [broken, setBroken] = useState(false);
   const color = c?.color ?? '#5b6172';
   const label = (c?.name ?? id ?? '?').replace(/[^A-Za-z0-9]/g, '');
   // Deux lettres pour mieux distinguer le large roster (ex. « DH », « MB »),
@@ -31,18 +34,33 @@ export function SfCharIcon({
       }}
       title={c?.name ?? id ?? undefined}
     >
-      {/* Reflet diagonal subtil pour donner du relief à la pastille. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)' }}
-      />
-      <span
-        className="relative leading-none tracking-tight"
-        style={{ fontSize: size * (initials.length > 1 ? 0.38 : 0.46), textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}
-      >
-        {initials}
-      </span>
+      {c && !broken ? (
+        <img
+          src={sfCharImg(c)}
+          alt={c.name}
+          draggable={false}
+          loading="lazy"
+          onError={() => setBroken(true)}
+          // Renders plein corps → on cadre vers le haut pour garder le visage.
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: '50% 12%' }}
+        />
+      ) : (
+        <>
+          {/* Reflet diagonal subtil pour donner du relief à la pastille. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)' }}
+          />
+          <span
+            className="relative leading-none tracking-tight"
+            style={{ fontSize: size * (initials.length > 1 ? 0.38 : 0.46), textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}
+          >
+            {initials}
+          </span>
+        </>
+      )}
     </div>
   );
 }
