@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AnimatePresence,
   motion,
@@ -128,7 +129,15 @@ export function BottomSheet({
     return style;
   }, [snap, keyboardInset]);
 
-  return (
+  // createPortal → monte le scrim + la sheet directement dans <body>.
+  //
+  // Pourquoi : PageTransition applique `transform: translateX(…)` sur son
+  // motion.div. En CSS, un ancêtre avec un transform actif crée un nouveau
+  // "containing block" pour les descendants position:fixed, qui se positionnent
+  // alors relativement au motion.div plutôt qu'au viewport. Résultat : la sheet
+  // apparaît à la mauvaise position quand la page a scrollé ou est en train
+  // d'être animée. Le portal échappe cet ancêtre transformé.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -203,6 +212,7 @@ export function BottomSheet({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
