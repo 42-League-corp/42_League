@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useGameMode } from '../../../hooks/useGameMode';
-import { pickRating } from '../../../lib/gameStats';
-import type { PlayedMatch } from '../../../lib/api';
+import { pickRating, type RatingSource } from '../../../lib/gameStats';
+import type { Game, PlayedMatch } from '../../../lib/api';
 
 export interface ProfilStats {
   elo: number;
@@ -51,22 +51,26 @@ const EMPTY_STATS: ProfilStats = {
   streakOngoing: false,
 };
 
-export function useProfilLogic(): ProfilLogic {
-  const { me, matches } = useLeagueData();
-  const { game } = useGameMode();
-  const myLogin = me?.login;
-
-  const data = useMemo(() => {
-    if (!me?.user || !myLogin) {
-      return { stats: EMPTY_STATS, recentMatches: [] as PlayedMatch[] };
-    }
-    const mine = matches
-      .filter(
-        (m) =>
-          (m.game ?? 'babyfoot') === game &&
-          (m.playerALogin === myLogin || m.playerBLogin === myLogin),
-      )
-      .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
+/**
+ * Cœur de calcul des stats de profil — pur, sans hook. Réutilisé par le profil
+ * perso (via {@link useProfilLogic}) ET par la fiche d'un autre joueur
+ * (`PlayerPage`), pour un agencement strictement identique. `matches` doit être
+ * l'historique global (GET /matches) ; le filtrage par joueur/discipline est fait ici.
+ */
+export function computeProfilStats(
+  user: RatingSource,
+  login: string,
+  matches: PlayedMatch[],
+  game: Game,
+): { stats: ProfilStats; recentMatches: PlayedMatch[] } {
+  const mine = matches
+    .filter(
+      (m) =>
+        (m.game ?? 'babyfoot') === game &&
+        (m.playerALogin === login || m.playerBLogin === login),
+    )
+    .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
+  const myLogin = login;
 
     let wins = 0;
     let losses = 0;
@@ -175,7 +179,7 @@ export function useProfilLogic(): ProfilLogic {
             (opponentScoresOnWin.reduce((s, v) => s + v, 0) / opponentScoresOnWin.length) * 10,
           ) / 10;
 
-    const rating = pickRating(me.user, game);
+    const rating = pickRating(user, game);
     return {
       stats: {
         elo: rating.elo,
@@ -195,6 +199,18 @@ export function useProfilLogic(): ProfilLogic {
       },
       recentMatches: mine.slice(0, 10),
     };
+}
+
+export function useProfilLogic(): ProfilLogic {
+  const { me, matches } = useLeagueData();
+  const { game } = useGameMode();
+  const myLogin = me?.login;
+
+  const data = useMemo(() => {
+    if (!me?.user || !myLogin) {
+      return { stats: EMPTY_STATS, recentMatches: [] as PlayedMatch[] };
+    }
+    return computeProfilStats(me.user, myLogin, matches, game);
   }, [me, myLogin, matches, game]);
 
   return { myLogin, ...data };

@@ -12,33 +12,44 @@ import { gameColor, GAME_EMOJI, GAME_LOGO_SRC } from '../../../lib/gameVisuals';
 import { displayTitle } from '../../../lib/cosmeticTitles';
 import { TitlePicker } from '../../../components/TitlePicker';
 import { useT } from '../../../lib/i18n';
+import type { MeResponse } from '../../../lib/api';
 import type { ProfilStats } from '../shared/useProfilLogic';
+
+type HeroUser = NonNullable<MeResponse['user']>;
 
 interface ProfileHeroCardProps {
   stats: ProfilStats;
+  /** Joueur affiché. Défaut = utilisateur courant (profil perso). */
+  user?: HeroUser;
+  /** Badges du joueur affiché. Défaut = badges de l'utilisateur courant. */
+  badges?: string[];
+  /** true = profil perso → affiche le sélecteur de titre. Défaut true. */
+  isMe?: boolean;
 }
 
 /**
  * Hero card "profil" — variante plus riche que celle de Défis :
  * affiche delta 7j, streak signée, % du top, longest streak.
+ * Réutilisée telle quelle pour la fiche d'un autre joueur (`isMe=false`).
  */
-export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
+export function ProfileHeroCard({ stats, user: userProp, badges: badgesProp, isMe = true }: ProfileHeroCardProps) {
   const { me, leaderboard } = useLeagueData();
   const { game } = useGameMode();
   const t = useT();
   const reducedMotion = useReducedMotion();
-  const user = me?.user;
+  const user = userProp ?? me?.user;
+  const badges = badgesProp ?? me?.badges;
   if (!user) return null;
   const titlesWon = pickRating(user, game).tournamentsWon;
 
-  // Badges cross-jeux : autres disciplines où ce joueur est actif.
+  // Badges cross-jeux : toutes les disciplines où ce joueur est INSCRIT
+  // (même sans match joué), hormis le mode courant déjà affiché en grand.
   const crossGameBadges = (['babyfoot', 'smash', 'chess', 'streetfighter'] as const)
     .filter((g) => g !== game && (user.games ?? ['babyfoot']).includes(g))
     .map((g) => {
       const r = pickRating(user, g);
       return { g, elo: r.elo, played: r.matchesPlayed };
-    })
-    .filter((b) => b.played > 0);
+    });
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
@@ -110,10 +121,12 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
           </div>
         )}
 
-        {/* Sélecteur de titre — cette vue est toujours SON propre profil. */}
-        <div className="flex justify-center mb-4">
-          <TitlePicker />
-        </div>
+        {/* Sélecteur de titre — uniquement sur SON propre profil. */}
+        {isMe && (
+          <div className="flex justify-center mb-4">
+            <TitlePicker />
+          </div>
+        )}
 
         {/* Header row : avatar + identity à gauche, rank badge à droite */}
         <div className="flex items-start gap-4 mb-5">
@@ -139,9 +152,9 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
                 {fullName}
               </h2>
-              {me?.badges && me.badges.length > 0 && (
+              {badges && badges.length > 0 && (
                 <div className="flex-shrink-0">
-                  <BadgesRow codes={me.badges} size="md" />
+                  <BadgesRow codes={badges} size="md" />
                 </div>
               )}
             </div>
@@ -230,32 +243,53 @@ export function ProfileHeroCard({ stats }: ProfileHeroCardProps) {
               {t('profil.alsoActiveOn')}
             </div>
             <div className="flex items-center gap-2">
-              {crossGameBadges.map(({ g, elo, played }) => (
-                <div
-                  key={g}
-                  className="flex-1 rounded-xl px-2.5 py-2 flex flex-col items-center gap-0.5"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-                >
-                  {GAME_LOGO_SRC[g] ? (
-                    <img
-                      src={GAME_LOGO_SRC[g]}
-                      alt=""
-                      aria-hidden
-                      className="w-6 h-6 object-contain"
-                    />
-                  ) : (
-                    <span className="text-2xl leading-none">{GAME_EMOJI[g]}</span>
-                  )}
-                  <span
-                    className="font-mono font-extrabold tabular-nums text-[11px]"
-                    style={{ color: gameColor(g) }}
+              {crossGameBadges.map(({ g, elo, played }) => {
+                const c = gameColor(g);
+                return (
+                  <div
+                    key={g}
+                    className="flex-1 rounded-xl px-2 py-2.5 flex flex-col items-center gap-1"
+                    style={{
+                      background: `linear-gradient(180deg, ${c}1f 0%, rgba(255,255,255,0.03) 100%)`,
+                      border: `1px solid ${c}59`,
+                    }}
                   >
-                    {elo}
-                  </span>
-                  <span className="text-[8px] text-muted uppercase tracking-wider font-bold">ELO</span>
-                  <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
-                </div>
-              ))}
+                    {/* Pastille colorée — logo du mode bien visible */}
+                    <span
+                      className="flex items-center justify-center w-10 h-10 rounded-full"
+                      style={{
+                        background: `radial-gradient(circle at 50% 35%, ${c}3d 0%, ${c}14 70%, transparent 100%)`,
+                        border: `1.5px solid ${c}`,
+                        boxShadow: `0 0 12px -2px ${c}80`,
+                      }}
+                    >
+                      {GAME_LOGO_SRC[g] ? (
+                        <img
+                          src={GAME_LOGO_SRC[g]}
+                          alt=""
+                          aria-hidden
+                          className="w-7 h-7 object-contain"
+                        />
+                      ) : (
+                        <span className="text-2xl leading-none">{GAME_EMOJI[g]}</span>
+                      )}
+                    </span>
+                    <span
+                      className="font-display font-black tabular-nums text-base leading-none"
+                      style={{ color: c, textShadow: `0 0 10px ${c}66` }}
+                    >
+                      {elo}
+                    </span>
+                    <span
+                      className="text-[8px] uppercase tracking-[0.16em] font-extrabold"
+                      style={{ color: `${c}b3` }}
+                    >
+                      ELO
+                    </span>
+                    <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

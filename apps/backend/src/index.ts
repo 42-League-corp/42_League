@@ -977,7 +977,7 @@ app.get('/users/:login', async (c) => {
     // Compte inexistant ou en cours de suppression → traité comme absent.
     throw new HTTPException(404, { message: 'user not found' });
   }
-  const [allUsers, played] = await Promise.all([
+  const [allUsers, played, followingRows, followersRows] = await Promise.all([
     prisma.user.findMany({
       where: VISIBLE_USER_WHERE,
       select: { login: true, elo: true },
@@ -989,6 +989,17 @@ app.get('/users/:login', async (c) => {
       },
       orderBy: { playedAt: 'desc' },
       take: 50,
+    }),
+    // Réseau du joueur consulté (comme le bloc « following / followers » du profil perso).
+    prisma.follow.findMany({
+      where: { followerLogin: login },
+      include: { followee: { select: { login: true, imageUrl: true, elo: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.follow.findMany({
+      where: { followeeLogin: login },
+      include: { follower: { select: { login: true, imageUrl: true, elo: true } } },
+      orderBy: { createdAt: 'desc' },
     }),
   ]);
   const rank = allUsers.findIndex((u) => u.login === login) + 1;
@@ -1014,6 +1025,8 @@ app.get('/users/:login', async (c) => {
     recent: played,
     badges,
     palmares,
+    followingList: followingRows,
+    followersList: followersRows,
     following: !!follow,
     followPrefs: follow
       ? {
@@ -1137,15 +1150,19 @@ app.post('/queue/join', async (c) => {
   }
 
   const opponentLogin = paired;
-  // Défi entre les deux joueurs (planifié maintenant). Best-effort : un échec ne
-  // doit pas empêcher la notification d'appariement.
+  // Défi entre les deux joueurs, créé DIRECTEMENT en `accepted` : les deux ont
+  // explicitement rejoint la file, donc pas d'étape « accepter/refuser ». Le duel
+  // atterrit immédiatement dans la liste « duels à jouer » (scheduledDuels) des
+  // DEUX joueurs, prêt à être joué plus tard. Best-effort : un échec ne doit pas
+  // empêcher la notification d'appariement.
   await prisma.challenge
     .create({
       data: {
         id: randomUUID(),
         challengerLogin: me,
         opponentLogin,
-        status: 'pending',
+        status: 'accepted',
+        decidedAt: new Date(),
         game,
         scheduledAt: new Date(),
       },

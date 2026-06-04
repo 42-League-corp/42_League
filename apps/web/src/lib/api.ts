@@ -371,6 +371,8 @@ export interface UserProfile {
     eloSf?: number;
     matchesPlayedSf?: number;
     tournamentsWonSf?: number;
+    /** Disciplines auxquelles le joueur a adhéré (badges cross-jeux de la carte héro). */
+    games?: Game[];
     createdAt: string;
   };
   rank: number | null;
@@ -379,6 +381,10 @@ export interface UserProfile {
   recent: PlayedMatch[];
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Réseau du joueur consulté : ceux qu'il suit (bloc « following »). */
+  followingList?: FollowEdge[];
+  /** Réseau du joueur consulté : ceux qui le suivent (bloc « followers »). */
+  followersList?: FollowEdge[];
   /** Le visiteur suit-il ce joueur ? (null/false si soi-même ou non suivi) */
   following?: boolean;
   /** Préférences de notif pour ce suivi (null si non suivi). */

@@ -2,25 +2,25 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, UserPlus, UserCheck } from 'lucide-react';
 import { Panel } from '../components/Panel';
-import { UserBadge } from '../components/Avatar';
 import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
-import { StatCard } from '../components/StatCard';
-import { PlayerLink } from '../components/PlayerLink';
-import { BadgesRow } from '../components/Badges';
 import { Palmares } from '../components/Palmares';
 import { EloChart } from '../components/EloChart';
-import { displayTitle } from '../lib/cosmeticTitles';
+import { FollowLists } from '../components/FollowLists';
+import { ProfileHeroCard } from './profil/mobile/ProfileHeroCard';
+import { RecentMatchesList } from './profil/mobile/RecentMatchesList';
+import { MyTeamsSection } from './profil/mobile/MyTeamsSection';
+import { SectionHeader } from './profil/shared/SectionHeader';
+import { computeProfilStats } from './profil/shared/useProfilLogic';
 import {
   api,
   type OpsUserResponse,
   type UserProfile,
   type FollowPrefs,
 } from '../lib/api';
-import { fmtCountdown, fmtDatePair } from '../lib/format';
+import { fmtCountdown } from '../lib/format';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
-import { pickRating } from '../lib/gameStats';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useI18n, useT } from '../lib/i18n';
@@ -30,8 +30,7 @@ export function PlayerPage() {
   const login = rawLogin ?? '';
   const navigate = useNavigate();
   const t = useT();
-  const { locale, lang } = useI18n();
-  const { me, opsMe, locations, refresh } = useLeagueData();
+  const { me, opsMe, locations, matches, refresh } = useLeagueData();
   const { game } = useGameMode();
   const flash = useFlash();
   const confirm = useConfirm();
@@ -108,84 +107,53 @@ export function PlayerPage() {
   }
 
   const p = profile;
-  // Stats de la discipline courante (la fiche s'isole comme le profil perso).
-  const rating = pickRating(p.user, game);
-  const winRate =
-    p.wins + p.losses === 0
-      ? 0
-      : Math.round((p.wins / (p.wins + p.losses)) * 100);
-
   const myLogin = me?.login;
   const isMe = myLogin === p.user.login;
   const onlineHost = locations.get(p.user.login);
 
-  return (
-    <Panel title={p.user.firstName && p.user.lastName ? `${p.user.firstName} ${p.user.lastName}` : p.user.login} sub={t('profil.subtitle')}>
-      <div className="flex items-center gap-5 mb-6">
-        <UserBadge 
-          login={p.user.login} 
-          imageUrl={p.user.imageUrl} 
-          firstName={p.user.firstName}
-          lastName={p.user.lastName}
-          size="xl" 
-        />
-        <div className="min-w-0">
-          <div className="text-xs text-muted-2 mt-1 flex flex-wrap items-center gap-2">
-            <span className="font-bold uppercase tracking-wider text-[10px]">
-              {t('profil.campus')} · {p.user.campus ?? '—'}
-            </span>
-            <span className="bg-gold/10 border border-gold/30 text-gold px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider font-mono tabular-nums">
-              {rating.elo} ELO
-            </span>
-            {onlineHost && <OnlineBadge host={onlineHost} />}
-          </div>
-          {displayTitle(p.user.login, p.user.title) && (
-            <div className="text-gold italic text-sm mt-1.5">« {displayTitle(p.user.login, p.user.title)} »</div>
-          )}
-          {p.badges && p.badges.length > 0 && (
-            <div className="mt-2">
-              <BadgesRow codes={p.badges} />
-            </div>
-          )}
-          {!isMe && myLogin && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button variant={following ? 'ghost' : 'primary'} size="sm" onClick={toggleFollow}>
-                {following ? (
-                  <>
-                    <UserCheck className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-                    {t('player.following')}
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-                    {t('player.follow')}
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
-                }
-              >
-                <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
-                Head-to-Head
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+  // Mêmes stats que le profil perso (calcul pur partagé), isolées par discipline
+  // depuis l'historique global — agencement strictement identique à `ProfilMobile`.
+  const { stats, recentMatches } = computeProfilStats(p.user, p.user.login, matches, game);
 
-      {p.palmares && p.palmares.length > 0 && (
-        <div className="mb-6">
-          <Palmares entries={p.palmares} />
+  return (
+    <div className="space-y-5">
+      {/* Carte héro — même design que le profil perso (sans le sélecteur de titre) */}
+      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} isMe={isMe} />
+
+      {/* Actions propres à la fiche d'un autre joueur : suivre + head-to-head */}
+      {!isMe && myLogin && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant={following ? 'ghost' : 'primary'} size="sm" onClick={toggleFollow} className="flex-1">
+            {following ? (
+              <>
+                <UserCheck className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+                {t('player.following')}
+              </>
+            ) : (
+              <>
+                <UserPlus className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+                {t('player.follow')}
+              </>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1"
+            onClick={() =>
+              navigate(`/h2h?a=${encodeURIComponent(myLogin)}&b=${encodeURIComponent(p.user.login)}`)
+            }
+          >
+            <Swords className="w-3.5 h-3.5 mr-1.5" strokeWidth={2.5} />
+            Head-to-Head
+          </Button>
+          {onlineHost && <OnlineBadge host={onlineHost} />}
         </div>
       )}
 
-      {/* Préférences de suivi — quand on suit ce joueur */}
+      {/* Configuration du suivi — préférences de notif quand on suit ce joueur */}
       {!isMe && myLogin && following && followPrefs && (
-        <div className="mb-6 card-hud rounded-xl p-4 border-gold/20">
+        <div className="card-hud rounded-xl p-4 border-gold/20">
           <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
             <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
             {t('player.notify.heading.a')} {p.user.login}{t('player.notify.heading.b')}
@@ -200,7 +168,7 @@ export function PlayerPage() {
       )}
 
       {me?.isAdmin && (
-        <div className="mb-4 p-3 bg-bg-2 border border-border rounded flex flex-wrap items-center gap-2">
+        <div className="p-3 bg-bg-2 border border-border rounded flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gold">
             {t('player.admin.title')}
           </span>
@@ -261,110 +229,47 @@ export function PlayerPage() {
         flash={flash}
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-6 mb-4">
-        <StatCard value={String(p.rank ?? '—')} label={t('profil.rank')} tone="teal" />
-        <StatCard value={String(p.user.matchesPlayed)} label={t('profil.matchesElo')} tone="teal" />
-        <StatCard
-          value={`${winRate}%`}
-          label={t('profil.winRate')}
-          tone={winRate >= 50 ? 'win' : 'loss'}
-        />
-        <StatCard
-          value={String(p.user.dodgeCount ?? 0)}
-          label={t('profil.dodges')}
-          tone={p.user.dodgeCount ? 'loss' : 'neutral'}
-        />
-      </div>
-
-      <div className="space-y-1.5 mb-6 text-sm card-hud rounded-xl px-4 py-3">
-        <div className="flex justify-between border-b border-gold/10 pb-1.5">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.wins')}</span>
-          <span className="text-gold font-display font-extrabold tabular-nums">{p.wins}</span>
-        </div>
-        <div className="flex justify-between border-b border-gold/10 pb-1.5">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.losses')}</span>
-          <span className="text-red font-display font-extrabold tabular-nums">{p.losses}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-2 uppercase tracking-wider text-xs font-medium">{t('profil.registeredSince')}</span>
-          <span className="text-text font-mono">
-            {new Date(p.user.createdAt).toLocaleDateString(locale, {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-            })}
-          </span>
-        </div>
-      </div>
-
       {/* Courbe d'évolution ELO — comme sur son propre profil */}
-      {p.recent.length >= 2 && (
-        <div className="mb-6 card-hud rounded-xl px-4 pt-3 pb-4 border-gold/20">
-          <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold mb-3 flex items-center gap-2">
-            <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold/80 to-gold-dim/80 rounded-sm" />
-            {t('profil.eloEvolution')}
-            <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent ml-1" />
+      {recentMatches.length >= 2 && (
+        <section>
+          <SectionHeader title={t('profil.eloEvolution')} />
+          <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
+            <EloChart
+              matches={matches}
+              myLogin={p.user.login}
+              currentElo={stats.elo}
+              game={game}
+              height={150}
+            />
           </div>
-          <EloChart
-            matches={p.recent}
-            myLogin={p.user.login}
-            currentElo={rating.elo}
-            game={game}
-            hideStartLabel
-            height={104}
-          />
-        </div>
+        </section>
       )}
 
-      {p.recent.length > 0 && (
-        <>
-          <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
-            {t('profil.recent')}
-          </div>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-muted">
-                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.date')}</th>
-                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.opp')}</th>
-                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.score')}</th>
-                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.result')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.recent.slice(0, 20).map((m) => {
-                  const isA = m.playerALogin === p.user.login;
-                  const opp = isA ? m.playerBLogin : m.playerALogin;
-                  const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-                  const sYou = isA ? m.scoreA : m.scoreB;
-                  const sOpp = isA ? m.scoreB : m.scoreA;
-                  return (
-                    <tr key={m.id} className="border-t border-border/40">
-                      <td className="px-2 sm:px-3 py-2 text-muted-2 text-xs whitespace-nowrap">
-                        {fmtDatePair(m.playedAt, lang).short}
-                        <span className="mx-1 opacity-40">·</span>
-                        <span className="text-muted">{fmtDatePair(m.playedAt, lang).long}</span>
-                      </td>
-                      <td className="px-2 sm:px-3 py-2">
-                        <PlayerLink login={opp}>{opp}</PlayerLink>
-                      </td>
-                      <td className="px-2 sm:px-3 py-2 text-right tabular-nums">
-                        {sYou}–{sOpp}
-                      </td>
-                      <td
-                        className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${won ? 'text-gold' : 'text-red'}`}
-                      >
-                        {won ? t('history.win') : t('history.loss')}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+      {/* Réseau du joueur (following / followers, style GitHub) */}
+      <section>
+        <SectionHeader title={t('profil.network')} />
+        <FollowLists following={p.followingList ?? []} followers={p.followersList ?? []} isMe={isMe} />
+      </section>
+
+      {/* Matchs récents — même liste que le profil perso */}
+      <section>
+        <SectionHeader title={t('profil.recent')} badge={stats.total} />
+        <RecentMatchesList matches={recentMatches} myLogin={p.user.login} />
+      </section>
+
+      {/* Équipes 2v2 — uniquement en Babyfoot */}
+      {game === 'babyfoot' && (
+        <section>
+          <SectionHeader title={t('profil.myTeams')} />
+          <MyTeamsSection myLogin={p.user.login} />
+        </section>
       )}
-    </Panel>
+
+      {/* Palmarès par saison */}
+      {p.palmares && p.palmares.length > 0 && (
+        <Palmares entries={p.palmares} />
+      )}
+    </div>
   );
 }
 

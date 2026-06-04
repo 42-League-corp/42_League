@@ -6,20 +6,34 @@ import { PlayerLink } from './PlayerLink';
 
 type Tab = 'following' | 'followers';
 
+interface FollowListsProps {
+  /** Réseau d'un autre joueur (fiche `PlayerPage`). Si fourni → pas d'auto-fetch du sien. */
+  following?: FollowEdge[];
+  followers?: FollowEdge[];
+  /** true = profil perso (libellés vides à la 2e personne). Défaut true. */
+  isMe?: boolean;
+}
+
 /**
- * Bloc « following / followers » façon GitHub pour le profil de l'utilisateur :
- * deux onglets avec compteurs, listes cliquables (chaque ligne renvoie vers la
- * fiche du joueur et affiche la hover-card au survol).
+ * Bloc « following / followers » façon GitHub : deux onglets avec compteurs,
+ * listes cliquables (chaque ligne renvoie vers la fiche du joueur).
+ * Sans props → réseau de l'utilisateur courant (auto-fetch). Avec props
+ * `following`/`followers` → réseau du joueur consulté.
  */
-export function FollowLists() {
-  const [following, setFollowing] = useState<FollowEdge[] | null>(null);
-  const [followers, setFollowers] = useState<FollowEdge[] | null>(null);
+export function FollowLists({ following: followingProp, followers: followersProp, isMe = true }: FollowListsProps = {}) {
+  const controlled = followingProp !== undefined || followersProp !== undefined;
+  const [followingState, setFollowingState] = useState<FollowEdge[] | null>(null);
+  const [followersState, setFollowersState] = useState<FollowEdge[] | null>(null);
   const [tab, setTab] = useState<Tab>('following');
 
   useEffect(() => {
-    api.follows().then(setFollowing).catch(() => setFollowing([]));
-    api.followers().then(setFollowers).catch(() => setFollowers([]));
-  }, []);
+    if (controlled) return;
+    api.follows().then(setFollowingState).catch(() => setFollowingState([]));
+    api.followers().then(setFollowersState).catch(() => setFollowersState([]));
+  }, [controlled]);
+
+  const following = controlled ? (followingProp ?? []) : followingState;
+  const followers = controlled ? (followersProp ?? []) : followersState;
 
   const followingCount = following?.length ?? 0;
   const followersCount = followers?.length ?? 0;
@@ -45,7 +59,13 @@ export function FollowLists() {
         <div className="text-center text-muted-2 text-sm py-6">Chargement…</div>
       ) : rows.length === 0 ? (
         <div className="text-center text-muted-2 text-sm py-6">
-          {tab === 'following' ? 'Tu ne suis personne pour le moment.' : "Personne ne te suit encore."}
+          {tab === 'following'
+            ? isMe
+              ? 'Tu ne suis personne pour le moment.'
+              : 'Ne suit personne pour le moment.'
+            : isMe
+              ? 'Personne ne te suit encore.'
+              : 'Aucun abonné pour le moment.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-72 overflow-y-auto scrollbar-none">

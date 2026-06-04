@@ -7,6 +7,7 @@ import { OpsCard } from './mobile/OpsCard';
 import { MyTeamsSection } from './mobile/MyTeamsSection';
 import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
+import { SectionHeader } from './shared/SectionHeader';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -87,22 +88,5 @@ export function ProfilMobile() {
 
       </div>
     </PullToRefresh>
-  );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function SectionHeader({ title, badge }: { title: string; badge?: number }) {
-  return (
-    <div className="flex items-center gap-2 mb-3 px-1">
-      <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
-      <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90">
-        {title}
-      </span>
-      {badge !== undefined && badge > 0 && (
-        <span className="font-mono text-[10px] text-muted tabular-nums">· {badge}</span>
-      )}
-      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent ml-2" />
-    </div>
   );
 }
