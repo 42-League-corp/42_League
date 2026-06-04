@@ -57,9 +57,10 @@ export function ConsentGate({ login, onAccepted }: ConsentGateProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in p-4">
+    <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="flex min-h-full items-center justify-center p-4">
       <div
-        className="relative card-hud border-gold/40 rounded-2xl p-5 sm:p-6 w-full max-w-md animate-pop overflow-hidden max-h-[92vh] overflow-y-auto"
+        className="relative card-hud border-gold/40 rounded-2xl p-5 sm:p-6 w-full max-w-md animate-pop overflow-hidden"
         style={{
           boxShadow:
             '0 18px 48px rgba(0,0,0,0.7), 0 0 40px rgba(255,201,74,0.18), inset 0 1px 0 rgba(255,255,255,0.05)',
@@ -166,6 +167,7 @@ export function ConsentGate({ login, onAccepted }: ConsentGateProps) {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

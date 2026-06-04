@@ -348,7 +348,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm">
+      <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -447,6 +448,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
           </div>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }

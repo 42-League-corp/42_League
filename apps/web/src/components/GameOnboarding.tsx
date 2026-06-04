@@ -107,7 +107,8 @@ export function GameOnboarding() {
 
   if (step === 'favs') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
+        <div className="flex min-h-full items-center justify-center p-4">
         <div className="w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
           <div className="text-center mb-5">
             <div className="font-display text-2xl font-black text-text-strong">Tes persos favoris</div>
@@ -138,11 +139,13 @@ export function GameOnboarding() {
           </div>
         </div>
       </div>
+      </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
+      <div className="flex min-h-full items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
         <div className="text-center mb-5">
           <div className="font-display text-2xl font-black text-text-strong">Bienvenue dans la League</div>
@@ -189,6 +192,7 @@ export function GameOnboarding() {
         <Button loading={busy} onClick={submit} className="w-full mt-5 py-3" disabled={sel.size === 0}>
           C'est parti
         </Button>
+      </div>
       </div>
     </div>
   );

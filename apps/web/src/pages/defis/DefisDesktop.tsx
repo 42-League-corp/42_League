@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Swords, X, ChevronDown, Clock, Zap, Users } from 'lucide-react';
+import { Plus, Swords, X, Clock, Zap, Users } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -28,6 +28,7 @@ import { useFlash } from '../../hooks/useFlash';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
 import { useDefisLogic } from './shared/useDefisLogic';
+import { gameColor, GAME_EMOJI as GAME_EMOJI_MAP } from '../../lib/gameVisuals';
 import {
   DeclareGameFlow,
   WINNING_SCORE,
@@ -45,19 +46,26 @@ type Kind = 'incoming' | 'outgoing' | 'accepted';
 type OpenCard = 'declare' | 'challenge' | 'ffa' | null;
 const NOOP = () => {};
 
-// ─── Badges de discipline ─────────────────────────────────────────────────────
-const GAME_EMOJI: Partial<Record<Game, string>> = {
-  smash: '🎮',
-  chess: '♟',
-  streetfighter: '🥊',
-};
+// ─── Badge de discipline ──────────────────────────────────────────────────────
+// Affiché sur TOUS les jeux avec la couleur propre au jeu (pas la couleur du
+// mode courant). Utilise gameColor() de gameVisuals pour la cohérence.
 
 function GameTag({ game }: { game?: Game }) {
   const t = useT();
-  if (!game || game === 'babyfoot') return null;
+  const g = game ?? 'babyfoot';
+  const color = gameColor(g);
+  const emoji = GAME_EMOJI_MAP[g];
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] bg-accent/12 text-accent border border-accent/25">
-      {GAME_EMOJI[game]} {t(`game.${game}`)}
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-extrabold uppercase tracking-[0.12em] text-[9px] leading-none flex-shrink-0"
+      style={{
+        color,
+        background: `${color}18`,
+        border: `1px solid ${color}40`,
+      }}
+    >
+      <span>{emoji}</span>
+      <span>{t(`game.${g}`)}</span>
     </span>
   );
 }
@@ -502,89 +510,80 @@ function ActivityStream({
 }: ActivityStreamProps) {
   const t = useT();
   const urgentCount = pendingToConfirm.length + ffaToConfirm.length + incoming.length;
-  const [open, setOpen] = useState(true);
 
   return (
-    <div className="mb-8 rounded-2xl overflow-hidden border border-border/40 bg-white/[0.015]">
-      {/* Header */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors"
-      >
-        {urgentCount > 0 && (
-          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gold text-[#1a1100] text-[10px] font-extrabold flex items-center justify-center">
-            {urgentCount}
-          </span>
-        )}
-        <span className="font-gaming text-[10px] uppercase tracking-[0.18em] font-extrabold text-gold/90 flex-1 text-left">
+    <div className="mb-8">
+      {/* Header — même DA que PlayerPool */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="font-gaming text-[10px] uppercase tracking-[0.18em] text-gold/80 font-extrabold flex items-center gap-2">
+          <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
           {t('defis.activity')}
-        </span>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2.5}
-        />
-      </button>
-
-      {open && (
-        <div className="px-5 pb-5 space-y-4">
-          {pendingToConfirm.length > 0 && (
-            <ActivityGroup label={t('defis.toConfirm')} badge={pendingToConfirm.length} urgent>
-              {pendingToConfirm.map((p) => (
-                <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
-              ))}
-            </ActivityGroup>
-          )}
-          {ffaToConfirm.length > 0 && (
-            <ActivityGroup label={t('ffa.toConfirm')} badge={ffaToConfirm.length} urgent>
-              {ffaToConfirm.map((f) => (
-                <FfaConfirmRow key={f.id} ffa={f} myLogin={myLogin} onConfirm={confirmFfa} onContest={contestFfa} />
-              ))}
-            </ActivityGroup>
-          )}
-          {incoming.length > 0 && (
-            <ActivityGroup label={t('defis.received')} badge={incoming.length} urgent>
-              {incoming.map((c) => (
-                <ChallengeRow key={c.id} challenge={c} kind="incoming" myLogin={myLogin} lang={lang}
-                  onAccept={() => handleAction(c.id, 'accept')}
-                  onDecline={() => handleAction(c.id, 'decline')} />
-              ))}
-            </ActivityGroup>
-          )}
-          {accepted.length > 0 && (
-            <ActivityGroup label={t('defis.scheduledDuels')} badge={accepted.length}>
-              {accepted.map((c) => (
-                <ChallengeRow key={c.id} challenge={c} kind="accepted" myLogin={myLogin} lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')} />
-              ))}
-            </ActivityGroup>
-          )}
-          {outgoing.length > 0 && (
-            <ActivityGroup label={t('defis.sent')} badge={outgoing.length}>
-              {outgoing.map((c) => (
-                <ChallengeRow key={c.id} challenge={c} kind="outgoing" myLogin={myLogin} lang={lang}
-                  onAccept={NOOP}
-                  onDecline={() => handleAction(c.id, 'decline')} />
-              ))}
-            </ActivityGroup>
-          )}
-          {pendingWaiting.length > 0 && (
-            <ActivityGroup label={t('defis.waitingConfirm')} badge={pendingWaiting.length}>
-              {pendingWaiting.map((p) => (
-                <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
-              ))}
-            </ActivityGroup>
-          )}
-          {ffaWaiting.length > 0 && (
-            <ActivityGroup label={t('ffa.waiting')} badge={ffaWaiting.length}>
-              {ffaWaiting.map((f) => (
-                <FfaWaitRow key={f.id} ffa={f} myLogin={myLogin} onCancel={cancelFfaDeclaration} />
-              ))}
-            </ActivityGroup>
+          {urgentCount > 0 && (
+            <span className="font-mono text-gold bg-gold/15 normal-case tracking-normal px-1.5 py-0.5 rounded-full text-[9px]">
+              {urgentCount}
+            </span>
           )}
         </div>
-      )}
+        <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
+      </div>
+
+      <div className="space-y-4">
+        {pendingToConfirm.length > 0 && (
+          <ActivityGroup label={t('defis.toConfirm')} badge={pendingToConfirm.length} urgent>
+            {pendingToConfirm.map((p) => (
+              <PendingConfirmRow key={p.id} match={p} onDone={refresh} />
+            ))}
+          </ActivityGroup>
+        )}
+        {ffaToConfirm.length > 0 && (
+          <ActivityGroup label={t('ffa.toConfirm')} badge={ffaToConfirm.length} urgent>
+            {ffaToConfirm.map((f) => (
+              <FfaConfirmRow key={f.id} ffa={f} myLogin={myLogin} onConfirm={confirmFfa} onContest={contestFfa} />
+            ))}
+          </ActivityGroup>
+        )}
+        {incoming.length > 0 && (
+          <ActivityGroup label={t('defis.received')} badge={incoming.length} urgent>
+            {incoming.map((c) => (
+              <ChallengeRow key={c.id} challenge={c} kind="incoming" myLogin={myLogin} lang={lang}
+                onAccept={() => handleAction(c.id, 'accept')}
+                onDecline={() => handleAction(c.id, 'decline')} />
+            ))}
+          </ActivityGroup>
+        )}
+        {accepted.length > 0 && (
+          <ActivityGroup label={t('defis.scheduledDuels')} badge={accepted.length}>
+            {accepted.map((c) => (
+              <ChallengeRow key={c.id} challenge={c} kind="accepted" myLogin={myLogin} lang={lang}
+                onAccept={NOOP}
+                onDecline={() => handleAction(c.id, 'decline')} />
+            ))}
+          </ActivityGroup>
+        )}
+        {outgoing.length > 0 && (
+          <ActivityGroup label={t('defis.sent')} badge={outgoing.length}>
+            {outgoing.map((c) => (
+              <ChallengeRow key={c.id} challenge={c} kind="outgoing" myLogin={myLogin} lang={lang}
+                onAccept={NOOP}
+                onDecline={() => handleAction(c.id, 'decline')} />
+            ))}
+          </ActivityGroup>
+        )}
+        {pendingWaiting.length > 0 && (
+          <ActivityGroup label={t('defis.waitingConfirm')} badge={pendingWaiting.length}>
+            {pendingWaiting.map((p) => (
+              <PendingWaitRow key={p.id} match={p} onCancel={() => cancelDeclaration(p)} />
+            ))}
+          </ActivityGroup>
+        )}
+        {ffaWaiting.length > 0 && (
+          <ActivityGroup label={t('ffa.waiting')} badge={ffaWaiting.length}>
+            {ffaWaiting.map((f) => (
+              <FfaWaitRow key={f.id} ffa={f} myLogin={myLogin} onCancel={cancelFfaDeclaration} />
+            ))}
+          </ActivityGroup>
+        )}
+      </div>
     </div>
   );
 }
@@ -948,7 +947,8 @@ function FfaContestModal({
   const [message, setMessage] = useState('');
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-sm">
+      <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl border border-red/40 bg-bg-1 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-sm font-extrabold text-text-strong mb-1">{t('ffa.contest.title')}</div>
         <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">{t('ffa.contest.sub')}</p>
@@ -983,6 +983,7 @@ function FfaContestModal({
             {t('ffa.contest.submit')}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -118,7 +118,7 @@ export function PlayerPage() {
   return (
     <div className="space-y-5">
       {/* Carte héro — même design que le profil perso (sans le sélecteur de titre) */}
-      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} isMe={isMe} />
+      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} isMe={isMe} onlineHost={onlineHost} />
 
       {/* Actions propres à la fiche d'un autre joueur : suivre + head-to-head */}
       {!isMe && myLogin && (

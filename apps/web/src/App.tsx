@@ -87,26 +87,46 @@ const ShopPage = lazy(() =>
 const ShopGODPage = lazy(() =>
   import('./pages/ShopGODPage').then((m) => ({ default: m.ShopGODPage })),
 );
+const GradesPage = lazy(() =>
+  import('./pages/GradesPage').then((m) => ({ default: m.GradesPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
+
+  // Le splash se coupe quand LES DEUX conditions sont vraies :
+  //   1. l'animation interne est terminée (onAnimDone)
+  //   2. les données de l'app sont chargées (setAppReady)
+  // Si non-authentifié → on considère l'app prête immédiatement.
+  const [animDone,  setAnimDone]  = useState(false);
+  const [appReady,  setAppReady]  = useState(!authenticated); // prêt direct si pas auth
   const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    if (animDone && appReady) {
+      setShowSplash(false);
+    }
+  }, [animDone, appReady]);
+
+  // Fallback max 4 s après fin d'animation — évite un splash infini si la
+  // requête réseau bloque.
+  useEffect(() => {
+    if (!animDone) return;
+    const t = setTimeout(() => setAppReady(true), 4000);
+    return () => clearTimeout(t);
+  }, [animDone]);
 
   return (
     <>
-      {/* Cross-dissolve : l'app est invisible pendant le splash, puis fade-in en même
-          temps que le splash fade-out → pas de "page jaune qui clignote" */}
+      {/* Cross-dissolve : app invisible pendant le splash, fade-in simultané à l'exit */}
       <motion.div
         className="h-full"
         initial={{ opacity: 0 }}
         animate={{ opacity: showSplash ? 0 : 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
       >
         <Routes>
           <Route path="/auth/return" element={<AuthReturnPage />} />
-          {/* /about accessible sans auth (politique de confidentialité RGPD Art. 13).
-              Une fois authentifié, /about est rendu dans le shell (cf. AuthenticatedShell)
-              pour conserver la tab bar en continuité des autres pages. */}
           {!authenticated && <Route path="/about" element={<AboutPage />} />}
           <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
           <Route path="/GOD" element={authenticated ? <GODPage /> : <Navigate to="/login" replace />} />
@@ -115,7 +135,7 @@ export function App() {
             element={
               authenticated ? (
                 <LeagueDataProvider>
-                  <AuthenticatedShell />
+                  <AuthenticatedShell onReady={() => setAppReady(true)} />
                 </LeagueDataProvider>
               ) : (
                 <Navigate to="/login" replace />
@@ -126,15 +146,22 @@ export function App() {
       </motion.div>
       <AnimatePresence>
         {showSplash && (
-          <SplashScreen onComplete={() => setShowSplash(false)} />
+          <SplashScreen onComplete={() => setAnimDone(true)} />
         )}
       </AnimatePresence>
     </>
   );
 }
 
-function AuthenticatedShell() {
+function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
   const { loading, error, me, refresh } = useLeagueData();
+
+  // Signal « données prêtes » vers App pour lever le splash.
+  // Déclenché une seule fois dès que le premier fetch se termine.
+  useEffect(() => {
+    if (!loading) onReady?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // Précharger tous les chunks de routes en arrière-plan dès que les données sont prêtes.
   // Évite toute suspension Suspense pendant la navigation → transitions AnimatePresence stables.
@@ -187,6 +214,7 @@ function AuthenticatedShell() {
                 <Route path="/h2h" element={<H2HPage />} />
                 <Route path="/shop" element={<ShopPage />} />
                 <Route path="/shop-god" element={<ShopGODPage />} />
+                <Route path="/grades" element={<GradesPage />} />
                 <Route path="/history" element={<HistoriquePage />} />
                 <Route path="/settings" element={<ReglagesPage />} />
                 <Route path="*" element={<Navigate to="/challenges" replace />} />

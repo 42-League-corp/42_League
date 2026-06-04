@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
+import { OnlineBadge } from '../../../components/OnlineBadge';
 import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../../lib/chars';
@@ -34,6 +35,8 @@ interface ProfileHeroCardProps {
   titleColor?: string | null;
   equippedBadge?: MeResponse['equippedBadge'];
   equippedBanner?: string | null;
+  /** Hôte 42 si le joueur est actuellement connecté sur un PC du cluster. */
+  onlineHost?: string;
 }
 
 /**
@@ -49,6 +52,7 @@ export function ProfileHeroCard({
   titleColor: titleColorProp,
   equippedBadge: equippedBadgeProp,
   equippedBanner: equippedBannerProp,
+  onlineHost,
 }: ProfileHeroCardProps) {
   const { me, leaderboard, refresh } = useLeagueData();
   const { game } = useGameMode();
@@ -88,12 +92,11 @@ export function ProfileHeroCard({
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
   const myRank = myEntry?.rank ?? 0;
-  // Affiche prénom + nom (depuis l'intra) plutôt que le login (évite la
-  // répétition avec le @login juste en dessous). Fallback login si absent.
-  const fullName =
+  // Prénom + nom depuis l'intra. Fallback login si absent des deux sources.
+  const realName =
     [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
-    user.login;
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
+  const fullName = realName || user.login;
   const isTop1 = myRank === 1;
   const isTop3 = myRank > 0 && myRank <= 3;
   const isTop10 = myRank > 0 && myRank <= 10;
@@ -193,12 +196,15 @@ export function ProfileHeroCard({
               size="lg"
               className="relative"
             />
+            {onlineHost && (
+              <OnlineBadge host={onlineHost} compact className="absolute bottom-0 right-0" />
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
-                {fullName}
+                {realName ?? <span className="font-mono font-bold text-muted-2">@{user.login}</span>}
               </h2>
               {((badges && badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
@@ -206,7 +212,7 @@ export function ProfileHeroCard({
                 </div>
               )}
             </div>
-            <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>
+            {realName && <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>}
             {user.campus && (
               <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
                 <MapPin className="w-3 h-3" strokeWidth={2.5} />
@@ -241,7 +247,7 @@ export function ProfileHeroCard({
           <div>
             <div className="ml-1.5 mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center gap-1.5">
               ELO
-              <RankBadge elo={stats.elo} size="xs" />
+              <RankBadge elo={stats.elo} size="xs" asLink />
             </div>
             <div className="font-display text-[clamp(2.75rem,13vw,3.5rem)] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />

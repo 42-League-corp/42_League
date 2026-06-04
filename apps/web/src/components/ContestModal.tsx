@@ -27,10 +27,11 @@ export function ContestModal({
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-md animate-fade-in">
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
       <div
         className="relative card-hud border-red/40 rounded-2xl p-5 sm:p-6 w-full max-w-md animate-pop overflow-hidden"
         style={{
@@ -137,6 +138,7 @@ export function ContestModal({
             Annuler
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

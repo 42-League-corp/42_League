@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
+import { OnlineBadge } from '../../components/OnlineBadge';
 import { StatCard } from '../../components/StatCard';
 import { RankBadge } from '../../components/RankBadge';
 import { BadgesRow } from '../../components/Badges';
@@ -33,7 +34,7 @@ import { pickRating } from '../../lib/gameStats';
 export function ProfilDesktop() {
   const t = useT();
   const { locale, lang } = useI18n();
-  const { me, matches, opsMe, leaderboard, tournaments, refresh } = useLeagueData();
+  const { me, matches, opsMe, leaderboard, tournaments, locations, refresh } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
   const [editGame, setEditGame] = useState<FightingGame | null>(null);
@@ -104,11 +105,12 @@ export function ProfilDesktop() {
   const myEntry = leaderboard.find((x) => x.login === u.login);
   const myRank = myEntry?.rank ?? 0;
   const isTop1 = myRank === 1;
-  // Affiche prénom + nom (depuis l'intra) plutôt que le login.
-  const fullName =
+  // Prénom + nom depuis l'intra. Fallback login si absent.
+  const realName =
     [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
-    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim() ||
-    u.login;
+    [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
+  const fullName = realName || u.login;
+  const myOnlineHost = locations.get(u.login);
 
   // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.
   const myRecent = matches
@@ -178,7 +180,7 @@ export function ProfilDesktop() {
         </div>
 
         <div className="relative z-10 p-5 pt-3 flex items-center gap-5">
-          {/* Avatar + glow */}
+          {/* Avatar + glow + dot présence */}
           <div className="relative flex-shrink-0">
             <div
               className="absolute -inset-1.5 rounded-full pointer-events-none"
@@ -190,13 +192,16 @@ export function ProfilDesktop() {
               size="xl"
               className="relative ring-2 ring-gold/45 ring-offset-2 ring-offset-bg-2"
             />
+            {myOnlineHost && (
+              <OnlineBadge host={myOnlineHost} compact className="absolute bottom-0.5 right-0.5 ring-offset-bg-2" />
+            )}
           </div>
 
           {/* Identité */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
               <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight min-w-0">
-                {fullName}
+                {realName ?? <span className="font-mono text-2xl font-bold text-muted-2">@{u.login}</span>}
               </div>
               {((me.badges && me.badges.length > 0) || equippedBadge) && (
                 <div className="flex-shrink-0">
@@ -204,8 +209,9 @@ export function ProfilDesktop() {
                 </div>
               )}
             </div>
-            <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>
+            {realName && <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              {myOnlineHost && <OnlineBadge host={myOnlineHost} />}
               <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
                 <MapPin className="w-3 h-3 text-gold/70" strokeWidth={2.5} />
                 {u.campus ?? '—'}
@@ -229,7 +235,7 @@ export function ProfilDesktop() {
           <div className="text-left flex-shrink-0 pl-2">
             <div className="ml-1 mb-1 flex items-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
               ELO
-              <RankBadge elo={stats.elo} size="xs" />
+              <RankBadge elo={stats.elo} size="xs" asLink />
             </div>
             <div
               className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"

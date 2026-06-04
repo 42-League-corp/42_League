@@ -1,4 +1,5 @@
 import { Gem, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { rankTier } from '@42-league/shared';
 
 /**
@@ -13,11 +14,14 @@ export function RankBadge({
   elo,
   size = 'sm',
   showLabel = true,
+  asLink = false,
   className = '',
 }: {
   elo: number;
   size?: 'xs' | 'sm';
   showLabel?: boolean;
+  /** Enveloppe le badge dans un lien vers /grades. */
+  asLink?: boolean;
   className?: string;
 }) {
   const tier = rankTier(elo);
@@ -30,9 +34,9 @@ export function RankBadge({
     : size === 'xs'
       ? 'p-0.5'
       : 'p-1';
-  return (
+  const badge = (
     <span
-      className={`inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.12em] leading-none border ${sizeCls} ${className}`}
+      className={`inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.12em] leading-none border ${sizeCls} ${asLink ? 'cursor-pointer hover:brightness-125 transition-[filter]' : ''} ${className}`}
       style={{
         color: tier.color,
         borderColor: `${tier.color}40`,
@@ -44,4 +48,6 @@ export function RankBadge({
       {showLabel && <span>{tier.label}</span>}
     </span>
   );
+  if (asLink) return <Link to="/grades">{badge}</Link>;
+  return badge;
 }

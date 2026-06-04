@@ -112,12 +112,12 @@ function BadgesModal({
   const total = codes.length + extra.length;
   return (
     <motion.div
-      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[130] overflow-y-auto bg-black/60 backdrop-blur-sm"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
     >
+      <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
       <motion.div
         className="card-hud rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
         initial={{ scale: 0.94, y: 10 }}
@@ -163,6 +163,7 @@ function BadgesModal({
           })}
         </div>
       </motion.div>
+      </div>
     </motion.div>
   );
 }

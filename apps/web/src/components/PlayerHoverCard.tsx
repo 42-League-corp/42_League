@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Flame, Snowflake } from 'lucide-react';
 import { Avatar } from './Avatar';
+import { OnlineBadge } from './OnlineBadge';
 import { RankedBadge } from './RankedBadge';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { computePlayerStats } from '../lib/playerStats';
@@ -18,14 +19,14 @@ const GAP = 8;
  * requête réseau supplémentaire.
  */
 export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRect: DOMRect }) {
-  const { leaderboard, matches } = useLeagueData();
+  const { leaderboard, matches, locations } = useLeagueData();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const entry = leaderboard.find((u) => u.login === login);
   const stats = useMemo(() => computePlayerStats(login, matches), [login, matches]);
-
-  const name = entry?.firstName && entry?.lastName ? `${entry.firstName} ${entry.lastName}` : login;
+  const onlineHost = locations.get(login);
+  const realName = entry?.firstName && entry?.lastName ? `${entry.firstName} ${entry.lastName}` : null;
 
   // Positionnement : sous l'ancre par défaut, au-dessus si pas de place ;
   // clampé horizontalement dans le viewport.
@@ -71,10 +72,18 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
 
       {/* En-tête : avatar + identité */}
       <div className="flex items-center gap-2.5">
-        <Avatar login={login} imageUrl={entry?.imageUrl ?? null} size="md" className="ring-1 ring-gold/30" />
+        <div className="relative flex-shrink-0">
+          <Avatar login={login} imageUrl={entry?.imageUrl ?? null} size="md" className="ring-1 ring-gold/30" />
+          {onlineHost && (
+            <OnlineBadge host={onlineHost} compact className="absolute bottom-0 right-0" />
+          )}
+        </div>
         <div className="min-w-0">
-          <div className="font-extrabold text-text-strong text-sm truncate">{name}</div>
-          <div className="text-[10px] text-muted-2 truncate">@{login}</div>
+          <div className="font-extrabold text-text-strong text-sm truncate">
+            {realName ?? <span className="font-mono text-muted-2">@{login}</span>}
+          </div>
+          {realName && <div className="text-[10px] text-muted-2 truncate">@{login}</div>}
+          {onlineHost && <OnlineBadge host={onlineHost} className="mt-0.5" />}
         </div>
       </div>
 

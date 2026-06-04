@@ -1,5 +1,5 @@
-import { motion, useReducedMotion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
 
 // ── Static data ──────────────────────────────────────────────────────────────
 
@@ -23,21 +23,18 @@ const BURST_LINES = Array.from({ length: 8 }, (_, i) => ({
         : 'rgba(255,255,255,0.08)',
 }));
 
-// Tiges babyfoot (vue de dessus) — 2 barres
 const BABY_RODS = [
   { y: '28%', players: [0.08, 0.32, 0.58, 0.82] },
   { y: '72%', players: [0.15, 0.45, 0.75] },
 ] as const;
 
-// Pills des sections du site (apparaissent sous LEAGUE)
 const SECTION_PILLS = [
-  { icon: '⚽', label: 'DÉFIS',    color: '#ffc94a', delay: 0     },
-  { icon: '♟', label: 'RANK',     color: '#00d9dc', delay: 0.045 },
-  { icon: '🏆', label: 'TOURNOIS', color: '#ffc94a', delay: 0.09  },
-  { icon: '📊', label: 'STATS',   color: '#00d9dc', delay: 0.135 },
+  { icon: '⚽', label: 'DÉFIS',    color: '#ffc94a', delay: 0      },
+  { icon: '♟',  label: 'RANK',     color: '#00d9dc', delay: 0.04   },
+  { icon: '🏆', label: 'TOURNOIS', color: '#ffc94a', delay: 0.08   },
+  { icon: '📊', label: 'STATS',    color: '#00d9dc', delay: 0.12   },
 ] as const;
 
-// Tabs skeleton
 const TABS = [
   { icon: '⚽', active: true  },
   { icon: '🏆', active: false },
@@ -46,96 +43,87 @@ const TABS = [
   { icon: '···', active: false },
 ];
 
-// Particules d'impact
 const SPARKS = Array.from({ length: 8 }, (_, i) => {
-  const angle = (i * 360) / 8;
-  const rad   = (angle * Math.PI) / 180;
+  const rad = ((i * 360) / 8 * Math.PI) / 180;
   return {
     id: i,
-    tx: Math.cos(rad) * 56,
-    ty: Math.sin(rad) * 56,
+    tx: Math.cos(rad) * 52,
+    ty: Math.sin(rad) * 52,
     color: i % 2 === 0 ? '#ffc94a' : '#00d9dc',
   };
 });
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface SplashScreenProps {
   onComplete: () => void;
 }
 
 /**
- * Arena intro — pro.
+ * Splash ultra-rapide.
  *
- * Pattern : preload image → build (800ms) → hold (600ms) → fade out (350ms).
- * Exit : opacity seulement, pas de scale — évite le flash de la page derrière.
- * App.tsx fait un cross-dissolve simultané pour un handoff parfaitement fluide.
- *
- * Timeline après preload :
- *   0ms    → background + skeleton header/tabbar
- *   80ms   → logo slam spring 720
- *   240ms  → flash + shockwave + sparks
- *   370ms  → LEAGUE wipe
- *   520ms  → pills sections slide-up
- *   ~800ms → composition complète, hold 600ms
- *   1400ms → onComplete() → exit fade 350ms
+ * - Démarre immédiatement (pas de gate preload)
+ * - Image logo chargée en parallèle ; apparaît dès qu'elle est prête
+ * - Timeline compressée ~650ms
+ * - `onComplete` signale que l'animation est finie ; App.tsx attend en plus
+ *   que les données soient chargées avant de couper le splash
  */
 export function SplashScreen({ onComplete }: SplashScreenProps) {
-  const [ready, setReady]           = useState(false);
-  const [phase, setPhase]           = useState(0);
-  const [showSparks, setShowSparks] = useState(false);
-  // Respecte « animations réduites » : on coupe le décor animé (burst, étincelles,
-  // shockwave, pièces, tiges) et on garde l'essentiel (logo + LEAGUE) → zéro saccade.
+  const [phase, setPhase]   = useState(0);
+  const [imgOk, setImgOk]   = useState(false);
   const reduce = useReducedMotion();
-  const decor = !reduce; // décor animé lourd uniquement si l'utilisateur l'accepte
+  const decor  = !reduce;
+  // Évite d'appeler onComplete deux fois si le composant re-render
+  const doneCalled = useRef(false);
 
-  // Préchargement de l'image avant de démarrer l'animation
+  // ── Préchargement image en parallèle (sans gater l'animation) ──────────────
   useEffect(() => {
-    const img = new Image();
-    const done = () => setReady(true);
+    const img   = new Image();
+    const done  = () => setImgOk(true);
     img.onload  = done;
-    img.onerror = done; // continue même si l'image rate
-    img.src = '/apple-touch-icon.png';
-    // Failsafe : 600ms max d'attente
-    const failsafe = setTimeout(done, 600);
+    img.onerror = done;
+    img.src     = '/apple-touch-icon.png';
+    // Si l'image prend trop longtemps → on l'affiche quand même (texte suffit)
+    const failsafe = setTimeout(done, 500);
     return () => clearTimeout(failsafe);
   }, []);
 
-  // Animation démarre quand l'image est prête
+  // ── Timeline d'animation (démarre immédiatement) ───────────────────────────
   useEffect(() => {
-    if (!ready) return;
+    // Phase 1 : background décoratif + squelettes header/tabbar
+    setPhase(1);
 
-    setPhase(1); // background + skeleton immédiatement
-
-    const t2 = setTimeout(() => {
-      setPhase(2); // logo slam
-      const ts = setTimeout(() => setShowSparks(true), 160);
-      return () => clearTimeout(ts);
-    }, 80);
-
-    const t3 = setTimeout(() => setPhase(3), 370); // LEAGUE
-    const t4 = setTimeout(() => setPhase(4), 520); // pills sections
-    const t5 = setTimeout(onComplete, 1400);        // auto-exit
+    // Phase 2 : logo + flash + shockwave (si image pas encore prête → logo
+    // apparaît quand imgOk devient true, grâce au rendu conditionnel séparé)
+    const t2 = setTimeout(() => setPhase(2),  40);
+    // Phase 3 : texte LEAGUE
+    const t3 = setTimeout(() => setPhase(3), 180);
+    // Phase 4 : pills sections
+    const t4 = setTimeout(() => setPhase(4), 300);
+    // Signal « animation finie » → App.tsx peut couper le splash dès que les
+    // données sont aussi prêtes
+    const t5 = setTimeout(() => {
+      if (!doneCalled.current) { doneCalled.current = true; onComplete(); }
+    }, 680);
 
     return () => [t2, t3, t4, t5].forEach(clearTimeout);
-  }, [ready, onComplete]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // volontairement vide : on ne re-lance pas la timeline
 
   return (
     <motion.div
       className="fixed inset-0 z-[9999] overflow-hidden"
       style={{
-        // Fond correspondant exactement au bg de l'app → pas de flash à l'exit
         background:
           'radial-gradient(ellipse 120% 65% at 50% -5%, #0a2020 0%, #0c0a08 50%, #0c0a08 100%)',
         cursor: 'pointer',
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}
-      // Pas de scale/blur — opacity pure pour que la transition soit invisible
-      exit={{ opacity: 0, transition: { duration: 0.35, ease: 'easeInOut' } }}
-      onClick={onComplete}
+      exit={{ opacity: 0, transition: { duration: 0.32, ease: 'easeInOut' } }}
+      onClick={() => { if (!doneCalled.current) { doneCalled.current = true; onComplete(); } }}
     >
-      {/* Grid discret */}
+      {/* ── Grid discret ── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -155,7 +143,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             style={{ top: rod.y, height: 1, zIndex: 1 }}
             initial={{ opacity: 0, scaleX: 0 }}
             animate={{ opacity: 1, scaleX: 1 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1], delay: ri * 0.04 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1], delay: ri * 0.03 }}
           >
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,201,74,0.08)' }} />
             {rod.players.map((pos, pi) => (
@@ -166,8 +154,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                   left: `${pos * 100}%`,
                   top: '50%',
                   transform: 'translate(-50%, -50%)',
-                  width: 10,
-                  height: 10,
+                  width: 10, height: 10,
                   borderRadius: '50%',
                   border: '1.5px solid rgba(255,201,74,0.18)',
                   background: 'rgba(255,201,74,0.05)',
@@ -184,8 +171,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             key={line.id}
             className="absolute pointer-events-none"
             style={{
-              left: '50%',
-              top: '46%',
+              left: '50%', top: '46%',
               width: line.width,
               height: line.thickness + 'px',
               background: `linear-gradient(90deg, ${line.color}, transparent)`,
@@ -195,7 +181,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             }}
             initial={{ scaleX: 0, opacity: 0 }}
             animate={{ scaleX: 1, opacity: 1 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1], delay: line.id * 0.012 }}
           />
         ))}
 
@@ -206,8 +192,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             key={i}
             className="absolute pointer-events-none"
             style={{
-              left: item.left,
-              top: item.top,
+              left: item.left, top: item.top,
               fontSize: item.size,
               fontFamily: 'Georgia, serif',
               color: item.color,
@@ -217,10 +202,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.22 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-          >
-            {item.piece}
-          </motion.div>
+            transition={{ duration: 0.18, ease: 'easeOut', delay: i * 0.04 }}
+          />
         ))}
 
       {/* ── Header skeleton ── */}
@@ -228,19 +211,14 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <motion.div
           className="absolute left-0 right-0 pointer-events-none"
           style={{
-            top: 0,
-            height: 50,
+            top: 0, height: 50, zIndex: 3,
             background: 'rgba(255,201,74,0.04)',
             borderBottom: '1px solid rgba(255,201,74,0.12)',
-            zIndex: 3,
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 16px',
-            gap: 10,
+            display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10,
           }}
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(255,201,74,0.15)' }} />
           <div>
@@ -259,68 +237,23 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <motion.div
           className="absolute left-0 right-0 pointer-events-none"
           style={{
-            bottom: 0,
-            height: 64,
+            bottom: 0, height: 64, zIndex: 3,
             background: 'rgba(0,217,220,0.03)',
             borderTop: '1px solid rgba(0,217,220,0.10)',
-            zIndex: 3,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-around',
-            padding: '0 8px',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'space-around', padding: '0 8px',
           }}
           initial={{ opacity: 0, y: 64 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           {TABS.map((tab, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 4,
-                opacity: tab.active ? 0.75 : 0.25,
-              }}
-            >
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: tab.active ? 0.75 : 0.25 }}>
               <span style={{ fontSize: 14 }}>{tab.icon}</span>
-              <div
-                style={{
-                  width: tab.active ? 18 : 4,
-                  height: 3,
-                  borderRadius: 2,
-                  background: tab.active ? '#ffc94a' : 'rgba(255,255,255,0.25)',
-                }}
-              />
+              <div style={{ width: tab.active ? 18 : 4, height: 3, borderRadius: 2, background: tab.active ? '#ffc94a' : 'rgba(255,255,255,0.25)' }} />
             </div>
           ))}
         </motion.div>
-      )}
-
-      {/* ── Spotlight derrière le logo ── */}
-      {/* IMPORTANT : apparaît AVEC le logo (phase 2) et en fondu — sinon un disque
-          sombre « pop » seul au centre avant le logo (le « point noir »). Cœur
-          adouci pour ne pas laisser de blob sombre pendant le cross-dissolve. */}
-      {phase >= 2 && (
-        <motion.div
-          className="absolute pointer-events-none"
-          style={{
-            left: '50%',
-            top: '46%',
-            width: 280,
-            height: 280,
-            marginLeft: -140,
-            marginTop: -140,
-            background:
-              'radial-gradient(ellipse at center, rgba(12,10,8,0.82) 24%, rgba(12,10,8,0.4) 52%, transparent 70%)',
-            zIndex: 7,
-            borderRadius: '50%',
-          }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-        />
       )}
 
       {/* ── Flash d'impact ── */}
@@ -328,9 +261,9 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <motion.div
           className="absolute inset-0 pointer-events-none"
           style={{ background: '#ffffff', zIndex: 8 }}
-          initial={{ opacity: 0.30 }}
+          initial={{ opacity: 0.25 }}
           animate={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
         />
       )}
 
@@ -339,41 +272,35 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
-            left: '50%',
-            top: '46%',
-            width: 110,
-            height: 110,
-            marginLeft: -55,
-            marginTop: -55,
+            left: '50%', top: '46%',
+            width: 110, height: 110,
+            marginLeft: -55, marginTop: -55,
             border: '2px solid rgba(255,201,74,0.75)',
             zIndex: 9,
           }}
           initial={{ scale: 1, opacity: 0.9 }}
           animate={{ scale: 5.5, opacity: 0 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
+          transition={{ duration: 0.38, ease: 'easeOut' }}
         />
       )}
 
       {/* ── Particules d'impact ── */}
-      {decor && showSparks &&
+      {decor && phase >= 2 &&
         SPARKS.map((spark) => (
           <motion.div
             key={spark.id}
             className="absolute pointer-events-none rounded-full"
             style={{
-              left: '50%',
-              top: '46%',
-              width: 5,
-              height: 5,
+              left: '50%', top: '46%',
+              width: 5, height: 5,
               background: spark.color,
               boxShadow: `0 0 6px ${spark.color}`,
-              marginLeft: -2.5,
-              marginTop: -2.5,
+              marginLeft: -2.5, marginTop: -2.5,
               zIndex: 10,
             }}
             initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
             animate={{ x: spark.tx, y: spark.ty, scale: 0, opacity: 0 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
           />
         ))}
 
@@ -382,25 +309,27 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
         style={{ gap: 6, transform: 'translateY(-5%)' }}
       >
-        {/* Logo — préchargé, slam sans surprise */}
-        {phase >= 2 && (
-          <motion.img
-            src="/apple-touch-icon.png"
-            alt="42 League"
-            style={{
-              width: 112,
-              height: 112,
-              borderRadius: 24,
-              filter:
-                'drop-shadow(0 0 22px rgba(0,217,220,0.60))' +
-                ' drop-shadow(0 0 50px rgba(255,183,27,0.55))',
-              zIndex: 11,
-            }}
-            initial={{ scale: 0.1, y: -200, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 680, damping: 32, mass: 0.75 }}
-          />
-        )}
+        {/* Logo — apparaît dès que l'image est prête ET que phase >= 2 */}
+        <AnimatePresence>
+          {phase >= 2 && imgOk && (
+            <motion.img
+              key="logo"
+              src="/apple-touch-icon.png"
+              alt="42 League"
+              style={{
+                width: 112, height: 112,
+                borderRadius: 24,
+                filter:
+                  'drop-shadow(0 0 22px rgba(0,217,220,0.60))' +
+                  ' drop-shadow(0 0 50px rgba(255,183,27,0.55))',
+                zIndex: 11,
+              }}
+              initial={{ scale: 0.1, y: -200, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 680, damping: 32, mass: 0.75 }}
+            />
+          )}
+        </AnimatePresence>
 
         {/* LEAGUE — wipe gauche → droite */}
         {phase >= 3 && (
@@ -408,7 +337,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             style={{ zIndex: 11, overflow: 'hidden' }}
             initial={{ clipPath: 'inset(0 100% 0 0)' }}
             animate={{ clipPath: 'inset(0 0% 0 0)' }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
             <span
               style={{
@@ -428,32 +357,28 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           </motion.div>
         )}
 
-        {/* Pills sections du site */}
+        {/* Pills sections — staggerées naturellement */}
         {phase >= 4 && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10, zIndex: 11 }}>
             {SECTION_PILLS.map((pill) => (
               <motion.div
                 key={pill.label}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '5px 10px',
-                  borderRadius: 20,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '5px 10px', borderRadius: 20,
                   border: `1px solid ${pill.color}40`,
                   background: `${pill.color}0d`,
                   backdropFilter: 'blur(4px)',
                 }}
-                initial={{ opacity: 0, y: 14, scale: 0.85 }}
+                initial={{ opacity: 0, y: 12, scale: 0.88 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.28, delay: pill.delay, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.24, delay: pill.delay, ease: [0.16, 1, 0.3, 1] }}
               >
                 <span style={{ fontSize: 13 }}>{pill.icon}</span>
                 <span
                   style={{
                     fontFamily: '"Rajdhani", "Orbitron", sans-serif',
-                    fontSize: 9,
-                    fontWeight: 700,
+                    fontSize: 9, fontWeight: 700,
                     letterSpacing: '0.12em',
                     color: `${pill.color}cc`,
                   }}

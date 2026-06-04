@@ -18,7 +18,7 @@ import { haptic } from '../../mobile/feedback/useHaptic';
 
 export function ProfilMobile() {
   const { stats, recentMatches, myLogin } = useProfilLogic();
-  const { me, matches, refresh } = useLeagueData();
+  const { me, matches, locations, refresh } = useLeagueData();
   const { game } = useGameMode();
   const { signOut } = useAuth();
   const t = useT();
@@ -40,7 +40,7 @@ export function ProfilMobile() {
           — le remount est masqué par l'overlay de transition d'univers. */}
       <div key={game} className="space-y-5">
         {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
-        <ProfileHeroCard stats={stats} />
+        <ProfileHeroCard stats={stats} onlineHost={myLogin ? locations.get(myLogin) : undefined} />
 
         {/* ELO evolution chart */}
         {myLogin && (

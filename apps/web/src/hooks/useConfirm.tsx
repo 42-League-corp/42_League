@@ -57,12 +57,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <ConfirmContext.Provider value={value}>
       {children}
       {active && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) finish(false);
-          }}
-        >
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-md animate-fade-in">
+          <div
+            className="flex min-h-full items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) finish(false);
+            }}
+          >
           <div
             className="card-hud relative rounded-2xl p-5 sm:p-6 w-full max-w-md animate-pop"
             style={{
@@ -104,6 +105,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </button>
             </div>
           </div>
+        </div>
         </div>
       )}
     </ConfirmContext.Provider>

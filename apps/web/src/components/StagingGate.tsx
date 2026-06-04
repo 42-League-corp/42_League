@@ -18,7 +18,8 @@ export function StagingGate({ login }: StagingGateProps) {
   const { signOut } = useAuth();
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in p-4">
+    <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="flex min-h-full items-center justify-center p-4">
       <div
         className="relative card-hud border-gold/40 rounded-2xl p-6 w-full max-w-md animate-pop text-center"
         style={{
@@ -49,6 +50,7 @@ export function StagingGate({ login }: StagingGateProps) {
         <Button variant="ghost" size="md" full onClick={signOut}>
           Se déconnecter
         </Button>
+      </div>
       </div>
     </div>
   );
