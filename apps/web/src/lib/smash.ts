@@ -100,7 +100,8 @@ export function smashCharName(id: string | null | undefined): string {
   return BY_ID.get(id)?.name ?? id;
 }
 
-/** URL de l'illustration officielle (best-effort). */
+/** Portrait local du perso (assets public/smash/, cf. scripts/fetch_smash_portraits.py).
+ *  Best-effort : image manquante → pastille colorée dans SmashCharIcon. */
 export function smashCharImg(c: SmashChar): string {
-  return `https://www.smashbros.com/assets_v2/img/fighter/${c.slug}/main.png`;
+  return `/smash/${c.id}.png`;
 }

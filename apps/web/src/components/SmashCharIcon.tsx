@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { smashChar, smashCharImg, type SmashChar } from '../lib/smash';
 
 /**
- * Vignette d'un personnage Smash : illustration officielle si elle charge, sinon
- * pastille colorée avec l'initiale (fallback robuste hors-ligne / hotlink bloqué).
+ * Vignette d'un personnage Smash : portrait local (assets public/smash/, cf.
+ * scripts/fetch_smash_portraits.py) si l'image charge, sinon pastille colorée
+ * avec l'initiale (fallback robuste hors-ligne / image manquante).
  */
 export function SmashCharIcon({
   id,
