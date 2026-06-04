@@ -32,6 +32,12 @@ export async function resetDb(): Promise<void> {
 
 export type RoleName = 'USER' | 'ADMIN' | 'SUPERADMIN';
 
+// Génère un ftId déterministe et unique à partir du login pour simuler un vrai
+// utilisateur 42 (la route POST /matches exige opponent.ftId non nul).
+function loginToFtId(login: string): number {
+  return login.split('').reduce((acc, c, i) => acc + c.charCodeAt(0) * (i + 1), 0) + 42000;
+}
+
 export interface SeedUserOpts {
   elo?: number;
   role?: RoleName;
@@ -40,6 +46,7 @@ export interface SeedUserOpts {
   tournamentsWon?: number;
   bannedAt?: Date | null;
   title?: string | null;
+  ftId?: number | null;
   /** Par défaut le user a consenti (sinon la consent-gate renvoie 403). Mettre false
    *  pour tester explicitement le comportement avant consentement. */
   consented?: boolean;
@@ -50,6 +57,8 @@ export async function seedUser(login: string, opts: SeedUserOpts = {}) {
   return prisma.user.create({
     data: {
       login,
+      // ftId renseigné → POST /matches peut déclarer des matchs contre cet utilisateur.
+      ftId: opts.ftId !== undefined ? opts.ftId : loginToFtId(login),
       // imageUrl renseigné → getOrCreateUser ne déclenchera pas le fetch 42.
       imageUrl: `https://example.test/${login}.jpg`,
       elo: opts.elo ?? 1000,

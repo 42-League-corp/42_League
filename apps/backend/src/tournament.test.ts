@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// tournament.ts importe prisma au niveau module → mock requis pour les tests
+// de fonctions pures qui ne touchent pas la DB.
+vi.mock('./db.js', () => ({ prisma: {} }));
+
 import {
   nextPow2,
   totalRounds,

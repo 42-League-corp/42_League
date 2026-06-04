@@ -94,7 +94,7 @@ describe('matches — confirmation', () => {
     expect(r.status).toBe(404);
   });
 
-  it('seul l’adversaire peut confirmer (le déclarant → 403)', async () => {
+  it("seul l'adversaire peut confirmer (le déclarant → 403)", async () => {
     const id = await declare('alice', 'bob', 10, 3);
     const r = await post(`/matches/${id}/confirm`, {
       login: 'alice',
@@ -148,18 +148,18 @@ describe('matches — confirmation', () => {
   });
 });
 
-describe('matches — rejet par l’adversaire', () => {
+describe("matches — rejet par l'adversaire", () => {
   beforeEach(async () => {
     await resetDb();
     await seedUser('alice');
     await seedUser('bob');
   });
 
-  it('seul l’adversaire peut rejeter (le déclarant → 403)', async () => {
+  it("seul l'adversaire peut rejeter (le déclarant → 403)", async () => {
     const id = await declare('alice', 'bob', 10, 3);
     const r = await post(`/matches/${id}/reject`, {
       login: 'alice',
-      body: { contestReason: 'never_played', contestMessage: 'on n’a jamais joué' },
+      body: { contestReason: 'never_played', contestMessage: "on n'a jamais joué" },
     });
     expect(r.status).toBe(403);
   });
@@ -168,7 +168,7 @@ describe('matches — rejet par l’adversaire', () => {
     const id = await declare('alice', 'bob', 10, 3);
     const r = await post(`/matches/${id}/reject`, {
       login: 'bob',
-      body: { contestReason: 'wrong_score', contestMessage: 'le score est faux, c’était 10-7' },
+      body: { contestReason: 'wrong_score', contestMessage: "le score est faux, c'était 10-7" },
     });
     expect(r.status).toBe(200);
     expect(r.body.status).toBe('rejected');
@@ -195,7 +195,7 @@ describe('matches — annulation par le déclarant', () => {
     await seedUser('bob');
   });
 
-  it('seul le déclarant peut annuler (l’adversaire → 403)', async () => {
+  it("seul le déclarant peut annuler (l'adversaire → 403)", async () => {
     const id = await declare('alice', 'bob', 10, 3);
     const r = await post(`/matches/${id}/cancel`, { login: 'bob' });
     expect(r.status).toBe(403);
@@ -238,12 +238,12 @@ describe('matches — anti-farming (max 2 comptés / paire / fenêtre)', () => {
     return r.body;
   }
 
-  it(‘ranked illimité : le 3e match consécutif compte pour l’ELO (anti-farming supprimé)’, async () => {
+  it("ranked illimité : le 3e match consécutif compte pour l'ELO (anti-farming supprimé)", async () => {
     // shouldCountForElo renvoie toujours true — plus de plafond par paire.
     await declareAndConfirm(); // compté
     await declareAndConfirm(); // compté
 
-    const aliceAfter2 = await get(‘/users/alice’, { login: ‘alice’ });
+    const aliceAfter2 = await get('/users/alice', { login: 'alice' });
     const eloAfter2 = aliceAfter2.body.user.elo;
 
     const third = await declareAndConfirm();
@@ -251,12 +251,12 @@ describe('matches — anti-farming (max 2 comptés / paire / fenêtre)', () => {
     expect(third.deltaA).not.toBe(0);          // ELO bougé
     expect(third.deltaB).not.toBe(0);
 
-    const aliceAfter3 = await get(‘/users/alice’, { login: ‘alice’ });
+    const aliceAfter3 = await get('/users/alice', { login: 'alice' });
     expect(aliceAfter3.body.user.elo).not.toBe(eloAfter2); // ELO a changé
     expect(aliceAfter3.body.user.matchesPlayed).toBe(3);   // les 3 comptent
 
     // les 3 matchs sont bien enregistrés
-    const played = await get(‘/matches’, { login: ‘alice’ });
+    const played = await get('/matches', { login: 'alice' });
     expect(played.body).toHaveLength(3);
   });
 });
