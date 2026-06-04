@@ -17,7 +17,6 @@ import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
-import { MyTeamsDesktop } from './shared/MyTeamsDesktop';
 import { FavoriteCharsRow } from '../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../lib/chars';
@@ -305,8 +304,7 @@ export function ProfilDesktop() {
         <FollowLists />
       </div>
 
-      {/* Mes Équipes 2v2 — uniquement en Babyfoot */}
-      {game === 'babyfoot' && <MyTeamsDesktop myLogin={u.login} />}
+      {/* Mes Équipes 2v2 — retiré du desktop (visible sur mobile uniquement) */}
 
       </Panel>
 
