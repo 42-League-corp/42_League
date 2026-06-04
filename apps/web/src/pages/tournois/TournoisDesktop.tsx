@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
-import { Trophy, Lock, X, Swords, ChevronRight, Users, Info } from 'lucide-react';
+import { Trophy, Lock, X, Swords, Users, Info } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
@@ -96,7 +96,7 @@ export function TournoisDesktop() {
 
       {/* ── Liste des tournois ───────────────────────────────────────────────── */}
       {tournaments.length === 0 ? (
-        <EmptyTournois onCreateClick={() => openCreate('friendly')} game={game} />
+        <EmptyTournois game={game} />
       ) : (
         <div className="space-y-8">
           {active.length > 0 && <TournoiGroup label={t('tournois.group.live')} tone="gold" items={active} />}
@@ -167,7 +167,7 @@ function RedWaxSeal({ size = 48 }: { size?: number }) {
 
 // ─── Empty state visuel ───────────────────────────────────────────────────────
 
-function EmptyTournois({ onCreateClick, game }: { onCreateClick: () => void; game: string }) {
+function EmptyTournois({ game }: { game: string }) {
   const t = useT();
   const gameEmoji = game === 'smash' ? '🎮' : game === 'streetfighter' ? '🥊' : game === 'chess' ? '♟' : '⚽';
   return (
@@ -183,21 +183,13 @@ function EmptyTournois({ onCreateClick, game }: { onCreateClick: () => void; gam
       <p className="text-sm text-muted-2 max-w-md mb-6 leading-relaxed">
         {t('tournois.empty.body')}
       </p>
-      <div className="flex gap-3 items-center">
-        <button type="button" onClick={onCreateClick}
-          className="shine flex items-center gap-2.5 px-6 py-3 rounded-xl border-2 border-gold/50 hover:border-gold
-            bg-gold/10 hover:bg-gold/15 text-gold font-extrabold text-sm uppercase tracking-wider transition-all">
-          <Swords className="w-4 h-4" strokeWidth={2.5} />
-          {t('tournois.create')}
-          <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
-        </button>
-        <div className="flex flex-wrap gap-2">
-          {[t('tournois.empty.tag.elim'), t('tournois.empty.tag.pools'), t('tournois.empty.tag.players')].map((tag) => (
-            <span key={tag} className="text-[11px] text-muted-2 px-3 py-1.5 rounded-full border border-border/50 bg-white/[0.02]">
-              {tag}
-            </span>
-          ))}
-        </div>
+      {/* Plus de bouton « Créer » ici : seul le gros CTA du haut sert à créer. */}
+      <div className="flex flex-wrap justify-center gap-2">
+        {[t('tournois.empty.tag.elim'), t('tournois.empty.tag.pools'), t('tournois.empty.tag.players')].map((tag) => (
+          <span key={tag} className="text-[11px] text-muted-2 px-3 py-1.5 rounded-full border border-border/50 bg-white/[0.02]">
+            {tag}
+          </span>
+        ))}
       </div>
     </div>
   );

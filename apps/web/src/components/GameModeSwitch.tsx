@@ -35,7 +35,7 @@ const META: Record<Game, {
     bgColor: 'rgba(255,201,74,0.10)',
     glowColor: 'rgba(255,201,74,0.45)',
     icon: () => (
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
         <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
         <rect x="10.8" y="5" width="2.4" height="10" rx="1" fill="currentColor" />
         <circle cx="12" cy="9.5" r="2.8" fill="currentColor" />
@@ -63,7 +63,7 @@ const META: Record<Game, {
     bgColor: 'rgba(86,196,110,0.10)',
     glowColor: 'rgba(86,196,110,0.45)',
     icon: () => (
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
         <path d="M12 2 v4 M10 4 h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         <path d="M12 7 C8.5 7 8 11 10.5 13 L9 19 h6 l-1.5 -6 C16 11 15.5 7 12 7 Z" fill="currentColor" />
         <rect x="7.5" y="19" width="9" height="2.5" rx="1" fill="currentColor" />
@@ -177,12 +177,13 @@ export function GameModeSwitch() {
                         boxShadow: sel ? `0 0 16px -5px ${gm.glowColor}` : 'none',
                       }}
                     >
-                      <span className="grid h-5 w-5 place-items-center" style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
+                      <span className="grid h-6 w-6 place-items-center" style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
+                      {/* Libellé court, identique quelle que soit la langue (Baby / Smash / Échecs / SF). */}
                       <span
-                        className="text-[10px] font-extrabold uppercase tracking-wider"
+                        className="w-full text-center text-[10px] font-extrabold uppercase tracking-wider leading-none whitespace-nowrap"
                         style={{ color: sel ? gm.color : 'rgba(255,255,255,0.5)' }}
                       >
-                        {t(`game.${g}`)}
+                        {gm.shortLabel}
                       </span>
                       {sel && (
                         <motion.span
