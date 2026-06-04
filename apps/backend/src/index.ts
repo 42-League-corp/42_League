@@ -63,12 +63,16 @@ import {
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
-import { issueStreamToken, verifyStreamToken, verifyToken } from './tokens.js';
+import { issueStreamToken, issueToken, verifyStreamToken, verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
 import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
+
+// Compte de test générique (rôle USER, cf. staging-seed.ts) sur lequel un admin
+// peut basculer pour vivre l'expérience d'un joueur lambda (POST /admin/impersonate-tester).
+const TESTER_LOGIN = 'tester';
 
 // Backdoor de dev : le header `x-dev-login` permet de se faire passer pour
 // n'importe quel utilisateur SANS OAuth. Il est donc STRICTEMENT réservé au dev
@@ -510,8 +514,9 @@ if (process.env.NODE_ENV !== 'test') {
 // direct par un login non autorisé est refusé ici, pas seulement masqué côté front.
 //
 // throbert & abidaux sont superadmins ; jagharra est invité pour les tests
-// (rôle ADMIN, jamais superadmin — cf. staging-seed.ts).
-const STAGING_ALLOWED = new Set([...SUPERADMINS, 'jagharra']);
+// (rôle ADMIN, jamais superadmin — cf. staging-seed.ts) ; tester est le compte
+// USER générique de l'impersonation (cf. POST /admin/impersonate-tester).
+const STAGING_ALLOWED = new Set([...SUPERADMINS, 'jagharra', TESTER_LOGIN]);
 if (process.env.APP_ENV === 'staging') {
   app.use('*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
@@ -2992,6 +2997,38 @@ app.post('/admin/users/:login/staging-access', async (c) => {
     payload: { from: target.role, to: newRole, stagingAccess: parsed.data.grant },
   });
   return c.json({ login: updated.login, role: updated.role, stagingAccess: parsed.data.grant });
+});
+
+// =========================================================================
+// IMPERSONATION « TESTER » — staging uniquement
+// =========================================================================
+// Délivre à un admin/superadmin un token d'authentification du compte de test
+// générique `tester` (rôle USER) afin qu'il puisse vivre l'expérience d'un joueur
+// lambda et tester sans privilèges. Garde-fous :
+//  - staging UNIQUEMENT (jamais en prod, fail-secure sur APP_ENV) ;
+//  - réservé aux admins (requireAdmin) ;
+//  - SEUL le compte `tester` dédié est ciblable — on ne mint jamais le token d'un
+//    compte réel arbitraire, ce qui interdit toute usurpation d'un vrai joueur.
+// Le retour au compte d'origine est purement côté client (le front sauvegarde le
+// token de l'admin avant de le remplacer — cf. startImpersonation/stopImpersonation).
+app.post('/admin/impersonate-tester', async (c) => {
+  if (process.env.APP_ENV !== 'staging') {
+    throw new HTTPException(403, { message: 'staging only' });
+  }
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new HTTPException(500, { message: 'server misconfigured' });
+  // Garantit l'existence du compte (rôle USER) même si le seed n'a pas tourné.
+  await getOrCreateUser(TESTER_LOGIN);
+  const token = issueToken(TESTER_LOGIN, secret);
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'IMPERSONATE_TESTER',
+    target: TESTER_LOGIN,
+  });
+  return c.json({ token, login: TESTER_LOGIN });
 });
 
 /* ============ FEATURE REQUESTS ============ */

@@ -1708,7 +1708,7 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
 
 const AUDIT_ACTIONS: AdminAuditAction[] = [
   'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES', 'RESET_DATABASE',
-  'DELETE_CHALLENGE', 'DELETE_PENDING_MATCH', 'DELETE_REJECTED_MATCH', 'DELETE_OPS',
+  'DELETE_CHALLENGE', 'DELETE_PENDING_MATCH', 'DELETE_REJECTED_MATCH', 'DELETE_OPS', 'IMPERSONATE_TESTER',
 ];
 
 const ACTION_COLOR: Record<AdminAuditAction, string> = {
@@ -1726,6 +1726,7 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   DELETE_REJECTED_MATCH: 'text-red-400',
   DELETE_OPS: 'text-red-400',
   DELETE_TOURNAMENT: 'text-red-400',
+  IMPERSONATE_TESTER: 'text-teal-400',
 };
 
 function AuditTab() {

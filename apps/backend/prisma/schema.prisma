@@ -444,6 +444,7 @@ enum AdminAction {
   DELETE_REJECTED_MATCH
   DELETE_OPS
   DELETE_TOURNAMENT
+  IMPERSONATE_TESTER
 }
 
 model AdminAuditLog {

@@ -307,6 +307,7 @@ export type AdminAuditAction =
   | 'DELETE_REJECTED_MATCH'
   | 'DELETE_OPS'
   | 'DELETE_TOURNAMENT'
+  | 'IMPERSONATE_TESTER'
   | 'RESET_DATABASE';
 
 export interface AdminAuditEntry {
@@ -787,6 +788,12 @@ export const api = {
 
   // ── Admin ──────────────────────────────────────────────────────────────────
   adminUsers: () => request<AdminUser[]>('/admin/users'),
+  // Staging : un admin récupère un token du compte `tester` (rôle USER) pour
+  // tester l'app en mode utilisateur (cf. composant TesterSwitch).
+  impersonateTester: () =>
+    request<{ token: string; login: string }>('/admin/impersonate-tester', {
+      method: 'POST',
+    }),
   setStagingAccess: (login: string, grant: boolean) =>
     request<{ login: string; role: string; stagingAccess: boolean }>(
       `/admin/users/${encodeURIComponent(login)}/staging-access`,

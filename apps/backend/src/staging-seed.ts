@@ -37,6 +37,20 @@ export async function seedStaging(): Promise<void> {
     },
   });
 
+  // tester : compte générique rôle USER, cible du bouton « Tester en mode user »
+  // (cf. POST /admin/impersonate-tester). Permet aux admins de vivre l'expérience
+  // d'un joueur lambda. On force le rôle USER à chaque démarrage : jamais admin.
+  await prisma.user.upsert({
+    where: { login: 'tester' },
+    update: { role: 'USER' },
+    create: {
+      login: 'tester',
+      role: 'USER',
+      campus: 'Le Havre',
+      games: ['babyfoot', 'smash', 'chess', 'streetfighter'],
+    },
+  });
+
   for (const p of SF_TEST_PLAYERS) {
     await prisma.user.upsert({
       where: { login: p.login },

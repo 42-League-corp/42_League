@@ -4,6 +4,7 @@ import { Avatar } from './Avatar';
 import { RankedBadge } from './RankedBadge';
 import { NotificationBell } from './NotificationBell';
 import { NotifBanner } from './NotifBanner';
+import { TesterSwitch } from './TesterSwitch';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useT } from '../lib/i18n';
@@ -137,6 +138,9 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Bannière de notifs temps réel (duels + scores à valider) */}
       <NotifBanner />
+
+      {/* Bouton flottant « Tester en mode user » (staging + admins) */}
+      <TesterSwitch />
 
       {/* Contenu */}
       <main className="flex-1 min-w-0 px-3 sm:px-6 py-4 sm:py-8 pb-24 lg:pb-8 max-w-4xl mx-auto w-full">
