@@ -139,7 +139,7 @@ export function DefisMobile() {
             />
             <div className="space-y-2.5">
               {pendingToConfirm.map((p) => (
-                <PendingMatchCard key={p.id} match={p} onDone={refresh} />
+                <PendingMatchCard key={p.id} match={p} myLogin={myLogin} onDone={refresh} />
               ))}
             </div>
           </section>

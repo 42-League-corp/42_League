@@ -352,6 +352,12 @@ model PendingMatch {
   mode          String? // null | '2v2'
   partner1Login String?  @map("partner_1_login")
   partner2Login String?  @map("partner_2_login")
+  // Confirmations progressives 2v2 — null = n/a (match 1v1).
+  // Le déclarant est auto-validé ; les 3 autres valident indépendamment.
+  // Settlement déclenché uniquement quand les 3 sont à `true`.
+  partner1Confirmed Boolean? @default(false) @map("partner_1_confirmed")
+  opp1Confirmed     Boolean? @default(false) @map("opp_1_confirmed")
+  opp2Confirmed     Boolean? @default(false) @map("opp_2_confirmed")
 
   declarer User  @relation("declarer", fields: [declarerLogin], references: [login])
   opponent User  @relation("opponent", fields: [opponentLogin], references: [login])

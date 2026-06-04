@@ -1730,6 +1730,10 @@ app.post('/matches/2v2', async (c) => {
       mode: '2v2',
       partner1Login: partnerLogin,
       partner2Login: opponent2Login,
+      // Confirmations progressives : les 3 non-déclarants partent à false.
+      partner1Confirmed: false,
+      opp1Confirmed: false,
+      opp2Confirmed: false,
     },
   });
 
@@ -1942,6 +1946,76 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
 app.post('/matches/:id/confirm', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
+
+  // ─── Branche 2v2 : confirmation de présence (pas de re-saisie de score) ──────
+  //
+  // Anti-farming : les 3 non-déclarants (partner1, opp1, opp2) confirment
+  // CHACUN indépendamment. Le settlement n'est déclenché que lorsque les 3
+  // ont confirmé — empêche 3 joueurs de valider le match d'un 4e absent.
+  {
+    const modeRow = await prisma.pendingMatch.findUnique({
+      where: { id },
+      select: { mode: true },
+    });
+    if (modeRow?.mode === '2v2') {
+      const r2v2 = await prisma.$transaction(async (tx) => {
+        const p = await tx.pendingMatch.findUnique({ where: { id } });
+        if (!p) throw new HTTPException(404, { message: 'pending match not found' });
+
+        const isPartner1 = me === p.partner1Login;
+        const isOpp1    = me === p.opponentLogin;
+        const isOpp2    = me === p.partner2Login;
+        if (!isPartner1 && !isOpp1 && !isOpp2) {
+          throw new HTTPException(403, { message: 'you are not a participant of this 2v2 match' });
+        }
+
+        const updateData: Prisma.PendingMatchUpdateInput = {};
+        if (isPartner1) updateData.partner1Confirmed = true;
+        if (isOpp1)     updateData.opp1Confirmed     = true;
+        if (isOpp2)     updateData.opp2Confirmed     = true;
+
+        const updated = await tx.pendingMatch.update({ where: { id }, data: updateData });
+
+        const allConfirmed =
+          updated.partner1Confirmed === true &&
+          updated.opp1Confirmed     === true &&
+          updated.opp2Confirmed     === true;
+
+        if (!allConfirmed) {
+          const confirmed = [
+            updated.partner1Confirmed,
+            updated.opp1Confirmed,
+            updated.opp2Confirmed,
+          ].filter(Boolean).length;
+          // Notifie les 4 participants de la progression en temps réel.
+          emit(
+            [p.declarerLogin, p.partner1Login, p.opponentLogin, p.partner2Login].filter(
+              Boolean,
+            ) as string[],
+            { type: 'match:2v2_progress', payload: { id, confirmed, total: 3 } },
+          );
+          return { waiting: true as const, confirmed };
+        }
+
+        // Tous confirmés → settlement ELO.
+        const created = await settlePendingAsPlayed(tx, p);
+        return { waiting: false as const, match: created };
+      });
+
+      if (r2v2.waiting) {
+        return c.json({ status: 'waiting', confirmed: r2v2.confirmed, total: 3 }, 202);
+      }
+
+      const m2v2 = r2v2.match;
+      const rcp = [m2v2.playerALogin, m2v2.playerBLogin, m2v2.playerA2Login, m2v2.playerB2Login]
+        .filter(Boolean) as string[];
+      emit(rcp, { type: 'match:confirmed', payload: m2v2 });
+      broadcast({ type: 'leaderboard:update', payload: {} });
+      return c.json(m2v2);
+    }
+  }
+
+  // ─── Branche 1v1 : validation bilatérale par re-saisie du score ──────────────
   const body = await c.req.json().catch(() => ({}));
   const parsed = ConfirmMatchSchema.safeParse(body);
   if (!parsed.success) {
@@ -1954,12 +2028,7 @@ app.post('/matches/:id/confirm', async (c) => {
     if (!p) {
       throw new HTTPException(404, { message: 'pending match not found' });
     }
-    // 1v1 : seul l'adversaire confirme. 2v2 : l'un des joueurs de l'équipe ADVERSE
-    // (opponent ou son coéquipier) confirme — leur point de vue « self » = score
-    // de l'équipe adverse, ce qui garde la vérif miroir valide.
-    const canConfirm =
-      p.mode === '2v2' ? me === p.opponentLogin || me === p.partner2Login : me === p.opponentLogin;
-    if (!canConfirm) {
+    if (me !== p.opponentLogin) {
       throw new HTTPException(403, {
         message: 'only the opponent can confirm this match',
       });

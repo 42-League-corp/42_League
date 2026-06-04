@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, X, Zap } from 'lucide-react';
+import { Check, Clock, X, Zap } from 'lucide-react';
 import { Button } from '../../../components/Button';
 import { ContestModal } from '../../../components/ContestModal';
 import { PlayerLink } from '../../../components/PlayerLink';
@@ -9,8 +9,40 @@ import { useFlash } from '../../../hooks/useFlash';
 import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
+// ─── Pill par joueur pour les confirmations 2v2 ───────────────────────────────
+
+function ConfirmPill({
+  login,
+  confirmed,
+  isMe,
+}: {
+  login: string;
+  confirmed: boolean | null | undefined;
+  isMe: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-bold transition-colors ${
+        confirmed
+          ? 'border-[#7fd66e]/50 bg-[#7fd66e]/10 text-[#7fd66e]'
+          : isMe
+            ? 'border-gold/50 bg-gold/10 text-gold'
+            : 'border-border/60 bg-bg-1/60 text-muted-2'
+      }`}
+    >
+      {confirmed ? (
+        <Check className="w-3 h-3 flex-shrink-0" strokeWidth={3} />
+      ) : (
+        <Clock className="w-3 h-3 flex-shrink-0 opacity-60" strokeWidth={2.5} />
+      )}
+      <span className="truncate max-w-[72px]">{isMe ? 'Toi' : login}</span>
+    </div>
+  );
+}
+
 interface PendingMatchCardProps {
   match: PendingMatch;
+  myLogin?: string;
   onDone: () => Promise<void>;
 }
 
@@ -20,7 +52,7 @@ interface PendingMatchCardProps {
  * directe, l'ELO bouge), soit on conteste avec une justification. Pas de re-saisie
  * du score à la confirmation.
  */
-export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
+export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardProps) {
   const t = useT();
   const flash = useFlash();
   const [contesting, setContesting] = useState(false);
@@ -28,11 +60,48 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
   // Dès qu'on a tranché (confirmé/contesté avec succès), la carte se retire
   // immédiatement — sans attendre le refresh réseau (qui peut être lent).
   const [resolved, setResolved] = useState(false);
+  // Suivi local des confirmations 2v2 (avant refresh serveur).
+  const [localConfirms, setLocalConfirms] = useState({
+    partner1: match.partner1Confirmed ?? false,
+    opp1: match.opp1Confirmed ?? false,
+    opp2: match.opp2Confirmed ?? false,
+  });
 
   // Vainqueur déterminé par comparaison de scores (et non « = 10 ») : valable
   // pour toutes les disciplines (babyfoot 10-x, échecs 1-0, smash 2-1).
   const iWon = match.scoreOpponent > match.scoreDeclarer;
 
+  // ── Confirmation 2v2 ──────────────────────────────────────────────────────────
+  const handleConfirm2v2 = async () => {
+    setBusy(true);
+    try {
+      const res = await api.confirm2v2Match(match.id);
+      if ('status' in res && res.status === 'waiting') {
+        // Mise à jour optimiste locale — on marque ce joueur comme confirmé.
+        const me = myLogin ?? '';
+        setLocalConfirms((prev) => ({
+          partner1: prev.partner1 || me === match.partner1Login,
+          opp1:     prev.opp1    || me === match.opponentLogin,
+          opp2:     prev.opp2    || me === match.partner2Login,
+        }));
+        flash.show(`${res.confirmed}/3 joueurs ont confirmé — en attente des autres`);
+        haptic('light');
+        setBusy(false);
+      } else {
+        // Settlement déclenché — tous ont confirmé.
+        flash.show(t('defis.matchConfirmedM'));
+        haptic('success');
+        setResolved(true);
+        await onDone();
+      }
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+      haptic('error');
+      setBusy(false);
+    }
+  };
+
+  // ── Confirmation 1v1 ──────────────────────────────────────────────────────────
   const handleConfirm = async () => {
     setBusy(true);
     try {
@@ -108,13 +177,18 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             </div>
           )}
 
-          {/* Mode 2v2 : badge + composition des équipes */}
+          {/* Mode 2v2 : badge + composition + statuts de confirmation */}
           {match.mode === '2v2' && (
-            <div className="flex flex-col items-center gap-1.5 mb-3">
-              <span className="inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
-                2 vs 2
-              </span>
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-text-strong">
+            <div className="mb-3 space-y-2.5">
+              {/* Badge + score */}
+              <div className="flex items-center justify-center gap-2">
+                <span className="inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+                  2 vs 2
+                </span>
+              </div>
+
+              {/* Équipes */}
+              <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-text-strong">
                 <span className="text-gold">
                   {match.declarerLogin} &amp; {match.partner1Login}
                 </span>
@@ -123,6 +197,39 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
                   {match.opponentLogin} &amp; {match.partner2Login}
                 </span>
               </div>
+
+              {/* Statut de confirmation par joueur */}
+              {(() => {
+                const me = myLogin ?? '';
+                const p1c = localConfirms.partner1;
+                const o1c = localConfirms.opp1;
+                const o2c = localConfirms.opp2;
+                const confirmedCount = [p1c, o1c, o2c].filter(Boolean).length;
+                return (
+                  <div className="space-y-1.5">
+                    <div className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted text-center">
+                      {confirmedCount}/3 confirmations
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <ConfirmPill
+                        login={match.partner1Login ?? ''}
+                        confirmed={p1c}
+                        isMe={me === match.partner1Login}
+                      />
+                      <ConfirmPill
+                        login={match.opponentLogin}
+                        confirmed={o1c}
+                        isMe={me === match.opponentLogin}
+                      />
+                      <ConfirmPill
+                        login={match.partner2Login ?? ''}
+                        confirmed={o2c}
+                        isMe={me === match.partner2Login}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -150,30 +257,58 @@ export function PendingMatchCard({ match, onDone }: PendingMatchCardProps) {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              size="md"
-              loading={busy}
-              onClick={handleConfirm}
-              className="py-3 text-sm"
-            >
-              <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
-              {t('defis.confirm')}
-            </Button>
-            <Button
-              size="md"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                haptic('light');
-                setContesting(true);
-              }}
-              className="py-3 text-sm text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
-            >
-              <X className="w-4 h-4 mr-1.5" strokeWidth={3} />
-              {t('defis.contest')}
-            </Button>
-          </div>
+          {match.mode === '2v2' ? (
+            /* ── Confirmation 2v2 : présence uniquement ── */
+            (() => {
+              const me = myLogin ?? '';
+              const alreadyConfirmed =
+                (me === match.partner1Login && localConfirms.partner1) ||
+                (me === match.opponentLogin && localConfirms.opp1) ||
+                (me === match.partner2Login && localConfirms.opp2);
+              return alreadyConfirmed ? (
+                <div className="flex items-center justify-center gap-2 py-2 text-[11px] text-[#7fd66e] font-bold">
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                  Tu as confirmé — en attente des autres
+                </div>
+              ) : (
+                <Button
+                  size="md"
+                  loading={busy}
+                  onClick={handleConfirm2v2}
+                  className="w-full py-3 text-sm"
+                >
+                  <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
+                  Je confirme ce match
+                </Button>
+              );
+            })()
+          ) : (
+            /* ── Confirmation 1v1 : score + contest ── */
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="md"
+                loading={busy}
+                onClick={handleConfirm}
+                className="py-3 text-sm"
+              >
+                <Check className="w-4 h-4 mr-1.5" strokeWidth={3} />
+                {t('defis.confirm')}
+              </Button>
+              <Button
+                size="md"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  haptic('light');
+                  setContesting(true);
+                }}
+                className="py-3 text-sm text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+              >
+                <X className="w-4 h-4 mr-1.5" strokeWidth={3} />
+                {t('defis.contest')}
+              </Button>
+            </div>
+          )}
         </div>
       </motion.div>
 

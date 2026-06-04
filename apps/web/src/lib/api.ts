@@ -51,6 +51,10 @@ export interface PendingMatch {
   partner1Login?: string | null;
   /** Coéquipier de l'adversaire (équipe 2) — présent uniquement en 2v2. */
   partner2Login?: string | null;
+  // Confirmations progressives 2v2 — null = n/a (match 1v1).
+  partner1Confirmed?: boolean | null;
+  opp1Confirmed?: boolean | null;
+  opp2Confirmed?: boolean | null;
 }
 
 export interface Challenge {
@@ -754,6 +758,20 @@ export const api = {
     request<PlayedMatch>(`/matches/${encodeURIComponent(id)}/confirm`, {
       method: 'POST',
       body: JSON.stringify({ scoreSelf, scoreOpponent, ...extra }),
+    }),
+
+  /**
+   * Confirme un match 2v2 (pas de re-saisie de score — juste la présence).
+   * Renvoie `{ status: 'waiting', confirmed: N, total: 3 }` si d'autres joueurs
+   * n'ont pas encore validé, ou le `PlayedMatch` dès que tous ont confirmé.
+   */
+  confirm2v2Match: (id: string) =>
+    request<
+      | { status: 'waiting'; confirmed: number; total: 3 }
+      | (PlayedMatch & { status?: never })
+    >(`/matches/${encodeURIComponent(id)}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
   rejectMatch: (
     id: string,
