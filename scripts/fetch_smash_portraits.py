@@ -58,10 +58,28 @@ def fandom_thumb(title):
     return None
 
 
+def shrink(dest, maxdim=512):
+    """Redimensionne en place (≤ maxdim) + PNG optimisé : les sources officielles
+    pèsent plusieurs Mo (illustrations pleine résolution), inutile pour des
+    vignettes ~40px et au-dessus de la limite de précache PWA (2 Mo). Best-effort :
+    nécessite Pillow ; sans lui, on garde l'image telle quelle."""
+    try:
+        from PIL import Image
+    except Exception:
+        return
+    try:
+        im = Image.open(dest).convert("RGBA")
+        im.thumbnail((maxdim, maxdim), Image.LANCZOS)
+        im.save(dest, format="PNG", optimize=True)
+    except Exception:
+        pass
+
+
 def save(body, dest):
     if not body or len(body) < 500:
         return False
     open(dest, "wb").write(body)
+    shrink(dest)
     return True
 
 
