@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
@@ -8,6 +7,7 @@ import { RankingScopeToggle } from './RankingScopeToggle';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { GoatView } from '../GoatPage';
 import { PlayerLink } from '../../components/PlayerLink';
 import { RankBadge } from '../../components/RankBadge';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
@@ -21,7 +21,6 @@ type LeaderboardTab = 'personal' | 'teams';
 
 export function LeaderboardMobile() {
   const t = useT();
-  const navigate = useNavigate();
   const { leaderboard, matches: allMatches, me, allOps, locations, refresh } = useLeagueData();
   const { game } = useGameMode();
   const matches = useMemo(
@@ -221,14 +220,14 @@ export function LeaderboardMobile() {
         {/* ── Banner GAME en tout premier, avant même le podium ────────── */}
         <LeaderboardBanner />
 
-        {/* Podium top 3 — directement sous le banner */}
-        {viewMode !== 'graph' && top3.length > 0 && !normalizedQuery && (
+        {/* Podium top 3 — uniquement en vue liste (ni nuage, ni G.O.A.T) */}
+        {viewMode === 'list' && top3.length > 0 && !normalizedQuery && (
           <Podium top3={top3} statsByLogin={podiumStats} />
         )}
 
-        {/* Bascule liste / nuage + accès G.O.A.T (en dessous du podium) */}
+        {/* Bascule liste / nuage / G.O.A.T (en dessous du podium) */}
         <div className="flex items-center justify-center gap-2">
-          <RankingViewToggle view={viewMode} onChange={setViewMode} onGoat={() => navigate('/goat')} />
+          <RankingViewToggle view={viewMode} onChange={setViewMode} />
         </div>
 
         {viewMode === 'graph' ? (
@@ -238,6 +237,8 @@ export function LeaderboardMobile() {
             winRates={winRates}
             className="h-[70vh]"
           />
+        ) : viewMode === 'goat' ? (
+          <GoatView />
         ) : (
         <>
         {/* (podium déjà rendu au-dessus) */}

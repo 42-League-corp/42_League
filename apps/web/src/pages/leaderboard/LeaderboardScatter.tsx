@@ -482,18 +482,14 @@ function ZoomBtn({ label, onClick, children }: { label: string; onClick: () => v
 
 // ─── Bascule Liste / Nuage ──────────────────────────────────────────────────
 
-export type RankingView = 'list' | 'graph';
+export type RankingView = 'list' | 'graph' | 'goat';
 
 export function RankingViewToggle({
   view,
   onChange,
-  onGoat,
-  goatActive = false,
 }: {
   view: RankingView;
   onChange: (v: RankingView) => void;
-  onGoat?: () => void;
-  goatActive?: boolean;
 }) {
   const t = useT();
   return (
@@ -504,11 +500,10 @@ export function RankingViewToggle({
       <ToggleBtn active={view === 'graph'} onClick={() => onChange('graph')} Icon={ScatterChart}>
         {t('lb.view.graph')}
       </ToggleBtn>
-      {onGoat && (
-        <ToggleBtn active={goatActive} onClick={onGoat} Icon={Crown}>
-          G.O.A.T
-        </ToggleBtn>
-      )}
+      {/* G.O.A.T : 3ᵉ vue inline (plus de navigation vers une page séparée). */}
+      <ToggleBtn active={view === 'goat'} onClick={() => onChange('goat')} Icon={Crown}>
+        G.O.A.T
+      </ToggleBtn>
     </div>
   );
 }

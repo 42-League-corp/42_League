@@ -50,10 +50,9 @@ function GoatWeightsList({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function GoatPage() {
+export function GoatView() {
   const { leaderboard, matches, tournaments, me } = useLeagueData();
   const { game } = useGameMode();
-  const navigate = useNavigate();
   const t = useT();
   // L'intro ne s'affiche qu'au tout premier passage ; ensuite elle est rappelable
   // via le bouton « ? ». La case « ne plus montrer » (cochée par défaut) mémorise
@@ -73,17 +72,7 @@ export function GoatPage() {
   const rest = ranking.slice(1);
 
   return (
-    <Panel title="G.O.A.T" sub={t('goat.sub')} accent="crown">
-      {/* ── Bouton retour ── */}
-      <button
-        type="button"
-        onClick={() => navigate('/leaderboard')}
-        className="group inline-flex items-center gap-1 mb-4 rounded-lg px-2.5 py-1.5 text-[11px] uppercase tracking-wider font-semibold text-muted-2 hover:text-gold hover:bg-white/[0.03] border border-transparent hover:border-border/50 transition-colors"
-      >
-        <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
-        {t('common.back')}
-      </button>
-
+    <div className="relative">
       {/* ── Contenu (grisé tant que l'intro est affichée) ── */}
       <motion.div
         animate={{
@@ -213,6 +202,28 @@ export function GoatPage() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Page autonome (route /goat) — conserve le cartouche + le bouton retour. Le
+// classement affiche désormais le G.O.A.T en vue inline (cf. RankingViewToggle),
+// mais on garde cette page pour les liens directs.
+export function GoatPage() {
+  const navigate = useNavigate();
+  const t = useT();
+  return (
+    <Panel title="G.O.A.T" sub={t('goat.sub')} accent="crown">
+      {/* ── Bouton retour ── */}
+      <button
+        type="button"
+        onClick={() => navigate('/leaderboard')}
+        className="group inline-flex items-center gap-1 mb-4 rounded-lg px-2.5 py-1.5 text-[11px] uppercase tracking-wider font-semibold text-muted-2 hover:text-gold hover:bg-white/[0.03] border border-transparent hover:border-border/50 transition-colors"
+      >
+        <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
+        {t('common.back')}
+      </button>
+      <GoatView />
     </Panel>
   );
 }

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
@@ -13,6 +12,7 @@ import { RankBadge } from '../../components/RankBadge';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { GoatView } from '../GoatPage';
 import { TeamLeaderboard } from './TeamLeaderboard';
 import { RankingScopeToggle } from './RankingScopeToggle';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -66,7 +66,6 @@ type SortDir = 'asc' | 'desc';
  */
 export function LeaderboardDesktop() {
   const t = useT();
-  const navigate = useNavigate();
   const { leaderboard, matches: allMatches, me, allOps, locations } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
@@ -311,7 +310,7 @@ export function LeaderboardDesktop() {
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} currentLabel={t('lb.season.current')} />
           <div className="flex items-center gap-2">
             {!viewingPast && (
-              <RankingViewToggle view={viewMode} onChange={setViewMode} onGoat={() => navigate('/goat')} />
+              <RankingViewToggle view={viewMode} onChange={setViewMode} />
             )}
           </div>
         </div>
@@ -319,6 +318,8 @@ export function LeaderboardDesktop() {
           <SnapshotTable standings={standings ?? []} />
         ) : leaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
+        ) : viewMode === 'goat' ? (
+          <GoatView />
         ) : viewMode === 'graph' ? (
           <LeaderboardScatter
             entries={leaderboard}
