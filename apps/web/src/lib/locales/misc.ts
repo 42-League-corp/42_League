@@ -36,6 +36,7 @@ export const dict: Record<Lang, Dict> = {
     'goat.intro.titlesLabel': 'titres remportés',
     'goat.intro.p2.d': ' en tournoi (20 %). Le joueur en tête trône en couronne, ses prétendants le suivent juste en dessous.',
     'goat.intro.ok': 'J\'ai compris',
+    'goat.intro.dontShowAgain': 'Ne plus montrer ce message',
     'goat.stat.matches': 'Matchs',
     'goat.stat.officialCup': 'Coupe off.',
     // libellés de métriques GOAT (cf. lib/goat.ts GOAT_WEIGHTS)
@@ -245,6 +246,7 @@ export const dict: Record<Lang, Dict> = {
     'goat.intro.titlesLabel': 'titles won',
     'goat.intro.p2.d': ' in tournaments (20%). The leader is crowned at the top, with the contenders right below.',
     'goat.intro.ok': 'Got it',
+    'goat.intro.dontShowAgain': 'Don\'t show this message again',
     'goat.stat.matches': 'Matches',
     'goat.stat.officialCup': 'Official cups',
     'goat.metric.officialTitles': 'Official tournaments',
@@ -442,6 +444,7 @@ export const dict: Record<Lang, Dict> = {
     'goat.intro.titlesLabel': 'títulos ganados',
     'goat.intro.p2.d': ' en torneo (20 %). El líder reina con corona, sus aspirantes le siguen justo debajo.',
     'goat.intro.ok': 'Entendido',
+    'goat.intro.dontShowAgain': 'No volver a mostrar este mensaje',
     'goat.stat.matches': 'Partidas',
     'goat.stat.officialCup': 'Copas of.',
     'goat.metric.officialTitles': 'Torneos oficiales',

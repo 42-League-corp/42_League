@@ -56,10 +56,12 @@ export function GoatPage() {
   const navigate = useNavigate();
   const t = useT();
   // L'intro ne s'affiche qu'au tout premier passage ; ensuite elle est rappelable
-  // via le bouton « ? » (hover) ou en cliquant dessus.
+  // via le bouton « ? ». La case « ne plus montrer » (cochée par défaut) mémorise
+  // le choix ; décochée, l'intro reviendra au prochain passage.
   const [showIntro, setShowIntro] = useState(() => !hasSeenGoatIntro());
+  const [dontShowAgain, setDontShowAgain] = useState(true);
   const dismissIntro = () => {
-    markGoatIntroSeen();
+    if (dontShowAgain) markGoatIntroSeen();
     setShowIntro(false);
   };
   const ranking = useMemo(
@@ -190,10 +192,19 @@ export function GoatPage() {
                 <div className="mt-3 rounded-xl border border-gold/15 bg-black/20 p-3">
                   <GoatWeightsList />
                 </div>
+                <label className="mt-5 flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-2 hover:text-muted transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={dontShowAgain}
+                    onChange={(e) => setDontShowAgain(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded cursor-pointer accent-[#ffc94a]"
+                  />
+                  {t('goat.intro.dontShowAgain')}
+                </label>
                 <button
                   type="button"
                   onClick={dismissIntro}
-                  className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
+                  className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
                 >
                   {t('goat.intro.ok')}
                 </button>
