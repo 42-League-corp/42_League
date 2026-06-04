@@ -204,9 +204,6 @@ export function EloChart({
   const idxRef = useRef(0);
   const [idx, setIdx] = useState(0);
   const [active, setActive] = useState(false);
-  // `touched` : passe à true au 1er survol. Permet d'afficher le dernier match au
-  // repos (avant interaction) puis de masquer le tooltip dès qu'on quitte la case.
-  const [touched, setTouched] = useState(false);
 
   // Conversion y-curseur → ELO (inverse du mapping de geo), via ref pour que le
   // useTransform lise toujours les bornes courantes. Donne un odomètre ELO
@@ -274,7 +271,6 @@ export function EloChart({
     xv = Math.max(padX, Math.min(W - padX, xv));
     mx.set(xv);
     if (!active) setActive(true);
-    if (!touched) setTouched(true);
   };
 
   // Tooltip : suit le curseur, recentré et borné dans la largeur
@@ -344,12 +340,11 @@ export function EloChart({
         <motion.circle cx={mx} cy={cy} r="4" fill="#0b1220" stroke={lineColor} strokeWidth="2.5" style={{ opacity: active ? 1 : 0 }} />
       </svg>
 
-      {/* Tooltip détaillé du match, suit le point actif. Au repos AVANT toute
-          interaction : visible (dernier match). Dès qu'on quitte la case après
-          avoir survolé : fade out. */}
+      {/* Tooltip détaillé du match : visible UNIQUEMENT quand la souris est dans
+          la zone (pas d'affichage par défaut). Fade out quand on quitte la case. */}
       <motion.div className="pointer-events-none absolute left-0 top-0 z-20"
         style={{ x: ttX, y: cy }}
-        animate={{ opacity: active ? 1 : touched ? 0 : 0.92 }}
+        animate={{ opacity: active ? 1 : 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}>
         <div style={{ transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))' }}>
           {below && <div className="mx-auto mb-[-5px] h-2.5 w-2.5 rotate-45 border-l border-t border-white/10 bg-slate-900/95" />}

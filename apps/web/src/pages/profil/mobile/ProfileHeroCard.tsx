@@ -69,13 +69,21 @@ export function ProfileHeroCard({
   );
   const titlesWon = pickRating(user, game).tournamentsWon;
 
+  // Titre équipé : null si aucun (ni override cosmétique, ni titre réel) → on
+  // affiche « sans éclat. » GRISÉ (pas en or, pas de couleur custom), comme l'état
+  // NONE du sélecteur.
+  const equippedTitle = displayTitle(user.login, user.title, null);
+  const isTarnished = !equippedTitle;
+  const titleLabel = equippedTitle ?? t('profil.title.tarnished');
+  const effectiveTitleColor = isTarnished ? null : titleColor;
+
   // Badges cross-jeux : toutes les disciplines où ce joueur est INSCRIT
   // (même sans match joué), hormis le mode courant déjà affiché en grand.
   const crossGameBadges = (['babyfoot', 'smash', 'chess', 'streetfighter'] as const)
     .filter((g) => g !== game && (user.games ?? ['babyfoot']).includes(g))
     .map((g) => {
       const r = pickRating(user, g);
-      return { g, elo: r.elo, played: r.matchesPlayed };
+      return { g, elo: r.elo };
     });
 
   const myEntry = leaderboard.find((u) => u.login === user.login);
@@ -152,19 +160,19 @@ export function ProfileHeroCard({
       <div className="relative z-10 px-5 pt-5 pb-5">
         {/* Titre équipé — bannière dorée centrée en HAUT de la carte. Par défaut
             « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (sur SON
-            profil) est une simple flèche à droite. */}
-        <div className="relative flex items-center justify-center mb-4">
+            profil) est une flèche qui suit immédiatement la fin du titre. */}
+        <div className="relative flex items-center justify-center gap-1.5 mb-4">
           <span
-            className="inline-flex items-center gap-1.5 max-w-[80%]"
-            style={titleColor ? { color: titleColor } : undefined}
+            className="inline-flex items-center gap-1.5 max-w-[80%] min-w-0"
+            style={effectiveTitleColor ? { color: effectiveTitleColor } : undefined}
           >
-            <span className={`text-base leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❝</span>
-            <span className={`italic text-base font-bold tracking-wide truncate ${titleColor ? '' : 'text-gold'}`}>
-              {displayTitle(user.login, user.title, t('profil.title.tarnished'))}
+            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❝</span>
+            <span className={`italic text-base font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold'}`}>
+              {titleLabel}
             </span>
-            <span className={`text-base leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❞</span>
+            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❞</span>
           </span>
-          {isMe && <TitlePicker className="absolute right-0" />}
+          {isMe && <TitlePicker className="shrink-0" />}
           {isMe && <BannerPicker className="absolute left-0" />}
         </div>
 
@@ -296,7 +304,7 @@ export function ProfileHeroCard({
               {t('profil.alsoActiveOn')}
             </div>
             <div className="flex items-center gap-2">
-              {crossGameBadges.map(({ g, elo, played }) => {
+              {crossGameBadges.map(({ g, elo }) => {
                 const c = gameColor(g);
                 return (
                   <div
@@ -339,7 +347,6 @@ export function ProfileHeroCard({
                     >
                       {t(`game.${g}`)}
                     </span>
-                    <span className="text-[8px] text-muted-2 font-mono">{played}m</span>
                   </div>
                 );
               })}

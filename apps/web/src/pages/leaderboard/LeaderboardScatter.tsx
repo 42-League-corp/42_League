@@ -263,12 +263,13 @@ export function LeaderboardScatter({
         </ZoomBtn>
       </div>
 
-      {/* Légende + explication */}
-      <div className="absolute top-2 left-2 z-20 pointer-events-none flex flex-col gap-1">
+      {/* Légende + explication — ancrée en BAS À DROITE pour ne pas chevaucher
+          les axes/points (l'angle haut-gauche est occupé par l'axe Matchs). */}
+      <div className="absolute bottom-2 right-2 z-20 pointer-events-none flex flex-col items-end gap-1 text-right max-w-[60%]">
         <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-2">
           {t('lb.scatter.legendTop')}
         </div>
-        <div className="flex items-center gap-2 text-[9px] text-muted-2/80 font-medium">
+        <div className="flex items-center justify-end gap-2 text-[9px] text-muted-2/80 font-medium">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold/70" />
           {t('lb.scatter.legendBest')}
           <span className="opacity-40">·</span>

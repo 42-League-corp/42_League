@@ -90,6 +90,11 @@ export function ProfilDesktop() {
   const u = me.user;
   // Cosmétiques équipés (boutique) — profil perso.
   const titleColor = me.titleColor ?? null;
+  // Titre équipé : null si aucun → « sans éclat. » GRISÉ (état NONE), pas en or.
+  const equippedTitle = displayTitle(u.login, u.title, null);
+  const isTarnished = !equippedTitle;
+  const titleLabel = equippedTitle ?? t('profil.title.tarnished');
+  const effectiveTitleColor = isTarnished ? null : titleColor;
   const equippedBadge = me.equippedBadge ?? null;
   const equippedBanner = me.equippedBanner ?? null;
   // Jeux de combat où je suis inscrit → afficher/éditer mes persos favoris.
@@ -160,13 +165,13 @@ export function ProfilDesktop() {
         <div className="relative z-10 pt-3.5 pb-1 flex items-center justify-center px-5">
           <span
             className="inline-flex items-center gap-1.5 max-w-[80%]"
-            style={titleColor ? { color: titleColor } : undefined}
+            style={effectiveTitleColor ? { color: effectiveTitleColor } : undefined}
           >
-            <span className={`text-lg leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❝</span>
-            <span className={`italic text-lg font-bold tracking-wide truncate ${titleColor ? '' : 'text-gold'}`}>
-              {displayTitle(u.login, u.title, t('profil.title.tarnished'))}
+            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❝</span>
+            <span className={`italic text-lg font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold'}`}>
+              {titleLabel}
             </span>
-            <span className={`text-lg leading-none opacity-70 ${titleColor ? '' : 'text-gold/70'}`}>❞</span>
+            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❞</span>
           </span>
           <BannerPicker className="absolute left-5" />
           <TitlePicker className="absolute right-5" />

@@ -52,6 +52,7 @@ const fr: Dict = {
   'shop.empty': 'Aucun article en boutique pour le moment.',
   'shop.cat.title': 'Titre',
   'shop.cat.banner': 'Bannière',
+  'shop.cat.badge': 'Badge',
   'shop.cat.cosmetic': 'Cosmétique',
   'shop.howToEarn.title': 'Bientôt — comment gagner des League Coins',
   'shop.howToEarn.body':
@@ -236,6 +237,7 @@ const en: Dict = {
   'shop.empty': 'No items in the shop yet.',
   'shop.cat.title': 'Title',
   'shop.cat.banner': 'Banner',
+  'shop.cat.badge': 'Badge',
   'shop.cat.cosmetic': 'Cosmetic',
   'shop.howToEarn.title': 'Coming soon — how to earn League Coins',
   'shop.howToEarn.body':
@@ -420,6 +422,7 @@ const es: Dict = {
   'shop.empty': 'Aún no hay artículos en la tienda.',
   'shop.cat.title': 'Título',
   'shop.cat.banner': 'Estandarte',
+  'shop.cat.badge': 'Insignia',
   'shop.cat.cosmetic': 'Cosmético',
   'shop.howToEarn.title': 'Próximamente — cómo ganar League Coins',
   'shop.howToEarn.body':

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check } from 'lucide-react';
+import { X, Check, Search } from 'lucide-react';
 import { Button } from './Button';
 import { api } from '../lib/api';
 import { useFlash } from '../hooks/useFlash';
 import { useT } from '../lib/i18n';
 import { haptic } from '../mobile/feedback/useHaptic';
-import { rosterForGame, iconForGame, type FightingGame } from '../lib/chars';
+import { rosterForGame, iconForGame, filterRoster, type FightingGame } from '../lib/chars';
 import { gameColor, GAME_LOGO_SRC } from '../lib/gameVisuals';
 
 const GAME_LABEL: Record<FightingGame, string> = { smash: 'Smash Bros', streetfighter: 'Street Fighter' };
@@ -25,10 +25,13 @@ export function CharMultiGrid({
   selected: string[];
   onToggle: (id: string) => void;
 }) {
+  const t = useT();
   const Icon = iconForGame(game);
   const c = gameColor(game);
   const roster = rosterForGame(game);
   const sel = new Set(selected);
+  const [query, setQuery] = useState('');
+  const shown = filterRoster(roster, query);
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
@@ -40,29 +43,49 @@ export function CharMultiGrid({
         </span>
         <span className="text-[10px] text-muted-2 font-mono">{selected.length}</span>
       </div>
-      <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-56 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-        {roster.map((ch) => {
-          const on = sel.has(ch.id);
-          return (
-            <button
-              key={ch.id}
-              type="button"
-              onClick={() => onToggle(ch.id)}
-              title={ch.name}
-              className={`relative rounded-lg transition-all ${
-                on ? 'ring-2 ring-[#c97bff] scale-105' : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
-              }`}
-            >
-              <Icon id={ch.id} size={40} className="w-full aspect-square" />
-              {on && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#c97bff] grid place-items-center shadow">
-                  <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Recherche / filtre par nom de perso */}
+      <div className="relative mb-2">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-2 pointer-events-none" strokeWidth={2.5} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('favorites.search')}
+          className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg bg-bg-1/60 border border-border/60 focus:border-[#c97bff] outline-none transition-colors"
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery('')} aria-label="×"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded text-muted-2 hover:text-text">
+            <X className="w-3 h-3" strokeWidth={2.5} />
+          </button>
+        )}
       </div>
+      {shown.length === 0 ? (
+        <div className="py-5 text-center text-[11px] text-muted-2">{t('favorites.noResult')}</div>
+      ) : (
+        <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-56 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
+          {shown.map((ch) => {
+            const on = sel.has(ch.id);
+            return (
+              <button
+                key={ch.id}
+                type="button"
+                onClick={() => onToggle(ch.id)}
+                title={ch.name}
+                className={`relative rounded-lg transition-all ${
+                  on ? 'ring-2 ring-[#c97bff] scale-105' : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
+                }`}
+              >
+                <Icon id={ch.id} size={40} className="w-full aspect-square" />
+                {on && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#c97bff] grid place-items-center shadow">
+                    <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

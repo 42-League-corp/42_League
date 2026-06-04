@@ -34,6 +34,21 @@ export function charName(game: FightingGame, id: string): string {
   return game === 'streetfighter' ? sfCharName(id) : smashCharName(id);
 }
 
+/** Normalise une chaîne pour la recherche : minuscules, sans accents/diacritiques. */
+export function normalizeSearch(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+
+/**
+ * Filtre un roster par requête (nom OU id, insensible à la casse/aux accents).
+ * Requête vide → roster complet inchangé.
+ */
+export function filterRoster<T extends { id: string; name: string }>(roster: T[], query: string): T[] {
+  const q = normalizeSearch(query);
+  if (!q) return roster;
+  return roster.filter((c) => normalizeSearch(c.name).includes(q) || normalizeSearch(c.id).includes(q));
+}
+
 /** Favoris stockés sur l'utilisateur pour ce jeu (jamais undefined). */
 export function favoritesForGame(
   user: NonNullable<MeResponse['user']> | undefined | null,
