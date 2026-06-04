@@ -50,7 +50,7 @@ export function TesterSwitch() {
     return (
       <button
         onClick={handleReturn}
-        className="fixed z-[80] bottom-20 sm:bottom-4 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/60 bg-gold/15 glass-strong shadow-lg hover:bg-gold/25 transition-colors animate-pop"
+        className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/60 bg-gold/15 glass-strong shadow-lg hover:bg-gold/25 transition-colors animate-pop"
         title={`Revenir au compte ${impersonator}`}
       >
         <span className="text-base">🧪</span>
@@ -73,7 +73,7 @@ export function TesterSwitch() {
     <button
       onClick={handleSwitch}
       disabled={busy}
-      className="fixed z-[80] bottom-20 sm:bottom-4 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
+      className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-teal/50 bg-teal-deep/20 glass-strong shadow-lg hover:bg-teal-deep/30 transition-colors disabled:opacity-50 animate-pop"
       title="Basculer sur le compte tester (mode utilisateur)"
     >
       <span className="text-base">🧪</span>
