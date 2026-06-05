@@ -1,5 +1,6 @@
 import { getApiBase } from './config';
 import { clearToken, getToken } from './storage';
+import { fireContestRage } from './contestRage';
 import type { Game } from './gameMode';
 
 export type { Game };
@@ -911,7 +912,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ contestReason, contestMessage }),
       },
-    ),
+    ).then((r) => {
+      fireContestRage('sender');
+      return r;
+    }),
   // Annulation de sa propre déclaration (réservé au déclarant, tant que pending).
   cancelMatch: (id: string) =>
     request<{ id: string; status: 'cancelled' }>(
@@ -937,7 +941,10 @@ export const api = {
     request<{ id: string; status: 'cancelled' }>(
       `/matches/ffa/${encodeURIComponent(id)}/contest`,
       { method: 'POST', body: JSON.stringify({ claimedPosition, message }) },
-    ),
+    ).then((r) => {
+      fireContestRage('sender');
+      return r;
+    }),
   cancelFfa: (id: string) =>
     request<{ id: string; status: 'cancelled' }>(
       `/matches/ffa/${encodeURIComponent(id)}/cancel`,
@@ -962,7 +969,10 @@ export const api = {
     request<{ id: string; status: 'cancelled' }>(
       `/matches/darts/${encodeURIComponent(id)}/contest`,
       { method: 'POST', body: JSON.stringify({ claimedRemaining, message }) },
-    ),
+    ).then((r) => {
+      fireContestRage('sender');
+      return r;
+    }),
   cancelDarts: (id: string) =>
     request<{ id: string; status: 'cancelled' }>(
       `/matches/darts/${encodeURIComponent(id)}/cancel`,

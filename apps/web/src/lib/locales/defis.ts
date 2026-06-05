@@ -151,6 +151,10 @@ export const dict: Record<Lang, Dict> = {
     'defis.matchConfirmed': '✓ Match confirmé — ELO mis à jour !',
     'defis.matchConfirmedM': 'Match confirmé — ELO mis à jour !',
     'defis.contestSent': 'Contestation envoyée.',
+    'defis.contestRageTitleSender': 'Tu contestes',
+    'defis.contestRageSubSender': 'Litige envoyé',
+    'defis.contestRageTitleReceiver': 'Score contesté',
+    'defis.contestRageSubReceiver': 'On conteste ton score',
     'defis.noPlayerFound': 'Aucun joueur trouvé',
 
     // PlayerSearch
@@ -427,6 +431,10 @@ export const dict: Record<Lang, Dict> = {
     'defis.matchConfirmed': '✓ Match confirmed — ELO updated!',
     'defis.matchConfirmedM': 'Match confirmed — ELO updated!',
     'defis.contestSent': 'Dispute submitted.',
+    'defis.contestRageTitleSender': 'You contest',
+    'defis.contestRageSubSender': 'Dispute sent',
+    'defis.contestRageTitleReceiver': 'Score disputed',
+    'defis.contestRageSubReceiver': 'Your score is being disputed',
     'defis.noPlayerFound': 'No player found',
 
     'defis.searchPlaceholder': 'Type a nickname…',
@@ -693,6 +701,10 @@ export const dict: Record<Lang, Dict> = {
     'defis.matchConfirmed': '✓ Partido confirmado — ¡ELO actualizado!',
     'defis.matchConfirmedM': 'Partido confirmado — ¡ELO actualizado!',
     'defis.contestSent': 'Impugnación enviada.',
+    'defis.contestRageTitleSender': 'Impugnas',
+    'defis.contestRageSubSender': 'Impugnación enviada',
+    'defis.contestRageTitleReceiver': 'Marcador impugnado',
+    'defis.contestRageSubReceiver': 'Impugnan tu marcador',
     'defis.noPlayerFound': 'Ningún jugador encontrado',
 
     'defis.searchPlaceholder': 'Escribe un apodo…',

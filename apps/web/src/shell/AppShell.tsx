@@ -9,6 +9,7 @@ import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
 import { MatchmakingOverlay } from '../components/MatchmakingOverlay';
+import { ContestRageOverlay } from '../components/ContestRageOverlay';
 
 interface AppShellProps {
   children: ReactNode;
@@ -42,6 +43,9 @@ export function AppShell({ children }: AppShellProps) {
       {/* Overlay VERSUS global : s'affiche sur n'importe quelle page quand le
           matchmaking trouve un adversaire (recherche persistante inter-pages) */}
       <MatchmakingOverlay />
+      {/* Réaction « rage » plein écran quand une game est contestée — des deux
+          côtés du litige (contesteur via API, contesté via SSE) */}
+      <ContestRageOverlay />
     </>
   );
 }
