@@ -63,8 +63,12 @@ export function TournoiDetailPage() {
   const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const prevStatusRef = useRef<Tournament['status'] | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `silent` : refresh en arrière-plan (SSE / retour de focus) qui swap les données
+  // SANS repasser par l'écran de chargement plein écran — sinon la page entière
+  // « recharge » à la moindre mutation. Le skeleton n'apparaît qu'au 1er chargement
+  // (ou quand on change de tournoi).
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const fresh = await api.tournament(id);
       // Détecte la transition registration → in_progress pendant qu'on est sur la page.
@@ -74,9 +78,9 @@ export function TournoiDetailPage() {
       prevStatusRef.current = fresh.status;
       setTournament(fresh);
     } catch {
-      setTournament(null);
+      if (!silent) setTournament(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
@@ -84,9 +88,15 @@ export function TournoiDetailPage() {
     void load();
   }, [load]);
 
+  // Refresh déclenché par les ACTIONS (toss, choix d'avantage, saisie de score,
+  // confirmation…) : silencieux lui aussi, sinon chaque clic recharge toute la
+  // page et démonte l'animation (pile-ou-face) en cours.
+  const refreshSilent = useCallback(() => load(true), [load]);
+
   // Rafraîchit la page en temps réel quand une mise à jour de tournoi ou une
-  // invitation est reçue (accept, decline, nouveau joueur, démarrage…).
-  useServerEvents(load, ['tournament:update', 'tournament:invite', 'tournament:invite_declined']);
+  // invitation est reçue (accept, decline, nouveau joueur, démarrage…). Refresh
+  // SILENCIEUX : on garde l'affichage courant et on swap les données en place.
+  useServerEvents(refreshSilent, ['tournament:update', 'tournament:invite', 'tournament:invite_declined']);
 
   if (loading) {
     return (
@@ -114,7 +124,7 @@ export function TournoiDetailPage() {
     try {
       await action();
       flash.show(successMsg);
-      await load();
+      await load(true); // refresh silencieux : pas de rechargement plein écran à chaque action
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     }
@@ -407,7 +417,7 @@ export function TournoiDetailPage() {
           {tournament.status === 'in_progress' && detailTab === 'bets' ? (
             <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
           ) : (
-            <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
+            <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={refreshSilent} />
           )}
 
           {tournament.status === 'in_progress' &&
