@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Gem, Shield, Crown } from 'lucide-react';
-import { RANK_TIERS, rankTier, type RankTier } from '@42-league/shared';
+import { RANK_TIERS, rankTier, GRANDMASTER, GRANDMASTER_TOP_N, type RankTier } from '@42-league/shared';
 import { Avatar } from '../components/Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
 import type { LeaderboardEntry } from '../lib/api';
@@ -290,6 +290,33 @@ export function GradesPage() {
               delay={i * 0.05}
             />
           ))}
+        </div>
+
+        {/* Grand Master : grade POSITIONNEL, hors barème ELO — le top N de chaque
+            discipline, qu'on gagne et perd au classement (pas un seuil d'ELO). */}
+        <div
+          className="relative mt-4 flex items-center gap-3 rounded-xl border p-3.5"
+          style={{ borderColor: `${GRANDMASTER.color}55`, background: `${GRANDMASTER.color}14` }}
+        >
+          <span
+            className="flex-shrink-0 grid place-items-center w-10 h-10 rounded-lg"
+            style={{ background: `${GRANDMASTER.color}26`, color: GRANDMASTER.color }}
+          >
+            <Crown className="w-5 h-5" strokeWidth={2.2} />
+          </span>
+          <div className="min-w-0">
+            <div
+              className="font-gaming text-sm font-extrabold uppercase tracking-[0.14em]"
+              style={{ color: GRANDMASTER.color }}
+            >
+              {GRANDMASTER.label}
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-2">
+              Grade d'élite réservé au{' '}
+              <span className="font-extrabold text-text-strong">top {GRANDMASTER_TOP_N}</span> de chaque
+              discipline. Indépendant de l'ELO : il se gagne et se perd au classement.
+            </p>
+          </div>
         </div>
       </motion.section>
     </div>

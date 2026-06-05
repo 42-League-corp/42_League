@@ -267,7 +267,7 @@ export function ProfileHeroCard({
           <div className="text-center">
             <div className="mb-0.5 text-[10px] text-muted uppercase tracking-[0.32em] font-extrabold flex items-center justify-center gap-1.5">
               ELO
-              <RankBadge elo={stats.elo} size="xs" asLink />
+              <RankBadge elo={stats.elo} rank={myRank} size="xs" asLink />
             </div>
             <div className="font-display text-[clamp(2.75rem,13vw,3.5rem)] font-black leading-none tabular-nums tracking-tighter text-gold-emboss">
               <AnimatedCounter value={stats.elo} duration={1.4} />

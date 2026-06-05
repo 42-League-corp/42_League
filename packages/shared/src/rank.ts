@@ -13,7 +13,7 @@
  * `floor` = seuil minimal du palier, utilisé comme cible de reset en fin de saison
  * (on ne repart pas de 1000 mais du plancher de son grade courant).
  */
-export type RankTierKey = 'etain' | 'bronze' | 'argent' | 'or' | 'diamant';
+export type RankTierKey = 'etain' | 'bronze' | 'argent' | 'or' | 'diamant' | 'grandmaster';
 
 export interface RankTier {
   key: RankTierKey;
@@ -49,6 +49,34 @@ export function rankTier(elo: number): RankTier {
     else break;
   }
   return tier;
+}
+
+/**
+ * Grand Master : grade d'élite POSITIONNEL (et non un seuil ELO) attribué au
+ * top {@link GRANDMASTER_TOP_N} de chaque classement (chaque discipline). Délibérément
+ * HORS de {@link RANK_TIERS} pour ne pas perturber le barème ELO (frise, planchers,
+ * reset de saison). `min` = Infinity : il n'est jamais atteint par l'ELO seul.
+ */
+export const GRANDMASTER_TOP_N = 5;
+
+export const GRANDMASTER: RankTier = {
+  key: 'grandmaster',
+  label: 'Grand Master',
+  min: Infinity,
+  floor: 1400,
+  color: '#c084fc',
+};
+
+/**
+ * Palier d'un joueur en tenant compte de sa POSITION dans le classement de sa
+ * discipline : top {@link GRANDMASTER_TOP_N} → Grand Master, sinon palier ELO classique.
+ *
+ * @param elo  score ELO du joueur dans la discipline.
+ * @param rank position (1 = 1er) ; null/0/absent = non classé → palier ELO seul.
+ */
+export function rankTierForRank(elo: number, rank?: number | null): RankTier {
+  if (rank != null && rank >= 1 && rank <= GRANDMASTER_TOP_N) return GRANDMASTER;
+  return rankTier(elo);
 }
 
 /**

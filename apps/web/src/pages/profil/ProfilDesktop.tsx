@@ -229,7 +229,7 @@ export function ProfilDesktop() {
           <div className="text-center flex-shrink-0 pl-2">
             <div className="mb-1 flex items-center justify-center gap-1.5 text-[10px] text-muted uppercase tracking-[0.28em] font-extrabold">
               ELO
-              <RankBadge elo={stats.elo} size="xs" asLink />
+              <RankBadge elo={stats.elo} rank={myRank} size="xs" asLink />
             </div>
             <div
               className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
