@@ -18,10 +18,10 @@ export interface BracketTreeProps {
 
 // Dimensions de layout (px). Un match est une carte de hauteur fixe ;
 // les cartes sont espacées verticalement pour aligner l'arbre.
-const CARD_W = 220;
-const CARD_H = 88;
-const COL_GAP = 56; // espace horizontal entre colonnes (connecteurs)
-const SLOT_H = 112; // pas vertical de base au round 1
+const CARD_W = 264;
+const CARD_H = 108;
+const COL_GAP = 64; // espace horizontal entre colonnes (connecteurs)
+const SLOT_H = 136; // pas vertical de base au round 1
 
 function roundLabel(round: number, totalRounds: number): string {
   const fromEnd = totalRounds - round;
@@ -105,7 +105,7 @@ export default function BracketTree({
         {Array.from({ length: rounds }, (_, i) => i + 1).map((round) => (
           <div
             key={`hdr-${round}`}
-            className="absolute text-[10px] uppercase tracking-wider text-muted font-semibold text-center"
+            className="absolute text-[11px] uppercase tracking-wider text-muted font-semibold text-center"
             style={{ left: colX(round), width: CARD_W, top: 0 }}
           >
             {roundLabel(round, rounds)}
@@ -213,7 +213,7 @@ function SlotRow({
 }) {
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-2 py-1.5 ${
+      className={`relative flex items-center justify-between gap-2 px-2.5 py-2.5 ${
         winner ? 'bg-gold/[0.07]' : ''
       }`}
     >
@@ -237,13 +237,13 @@ function SlotRow({
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             className="shrink-0"
           >
-            <Avatar login={login} imageUrl={avatarUrl} size="xs" />
+            <Avatar login={login} imageUrl={avatarUrl} size="sm" />
           </motion.div>
         ) : (
-          <div className="w-5 h-5 rounded-full border border-dashed border-muted/50 shrink-0" />
+          <div className="w-8 h-8 rounded-full border border-dashed border-muted/50 shrink-0" />
         )}
         <span
-          className={`text-xs truncate ${
+          className={`text-sm truncate ${
             winner ? 'text-text-strong font-bold' : login ? 'text-text' : 'text-muted'
           }`}
         >
@@ -251,7 +251,7 @@ function SlotRow({
         </span>
       </div>
       <span
-        className={`text-xs tabular-nums shrink-0 ${
+        className={`text-sm tabular-nums shrink-0 ${
           winner ? 'text-gold font-bold' : score != null && score < 0 ? 'text-red' : 'text-muted-2'
         }`}
       >
