@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crown, ChevronLeft, Flame, HelpCircle, Gift } from 'lucide-react';
+import { Crown, ChevronLeft, Flame, HelpCircle, Gift, X } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
@@ -14,7 +15,7 @@ import {
   type GoatPlayer,
   type GoatMetricKey,
 } from '../lib/goat';
-import type { LeaderboardEntry } from '../lib/api';
+import type { LeaderboardEntry, PlayedMatch } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { hasSeenGoatIntro, markGoatIntroSeen } from '../lib/storage';
 
@@ -50,8 +51,19 @@ function GoatWeightsList({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function GoatView() {
-  const { leaderboard, matches, tournaments, me } = useLeagueData();
+export function GoatView({
+  leaderboard: lbOverride,
+  matches: matchesOverride,
+}: {
+  /** Classement scopé saison (snapshot). Défaut : classement live. */
+  leaderboard?: LeaderboardEntry[];
+  /** Matchs scopés saison (filtrés par seasonId). Défaut : tous les matchs live. */
+  matches?: PlayedMatch[];
+} = {}) {
+  const live = useLeagueData();
+  const leaderboard = lbOverride ?? live.leaderboard;
+  const matches = matchesOverride ?? live.matches;
+  const { tournaments, me } = live;
   const { game } = useGameMode();
   const t = useT();
   // L'intro ne s'affiche qu'au tout premier passage ; ensuite elle est rappelable
@@ -72,37 +84,9 @@ export function GoatView() {
   const rest = ranking.slice(1);
 
   return (
-    <div className="relative">
-      {/* ── Contenu (grisé tant que l'intro est affichée) ── */}
-      <motion.div
-        animate={{
-          opacity: showIntro ? 0.35 : 1,
-          filter: showIntro ? 'blur(3px)' : 'blur(0px)',
-        }}
-        initial={false}
-        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-        className={showIntro ? 'pointer-events-none select-none' : ''}
-        aria-hidden={showIntro}
-      >
-      <div className="flex items-center justify-end mb-5">
-        {/* Bouton « ? » : réaffiche la répartition du Score au survol (et la modale au clic). */}
-        <div className="relative group">
-          <button
-            type="button"
-            onClick={() => setShowIntro(true)}
-            aria-label={t('goat.help.aria')}
-            className="w-7 h-7 rounded-full flex items-center justify-center border border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 hover:bg-gold/5 transition-colors"
-          >
-            <HelpCircle className="w-4 h-4" strokeWidth={2.4} />
-          </button>
-          <div className="absolute right-0 top-9 z-30 w-64 rounded-xl border border-gold/30 bg-bg-1/95 backdrop-blur p-3 shadow-xl opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-150">
-            <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold mb-2">
-              {t('goat.intro.scoreLabel')}
-            </div>
-            <GoatWeightsList compact />
-          </div>
-        </div>
-      </div>
+    <div>
+      {/* ── Bandeau d'en-tête : explique la page d'emblée + accès à l'aide ── */}
+      <GoatHeader onOpenHelp={() => setShowIntro(true)} />
 
       {!goat ? (
         <div className="text-center text-muted-2 py-16">
@@ -131,96 +115,194 @@ export function GoatView() {
           )}
         </>
       )}
-      </motion.div>
 
-      {/* ── Overlay d'explication (premier affichage) ── */}
-      <AnimatePresence>
-        {showIntro && (
-          <motion.div
-            key="goat-intro"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            className="absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6"
-            style={{ background: 'rgba(8,6,3,0.55)', backdropFilter: 'blur(2px)' }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-full max-w-md rounded-2xl overflow-hidden"
-              style={{
-                background: 'linear-gradient(155deg, rgba(50,38,12,0.96) 0%, rgba(20,16,7,0.98) 100%)',
-                border: '1.5px solid rgba(255,201,74,0.45)',
-                boxShadow: '0 0 50px rgba(255,201,74,0.18), inset 0 1px 0 rgba(255,215,120,0.12)',
-              }}
-            >
-              <div className="absolute -right-6 -top-6 opacity-[0.07] pointer-events-none">
-                <Crown className="w-40 h-40 text-gold" fill="currentColor" strokeWidth={0.5} />
-              </div>
-              <div className="relative p-6 sm:p-7">
-                <div className="flex items-center gap-2.5 mb-3">
-                  <Crown className="w-6 h-6 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.6)]" fill="currentColor" strokeWidth={1.5} />
-                  <span className="font-display text-xl font-black text-text-strong leading-none">
-                    {t('goat.title')}
-                  </span>
-                </div>
-                <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-4">
-                  🐐 {t('goat.sub')}
-                </div>
-                <p className="text-sm text-muted leading-relaxed">
-                  {t('goat.intro.p1.a')}<span className="text-gold/90 font-semibold">{t('goat.intro.scoreLabel')}</span>{t('goat.intro.p1.b')}
-                </p>
-                <p className="text-sm text-muted leading-relaxed mt-3">
-                  {t('goat.intro.p2.a')}
-                  <span className="text-gold/90 font-semibold">{GOAT_WEIGHTS.length} {t('goat.intro.measures')}</span>
-                  {t('goat.intro.p2.b')}
-                </p>
-                <div className="mt-3 rounded-xl border border-gold/15 bg-black/20 p-3">
-                  <GoatWeightsList />
-                </div>
-                {/* Récompense — l'info « le GOAT reçoit un truc en plus ». */}
-                <div
-                  className="mt-3 flex items-start gap-3 rounded-xl p-3"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255,201,74,0.16) 0%, rgba(255,201,74,0.05) 100%)',
-                    border: '1px solid rgba(255,201,74,0.4)',
-                  }}
-                >
-                  <Gift className="w-5 h-5 text-gold shrink-0 mt-0.5 drop-shadow-[0_1px_4px_rgba(255,201,74,0.5)]" strokeWidth={2} />
-                  <div>
-                    <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-gold">
-                      {t('goat.reward.title')}
-                    </div>
-                    <p className="text-[12px] text-muted leading-snug mt-0.5">
-                      {t('goat.reward.text')}
-                    </p>
-                  </div>
-                </div>
-                <label className="mt-5 flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-2 hover:text-muted transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={dontShowAgain}
-                    onChange={(e) => setDontShowAgain(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded cursor-pointer accent-[#ffc94a]"
-                  />
-                  {t('goat.intro.dontShowAgain')}
-                </label>
-                <button
-                  type="button"
-                  onClick={dismissIntro}
-                  className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
-                >
-                  {t('goat.intro.ok')}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Modale d'explication — rendue en portal, centrée dans la fenêtre ── */}
+      <GoatIntroModal
+        open={showIntro}
+        dontShowAgain={dontShowAgain}
+        setDontShowAgain={setDontShowAgain}
+        onClose={dismissIntro}
+      />
     </div>
+  );
+}
+
+// ─── En-tête explicite (toujours visible) ────────────────────────────────────
+// Remplace l'ancien bouton « ? » isolé : le titre + la baseline disent ce qu'est
+// la page sans rien ouvrir, et un bouton clairement libellé invite à l'aide.
+
+function GoatHeader({ onOpenHelp }: { onOpenHelp: () => void }) {
+  const t = useT();
+  return (
+    <div className="flex items-start justify-between gap-3 mb-5">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Crown className="w-4 h-4 text-gold drop-shadow-[0_1px_5px_rgba(255,201,74,0.5)]" fill="currentColor" strokeWidth={1.5} />
+          <span className="font-display text-sm font-black uppercase tracking-[0.18em] text-gold">
+            {t('goat.intro.scoreLabel')}
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-2 leading-snug mt-1 max-w-md">
+          {t('goat.tagline')}
+        </p>
+      </div>
+      {/* Bouton d'aide libellé : survol = aperçu de la répartition, clic = modale. */}
+      <div className="relative group shrink-0">
+        <button
+          type="button"
+          onClick={onOpenHelp}
+          aria-label={t('goat.help.aria')}
+          className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 px-2.5 py-1.5 text-[11px] font-semibold text-gold/85 hover:text-gold hover:border-gold/60 hover:bg-gold/5 transition-colors"
+        >
+          <HelpCircle className="w-3.5 h-3.5" strokeWidth={2.4} />
+          <span className="hidden sm:inline">{t('goat.help.button')}</span>
+        </button>
+        <div className="absolute right-0 top-10 z-30 w-64 rounded-xl border border-gold/30 bg-bg-1/95 backdrop-blur p-3 shadow-xl opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-150">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold mb-2">
+            {t('goat.intro.scoreLabel')}
+          </div>
+          <GoatWeightsList compact />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modale d'explication ─────────────────────────────────────────────────────
+// Rendue via portal en `fixed inset-0` : toujours centrée dans la fenêtre (et non
+// au milieu d'un conteneur très long, ce qui la faisait apparaître « en bas »).
+// Se ferme via la croix, le fond, ou Échap.
+
+function GoatIntroModal({
+  open,
+  dontShowAgain,
+  setDontShowAgain,
+  onClose,
+}: {
+  open: boolean;
+  dontShowAgain: boolean;
+  setDontShowAgain: (v: boolean) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+
+  // Échap pour fermer + blocage du scroll de fond tant que la modale est ouverte.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="goat-intro"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('goat.title')}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          onClick={onClose}
+          className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          style={{ background: 'rgba(8,6,3,0.7)', backdropFilter: 'blur(4px)' }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md my-auto rounded-2xl overflow-hidden"
+            style={{
+              background: 'linear-gradient(155deg, rgba(50,38,12,0.96) 0%, rgba(20,16,7,0.98) 100%)',
+              border: '1.5px solid rgba(255,201,74,0.45)',
+              boxShadow: '0 0 50px rgba(255,201,74,0.18), inset 0 1px 0 rgba(255,215,120,0.12)',
+            }}
+          >
+            <div className="absolute -right-6 -top-6 opacity-[0.07] pointer-events-none">
+              <Crown className="w-40 h-40 text-gold" fill="currentColor" strokeWidth={0.5} />
+            </div>
+            {/* Croix de fermeture — affordance claire en haut à droite. */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('common.back')}
+              className="absolute right-3 top-3 z-10 w-7 h-7 rounded-full flex items-center justify-center text-muted-2 hover:text-text-strong hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" strokeWidth={2.4} />
+            </button>
+            <div className="relative p-6 sm:p-7">
+              <div className="flex items-center gap-2.5 mb-3">
+                <Crown className="w-6 h-6 text-gold drop-shadow-[0_2px_8px_rgba(255,201,74,0.6)]" fill="currentColor" strokeWidth={1.5} />
+                <span className="font-display text-xl font-black text-text-strong leading-none">
+                  {t('goat.title')}
+                </span>
+              </div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-4">
+                🐐 {t('goat.sub')}
+              </div>
+              <p className="text-sm text-muted leading-relaxed">
+                {t('goat.intro.p1.a')}<span className="text-gold/90 font-semibold">{t('goat.intro.scoreLabel')}</span>{t('goat.intro.p1.b')}
+              </p>
+              <p className="text-sm text-muted leading-relaxed mt-3">
+                {t('goat.intro.p2.a')}
+                <span className="text-gold/90 font-semibold">{GOAT_WEIGHTS.length} {t('goat.intro.measures')}</span>
+                {t('goat.intro.p2.b')}
+              </p>
+              <div className="mt-3 rounded-xl border border-gold/15 bg-black/20 p-3">
+                <GoatWeightsList />
+              </div>
+              {/* Récompense — l'info « le GOAT reçoit un truc en plus ». */}
+              <div
+                className="mt-3 flex items-start gap-3 rounded-xl p-3"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,201,74,0.16) 0%, rgba(255,201,74,0.05) 100%)',
+                  border: '1px solid rgba(255,201,74,0.4)',
+                }}
+              >
+                <Gift className="w-5 h-5 text-gold shrink-0 mt-0.5 drop-shadow-[0_1px_4px_rgba(255,201,74,0.5)]" strokeWidth={2} />
+                <div>
+                  <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-gold">
+                    {t('goat.reward.title')}
+                  </div>
+                  <p className="text-[12px] text-muted leading-snug mt-0.5">
+                    {t('goat.reward.text')}
+                  </p>
+                </div>
+              </div>
+              <label className="mt-5 flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-2 hover:text-muted transition-colors">
+                <input
+                  type="checkbox"
+                  checked={dontShowAgain}
+                  onChange={(e) => setDontShowAgain(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded cursor-pointer accent-[#ffc94a]"
+                />
+                {t('goat.intro.dontShowAgain')}
+              </label>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 bg-gradient-to-r from-gold to-[#f5b942] hover:brightness-110 shadow-gold-glow transition-all active:scale-[0.98]"
+              >
+                {t('goat.intro.ok')}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }
 
@@ -252,7 +334,9 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
   const { entry, metrics } = player;
   const t = useT();
   return (
-    <div className="relative rounded-2xl overflow-hidden"
+    <div
+      id={isMe ? 'lb-me-row' : undefined}
+      className="relative rounded-2xl overflow-hidden scroll-mt-24"
       style={{
         background: 'linear-gradient(145deg, rgba(50,38,12,0.9) 0%, rgba(22,18,8,0.95) 100%)',
         border: '1.5px solid rgba(255,201,74,0.45)',
@@ -329,9 +413,12 @@ function ContenderCard({ player, isMe }: { player: GoatPlayer; isMe: boolean }) 
   const { entry, metrics } = player;
   const t = useT();
   return (
-    <div className={`rounded-xl p-3.5 transition-colors ${
-      isMe ? 'border border-gold/35 bg-gold/[0.04]' : 'border border-border/50 bg-white/[0.02]'
-    }`}>
+    <div
+      id={isMe ? 'lb-me-row' : undefined}
+      className={`rounded-xl p-3.5 transition-colors scroll-mt-24 ${
+        isMe ? 'border border-gold/35 bg-gold/[0.04]' : 'border border-border/50 bg-white/[0.02]'
+      }`}
+    >
       {/* En-tête de carte */}
       <div className="flex items-center gap-2.5 mb-3">
         <span className="w-7 text-center font-display font-black tabular-nums text-muted-2 text-sm shrink-0">
