@@ -510,6 +510,8 @@ export interface UserProfile {
   followPrefs?: FollowPrefs | null;
   /** Palmarès par saison (classements finaux). */
   palmares?: PalmaresEntry[];
+  /** Solde de League Coins du joueur — visible de tous. */
+  coins?: number;
 }
 
 export interface FollowPrefs {

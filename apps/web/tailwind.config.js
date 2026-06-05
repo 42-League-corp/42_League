@@ -185,6 +185,11 @@ export default {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
+        // Arc-en-ciel RGB qui parcourt le ∞ en continu (route de couleurs).
+        'rgb-road': {
+          '0%': { backgroundPosition: '0% center' },
+          '100%': { backgroundPosition: '100% center' },
+        },
         'glow-pulse': {
           '0%, 100%': {
             boxShadow:

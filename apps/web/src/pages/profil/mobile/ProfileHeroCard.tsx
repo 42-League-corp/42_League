@@ -39,6 +39,8 @@ interface ProfileHeroCardProps {
   equippedBanner?: string | null;
   /** Hôte 42 si le joueur est actuellement connecté sur un PC du cluster. */
   onlineHost?: string;
+  /** Solde de League Coins (pour les fiches d'autres joueurs ; `me.coins` est utilisé quand isMe). */
+  coins?: number;
 }
 
 /**
@@ -55,6 +57,7 @@ export function ProfileHeroCard({
   equippedBadge: equippedBadgeProp,
   equippedBanner: equippedBannerProp,
   onlineHost,
+  coins: coinsProp,
 }: ProfileHeroCardProps) {
   const { me, leaderboard, refresh } = useLeagueData();
   const { game } = useGameMode();
@@ -304,18 +307,22 @@ export function ProfileHeroCard({
           />
         </div>
 
-        {/* Solde League Coin — sur SON profil. Bandeau lisible avec libellé. */}
-        {isMe && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-violet-500/10 border border-violet-400/25">
-            <img src="/42coin.png" alt="" className="w-5 h-5 shrink-0" />
-            <span className="text-[11px] uppercase tracking-[0.16em] font-extrabold text-violet-200/90">
-              League Coins
-            </span>
-            <span className="ml-auto font-display text-xl font-black tabular-nums text-violet-100">
-              <CoinCount login={me?.login} value={me?.coins ?? 0} />
-            </span>
-          </div>
-        )}
+        {/* Solde League Coin — visible sur tous les profils. */}
+        {(() => {
+          const coinLogin = user?.login ?? null;
+          const coinValue = isMe ? (me?.coins ?? 0) : (coinsProp ?? 0);
+          return (
+            <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-violet-500/10 border border-violet-400/25">
+              <img src="/42coin.png" alt="" className="w-5 h-5 shrink-0" />
+              <span className="text-[11px] uppercase tracking-[0.16em] font-extrabold text-violet-200/90">
+                League Coins
+              </span>
+              <span className="ml-auto font-display text-xl font-black tabular-nums text-violet-100">
+                <CoinCount login={coinLogin} value={coinValue} />
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Autres disciplines — section lisible, intégrée dans la carte héro */}
         {crossGameBadges.length > 0 && (

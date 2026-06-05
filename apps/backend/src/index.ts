@@ -1263,6 +1263,8 @@ app.get('/users/:login', async (c) => {
     recent: played,
     badges,
     palmares,
+    // Solde de League Coins — visible de tous sur la fiche d'un joueur.
+    coins: user.leagueCoins ?? 0,
     // Cosmétiques équipés (pour afficher couleur titre / badge / bannière sur la fiche).
     titleColor: cosmetics.titleColor,
     equippedBadge: cosmetics.equippedBadge,

@@ -10,7 +10,7 @@
         "--",
         "bash",
         "-lc",
-        "cd /home/adrien/projects/42_League && npm run dev -w @42-league/web"
+        "cd /home/adrien/42_League && npm run dev -w @42-league/web"
       ],
       "port": 5173
     },
