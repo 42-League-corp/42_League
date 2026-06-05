@@ -17,11 +17,13 @@ export interface CoinFlipProps {
   winnerName?: string;
   onFlip?: () => void;
   t: (k: string) => string;
+  /** Diamètre de la pièce en px (défaut 96 ; l'overlay l'affiche en grand). */
+  size?: number;
 }
 
 const COIN = '/42coin.png';
 
-export default function CoinFlip({ side, flipping, winnerName, onFlip, t }: CoinFlipProps) {
+export default function CoinFlip({ side, flipping, winnerName, onFlip, t, size = 96 }: CoinFlipProps) {
   const resolved = side !== null && !flipping;
 
   // Angle final : la face « pile » (heads) tombe à 0°, « face » (tails) à 180°.
@@ -34,7 +36,7 @@ export default function CoinFlip({ side, flipping, winnerName, onFlip, t }: Coin
       <div style={{ perspective: 800 }}>
         <motion.div
           className="relative"
-          style={{ width: 96, height: 96, transformStyle: 'preserve-3d' }}
+          style={{ width: size, height: size, transformStyle: 'preserve-3d' }}
           animate={
             flipping
               ? { rotateY: [0, 360, 720, 1080] }

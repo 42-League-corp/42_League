@@ -12,6 +12,7 @@ import { api, type Game, type Tournament, type TournamentMatch, type TournamentI
 import { PlayerSearch } from './defis/shared/PlayerSearch';
 import BracketTree from '../components/tournois/BracketTree';
 import CoinFlip from '../components/tournois/CoinFlip';
+import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import AdvantagePicker from '../components/tournois/AdvantagePicker';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
@@ -830,40 +831,43 @@ function BracketMatch({
       <PlayerRow login={match.playerALogin} score={match.scoreA} winner={winnerA} />
       <PlayerRow login={match.playerBLogin} score={match.scoreB} winner={winnerB} />
 
-      {/* ── Duel : pile-ou-face partagé, puis choix de l'avantage ── */}
+      {/* ── Duel : pile-ou-face partagé, puis choix de l'avantage ──
+          Le LANCER (rotation + annonce du résultat) s'affiche EN GRAND, centré
+          sur toute la page, via CoinFlipOverlay — il reste jusqu'à ce que le
+          résultat soit annoncé. Ici, en inline, on ne garde que le bouton
+          d'initiation (avant le lancer) et le choix d'avantage (après). */}
       {duelPending && (
         <div className="mt-2 pt-2 border-t border-border/40">
-          {!tossDone ? (
+          {!tossDone && !flipping && (
             <CoinFlip
               side={match.tossSide ?? null}
-              flipping={flipping}
-              winnerName={tossWinnerName || undefined}
+              flipping={false}
               onFlip={handleToss}
               t={t}
             />
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <CoinFlip
-                side={match.tossSide ?? null}
-                flipping={false}
-                winnerName={tossWinnerName}
-                onFlip={undefined}
-                t={t}
-              />
-              {revealAdvantage && (
-                <AdvantagePicker
-                  advantage={advantage}
-                  isWinner={iAmTossWinner}
-                  pick={match.advantagePick ?? null}
-                  opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
-                  onPick={handlePickAdvantage}
-                  t={t}
-                />
-              )}
-            </div>
+          )}
+          {tossDone && revealAdvantage && (
+            <AdvantagePicker
+              advantage={advantage}
+              isWinner={iAmTossWinner}
+              pick={match.advantagePick ?? null}
+              opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
+              onPick={handlePickAdvantage}
+              t={t}
+            />
           )}
         </div>
       )}
+
+      {/* Cinématique plein écran du pile-ou-face : ouverte pendant la rotation
+          puis l'annonce du gagnant, fermée quand on enchaîne sur l'avantage. */}
+      <CoinFlipOverlay
+        open={duelPending && (flipping || (tossDone && !revealAdvantage))}
+        side={match.tossSide ?? null}
+        flipping={flipping}
+        winnerName={tossWinnerName || undefined}
+        t={t}
+      />
 
       {/* Récap de l'avantage choisi, juste avant la saisie du score. */}
       {isBracket && advantageDone && canRecord && !recorded && (
