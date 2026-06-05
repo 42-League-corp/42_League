@@ -66,7 +66,12 @@ export function ContestRageOverlay() {
   }, [trigger]);
 
   // Côté contesté : event SSE temps réel (faible debounce pour rester punchy).
-  useServerEvents(() => trigger('receiver'), SSE_TYPES, { debounceMs: 50 });
+  // `fireOnReopen: false` → l'animation ne se rejoue PAS à chaque retour de focus
+  // / changement de page (sinon le rattrapage SSE la redéclenche sans contestation).
+  useServerEvents(() => trigger('receiver'), SSE_TYPES, {
+    debounceMs: 50,
+    fireOnReopen: false,
+  });
 
   // Auto-dismiss.
   useEffect(() => {

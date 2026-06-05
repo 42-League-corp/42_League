@@ -23,11 +23,20 @@ import { getToken } from '../lib/storage';
  *
  * Le callback est conservé dans une ref → changer son identité entre deux
  * rendus NE relance PAS la connexion (seul `types` / `enabled` le font).
+ *
+ * `fireOnReopen` (défaut true) : au retour au premier plan (focus / online /
+ * visibilité), on rejoue `onEvent` une fois pour rattraper ce qu'on a manqué en
+ * veille. Parfait pour un re-fetch, mais à désactiver si `onEvent` a un effet de
+ * bord visible (ex. animation) qu'on ne veut déclencher QUE sur un vrai event.
  */
 export function useServerEvents(
   onEvent: () => void,
   types: string[],
-  { enabled = true, debounceMs = 300 }: { enabled?: boolean; debounceMs?: number } = {},
+  {
+    enabled = true,
+    debounceMs = 300,
+    fireOnReopen = true,
+  }: { enabled?: boolean; debounceMs?: number; fireOnReopen?: boolean } = {},
 ) {
   const cbRef = useRef(onEvent);
   useEffect(() => {
@@ -111,7 +120,9 @@ export function useServerEvents(
         es?.close();
         es = undefined;
         void connect();
-        fire();
+        // Rattrapage des events manqués en veille — seulement si l'appelant le
+        // veut (sinon un effet de bord visible se rejouerait à chaque focus).
+        if (fireOnReopen) fire();
       }, 150);
     };
     const onVisibility = () => {
@@ -137,5 +148,5 @@ export function useServerEvents(
       document.removeEventListener('visibilitychange', onVisibility);
       es?.close();
     };
-  }, [enabled, typesKey, debounceMs]);
+  }, [enabled, typesKey, debounceMs, fireOnReopen]);
 }
