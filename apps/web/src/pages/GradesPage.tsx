@@ -11,15 +11,21 @@ import type { LeaderboardEntry } from '../lib/api';
 
 /** ELO de départ de la frise (un peu avant Étain pour respirer). */
 const TRACK_MIN = 850;
+/**
+ * Part horizontale réservée au barème ELO. Les (100 − x)% de droite forment la
+ * bande terminale « Grand Master » (positionnelle : top N de la discipline, hors
+ * ELO) — posée à la suite des paliers, dans leur continuité.
+ */
+const ELO_SPAN_PCT = 85;
 /** Deux joueurs à ≤ N ELO d'écart sont regroupés dans une même colonne. */
 const CLUSTER_RADIUS = 18;
-/** Avatars max par colonne avant le badge "+N". */
-const MAX_PER_COL = 6;
+/** Avatars empilés (superposés) avant le badge "+N". Le reste se lit au survol. */
+const MAX_PER_COL = 3;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function TierIcon({ tierKey, className, style }: { tierKey: string; className?: string; style?: React.CSSProperties }) {
-  const Icon = tierKey === 'diamant' ? Gem : Shield;
+  const Icon = tierKey === 'grandmaster' ? Crown : tierKey === 'diamant' ? Gem : Shield;
   return <Icon className={className} style={style} strokeWidth={2.2} />;
 }
 
@@ -63,7 +69,8 @@ export function GradesPage() {
   );
 
   const toPct = useMemo(
-    () => (elo: number) => Math.max(0, Math.min(100, ((elo - TRACK_MIN) / (trackMax - TRACK_MIN)) * 100)),
+    () => (elo: number) =>
+      Math.max(0, Math.min(ELO_SPAN_PCT, ((elo - TRACK_MIN) / (trackMax - TRACK_MIN)) * ELO_SPAN_PCT)),
     [trackMax],
   );
 
@@ -81,8 +88,12 @@ export function GradesPage() {
 
   const champion = leaderboard.find((e) => e.rank === 1) ?? null;
 
+  // Grand Master : grade POSITIONNEL (top N de la discipline), superposé au barème ELO.
+  const gmCount = Math.min(GRANDMASTER_TOP_N, leaderboard.length);
+
   // Mon standing.
   const myEntry = leaderboard.find((e) => e.login === myLogin) ?? null;
+  const isGm = !!myEntry && myEntry.rank >= 1 && myEntry.rank <= GRANDMASTER_TOP_N;
   const myTier = myEntry ? rankTier(myEntry.elo) : null;
   const nextTier = myEntry ? RANK_TIERS.find((t) => t.min > myEntry.elo) ?? null : null;
   const ptsToNext = nextTier && myEntry ? nextTier.min - myEntry.elo : null;
@@ -91,13 +102,17 @@ export function GradesPage() {
       ? Math.min(100, Math.max(2, ((myEntry.elo - myTier.min) / (nextTier.min - myTier.min)) * 100))
       : null;
 
-  // Segments de la frise (un par palier).
-  const segments = RANK_TIERS.map((tier, i) => {
-    const nextMin = RANK_TIERS[i + 1]?.min ?? trackMax;
-    const left = toPct(Math.max(tier.min, TRACK_MIN));
-    const right = toPct(Math.min(nextMin, trackMax));
-    return { tier, left, width: right - left, isLast: i === RANK_TIERS.length - 1 };
-  });
+  // Segments de la frise : un par palier ELO, PUIS la bande terminale Grand Master
+  // (top N de la discipline) posée à la suite, dans la continuité des autres.
+  const segments = [
+    ...RANK_TIERS.map((tier, i) => {
+      const nextMin = RANK_TIERS[i + 1]?.min ?? trackMax;
+      const left = toPct(Math.max(tier.min, TRACK_MIN));
+      const right = toPct(Math.min(nextMin, trackMax));
+      return { tier, left, width: right - left, isLast: false };
+    }),
+    { tier: GRANDMASTER, left: ELO_SPAN_PCT, width: 100 - ELO_SPAN_PCT, isLast: true },
+  ];
 
   // Bornes ELO affichées sous la frise (début + chaque changement de palier).
   const boundaries = [
@@ -119,12 +134,6 @@ export function GradesPage() {
           className="absolute inset-x-0 top-0 h-56 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 0%, rgba(255,201,74,0.22), transparent 65%)' }}
         />
-        <div className="absolute inset-x-0 top-0 h-64 pointer-events-none overflow-hidden opacity-30 [mask-image:radial-gradient(ellipse_70%_100%_at_50%_0%,black,transparent_72%)]">
-          <div
-            className="absolute left-1/2 top-0 aspect-square w-[1200px] max-w-none animate-spin-sun"
-            style={{ background: 'repeating-conic-gradient(rgba(255,201,74,0.12) 0deg 5deg, transparent 5deg 16deg)' }}
-          />
-        </div>
         <div aria-hidden className="absolute inset-0 hud-grid opacity-40 pointer-events-none" />
 
         <div className="relative p-5 sm:p-6">
@@ -279,44 +288,26 @@ export function GradesPage() {
           — personne ne reste coincé sous le Bronze d'une saison à l'autre.
         </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {RANK_TIERS.map((tier, i) => (
             <TierCard
               key={tier.key}
               tier={tier}
               max={RANK_TIERS[i + 1]?.min ?? null}
               count={countByTier.get(tier.key) ?? 0}
-              isMine={myTier?.key === tier.key}
+              isMine={!isGm && myTier?.key === tier.key}
               delay={i * 0.05}
             />
           ))}
-        </div>
-
-        {/* Grand Master : grade POSITIONNEL, hors barème ELO — le top N de chaque
-            discipline, qu'on gagne et perd au classement (pas un seuil d'ELO). */}
-        <div
-          className="relative mt-4 flex items-center gap-3 rounded-xl border p-3.5"
-          style={{ borderColor: `${GRANDMASTER.color}55`, background: `${GRANDMASTER.color}14` }}
-        >
-          <span
-            className="flex-shrink-0 grid place-items-center w-10 h-10 rounded-lg"
-            style={{ background: `${GRANDMASTER.color}26`, color: GRANDMASTER.color }}
-          >
-            <Crown className="w-5 h-5" strokeWidth={2.2} />
-          </span>
-          <div className="min-w-0">
-            <div
-              className="font-gaming text-sm font-extrabold uppercase tracking-[0.14em]"
-              style={{ color: GRANDMASTER.color }}
-            >
-              {GRANDMASTER.label}
-            </div>
-            <p className="text-[11px] leading-relaxed text-muted-2">
-              Grade d'élite réservé au{' '}
-              <span className="font-extrabold text-text-strong">top {GRANDMASTER_TOP_N}</span> de chaque
-              discipline. Indépendant de l'ELO : il se gagne et se perd au classement.
-            </p>
-          </div>
+          {/* Grand Master « à la suite » des autres : même carte, top N de la discipline. */}
+          <TierCard
+            key="grandmaster"
+            tier={GRANDMASTER}
+            max={null}
+            count={gmCount}
+            isMine={isGm}
+            delay={RANK_TIERS.length * 0.05}
+          />
         </div>
       </motion.section>
     </div>
@@ -349,58 +340,86 @@ function FriseTrack({
     <>
       {/* ── Colonnes d'avatars ── */}
       {clusters.map((cluster, ci) => {
-        const visible = cluster.entries.slice(0, MAX_PER_COL);
-        const overflow = cluster.entries.length - visible.length;
         const tier = rankTier(cluster.center);
         const hasMe = cluster.entries.some((e) => e.login === myEntry?.login);
+        // Du mieux classé au moins bien, pour la pile ET le popover.
+        const sorted = [...cluster.entries].sort((a, b) => a.rank - b.rank);
+        const pile = sorted.slice(0, MAX_PER_COL);
+        const overflow = sorted.length - pile.length;
+        const multi = cluster.entries.length > 1;
         return (
           <div
             key={ci}
-            className="absolute flex flex-col-reverse items-center"
-            style={{ left: `${cluster.pct}%`, bottom: TRACK_BOTTOM + TRACK_H + 8, transform: 'translateX(-50%)', gap: 4 }}
+            className="group absolute flex flex-col-reverse items-center"
+            style={{ left: `${cluster.pct}%`, bottom: TRACK_BOTTOM + TRACK_H + 8, transform: 'translateX(-50%)' }}
           >
             {/* Connecteur vers la barre */}
             <div className="w-px flex-shrink-0" style={{ height: 8, background: `${tier.color}${hasMe ? 'dd' : '50'}` }} />
 
-            {visible.map((entry) => {
-              const isMe = entry.login === myEntry?.login;
-              const isChamp = entry.login === championLogin;
-              return (
-                <Link
-                  key={entry.login}
-                  to={`/player/${entry.login}`}
-                  title={`${fullName(entry)} · ${entry.elo} ELO`}
-                  className="block flex-shrink-0 transition-transform hover:scale-110 hover:z-20 relative"
-                >
-                  {isChamp && (
-                    <Crown
-                      className="absolute -top-3 left-1/2 -translate-x-1/2 w-3.5 h-3.5 text-gold z-10 drop-shadow-[0_1px_3px_rgba(255,201,74,0.7)]"
-                      strokeWidth={2.5}
-                      fill="currentColor"
-                    />
-                  )}
-                  <div
-                    className="rounded-full"
-                    style={
-                      isMe
-                        ? { padding: 2, background: `linear-gradient(135deg, ${myTierColor ?? '#ffc94a'}, ${myTierColor ?? '#ffc94a'}66)` }
-                        : undefined
-                    }
+            {/* Pile compacte d'avatars superposés. Détail complet au survol. */}
+            <div className="relative flex flex-col-reverse items-center">
+              {pile.map((entry, i) => {
+                const isMe = entry.login === myEntry?.login;
+                const isChamp = entry.login === championLogin;
+                return (
+                  <Link
+                    key={entry.login}
+                    to={`/player/${entry.login}`}
+                    title={`${fullName(entry)} · ${entry.elo} ELO`}
+                    className="block flex-shrink-0 relative transition-transform hover:!scale-110 hover:!z-20"
+                    style={{ marginBottom: i === 0 ? 0 : -9, zIndex: MAX_PER_COL - i }}
                   >
-                    <Avatar login={entry.login} imageUrl={entry.imageUrl} size={isMe ? 'sm' : 'xs'} className={isMe ? 'ring-1 ring-bg-1' : ''} />
-                  </div>
-                </Link>
-              );
-            })}
+                    {isChamp && (
+                      <Crown
+                        className="absolute -top-3 left-1/2 -translate-x-1/2 w-3.5 h-3.5 text-gold z-10 drop-shadow-[0_1px_3px_rgba(255,201,74,0.7)]"
+                        strokeWidth={2.5}
+                        fill="currentColor"
+                      />
+                    )}
+                    <div
+                      className="rounded-full ring-1 ring-bg-1"
+                      style={
+                        isMe
+                          ? { padding: 2, background: `linear-gradient(135deg, ${myTierColor ?? '#ffc94a'}, ${myTierColor ?? '#ffc94a'}66)` }
+                          : undefined
+                      }
+                    >
+                      <Avatar login={entry.login} imageUrl={entry.imageUrl} size={isMe ? 'sm' : 'xs'} className={isMe ? 'ring-1 ring-bg-1' : ''} />
+                    </div>
+                  </Link>
+                );
+              })}
 
-            {overflow > 0 && (
-              <div
-                className="flex items-center justify-center rounded-full font-extrabold flex-shrink-0"
-                style={{ width: 22, height: 22, fontSize: 8, color: tier.color, border: `1px solid ${tier.color}55`, background: `${tier.color}1a` }}
-              >
-                +{overflow}
-              </div>
-            )}
+              {overflow > 0 && (
+                <div
+                  className="flex items-center justify-center rounded-full font-extrabold flex-shrink-0 ring-1 ring-bg-1"
+                  style={{ width: 22, height: 22, fontSize: 8, marginBottom: -9, zIndex: 0, color: tier.color, border: `1px solid ${tier.color}55`, background: `${tier.color}1a` }}
+                >
+                  +{overflow}
+                </div>
+              )}
+
+              {/* Popover au survol : qui est exactement à ce stade. */}
+              {multi && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 w-max max-w-[210px]">
+                  <div className="rounded-lg border border-border/70 bg-bg-1/95 backdrop-blur px-2 py-1.5 shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                    <div
+                      className="text-[8px] font-gaming font-extrabold uppercase tracking-widest mb-1"
+                      style={{ color: tier.color }}
+                    >
+                      {cluster.entries.length} au même stade
+                    </div>
+                    {sorted.map((entry) => (
+                      <div key={entry.login} className="flex items-center gap-1.5 py-0.5">
+                        <Avatar login={entry.login} imageUrl={entry.imageUrl} size="xs" />
+                        <span className="text-[10px] text-text truncate flex-1">{fullName(entry)}</span>
+                        <span className="text-[9px] font-mono tabular-nums text-muted-2">{entry.elo}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
@@ -514,9 +533,9 @@ function TierCard({
       <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.12em]" style={{ color: tier.color }}>
         {tier.label}
       </div>
-      {/* ELO de la catégorie (changement de palier) */}
+      {/* Plage ELO du palier — ou « Top N » pour le Grand Master (positionnel). */}
       <div className="font-mono text-[10px] font-bold text-muted-2 tabular-nums mt-0.5">
-        {max ? `${tier.min} – ${max - 1}` : `${tier.min} +`}
+        {tier.key === 'grandmaster' ? `Top ${GRANDMASTER_TOP_N}` : max ? `${tier.min} – ${max - 1}` : `${tier.min} +`}
       </div>
       <div className="mt-2 pt-2 border-t border-border/50">
         <span className="font-display text-lg font-black tabular-nums text-text-strong leading-none">{count}</span>
