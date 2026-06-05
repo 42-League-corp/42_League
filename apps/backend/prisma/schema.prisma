@@ -319,6 +319,10 @@ model TournamentMatch {
   recordedByLogin String?   @map("recorded_by_login")
   recordedAt      DateTime? @map("recorded_at")
   confirmedAt     DateTime? @map("confirmed_at")
+  // Verrou de paris : posé au PREMIER score saisi sur ce match, JAMAIS remis à
+  // null (même si le score est ensuite rejeté/réinitialisé). Empêche la
+  // réouverture du marché de paris une fois qu'un score a été divulgué.
+  betsLockedAt    DateTime? @map("bets_locked_at")
   // Pile-ou-face d'avant-duel : désigne qui choisit son avantage (résultat partagé).
   tossWinnerLogin String?   @map("toss_winner_login") // gagnant du pile-ou-face
   tossSide        String?   @map("toss_side") // 'heads' | 'tails' (face affichée par l'anim)

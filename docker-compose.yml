@@ -4,10 +4,13 @@ services:
     container_name: league-postgres
     environment:
       POSTGRES_USER: league
-      POSTGRES_PASSWORD: league
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-league}
       POSTGRES_DB: league
     ports:
-      - "5432:5432"
+      # Loopback uniquement : la base de dev n'est PAS exposée au réseau (LAN
+      # campus). Docker contourne UFW — sans le préfixe 127.0.0.1, n'importe qui
+      # sur le sous-réseau pourrait s'y connecter avec des identifiants triviaux.
+      - "127.0.0.1:5432:5432"
     volumes:
       - league_pgdata:/var/lib/postgresql/data
     healthcheck:

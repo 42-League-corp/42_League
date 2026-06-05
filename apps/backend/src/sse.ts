@@ -8,9 +8,30 @@ export interface SseEvent {
 // login → active SSE connections for that user
 const connections = new Map<string, Set<SSEStreamingApi>>();
 
-export function registerSse(login: string, stream: SSEStreamingApi): () => void {
+// Plafond de flux SSE simultanés PAR utilisateur. Empêche l'épuisement du pool
+// de sockets / de la mémoire serveur : sans borne, un client pouvait ouvrir des
+// centaines de connexions /events jamais refermées (chaque broadcast itère alors
+// sur toutes) et rendre le site indisponible. Les admins en sont exemptés
+// (`unlimited`) pour tester librement (multi-onglets / outils).
+const MAX_SSE_PER_LOGIN = 5;
+
+export function registerSse(
+  login: string,
+  stream: SSEStreamingApi,
+  opts: { unlimited?: boolean } = {},
+): () => void {
   if (!connections.has(login)) connections.set(login, new Set());
   const set = connections.get(login)!;
+  // Au-delà du plafond, on ferme la connexion la PLUS ANCIENNE (le Set conserve
+  // l'ordre d'insertion) pour faire de la place — borne stricte par login.
+  if (!opts.unlimited) {
+    while (set.size >= MAX_SSE_PER_LOGIN) {
+      const oldest = set.values().next().value as SSEStreamingApi | undefined;
+      if (!oldest) break;
+      set.delete(oldest);
+      void oldest.close().catch(() => {});
+    }
+  }
   set.add(stream);
   return () => {
     set.delete(stream);

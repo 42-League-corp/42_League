@@ -26,8 +26,12 @@ async function startLoginFlow(): Promise<AuthStatus> {
   }
 
   const parsed = new URL(finalUrl);
-  const token = parsed.searchParams.get('token');
-  const login = parsed.searchParams.get('login');
+  // Le backend renvoie le token dans le FRAGMENT (#token=…) — non transmis aux
+  // serveurs, absent des logs/Referer (aligné sur le flux web). On lit donc le
+  // hash en priorité, avec repli sur la query pour rétro-compatibilité.
+  const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+  const token = hashParams.get('token') ?? parsed.searchParams.get('token');
+  const login = parsed.searchParams.get('login') ?? hashParams.get('login');
   if (!token || !login) {
     throw new Error('OAuth redirect missing token or login');
   }
