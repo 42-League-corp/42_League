@@ -450,7 +450,8 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
           bg-gradient-to-br from-bg-2/80 to-bg-1/90
           flex items-center gap-5 px-7 py-6
           transition-all duration-300 text-left
-          active:scale-[0.98]`}
+          active:scale-[0.98]
+          ${kind === 'ffa' ? 'md:col-span-2 md:w-[calc(50%-0.5rem)] md:mx-auto' : ''}`}
         style={{ boxShadow: meta.glow }}
       >
         {/* Gradient d'accent en background */}

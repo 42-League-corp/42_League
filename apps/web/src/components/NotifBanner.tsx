@@ -342,9 +342,9 @@ export function NotifBanner() {
           return (
           <Row key={c.id} accent={color}>
             <Meta>
-              <span style={{ fontSize: 14 }}>{GAME_EMOJI[game]}</span>
+              <span style={{ fontSize: 16 }}>{GAME_EMOJI[game]}</span>
               <span style={{ color, fontWeight: 700 }}>{c.challengerLogin}</span>
-              {' te défie en duel ⚔️'}
+              {' te défie en duel'}
             </Meta>
             <Actions>
               <ConfirmBtn disabled={busy.has(c.id)} onClick={() => acceptDuel(c.id)}>
@@ -365,7 +365,7 @@ export function NotifBanner() {
           return (
           <Row key={p.id} accent={color}>
             <Meta>
-              <span style={{ fontSize: 14 }}>{GAME_EMOJI[game]}</span>
+              <span style={{ fontSize: 16 }}>{GAME_EMOJI[game]}</span>
               <span style={{ color, fontWeight: 700 }}>{p.declarerLogin}</span>
               {' a déclaré :'}
             </Meta>
@@ -407,18 +407,21 @@ export function NotifBanner() {
 // ─── Sous-composants de présentation (styles identiques à l'extension) ─────────
 
 function Row({ children, accent }: { children: React.ReactNode; accent?: string }) {
+  // Chaque case est franchement teintée à la couleur de SA discipline : voile
+  // diagonal + bordure pleine + liseré gauche, pour qu'un babyfoot (jaune), un
+  // smash (rouge), un échecs (vert) ou un SF (orange) se distinguent au premier
+  // coup d'œil — y compris quand plusieurs disciplines coexistent dans le popup.
+  const tint = accent ?? '#3a4658';
   return (
     <div
       style={{
+        margin: 8,
         padding: '10px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        // Liseré + voile teinté à la couleur de la discipline du défi/score.
-        ...(accent
-          ? {
-              borderLeft: `3px solid ${accent}`,
-              background: `linear-gradient(90deg, ${accent}1f 0%, transparent 55%)`,
-            }
-          : {}),
+        borderRadius: 8,
+        border: `1px solid ${tint}59`,
+        borderLeft: `3px solid ${tint}`,
+        background: `linear-gradient(135deg, ${tint}2b 0%, ${tint}0d 55%, rgba(255,255,255,0.02) 100%)`,
+        boxShadow: `0 1px 6px ${tint}1f`,
       }}
     >
       {children}

@@ -51,9 +51,12 @@ function ticks(min: number, max: number, count = 5): number[] {
  * Décalage (base px) du i-ème membre déployé en cercle autour du centre d'un amas.
  * Le rayon grandit légèrement quand l'amas est dense pour éviter les recouvrements.
  */
+/** Rayon (base px) de l'éventail déployé d'un amas de `total` membres. */
+const fanRadius = (total: number) => FAN_R * (total > 6 ? 1 + (total - 6) * 0.12 : 1);
+
 function fanOffset(i: number, total: number): { x: number; y: number } {
   if (total <= 1) return { x: 0, y: 0 };
-  const r = FAN_R * (total > 6 ? 1 + (total - 6) * 0.12 : 1);
+  const r = fanRadius(total);
   // On démarre en haut (-90°) et on tourne dans le sens horaire.
   const a = -Math.PI / 2 + (i / total) * Math.PI * 2;
   return { x: Math.cos(a) * r, y: Math.sin(a) * r };
@@ -379,6 +382,15 @@ export function LeaderboardScatter({
             const openFan = () => multi && setOpenCluster(c.id);
             const closeFan = () => setOpenCluster((o) => (o === c.id ? null : o));
 
+            // Rayon (écran, px) de la zone de survol CONTINUE de l'amas. Sans elle,
+            // la zone sensible se limite à l'union des têtes : déployées en éventail,
+            // les trous entre elles déclenchent un mouseleave → l'amas se replie puis
+            // se redéploie en boucle (clignotement). Le disque comble ces trous : tant
+            // que la souris reste dans l'amas (replié ou déployé), il reste ouvert.
+            const hitR = open
+              ? fanRadius(c.members.length) * view.scale + 26
+              : CLUMP_STEP * Math.sqrt(Math.max(0, c.members.length - 1)) * view.scale + DOT / 2 + 6;
+
             return (
               <div
                 key={c.id}
@@ -390,6 +402,22 @@ export function LeaderboardScatter({
                   setHovered((h) => (c.members.some((m) => m.login === h) ? null : h));
                 }}
               >
+                {/* Zone de survol continue (invisible) — comble les trous de l'éventail
+                    pour éviter le clignotement. Sous les têtes (rendu avant), donc ne
+                    capte le pointeur que dans les espaces vides entre elles. */}
+                {multi && (
+                  <span
+                    aria-hidden
+                    className="absolute rounded-full"
+                    style={{
+                      left: 0,
+                      top: 0,
+                      width: hitR * 2,
+                      height: hitR * 2,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  />
+                )}
                 <AnimatePresence>
                   {c.members.map((e, i) => {
                     const spread = open && multi;

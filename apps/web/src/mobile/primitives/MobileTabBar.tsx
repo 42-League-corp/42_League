@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Swords, Trophy, BarChart3, Award, User, ShoppingBag } from 'lucide-react';
+import { Swords, Trophy, BarChart3, Award, User } from 'lucide-react';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 import { haptic } from '../feedback/useHaptic';
@@ -17,7 +17,6 @@ const TABS: TabDef[] = [
   { to: '/tournaments', labelKey: 'nav.tournois', Icon: Trophy },
   { to: '/leaderboard', labelKey: 'nav.leaderboard', Icon: BarChart3 },
   { to: '/trophies', labelKey: 'nav.trophees', Icon: Award },
-  { to: '/shop', labelKey: 'nav.shop', Icon: ShoppingBag },
   { to: '/profile', labelKey: 'nav.profil', Icon: User },
 ];
 
@@ -67,6 +66,14 @@ export function MobileTabBar() {
     >
       {/* Filet doré décoratif en haut */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none" />
+
+      {/* Filet opaque sous la barre : couvre la safe-area-inset-bottom en dur
+          (le glass de la nav est translucide → sans ça, le contenu scrollé
+          transparaissait dans la zone du home indicator). */}
+      <div
+        className="absolute bottom-0 left-0 right-0 bg-bg-0 pointer-events-none"
+        style={{ height: 'env(safe-area-inset-bottom)' }}
+      />
 
       {/* Indicateur fluide qui se déplace */}
       {idx >= 0 && tabWidth > 0 && (

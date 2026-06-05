@@ -22,6 +22,7 @@ import { NotificationBell } from '../components/NotificationBell';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
+import { GAME_META } from '../lib/gameMeta';
 import { pickRating } from '../lib/gameStats';
 import { useT } from '../lib/i18n';
 
@@ -95,7 +96,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
               draggable={false}
             />
             <div className="text-[9px] text-brass/80 uppercase tracking-[0.2em] font-bold text-center">
-              Babyfoot · Ranked
+              {GAME_META[game].label} · Ranked
             </div>
           </NavLink>
         </div>

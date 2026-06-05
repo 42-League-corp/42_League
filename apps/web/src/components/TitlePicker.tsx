@@ -49,13 +49,9 @@ export function TitlePicker({ className }: { className?: string }) {
     };
   }, [open]);
 
-  // Pas de titres possédés : indice discret (pas de sélecteur).
+  // Pas de titres possédés : rien à afficher (ni indice, ni sélecteur).
   if (owned.length === 0) {
-    return (
-      <div className={`text-[10px] text-muted-2 italic ${className ?? ''}`}>
-        {t('profil.title.earnHint')}
-      </div>
-    );
+    return null;
   }
 
   async function select(label: string | null) {

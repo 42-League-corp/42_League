@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Crosshair, Settings } from 'lucide-react';
+import { Shield, Crosshair, Settings, ShoppingBag } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { NotificationBell } from '../../components/NotificationBell';
 import { TesterSwitchMobileIcon } from '../../components/TesterSwitch';
@@ -107,6 +107,16 @@ export function MobileHeader() {
 
         {/* Tester en mode user — petite icône à côté de Réglages (staging + admins) */}
         <TesterSwitchMobileIcon />
+
+        {/* Boutique — déplacée ici depuis la tab bar du bas */}
+        <NavLink
+          to="/shop"
+          onClick={() => haptic('selection')}
+          aria-label={t('nav.shop')}
+          className="relative flex items-center justify-center w-9 h-9 rounded-full text-gold active:scale-90 transition-transform tap-transparent"
+        >
+          <ShoppingBag className="w-[18px] h-[18px]" strokeWidth={2.2} />
+        </NavLink>
 
         {/* Réglages — rouage, à gauche des notifs (comme la version web) */}
         <NavLink

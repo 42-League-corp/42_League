@@ -6,6 +6,8 @@ import { NotificationBell } from './NotificationBell';
 import { NotifBanner } from './NotifBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useGameMode } from '../hooks/useGameMode';
+import { GAME_META } from '../lib/gameMeta';
 import { useT } from '../lib/i18n';
 
 interface NavDef {
@@ -35,6 +37,7 @@ export function Layout({ children }: LayoutProps) {
   const t = useT();
   const { login } = useAuth();
   const { me, pending } = useLeagueData();
+  const { game } = useGameMode();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -68,7 +71,7 @@ export function Layout({ children }: LayoutProps) {
               42 League
             </div>
             <div className="text-[10px] text-brass/80 mt-1 uppercase tracking-[0.2em] font-bold">
-              Babyfoot · Ranked
+              {GAME_META[game].label} · Ranked
             </div>
           </NavLink>
           <NotificationBell />

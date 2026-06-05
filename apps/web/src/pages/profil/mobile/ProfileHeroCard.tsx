@@ -327,7 +327,7 @@ export function ProfileHeroCard({
         {/* Autres disciplines — section lisible, intégrée dans la carte héro */}
         {crossGameBadges.length > 0 && (
           <div className="mt-3 pt-3 border-t border-white/[0.07]">
-            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2">
+            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2 text-center">
               {t('profil.alsoActiveOn')}
             </div>
             <div className="flex items-center gap-2">
@@ -384,7 +384,7 @@ export function ProfileHeroCard({
         {/* Persos favoris — un gros rond logo par jeu de combat (clic = sélecteur). */}
         {fightingGames.length > 0 && (
           <div className="mt-3 pt-3 border-t border-white/[0.07]">
-            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2">
+            <div className="text-[8px] uppercase tracking-[0.20em] font-extrabold text-muted-2 mb-2 text-center">
               {t('favorites.label')}
             </div>
             <div className="flex items-center justify-center gap-5">

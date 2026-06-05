@@ -4,6 +4,7 @@ import { Avatar } from '../../../components/Avatar';
 import { PlayerLink } from '../../../components/PlayerLink';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
 import { SfCharIcon } from '../../../components/SfCharIcon';
+import { decodeChars } from '../../../lib/chars';
 import { GamePill, MatchScore } from '../../../components/MatchScore';
 import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
@@ -39,7 +40,8 @@ export function RecentMatchRow({ match, ownerLogin, delay = 0 }: RecentMatchRowP
   const oppImg = leaderboard.find((u) => u.login === opp)?.imageUrl ?? null;
   const isSmash = match.game === 'smash';
   const isSf = match.game === 'streetfighter';
-  const oppChar = youAreA ? match.charB : match.charA;
+  // Perso(s) de l'adversaire : un seul, ou un par manche si détaillé à la déclaration.
+  const oppChars = decodeChars(youAreA ? match.charB : match.charA);
   const winnerScore = youWon ? (youAreA ? match.scoreA : match.scoreB) : (youAreA ? match.scoreB : match.scoreA);
   const loserScore = youWon ? (youAreA ? match.scoreB : match.scoreA) : (youAreA ? match.scoreA : match.scoreB);
   const delta = youAreA ? match.deltaA : match.deltaB;
@@ -73,11 +75,20 @@ export function RecentMatchRow({ match, ownerLogin, delay = 0 }: RecentMatchRowP
         <div className="min-w-0 flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-sm font-bold text-text-strong truncate leading-none">{opp}</span>
-            {isSmash && oppChar && <SmashCharIcon id={oppChar} size={16} className="shrink-0" />}
-            {isSf && oppChar && <SfCharIcon id={oppChar} size={16} className="shrink-0" />}
+            {(isSmash || isSf) && oppChars.length > 0 && (
+              <span className="flex items-center gap-0.5 shrink-0">
+                {oppChars.map((c, i) =>
+                  isSmash ? (
+                    <SmashCharIcon key={i} id={c} size={16} className="shrink-0" />
+                  ) : (
+                    <SfCharIcon key={i} id={c} size={16} className="shrink-0" />
+                  ),
+                )}
+              </span>
+            )}
             <GamePill game={match.game} />
           </div>
-          <span className="text-[11px] text-muted-2 font-medium tabular-nums leading-none">
+          <span className="text-[11px] text-muted-2 font-medium tabular-nums leading-none mt-0.5">
             {date.short}
             <span className="mx-1 opacity-40">·</span>
             {date.long}

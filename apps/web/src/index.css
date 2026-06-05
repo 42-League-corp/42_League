@@ -92,6 +92,11 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Filet de sécurité opaque sous toute la safe-area : en standalone iOS,
+       `background-attachment: fixed` du body ne peint pas la zone du home
+       indicator → le blanc par défaut du WebView ressortait (bande blanche en
+       bas). Cette base sombre garantit qu'aucun blanc ne transparaît. */
+    background-color: #0b0907;
     /* Verrou : seul <main> scrolle dans le shell mobile. html/body restent
        figés sur le viewport pour éviter le « double scroll » où l'utilisateur
        pouvait descendre sous le contenu. */

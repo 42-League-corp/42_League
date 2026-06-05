@@ -77,6 +77,23 @@ export function computeGoat(
 ): GoatPlayer[] {
   const known = new Set(leaderboard.map((e) => e.login));
 
+  // ELO cumulé « all-time » : le GOAT doit rester PERSISTANT entre les saisons.
+  // Or l'ELO du leaderboard (entry.elo) est remis au plancher de palier à chaque
+  // clôture de saison → il ne reflète que la saison courante. On reconstruit donc
+  // un ELO continu en repartant de l'ELO de départ (1000) et en ré-appliquant la
+  // variation de CHAQUE match de toutes les saisons (l'historique /matches n'est
+  // jamais purgé). Les nulles (échecs) comptent aussi car elles bougent l'ELO.
+  const ALL_TIME_BASE_ELO = 1000;
+  const eloDeltaSum = new Map<string, number>();
+  for (const m of matches) {
+    if (!m.countedForElo) continue;
+    if (known.has(m.playerALogin))
+      eloDeltaSum.set(m.playerALogin, (eloDeltaSum.get(m.playerALogin) ?? 0) + (m.deltaA ?? 0));
+    if (known.has(m.playerBLogin))
+      eloDeltaSum.set(m.playerBLogin, (eloDeltaSum.get(m.playerBLogin) ?? 0) + (m.deltaB ?? 0));
+  }
+  const allTimeElo = (login: string) => ALL_TIME_BASE_ELO + (eloDeltaSum.get(login) ?? 0);
+
   // Titres par joueur (officiels vs amicaux) — tournois terminés avec un vainqueur.
   const officialTitles = new Map<string, number>();
   const friendlyTitles = new Map<string, number>();
@@ -146,7 +163,7 @@ export function computeGoat(
       }
     }
     const metrics: GoatMetrics = {
-      elo: entry.elo,
+      elo: allTimeElo(entry.login),
       games,
       wins,
       losses,

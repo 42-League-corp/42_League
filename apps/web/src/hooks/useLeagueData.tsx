@@ -146,74 +146,89 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!authenticated) {
-      setData(EMPTY);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      // On interroge `me` en premier : tant que le consentement RGPD n'est pas donné,
-      // la consent-gate du serveur refuse (403) tous les autres endpoints. On évite
-      // donc de les appeler — la <ConsentGate> est affichée à la place par AuthenticatedShell.
-      const me = await api.me();
-      if (me.consentRequired) {
-        setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
+  // `silent` : refetch complet SANS spinner global ni écran d'erreur. Utilisé pour
+  // les rafraîchissements POST-ACTION (déclarer une game, défier, confirmer un
+  // popup…) : on met à jour les données en place, sans re-blanchir toute la page
+  // (le spinner plein écran d'App.tsx ne doit s'afficher qu'au tout premier chargement).
+  const load = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!authenticated) {
+        setData(EMPTY);
         setLoading(false);
+        setError(null);
         return;
       }
-      // Staging : réservé à la liste blanche (me.stagingAllowed). Un login non
-      // autorisé n'appelle pas les autres endpoints (le serveur les refuse) ;
-      // AuthenticatedShell affiche <StagingGate>. On conserve `me` pour le login.
-      if (IS_STAGING && !me.stagingAllowed) {
-        setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
-        setLoading(false);
-        return;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
       }
-      const [matches, pending, pendingFfas, playedFfas, challenges, leaderboard, tournaments, opsMe, allOps] =
-        await Promise.all([
-          api.playedMatches(),
-          api.pendingMatches(),
-          api.pendingFfas().catch(() => [] as PendingFfa[]),
-          api.playedFfas().catch(() => [] as PlayedFfa[]),
-          api.challenges(),
-          api.leaderboard(getGame()),
-          api.tournaments(getGame()),
-          api.opsMe().catch(() => null),
-          api.opsList().catch(() => [] as Ops[]),
-        ]);
-      setData((prev) => ({
-        me,
-        matches,
-        pending,
-        pendingFfas,
-        playedFfas,
-        challenges,
-        leaderboard,
-        tournaments,
-        opsMe,
-        allOps,
-        // `locations` est alimenté par un poller séparé → on préserve l'existant
-        // au lieu de l'écraser (sinon le type LeagueData est incomplet + perte des hôtes).
-        locations: prev.locations,
-      }));
-    } catch (err) {
-      if (err instanceof AuthError) {
-        signOut();
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
+      try {
+        // On interroge `me` en premier : tant que le consentement RGPD n'est pas donné,
+        // la consent-gate du serveur refuse (403) tous les autres endpoints. On évite
+        // donc de les appeler — la <ConsentGate> est affichée à la place par AuthenticatedShell.
+        const me = await api.me();
+        if (me.consentRequired) {
+          setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
+          if (!silent) setLoading(false);
+          return;
+        }
+        // Staging : réservé à la liste blanche (me.stagingAllowed). Un login non
+        // autorisé n'appelle pas les autres endpoints (le serveur les refuse) ;
+        // AuthenticatedShell affiche <StagingGate>. On conserve `me` pour le login.
+        if (IS_STAGING && !me.stagingAllowed) {
+          setData((prev) => ({ ...EMPTY, me, locations: prev.locations }));
+          if (!silent) setLoading(false);
+          return;
+        }
+        const [matches, pending, pendingFfas, playedFfas, challenges, leaderboard, tournaments, opsMe, allOps] =
+          await Promise.all([
+            api.playedMatches(),
+            api.pendingMatches(),
+            api.pendingFfas().catch(() => [] as PendingFfa[]),
+            api.playedFfas().catch(() => [] as PlayedFfa[]),
+            api.challenges(),
+            api.leaderboard(getGame()),
+            api.tournaments(getGame()),
+            api.opsMe().catch(() => null),
+            api.opsList().catch(() => [] as Ops[]),
+          ]);
+        setData((prev) => ({
+          me,
+          matches,
+          pending,
+          pendingFfas,
+          playedFfas,
+          challenges,
+          leaderboard,
+          tournaments,
+          opsMe,
+          allOps,
+          // `locations` est alimenté par un poller séparé → on préserve l'existant
+          // au lieu de l'écraser (sinon le type LeagueData est incomplet + perte des hôtes).
+          locations: prev.locations,
+        }));
+      } catch (err) {
+        if (err instanceof AuthError) {
+          signOut();
+        } else if (!silent) {
+          // En mode silencieux on avale l'erreur (comme refreshDomains) : un hoquet
+          // réseau post-action ne doit pas remplacer la page par un écran d'erreur.
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [authenticated, signOut]);
+    },
+    [authenticated, signOut],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Exposé comme `refresh` : refetch silencieux (pas de spinner global). Identité
+  // stable pour ne pas invalider les useCallback des appelants qui en dépendent.
+  const refresh = useCallback(() => load({ silent: true }), [load]);
 
   // Rafraîchit UNIQUEMENT les domaines demandés et fusionne dans le state.
   // (refresh partiel : pas de spinner global, pas d'écran d'erreur si ça échoue.)
@@ -392,8 +407,8 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<LeagueDataContextValue>(
-    () => ({ ...data, loading, error, refresh: load, patchMyTitle }),
-    [data, loading, error, load, patchMyTitle],
+    () => ({ ...data, loading, error, refresh, patchMyTitle }),
+    [data, loading, error, refresh, patchMyTitle],
   );
 
   return (

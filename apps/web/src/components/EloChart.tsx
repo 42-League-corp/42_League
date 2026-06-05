@@ -328,6 +328,15 @@ export function EloChart({
   // Tooltip : suit le curseur, recentré et borné dans la largeur
   const ttHalf = Math.min(104, W / 2);
   const ttX = useTransform(mx, (v) => Math.min(Math.max(v, ttHalf), W - ttHalf));
+  // Décalage dynamique de la POINTE : quand la bulle bute sur un bord, son centre
+  // (ttX) se fige alors que le curseur (mx) continue. On déplace donc la pointe de
+  // l'écart `mx - ttX` pour qu'elle vise toujours le point — bornée pour rester
+  // sous la carte. Au centre l'écart est nul → pointe centrée comme avant.
+  const arrowDx = useTransform(mx, (m) => {
+    const off = m - Math.min(Math.max(m, ttHalf), W - ttHalf);
+    const lim = ttHalf - 12;
+    return Math.max(-lim, Math.min(lim, off));
+  });
 
   if (points.length < 2 || !geo) {
     return (
@@ -452,7 +461,10 @@ export function EloChart({
               </div>
             )}
           </motion.div>
-          <div className="mx-auto mt-[-5px] h-2.5 w-2.5 rotate-45 border-b border-r border-white/10 bg-slate-900/95" />
+          <motion.div
+            style={{ x: arrowDx, rotate: 45 }}
+            className="mx-auto mt-[-5px] h-2.5 w-2.5 border-b border-r border-white/10 bg-slate-900/95"
+          />
         </div>
       </motion.div>
     </div>

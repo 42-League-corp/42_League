@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { api, type Game } from '../lib/api';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
@@ -25,6 +25,22 @@ function GameTrophy({ game, accent, className }: { game: Game; accent: string; c
 }
 
 const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e', streetfighter: '#ff7a18' };
+
+/** Grosse croix rouge en haut à droite de la modale : skip pour qui s'en fiche. */
+function CloseX({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-label="Passer l'inscription"
+      title="Passer"
+      onClick={onClick}
+      disabled={disabled}
+      className="absolute -top-3 -right-3 z-10 grid place-items-center w-10 h-10 rounded-full bg-red text-white shadow-lg shadow-red/40 ring-2 ring-bg-1 hover:brightness-110 active:scale-90 transition-transform disabled:opacity-50"
+    >
+      <X className="w-5 h-5" strokeWidth={3} />
+    </button>
+  );
+}
 
 /**
  * Onboarding au 1er login : choix des modes de jeu auxquels on adhère. On
@@ -88,6 +104,24 @@ export function GameOnboarding() {
     }
   };
 
+  // Skip total (croix rouge en haut à droite) : pour ceux que l'onboarding
+  // n'intéresse pas. On les inscrit à leur sélection courante (ou babyfoot par
+  // défaut si rien), on pose onboardedAt et on ferme — sinon la modale reviendrait.
+  const skipOnboarding = async () => {
+    setBusy(true);
+    try {
+      const games: Game[] = sel.size > 0 ? [...sel] : ['babyfoot'];
+      await api.setGames(games);
+      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
+      const first = order.find((g) => games.includes(g)) ?? 'babyfoot';
+      setActiveGame(first);
+      await refresh();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+      setBusy(false);
+    }
+  };
+
   // Étape 2 : enregistre les favoris (ou skip), puis refresh → fermeture.
   const finishFavorites = async (save: boolean) => {
     setBusy(true);
@@ -109,7 +143,8 @@ export function GameOnboarding() {
     return (
       <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
         <div className="flex min-h-full items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
+        <div className="relative w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
+          <CloseX onClick={() => finishFavorites(false)} disabled={busy} />
           <div className="text-center mb-5">
             <div className="font-display text-2xl font-black text-text-strong">Tes persos favoris</div>
             <p className="text-sm text-muted-2 mt-1">
@@ -146,7 +181,8 @@ export function GameOnboarding() {
   return (
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
       <div className="flex min-h-full items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
+        <CloseX onClick={skipOnboarding} disabled={busy} />
         <div className="text-center mb-5">
           <div className="font-display text-2xl font-black text-text-strong">Bienvenue dans la League</div>
           <p className="text-sm text-muted-2 mt-1">

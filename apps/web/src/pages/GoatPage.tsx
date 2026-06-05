@@ -295,7 +295,7 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
 
         {/* Stats grid compacte */}
         <div className="grid grid-cols-4 gap-2 mb-4">
-          <MiniStat label="ELO" value={String(metrics.elo)} accent="gold" />
+          <MiniStat label="ELO cumulé" value={String(metrics.elo)} accent="gold" />
           <MiniStat label={t('profil.winRate')} value={`${metrics.winRate}%`} accent="gold" />
           <MiniStat label={t('goat.stat.matches')} value={`${metrics.wins}${t('lb.abbr.win')}`} accent="teal" />
           <MiniStat label={t('goat.stat.officialCup')} value={String(metrics.officialTitles)} accent={metrics.officialTitles > 0 ? 'red' : 'muted'} />
