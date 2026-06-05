@@ -414,6 +414,25 @@ export const dict: Record<Lang, Dict> = {
     'tourn.duel.startMatch': 'Lancer le duel',
     'tourn.duel.heads': 'Pile',
     'tourn.duel.tails': 'Face',
+
+    // ── Onboarding (1er login) ─────────────────────────────────────────────
+    'onboarding.skip.aria': "Passer l'inscription",
+    'onboarding.skip.title': 'Passer',
+    'onboarding.tagline.babyfoot': '1 contre 1 · 10 buts · gamelles',
+    'onboarding.tagline.smash': '1 contre 1 · Bo3/Bo5 · stocks',
+    'onboarding.tagline.chess': '1 contre 1 · victoire / défaite',
+    'onboarding.tagline.streetfighter': '1 contre 1 · Bo3/Bo5 · persos',
+    'onboarding.tagline.flechettes': '2 à 8 joueurs · 301/501 · points',
+    'onboarding.favs.title': 'Tes persos favoris',
+    'onboarding.favs.desc':
+      "Choisis tes mains pour chaque jeu. Elles s'affichent sur ton profil et remontent en haut du sélecteur lors d'une déclaration (modifiable plus tard depuis ton profil).",
+    'onboarding.favs.skip': 'Passer',
+    'onboarding.favs.finish': 'Terminer',
+    'onboarding.welcome.title': 'Bienvenue dans la League',
+    'onboarding.welcome.desc':
+      "À quels modes veux-tu participer ? Tu n'apparais dans les classements et stats que des modes choisis (modifiable plus tard dans les réglages).",
+    'onboarding.start': "C'est parti",
+    'onboarding.pickAtLeastOne': 'Choisis au moins un mode',
   },
   en: {
     'goat.help.aria': 'How is the G.O.A.T Score computed?',
@@ -798,6 +817,25 @@ export const dict: Record<Lang, Dict> = {
     'tourn.duel.startMatch': 'Start the duel',
     'tourn.duel.heads': 'Heads',
     'tourn.duel.tails': 'Tails',
+
+    // ── Onboarding (first login) ───────────────────────────────────────────
+    'onboarding.skip.aria': 'Skip registration',
+    'onboarding.skip.title': 'Skip',
+    'onboarding.tagline.babyfoot': '1v1 · 10 goals · gamelles',
+    'onboarding.tagline.smash': '1v1 · Bo3/Bo5 · stocks',
+    'onboarding.tagline.chess': '1v1 · win / loss',
+    'onboarding.tagline.streetfighter': '1v1 · Bo3/Bo5 · characters',
+    'onboarding.tagline.flechettes': '2 to 8 players · 301/501 · points',
+    'onboarding.favs.title': 'Your favorite characters',
+    'onboarding.favs.desc':
+      'Pick your mains for each game. They show on your profile and move to the top of the selector when reporting a match (editable later from your profile).',
+    'onboarding.favs.skip': 'Skip',
+    'onboarding.favs.finish': 'Finish',
+    'onboarding.welcome.title': 'Welcome to the League',
+    'onboarding.welcome.desc':
+      'Which modes do you want to take part in? You only appear in the leaderboards and stats of the modes you pick (editable later in settings).',
+    'onboarding.start': "Let's go",
+    'onboarding.pickAtLeastOne': 'Pick at least one mode',
   },
   es: {
     'goat.help.aria': '¿Cómo se calcula la Puntuación G.O.A.T?',
@@ -1182,5 +1220,24 @@ export const dict: Record<Lang, Dict> = {
     'tourn.duel.startMatch': 'Empezar el duelo',
     'tourn.duel.heads': 'Cara',
     'tourn.duel.tails': 'Cruz',
+
+    // ── Onboarding (primer inicio de sesión) ───────────────────────────────
+    'onboarding.skip.aria': 'Saltar el registro',
+    'onboarding.skip.title': 'Saltar',
+    'onboarding.tagline.babyfoot': '1 contra 1 · 10 goles · gamelles',
+    'onboarding.tagline.smash': '1 contra 1 · Bo3/Bo5 · stocks',
+    'onboarding.tagline.chess': '1 contra 1 · victoria / derrota',
+    'onboarding.tagline.streetfighter': '1 contra 1 · Bo3/Bo5 · personajes',
+    'onboarding.tagline.flechettes': '2 a 8 jugadores · 301/501 · puntos',
+    'onboarding.favs.title': 'Tus personajes favoritos',
+    'onboarding.favs.desc':
+      'Elige tus mains para cada juego. Aparecen en tu perfil y suben a lo alto del selector al registrar una partida (modificable más tarde desde tu perfil).',
+    'onboarding.favs.skip': 'Saltar',
+    'onboarding.favs.finish': 'Terminar',
+    'onboarding.welcome.title': 'Bienvenido a la League',
+    'onboarding.welcome.desc':
+      '¿En qué modos quieres participar? Solo apareces en las clasificaciones y estadísticas de los modos elegidos (modificable más tarde en los ajustes).',
+    'onboarding.start': '¡Vamos!',
+    'onboarding.pickAtLeastOne': 'Elige al menos un modo',
   },
 };

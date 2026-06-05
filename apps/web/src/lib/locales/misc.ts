@@ -224,6 +224,18 @@ export const dict: Record<Lang, Dict> = {
     'team.players': 'Les Joueurs',
     'team.recent': 'Derniers matches',
     'team.noName': 'Équipe sans nom — 2v2 Babyfoot',
+
+    // ─── Cloche de notifications ───────────────────────────────────────────
+    'notif.title': 'Notifications',
+    'notif.markAllRead': 'Tout lire',
+    'notif.tab.todo': 'À traiter',
+    'notif.tab.inbox': 'Inbox',
+    'notif.empty.todo': 'Rien à traiter 🎉',
+    'notif.empty.inbox': 'Aucune notification',
+    'notif.ago.now': "à l'instant",
+    'notif.ago.minutes': 'il y a {n} min',
+    'notif.ago.hours': 'il y a {n} h',
+    'notif.ago.days': 'il y a {n} j',
   },
 
   en: {
@@ -427,6 +439,17 @@ export const dict: Record<Lang, Dict> = {
     'team.players': 'The Players',
     'team.recent': 'Recent matches',
     'team.noName': 'Unnamed team — 2v2 Babyfoot',
+
+    'notif.title': 'Notifications',
+    'notif.markAllRead': 'Mark all read',
+    'notif.tab.todo': 'To do',
+    'notif.tab.inbox': 'Inbox',
+    'notif.empty.todo': 'Nothing to do 🎉',
+    'notif.empty.inbox': 'No notifications',
+    'notif.ago.now': 'just now',
+    'notif.ago.minutes': '{n} min ago',
+    'notif.ago.hours': '{n} h ago',
+    'notif.ago.days': '{n} d ago',
   },
 
   es: {
@@ -630,5 +653,16 @@ export const dict: Record<Lang, Dict> = {
     'team.players': 'Los jugadores',
     'team.recent': 'Últimas partidas',
     'team.noName': 'Equipo sin nombre — 2v2 Babyfoot',
+
+    'notif.title': 'Notificaciones',
+    'notif.markAllRead': 'Marcar todo como leído',
+    'notif.tab.todo': 'Por hacer',
+    'notif.tab.inbox': 'Bandeja',
+    'notif.empty.todo': 'Nada por hacer 🎉',
+    'notif.empty.inbox': 'Sin notificaciones',
+    'notif.ago.now': 'ahora mismo',
+    'notif.ago.minutes': 'hace {n} min',
+    'notif.ago.hours': 'hace {n} h',
+    'notif.ago.days': 'hace {n} d',
   },
 };

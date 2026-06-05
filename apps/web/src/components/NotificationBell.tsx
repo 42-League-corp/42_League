@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, type LucideIcon } from 'lucide-react';
 import { api, type AppNotification } from '../lib/api';
 import { useServerEvents } from '../hooks/useServerEvents';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { gameColor, GAME_EMOJI } from '../lib/gameVisuals';
 import { setGame } from '../lib/gameMode';
+import { useT } from '../lib/i18n';
 
 const POLL_MS = 30_000;
 
@@ -63,16 +65,16 @@ function textOn(hex: string): string {
   return 0.299 * r + 0.587 * g + 0.114 * b >= 150 ? '#10131a' : '#ffffff';
 }
 
-/** Temps relatif court en français. */
-function ago(iso: string): string {
+/** Temps relatif court, localisé via i18n. */
+function ago(iso: string, t: (key: string) => string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "à l'instant";
+  if (s < 60) return t('notif.ago.now');
   const m = Math.floor(s / 60);
-  if (m < 60) return `il y a ${m} min`;
+  if (m < 60) return t('notif.ago.minutes').replace('{n}', String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `il y a ${h} h`;
+  if (h < 24) return t('notif.ago.hours').replace('{n}', String(h));
   const d = Math.floor(h / 24);
-  return `il y a ${d} j`;
+  return t('notif.ago.days').replace('{n}', String(d));
 }
 
 type Tab = 'todo' | 'inbox';
@@ -92,6 +94,7 @@ type Tab = 'todo' | 'inbox';
  */
 export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'down' } = {}) {
   const navigate = useNavigate();
+  const t = useT();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -131,6 +134,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  // Fermeture sur Échap quand le panneau est ouvert.
+  useEscapeKey(open, () => setOpen(false));
+
   const markAll = async () => {
     setUnread(0);
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -157,7 +163,7 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        aria-label="Notifications"
+        aria-label={t('notif.title')}
         onClick={() => setOpen((o) => !o)}
         className="relative flex items-center justify-center w-9 h-9 rounded-lg text-muted-2 hover:text-gold hover:bg-bg-2/60 transition-colors"
       >
@@ -171,6 +177,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
 
       {open && (
         <div
+          role="dialog"
+          aria-modal="false"
+          aria-label={t('notif.title')}
           style={{ zIndex: 2147483645 }}
           className={`rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60 ${
             placement === 'up'
@@ -184,14 +193,14 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
           }`}
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-gold/15 bg-bg-1">
-            <span className="text-[11px] uppercase tracking-wider text-gold font-extrabold">Notifications</span>
+            <span className="text-[11px] uppercase tracking-wider text-gold font-extrabold">{t('notif.title')}</span>
             {unread > 0 && (
               <button
                 onClick={markAll}
                 className="inline-flex items-center gap-1 text-[10px] text-muted-2 hover:text-gold transition-colors font-bold"
               >
                 <CheckCheck className="w-3.5 h-3.5" strokeWidth={2.5} />
-                Tout lire
+                {t('notif.markAllRead')}
               </button>
             )}
           </div>
@@ -205,7 +214,7 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
                 tab === 'todo' ? 'bg-gold/15 text-gold' : 'text-muted-2 hover:text-text-strong'
               }`}
             >
-              À traiter
+              {t('notif.tab.todo')}
               {unread > 0 && (
                 <span className="min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red text-white text-[9px] font-black tabular-nums">
                   {unread > 9 ? '9+' : unread}
@@ -219,14 +228,14 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
                 tab === 'inbox' ? 'bg-gold/15 text-gold' : 'text-muted-2 hover:text-text-strong'
               }`}
             >
-              Inbox
+              {t('notif.tab.inbox')}
             </button>
           </div>
 
           <div className="max-h-[60vh] overflow-y-auto custom-scrollbar p-1.5 space-y-1.5">
             {shown.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-2">
-                {tab === 'todo' ? 'Rien à traiter 🎉' : 'Aucune notification'}
+                {tab === 'todo' ? t('notif.empty.todo') : t('notif.empty.inbox')}
               </div>
             ) : (
               shown.map((n) => {
@@ -259,7 +268,7 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
                         </span>
                       )}
                       <span className="block text-[10px] mt-0.5 font-mono" style={{ opacity: 0.7 }}>
-                        {ago(n.createdAt)}
+                        {ago(n.createdAt, t)}
                       </span>
                     </span>
                     {!n.read && (

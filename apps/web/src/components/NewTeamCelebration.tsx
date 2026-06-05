@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Check, ArrowRight, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import { useFlash } from '../hooks/useFlash';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { haptic } from '../mobile/feedback/useHaptic';
@@ -77,6 +78,7 @@ export function NewTeamCelebration({
   teamId, teamElo, player1, player2, onClose,
 }: NewTeamCelebrationProps) {
   const navigate = useNavigate();
+  const t = useT();
   const flash = useFlash();
   const [name, setName] = useState('');
   const [editingName, setEditingName] = useState(true);
@@ -105,7 +107,7 @@ export function NewTeamCelebration({
     setSaving(true);
     try {
       await api.nameTeam(teamId, trimmed);
-      flash.show(`Duo « ${trimmed} » créé !`);
+      flash.show(t('newteam.flash.created').replace('{name}', trimmed));
       haptic('success');
     } catch {
       // Pas bloquant
@@ -134,6 +136,9 @@ export function NewTeamCelebration({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('newteam.title')}
           className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden"
           style={{
             background: 'radial-gradient(ellipse at center, rgba(30,22,8,0.97) 0%, rgba(8,6,3,0.99) 100%)',
@@ -160,6 +165,7 @@ export function NewTeamCelebration({
           <button
             type="button"
             onClick={handleGoToTeam}
+            aria-label={t('newteam.close')}
             className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center text-muted-2 hover:text-gold hover:bg-gold/10 transition-colors tap-transparent z-10"
           >
             <X className="w-5 h-5" strokeWidth={2.5} />
@@ -176,7 +182,7 @@ export function NewTeamCelebration({
               className="text-center"
             >
               <div className="text-[11px] font-extrabold uppercase tracking-[0.35em] text-gold/70 mb-2">
-                ⚡ Babyfoot 2v2 ⚡
+                ⚡ {t('newteam.kicker')} ⚡
               </div>
               <div
                 className="font-display text-4xl sm:text-5xl font-black uppercase tracking-tight"
@@ -188,7 +194,7 @@ export function NewTeamCelebration({
                   filter: 'drop-shadow(0 0 20px rgba(255,201,74,0.6))',
                 }}
               >
-                Nouveau Duo !
+                {t('newteam.title')}
               </div>
             </motion.div>
 
@@ -260,7 +266,7 @@ export function NewTeamCelebration({
                   <span className="tabular-nums">{player1.elo} ELO</span>
                 )}
                 <span className="text-muted-2">→</span>
-                <span className="tabular-nums text-gold font-extrabold">{teamElo} ELO équipe</span>
+                <span className="tabular-nums text-gold font-extrabold">{teamElo} {t('newteam.teamElo')}</span>
                 <span className="text-muted-2">←</span>
                 {player2.elo !== undefined && (
                   <span className="tabular-nums">{player2.elo} ELO</span>
@@ -276,7 +282,7 @@ export function NewTeamCelebration({
               className="w-full space-y-3"
             >
               <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-2 text-center">
-                Nommez votre duo pour entrer dans l'histoire
+                {t('newteam.namePrompt')}
               </div>
 
               {editingName ? (
@@ -304,7 +310,7 @@ export function NewTeamCelebration({
                   onClick={() => setEditingName(true)}
                   className="w-full py-3 text-sm text-muted-2 border border-border/60 rounded-xl hover:border-gold/30 hover:text-text transition-colors"
                 >
-                  + Donner un nom
+                  + {t('newteam.giveName')}
                 </button>
               )}
 
@@ -325,12 +331,12 @@ export function NewTeamCelebration({
                   {name.trim() ? (
                     <>
                       <Check className="w-4 h-4" strokeWidth={3} />
-                      Confirmer
+                      {t('newteam.confirm')}
                     </>
                   ) : (
                     <>
                       <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
-                      Voir la page
+                      {t('newteam.viewPage')}
                     </>
                   )}
                 </motion.button>
@@ -340,7 +346,7 @@ export function NewTeamCelebration({
                     onClick={handleGoToTeam}
                     className="px-4 py-3 rounded-xl border border-border/60 text-sm text-muted-2 hover:text-text hover:border-muted/40 transition-colors tap-transparent"
                   >
-                    Plus tard
+                    {t('newteam.later')}
                   </button>
                 )}
               </div>

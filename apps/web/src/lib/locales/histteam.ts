@@ -61,6 +61,18 @@ export const dict: Record<Lang, Dict> = {
     // Team — états vides
     'team.empty.desktop': "Aucun match confirmé pour l'instant.",
     'team.empty.mobile': 'Aucun match enregistré.',
+
+    // NewTeamCelebration — overlay nouveau duo
+    'newteam.kicker': 'Babyfoot 2v2',
+    'newteam.title': 'Nouveau Duo !',
+    'newteam.teamElo': 'ELO équipe',
+    'newteam.namePrompt': "Nommez votre duo pour entrer dans l'histoire",
+    'newteam.giveName': 'Donner un nom',
+    'newteam.confirm': 'Confirmer',
+    'newteam.viewPage': 'Voir la page',
+    'newteam.later': 'Plus tard',
+    'newteam.close': 'Fermer',
+    'newteam.flash.created': 'Duo « {name} » créé !',
   },
   en: {
     'history.stat.games': 'Games',
@@ -109,6 +121,17 @@ export const dict: Record<Lang, Dict> = {
 
     'team.empty.desktop': 'No confirmed match yet.',
     'team.empty.mobile': 'No match recorded.',
+
+    'newteam.kicker': 'Foosball 2v2',
+    'newteam.title': 'New Duo!',
+    'newteam.teamElo': 'team ELO',
+    'newteam.namePrompt': 'Name your duo to go down in history',
+    'newteam.giveName': 'Give a name',
+    'newteam.confirm': 'Confirm',
+    'newteam.viewPage': 'View page',
+    'newteam.later': 'Later',
+    'newteam.close': 'Close',
+    'newteam.flash.created': 'Duo "{name}" created!',
   },
   es: {
     'history.stat.games': 'Partidas',
@@ -157,5 +180,16 @@ export const dict: Record<Lang, Dict> = {
 
     'team.empty.desktop': 'Aún no hay ningún partido confirmado.',
     'team.empty.mobile': 'Ningún partido registrado.',
+
+    'newteam.kicker': 'Futbolín 2v2',
+    'newteam.title': '¡Nuevo Dúo!',
+    'newteam.teamElo': 'ELO equipo',
+    'newteam.namePrompt': 'Nombra tu dúo para entrar en la historia',
+    'newteam.giveName': 'Poner un nombre',
+    'newteam.confirm': 'Confirmar',
+    'newteam.viewPage': 'Ver la página',
+    'newteam.later': 'Más tarde',
+    'newteam.close': 'Cerrar',
+    'newteam.flash.created': '¡Dúo «{name}» creado!',
   },
 };

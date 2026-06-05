@@ -11,13 +11,16 @@ import { ChessTrophy } from './ChessTrophy';
 import { Button } from './Button';
 import { CharMultiGrid } from './FavoriteCharsEditor';
 import { type FightingGame } from '../lib/chars';
+import { useT } from '../lib/i18n';
 
-const GAMES: { id: Game; name: string; tagline: string }[] = [
-  { id: 'babyfoot', name: 'Babyfoot', tagline: '1 contre 1 · 10 buts · gamelles' },
-  { id: 'smash', name: 'Smash Bros', tagline: '1 contre 1 · Bo3/Bo5 · stocks' },
-  { id: 'chess', name: 'Échecs', tagline: '1 contre 1 · victoire / défaite' },
-  { id: 'streetfighter', name: 'Street Fighter', tagline: '1 contre 1 · Bo3/Bo5 · persos' },
-  { id: 'flechettes', name: 'Fléchettes', tagline: '2 à 8 joueurs · 301/501 · points' },
+// Le nom est un nom propre (marque) → non traduit ; la tagline est une clé i18n
+// résolue au rendu (les constantes module n'ont pas accès à `t`).
+const GAMES: { id: Game; name: string; taglineKey: string }[] = [
+  { id: 'babyfoot', name: 'Babyfoot', taglineKey: 'onboarding.tagline.babyfoot' },
+  { id: 'smash', name: 'Smash Bros', taglineKey: 'onboarding.tagline.smash' },
+  { id: 'chess', name: 'Échecs', taglineKey: 'onboarding.tagline.chess' },
+  { id: 'streetfighter', name: 'Street Fighter', taglineKey: 'onboarding.tagline.streetfighter' },
+  { id: 'flechettes', name: 'Fléchettes', taglineKey: 'onboarding.tagline.flechettes' },
 ];
 
 function GameTrophy({ game, accent, className }: { game: Game; accent: string; className?: string }) {
@@ -29,12 +32,20 @@ function GameTrophy({ game, accent, className }: { game: Game; accent: string; c
 const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e', streetfighter: '#ff7a18', flechettes: '#14b8a6' };
 
 /** Grosse croix rouge en haut à droite de la modale : skip pour qui s'en fiche. */
-function CloseX({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+function CloseX({
+  onClick,
+  disabled,
+  t,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  t: (key: string) => string;
+}) {
   return (
     <button
       type="button"
-      aria-label="Passer l'inscription"
-      title="Passer"
+      aria-label={t('onboarding.skip.aria')}
+      title={t('onboarding.skip.title')}
       onClick={onClick}
       disabled={disabled}
       className="absolute -top-3 -right-3 z-10 grid place-items-center w-10 h-10 rounded-full bg-red text-white shadow-lg shadow-red/40 ring-2 ring-bg-1 hover:brightness-110 active:scale-90 transition-transform disabled:opacity-50"
@@ -52,6 +63,7 @@ function CloseX({ onClick, disabled }: { onClick: () => void; disabled: boolean 
 export function GameOnboarding() {
   const { me, refresh } = useLeagueData();
   const flash = useFlash();
+  const t = useT();
   const [sel, setSel] = useState<Set<Game>>(new Set<Game>(['babyfoot']));
   const [busy, setBusy] = useState(false);
   // Étape 2 (optionnelle) : choix des persos favoris si Smash/SF sélectionnés.
@@ -94,7 +106,7 @@ export function GameOnboarding() {
   const submit = async () => {
     const games = [...sel];
     if (games.length === 0) {
-      flash.show('Choisis au moins un mode', 'error');
+      flash.show(t('onboarding.pickAtLeastOne'), 'error');
       return;
     }
     setBusy(true);
@@ -156,13 +168,10 @@ export function GameOnboarding() {
       <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
         <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
-          <CloseX onClick={() => finishFavorites(false)} disabled={busy} />
+          <CloseX onClick={() => finishFavorites(false)} disabled={busy} t={t} />
           <div className="text-center mb-5">
-            <div className="font-display text-2xl font-black text-text-strong">Tes persos favoris</div>
-            <p className="text-sm text-muted-2 mt-1">
-              Choisis tes mains pour chaque jeu. Elles s'affichent sur ton profil et remontent en
-              haut du sélecteur lors d'une déclaration (modifiable plus tard depuis ton profil).
-            </p>
+            <div className="font-display text-2xl font-black text-text-strong">{t('onboarding.favs.title')}</div>
+            <p className="text-sm text-muted-2 mt-1">{t('onboarding.favs.desc')}</p>
           </div>
 
           <div className="space-y-4 max-h-[55vh] overflow-y-auto scrollbar-none">
@@ -178,10 +187,10 @@ export function GameOnboarding() {
               disabled={busy}
               className="flex-1 py-3 rounded-xl border border-border text-xs font-extrabold uppercase tracking-wide text-muted-2 hover:text-text hover:border-border-strong transition-colors tap-transparent disabled:opacity-50"
             >
-              Passer
+              {t('onboarding.favs.skip')}
             </button>
             <Button loading={busy} onClick={() => finishFavorites(true)} className="flex-1 py-3">
-              Terminer
+              {t('onboarding.favs.finish')}
             </Button>
           </div>
         </div>
@@ -194,13 +203,10 @@ export function GameOnboarding() {
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
       <div className="flex min-h-full items-center justify-center p-4">
       <div className="relative w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
-        <CloseX onClick={skipOnboarding} disabled={busy} />
+        <CloseX onClick={skipOnboarding} disabled={busy} t={t} />
         <div className="text-center mb-5">
-          <div className="font-display text-2xl font-black text-text-strong">Bienvenue dans la League</div>
-          <p className="text-sm text-muted-2 mt-1">
-            À quels modes veux-tu participer ? Tu n'apparais dans les classements et stats que des
-            modes choisis (modifiable plus tard dans les réglages).
-          </p>
+          <div className="font-display text-2xl font-black text-text-strong">{t('onboarding.welcome.title')}</div>
+          <p className="text-sm text-muted-2 mt-1">{t('onboarding.welcome.desc')}</p>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
@@ -220,7 +226,7 @@ export function GameOnboarding() {
                 <GameTrophy game={g.id} accent={accent} className="w-12 h-12 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="font-extrabold text-text-strong">{g.name}</div>
-                  <div className="text-[11px] text-muted-2">{g.tagline}</div>
+                  <div className="text-[11px] text-muted-2">{t(g.taglineKey)}</div>
                 </div>
                 <span
                   className="grid place-items-center w-6 h-6 rounded-full border-2"
@@ -238,7 +244,7 @@ export function GameOnboarding() {
         </div>
 
         <Button loading={busy} onClick={submit} className="w-full mt-5 py-3" disabled={sel.size === 0}>
-          C'est parti
+          {t('onboarding.start')}
         </Button>
       </div>
       </div>
