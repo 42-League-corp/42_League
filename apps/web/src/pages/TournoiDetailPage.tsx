@@ -466,7 +466,7 @@ function PoolsAndBracket({
 }) {
   const t = useT();
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
-  const { poolGroups, bracketRounds, bracketMatchesFlat, totalBracketRounds, poolsComplete } = useMemo(() => {
+  const { poolGroups, bracketMatchesFlat, totalBracketRounds, poolsComplete } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
     const bracketMatches = all.filter((m) => (m.stage ?? 'bracket') === 'bracket');
