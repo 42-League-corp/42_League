@@ -9,7 +9,7 @@ CREATE TABLE "weekly_quest_progress" (
   "wins"           INTEGER      NOT NULL DEFAULT 0,
   "games_played"   TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
   "claimed"        TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
-  "updated_at"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at"     TIMESTAMP(3) NOT NULL,
 
   CONSTRAINT "weekly_quest_progress_pkey" PRIMARY KEY ("login", "week_key")
 );
