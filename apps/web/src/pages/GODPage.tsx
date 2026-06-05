@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, type ReactNode, type ClipboardEvent, 
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useServerEvents } from '../hooks/useServerEvents';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useT } from '../lib/i18n';
+import { SortableTh, useTableSort, sortRows } from '../components/SortableTh';
 import {
   api,
   type AdminUser,
@@ -191,6 +193,7 @@ function ConfirmModal({
   onCancel: () => void;
 }) {
   const t = useT();
+  useEscapeKey(true, onCancel);
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/70 font-mono" onClick={onCancel}>
       <div
@@ -342,6 +345,7 @@ function StatsEditModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const t = useT();
+  useEscapeKey(true, onClose);
 
   const toggleGame = (g: 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes') =>
     setGames((prev) => {
@@ -511,6 +515,7 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ removedUsers: number; resetUsers: number } | null>(null);
   const t = useT();
+  useEscapeKey(true, onClose);
 
   const blockPaste = (e: ClipboardEvent | DragEvent) => {
     e.preventDefault();
@@ -610,6 +615,7 @@ function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSave
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  useEscapeKey(open, () => setOpen(false));
 
   function toggle(k: ModeratorPermissionKey) {
     setPerms((p) => ({ ...p, [k]: !p[k] }));
@@ -680,6 +686,10 @@ function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSave
 // (ils ont accès quoi qu'il arrive, et le backend les protège de toute façon).
 const HARDCODED_SUPERADMINS = new Set(['abidaux', 'throbert']);
 
+// Ordre de privilège pour trier la colonne « rôle ».
+const ROLE_WEIGHT: Record<string, number> = { USER: 0, MODERATOR: 1, ADMIN: 2, SUPERADMIN: 3 };
+type UsersSortKey = 'login' | 'role' | 'elo' | 'matches' | 'dodges' | 'trophies' | 'status' | 'campus';
+
 function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -711,6 +721,26 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   useServerEvents(() => load(true), PANEL_EVENTS);
 
   const filtered = users.filter((u) => u.login.toLowerCase().includes(filter.toLowerCase()));
+
+  const { sort, toggleSort } = useTableSort<UsersSortKey>({ key: 'login', dir: 'asc' });
+  const sorted = sortRows(
+    filtered,
+    sort,
+    (u, k) => {
+      switch (k) {
+        case 'login': return u.login.toLowerCase();
+        case 'role': return ROLE_WEIGHT[u.role] ?? 0;
+        case 'elo': return u.elo;
+        case 'matches': return u.matchesPlayed;
+        case 'dodges': return u.dodgeCount;
+        case 'trophies': return u.tournamentsWon;
+        case 'status': return u.bannedAt ? 1 : 0;
+        case 'campus': return (u.campus ?? '').toLowerCase();
+        default: return 0;
+      }
+    },
+    (a, b) => a.login.localeCompare(b.login),
+  );
 
   async function withPending(login: string, fn: () => Promise<unknown>) {
     setPending(login);
@@ -874,20 +904,20 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     />
                   )}
                 </th>
-                <th className="text-left py-2 px-3">{t('god.users.col.login')}</th>
-                <th className="text-left py-2 px-3">{t('god.users.col.role')}</th>
+                <SortableTh<UsersSortKey> label={t('god.users.col.login')} k="login" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label={t('god.users.col.role')} k="role" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-2 px-3" />
                 <th className="text-left py-2 px-3">{t('god.users.col.modes')}</th>
-                <th className="text-right py-2 px-3">{t('god.users.col.elo')}</th>
-                <th className="text-right py-2 px-3">{t('god.users.col.matches')}</th>
-                <th className="text-right py-2 px-3">{t('god.users.col.dodges')}</th>
-                <th className="text-right py-2 px-3">🏆</th>
-                <th className="text-left py-2 px-3">{t('god.users.col.status')}</th>
-                <th className="text-left py-2 px-3">{t('god.users.col.campus')}</th>
+                <SortableTh<UsersSortKey> label={t('god.users.col.elo')} k="elo" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label={t('god.users.col.matches')} k="matches" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label={t('god.users.col.dodges')} k="dodges" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label="🏆" k="trophies" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label={t('god.users.col.status')} k="status" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<UsersSortKey> label={t('god.users.col.campus')} k="campus" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
                 <th className="text-right py-2 px-3">{t('god.users.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => {
+              {sorted.map((u) => {
                 const isSelf = u.login === myLogin;
                 const isHardcoded = HARDCODED_SUPERADMINS.has(u.login.toLowerCase());
                 // Hardcodés + soi-même : on ne touche pas au rôle ni au ban.
@@ -1256,6 +1286,8 @@ function RejetsTab() {
 
 // ── Tab: MATCHES ───────────────────────────────────────────────────────────
 
+type MatchesSortKey = 'date' | 'playerA' | 'score' | 'playerB' | 'deltaA' | 'deltaB' | 'elo';
+
 function MatchesTab() {
   const [matches, setMatches] = useState<PlayedMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1283,8 +1315,23 @@ function MatchesTab() {
   useEffect(() => { load(); }, [load]);
   useServerEvents(() => load(true), PANEL_EVENTS);
 
-  const filtered = matches.filter(
-    (m) => m.playerALogin.includes(filter) || m.playerBLogin.includes(filter),
+  const { sort, toggleSort } = useTableSort<MatchesSortKey>({ key: 'date', dir: 'desc' });
+  const filtered = sortRows(
+    matches.filter((m) => m.playerALogin.includes(filter) || m.playerBLogin.includes(filter)),
+    sort,
+    (m, k) => {
+      switch (k) {
+        case 'date': return new Date(m.playedAt).getTime();
+        case 'playerA': return m.playerALogin.toLowerCase();
+        case 'score': return m.scoreA + m.scoreB;
+        case 'playerB': return m.playerBLogin.toLowerCase();
+        case 'deltaA': return m.deltaA;
+        case 'deltaB': return m.deltaB;
+        case 'elo': return m.countedForElo ? 1 : 0;
+        default: return 0;
+      }
+    },
+    (a, b) => b.id.localeCompare(a.id),
   ).slice(0, 200);
 
   function startEdit(m: PlayedMatch) {
@@ -1389,13 +1436,13 @@ function MatchesTab() {
                     />
                   )}
                 </th>
-                <th className="text-left py-2 px-2">{t('god.match.col.date')}</th>
-                <th className="text-left py-2 px-2">{t('god.match.col.playerA')}</th>
-                <th className="text-center py-2 px-2">{t('god.match.col.score')}</th>
-                <th className="text-left py-2 px-2">{t('god.match.col.playerB')}</th>
-                <th className="text-right py-2 px-2">ΔA</th>
-                <th className="text-right py-2 px-2">ΔB</th>
-                <th className="text-center py-2 px-2">ELO</th>
+                <SortableTh<MatchesSortKey> label={t('god.match.col.date')} k="date" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" />
+                <SortableTh<MatchesSortKey> label={t('god.match.col.playerA')} k="playerA" sort={sort} onSort={toggleSort} align="left" />
+                <SortableTh<MatchesSortKey> label={t('god.match.col.score')} k="score" sort={sort} onSort={toggleSort} align="center" defaultDir="desc" />
+                <SortableTh<MatchesSortKey> label={t('god.match.col.playerB')} k="playerB" sort={sort} onSort={toggleSort} align="left" />
+                <SortableTh<MatchesSortKey> label="ΔA" k="deltaA" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" />
+                <SortableTh<MatchesSortKey> label="ΔB" k="deltaB" sort={sort} onSort={toggleSort} align="right" defaultDir="desc" />
+                <SortableTh<MatchesSortKey> label="ELO" k="elo" sort={sort} onSort={toggleSort} align="center" defaultDir="desc" />
                 <th className="text-right py-2 px-2">{t('god.match.col.actions')}</th>
               </tr>
             </thead>
@@ -1865,6 +1912,8 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   IMPERSONATE_TESTER: 'text-teal-400',
 };
 
+type AuditSortKey = 'date' | 'actor' | 'role' | 'action' | 'target' | 'ip';
+
 function AuditTab() {
   const [entries, setEntries] = useState<AdminAuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1895,6 +1944,23 @@ function AuditTab() {
   useEffect(() => { load(); }, [load]);
   useServerEvents(() => load(true), PANEL_EVENTS);
 
+  const { sort, toggleSort } = useTableSort<AuditSortKey>({ key: 'date', dir: 'desc' });
+  const sorted = sortRows(
+    entries,
+    sort,
+    (e, k) => {
+      switch (k) {
+        case 'date': return new Date(e.createdAt).getTime();
+        case 'actor': return e.actorLogin.toLowerCase();
+        case 'role': return ROLE_WEIGHT[e.actorRole] ?? 0;
+        case 'action': return e.action;
+        case 'target': return (e.targetLogin ?? '').toLowerCase();
+        case 'ip': return e.ipAddress ?? '';
+        default: return 0;
+      }
+    },
+  );
+
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1919,17 +1985,17 @@ function AuditTab() {
         <table className="w-full text-xs font-mono border-collapse">
           <thead>
             <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.date')}</th>
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.actor')}</th>
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.role')}</th>
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.action')}</th>
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.target')}</th>
+              <SortableTh<AuditSortKey> label={t('god.audit.col.date')} k="date" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-1.5 px-2" />
+              <SortableTh<AuditSortKey> label={t('god.audit.col.actor')} k="actor" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
+              <SortableTh<AuditSortKey> label={t('god.audit.col.role')} k="role" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-1.5 px-2" />
+              <SortableTh<AuditSortKey> label={t('god.audit.col.action')} k="action" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
+              <SortableTh<AuditSortKey> label={t('god.audit.col.target')} k="target" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
               <th className="text-left py-1.5 px-2">{t('god.audit.col.details')}</th>
-              <th className="text-left py-1.5 px-2">{t('god.audit.col.ip')}</th>
+              <SortableTh<AuditSortKey> label={t('god.audit.col.ip')} k="ip" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
             </tr>
           </thead>
           <tbody>
-            {entries.map((e) => (
+            {sorted.map((e) => (
               <tr key={e.id} className="border-b border-zinc-900 hover:bg-zinc-900/30">
                 <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">
                   {new Date(e.createdAt).toLocaleString('fr-FR')}
@@ -2186,6 +2252,8 @@ function HistoryRowActions({
   );
 }
 
+type AllHistorySortKey = 'date' | 'type' | 'playerA' | 'playerB';
+
 function AllHistoryTab() {
   const [events, setEvents] = useState<AllHistoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2215,6 +2283,21 @@ function AllHistoryTab() {
   useEffect(() => { load(); }, [load]);
 
   const typeOrder: AllHistoryEventType[] = ['challenge', 'pending_match', 'played_match', 'rejected_match', 'ops'];
+
+  const { sort, toggleSort } = useTableSort<AllHistorySortKey>({ key: 'date', dir: 'desc' });
+  const sorted = sortRows(
+    events,
+    sort,
+    (ev, k) => {
+      switch (k) {
+        case 'date': return new Date(ev.at).getTime();
+        case 'type': return typeOrder.indexOf(ev.type);
+        case 'playerA': return (ev.playerA ?? '').toLowerCase();
+        case 'playerB': return (ev.playerB ?? '').toLowerCase();
+        default: return 0;
+      }
+    },
+  );
 
   function removeEvent(id: string, type: AllHistoryEventType) {
     setEvents((prev) => prev.filter((e) => !(e.id === id && e.type === type)));
@@ -2337,16 +2420,16 @@ function AllHistoryTab() {
                     />
                   )}
                 </th>
-                <th className="text-left py-1.5 px-2">{t('god.match.col.date')}</th>
-                <th className="text-left py-1.5 px-2">{t('god.hist.col.type')}</th>
-                <th className="text-left py-1.5 px-2">{t('god.match.col.playerA')}</th>
-                <th className="text-left py-1.5 px-2">{t('god.match.col.playerB')}</th>
+                <SortableTh<AllHistorySortKey> label={t('god.match.col.date')} k="date" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-1.5 px-2" />
+                <SortableTh<AllHistorySortKey> label={t('god.hist.col.type')} k="type" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
+                <SortableTh<AllHistorySortKey> label={t('god.match.col.playerA')} k="playerA" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
+                <SortableTh<AllHistorySortKey> label={t('god.match.col.playerB')} k="playerB" sort={sort} onSort={toggleSort} align="left" className="py-1.5 px-2" />
                 <th className="text-left py-1.5 px-2">{t('god.hist.col.detail')}</th>
                 <th className="text-right py-1.5 px-2">{t('god.match.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {events.map((ev) => (
+              {sorted.map((ev) => (
                 <tr key={`${ev.type}-${ev.id}`} className={`border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors ${selected.has(keyOf(ev)) ? 'bg-red-500/5' : ''}`}>
                   <td className="py-2 px-2 align-top">
                     <Check checked={selected.has(keyOf(ev))} onChange={() => toggle(keyOf(ev))} />
@@ -2553,6 +2636,7 @@ function TransitionSeasonModal({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ champion: string | null; players: number } | null>(null);
   const t = useT();
+  useEscapeKey(true, onClose);
 
   async function go() {
     setBusy(true);
@@ -2578,8 +2662,11 @@ function TransitionSeasonModal({
         ) : (
           <>
             <div className="text-sm font-bold text-emerald-400 uppercase tracking-widest mb-2">{t('god.season.transitionTitle').replace('{name}', newName)}</div>
-            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+            <p className="text-xs text-zinc-400 leading-relaxed mb-2">
               {t('god.season.transitionDesc.a').replace('{name}', activeName)} <span className="text-amber-300 font-bold">{t('god.season.transitionDesc.b')}</span>{t('god.season.transitionDesc.c')}
+            </p>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              {t('god.season.transitionDesc.etain.a')}<span className="text-zinc-300 font-bold">{t('god.season.transitionDesc.etain.tin')}</span>{t('god.season.transitionDesc.etain.mid')}<span className="text-amber-600 font-bold">{t('god.season.transitionDesc.etain.bronze')}</span>{t('god.season.transitionDesc.etain.b')}
             </p>
             <div className="flex gap-2 justify-end">
               <Btn variant="ghost" onClick={onClose}>{t('god.cancel')}</Btn>
@@ -2611,6 +2698,7 @@ function DeleteSeasonModal({
   const [busy, setBusy] = useState(false);
   const ok = typed.trim().toLowerCase() === DELETE_SEASON_PHRASE;
   const t = useT();
+  useEscapeKey(true, onClose);
 
   async function go() {
     setBusy(true);
@@ -2846,6 +2934,8 @@ const TOURN_STATUS_CLS: Record<Tournament['status'], string> = {
   cancelled: 'bg-red-400/15 text-red-400',
 };
 
+type TournSortKey = 'name' | 'game' | 'type' | 'format' | 'players' | 'status' | 'organizer' | 'winner' | 'created';
+
 function TournamentsTab() {
   const tr = useT();
   const [rows, setRows] = useState<Tournament[]>([]);
@@ -2905,10 +2995,26 @@ function TournamentsTab() {
   );
 
   const order: Tournament['status'][] = ['in_progress', 'registration', 'finished', 'cancelled'];
-  const sorted = [...filtered].sort(
-    (a, b) =>
-      order.indexOf(a.status) - order.indexOf(b.status) ||
-      (a.createdAt < b.createdAt ? 1 : -1),
+  const { sort, toggleSort } = useTableSort<TournSortKey>({ key: 'status', dir: 'asc' });
+  const sorted = sortRows(
+    filtered,
+    sort,
+    (tn, k) => {
+      switch (k) {
+        case 'name': return tn.name.toLowerCase();
+        case 'game': return tn.game ?? 'babyfoot';
+        case 'type': return tn.kind;
+        case 'format': return tn.format ?? '';
+        case 'players': return tn.entries?.length ?? 0;
+        case 'status': return order.indexOf(tn.status);
+        case 'organizer': return tn.createdByLogin.toLowerCase();
+        case 'winner': return (tn.winner?.login ?? '').toLowerCase();
+        case 'created': return new Date(tn.createdAt).getTime();
+        default: return 0;
+      }
+    },
+    // Départage : du plus récent au plus ancien (comportement historique).
+    (a, b) => (a.createdAt < b.createdAt ? 1 : -1),
   );
 
   return (
@@ -2944,15 +3050,15 @@ function TournamentsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-zinc-500 text-xs font-mono uppercase tracking-wider border-b border-zinc-800">
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.name')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.game')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.type')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.format')}</th>
-                <th className="text-center py-2 px-3">{tr('god.tourn.col.players')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.status')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.organizer')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.winner')}</th>
-                <th className="text-left py-2 px-3">{tr('god.tourn.col.created')}</th>
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.name')} k="name" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.game')} k="game" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.type')} k="type" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.format')} k="format" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.players')} k="players" sort={sort} onSort={toggleSort} align="center" defaultDir="desc" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.status')} k="status" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.organizer')} k="organizer" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.winner')} k="winner" sort={sort} onSort={toggleSort} align="left" className="py-2 px-3" />
+                <SortableTh<TournSortKey> label={tr('god.tourn.col.created')} k="created" sort={sort} onSort={toggleSort} align="left" defaultDir="desc" className="py-2 px-3" />
                 <th className="text-right py-2 px-3">{tr('god.tourn.col.action')}</th>
               </tr>
             </thead>

@@ -33,15 +33,29 @@ export interface MyFfaStat {
   total: number;
 }
 
-/** Élément du flux global : un match 1v1/2v2 OU un FFA, daté pour le tri. */
+/**
+ * Ma participation à une manche de fléchettes (reste + rang + delta).
+ * Réutilise le modèle FFA — même forme que MyFfaStat (le champ `ffa` porte
+ * la PlayedFfa darts, avec startScore + remaining par participant).
+ */
+export interface MyDartsStat {
+  ffa: PlayedFfa;
+  myPosition: number;
+  myDelta: number;
+  total: number;
+}
+
+/** Élément du flux global : un match 1v1/2v2, un FFA OU une manche de fléchettes. */
 export type GlobalItem =
   | { kind: 'match'; id: string; playedAt: string; match: PlayedMatch }
-  | { kind: 'ffa'; id: string; playedAt: string; ffa: PlayedFfa };
+  | { kind: 'ffa'; id: string; playedAt: string; ffa: PlayedFfa }
+  | { kind: 'darts'; id: string; playedAt: string; ffa: PlayedFfa };
 
-/** Élément de mon flux : ma game 1v1/2v2 OU ma participation FFA. */
+/** Élément de mon flux : ma game 1v1/2v2, ma participation FFA OU fléchettes. */
 export type MineItem =
   | { kind: 'match'; id: string; playedAt: string; stat: MyMatchStat }
-  | { kind: 'ffa'; id: string; playedAt: string; stat: MyFfaStat };
+  | { kind: 'ffa'; id: string; playedAt: string; stat: MyFfaStat }
+  | { kind: 'darts'; id: string; playedAt: string; stat: MyDartsStat };
 
 export interface HistoriqueData {
   myLogin: string | undefined;
@@ -60,7 +74,7 @@ export interface HistoriqueData {
  * N'ENTRENT PAS dans le calcul du win-rate (ils ont un rang, pas un binaire V/D).
  */
 export function useHistoriqueLogic(): HistoriqueData {
-  const { matches: allMatches, playedFfas: allFfas, me, refresh } = useLeagueData();
+  const { matches: allMatches, playedFfas: allFfas, playedDarts: allDarts, me, refresh } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
 
@@ -74,14 +88,20 @@ export function useHistoriqueLogic(): HistoriqueData {
     () => allFfas.filter((f) => (f.game ?? 'smash') === game),
     [allFfas, game],
   );
+  // Les manches de fléchettes (game='flechettes') : présentes seulement dans ce mode.
+  const darts = useMemo(
+    () => allDarts.filter((d) => (d.game ?? 'flechettes') === game),
+    [allDarts, game],
+  );
 
   const global = useMemo<GlobalItem[]>(() => {
     const items: GlobalItem[] = [
       ...matches.map((m) => ({ kind: 'match' as const, id: m.id, playedAt: m.playedAt, match: m })),
       ...ffas.map((f) => ({ kind: 'ffa' as const, id: f.id, playedAt: f.playedAt, ffa: f })),
+      ...darts.map((d) => ({ kind: 'darts' as const, id: d.id, playedAt: d.playedAt, ffa: d })),
     ];
     return items.sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
-  }, [matches, ffas]);
+  }, [matches, ffas, darts]);
 
   const mine = useMemo<MineItem[]>(() => {
     if (!myLogin) return [];
@@ -155,10 +175,25 @@ export function useHistoriqueLogic(): HistoriqueData {
       })
       .filter((x): x is MineItem => x !== null);
 
-    return [...matchItems, ...ffaItems].sort(
+    // Mes manches de fléchettes (hors win-rate) : ma position + mon delta.
+    const dartsItems: MineItem[] = darts
+      .map((d) => {
+        const me = d.participants.find((p) => p.login === myLogin);
+        if (!me) return null;
+        const stat: MyDartsStat = {
+          ffa: d,
+          myPosition: me.position,
+          myDelta: me.delta,
+          total: d.participants.length,
+        };
+        return { kind: 'darts', id: d.id, playedAt: d.playedAt, stat } as MineItem;
+      })
+      .filter((x): x is MineItem => x !== null);
+
+    return [...matchItems, ...ffaItems, ...dartsItems].sort(
       (a, b) => +new Date(b.playedAt) - +new Date(a.playedAt),
     );
-  }, [matches, ffas, myLogin]);
+  }, [matches, ffas, darts, myLogin]);
 
   return { myLogin, global, mine, refresh };
 }

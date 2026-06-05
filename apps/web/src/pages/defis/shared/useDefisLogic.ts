@@ -17,6 +17,10 @@ export interface DefisLogic {
   ffaToConfirm: PendingFfa[];
   /** FFA Smash que j'attends (déclarés par moi, ou déjà confirmés de mon côté). */
   ffaWaiting: PendingFfa[];
+  /** Manches de fléchettes où je dois encore confirmer MON reste. */
+  dartsToConfirm: PendingFfa[];
+  /** Manches de fléchettes que j'attends (déclarées par moi, ou déjà confirmées). */
+  dartsWaiting: PendingFfa[];
   others: LeaderboardEntry[];
   recentOpponents: LeaderboardEntry[];
   opponentCounts: Record<string, number>;
@@ -29,6 +33,12 @@ export interface DefisLogic {
   contestFfa: (id: string, claimedPosition: number, message?: string) => Promise<void>;
   /** Annule un FFA que j'ai déclaré. */
   cancelFfaDeclaration: (id: string) => Promise<void>;
+  /** Confirme MON reste dans une manche de fléchettes. */
+  confirmDarts: (id: string, remaining: number) => Promise<void>;
+  /** Conteste MON reste (revendique `claimedRemaining`) → annule la manche. */
+  contestDarts: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
+  /** Annule une manche de fléchettes que j'ai déclarée. */
+  cancelDartsDeclaration: (id: string) => Promise<void>;
 }
 
 /**
@@ -36,7 +46,7 @@ export interface DefisLogic {
  * Ne contient aucune UI, juste de la donnée dérivée et des actions.
  */
 export function useDefisLogic(): DefisLogic {
-  const { challenges, leaderboard, me, pending, pendingFfas, matches, refresh } = useLeagueData();
+  const { challenges, leaderboard, me, pending, pendingFfas, pendingDarts, matches, refresh } = useLeagueData();
   const flash = useFlash();
   const confirm = useConfirm();
   const t = useT();
@@ -95,6 +105,19 @@ export function useDefisLogic(): DefisLogic {
     }
     return { ffaToConfirm: toConfirm, ffaWaiting: waiting };
   }, [pendingFfas, myLogin]);
+
+  // Fléchettes : même logique que le FFA (confirmer SON reste, ou attendre).
+  const { dartsToConfirm, dartsWaiting } = useMemo(() => {
+    const toConfirm: PendingFfa[] = [];
+    const waiting: PendingFfa[] = [];
+    for (const d of pendingDarts) {
+      const mine = d.participants.find((p) => p.login === myLogin);
+      if (!mine) continue;
+      if (mine.confirmed) waiting.push(d);
+      else toConfirm.push(d);
+    }
+    return { dartsToConfirm: toConfirm, dartsWaiting: waiting };
+  }, [pendingDarts, myLogin]);
 
   const others = useMemo(
     () => leaderboard.filter((u) => u.login !== myLogin),
@@ -263,6 +286,53 @@ export function useDefisLogic(): DefisLogic {
     [confirm, flash, refresh, t],
   );
 
+  const confirmDarts = useCallback(
+    async (id: string, remaining: number) => {
+      try {
+        await api.confirmDarts(id, remaining);
+        flash.show(t('darts.toast.confirmed'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [flash, refresh, t],
+  );
+
+  const contestDarts = useCallback(
+    async (id: string, claimedRemaining: number, message?: string) => {
+      try {
+        await api.contestDarts(id, claimedRemaining, message);
+        flash.show(t('darts.toast.contested'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [flash, refresh, t],
+  );
+
+  const cancelDartsDeclaration = useCallback(
+    async (id: string) => {
+      const ok = await confirm({
+        title: t('darts.confirm.cancel.title'),
+        message: t('darts.confirm.cancel.message'),
+        confirmLabel: t('defis.confirm.cancel'),
+        cancelLabel: t('defis.confirm.keep'),
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api.cancelDarts(id);
+        flash.show(t('darts.toast.cancelled'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [confirm, flash, refresh, t],
+  );
+
   return {
     myLogin,
     incoming,
@@ -272,6 +342,8 @@ export function useDefisLogic(): DefisLogic {
     pendingWaiting,
     ffaToConfirm,
     ffaWaiting,
+    dartsToConfirm,
+    dartsWaiting,
     others,
     recentOpponents,
     opponentCounts,
@@ -281,5 +353,8 @@ export function useDefisLogic(): DefisLogic {
     confirmFfa,
     contestFfa,
     cancelFfaDeclaration,
+    confirmDarts,
+    contestDarts,
+    cancelDartsDeclaration,
   };
 }

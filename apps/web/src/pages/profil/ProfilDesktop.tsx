@@ -371,7 +371,7 @@ function TitlesCard({
   label: string;
   value: number;
   accent: string;
-  game: 'babyfoot' | 'smash' | 'chess' | 'streetfighter';
+  game: 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes';
 }) {
   return (
     <div className="card-hud rounded-xl px-3 py-2.5 flex items-center gap-2.5">

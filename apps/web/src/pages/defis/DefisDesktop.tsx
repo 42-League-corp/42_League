@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Swords, X, Clock, Zap, Users } from 'lucide-react';
+import { Plus, Swords, X, Clock, Zap, Users, Target } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -40,12 +40,13 @@ import { Declare2v2GameFlow } from './shared/Declare2v2GameFlow';
 import { Challenge2v2Flow } from './shared/Challenge2v2Flow';
 import { Mode1v1Toggle, type DuelMode } from './shared/Mode1v1Toggle';
 import { DeclareFfaGameFlow } from './shared/DeclareFfaGameFlow';
+import { DeclareDartsGameFlow } from './shared/DeclareDartsGameFlow';
 import { NewTeamCelebration } from '../../components/NewTeamCelebration';
 import type { Declare2v2Response } from '../../lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Kind = 'incoming' | 'outgoing' | 'accepted';
-type OpenCard = 'declare' | 'challenge' | 'ffa' | null;
+type OpenCard = 'declare' | 'challenge' | 'ffa' | 'darts' | null;
 const NOOP = () => {};
 
 // ─── Badge de discipline ──────────────────────────────────────────────────────
@@ -88,6 +89,8 @@ export function DefisDesktop() {
     pendingWaiting,
     ffaToConfirm,
     ffaWaiting,
+    dartsToConfirm,
+    dartsWaiting,
     others,
     recentOpponents,
     opponentCounts,
@@ -97,6 +100,9 @@ export function DefisDesktop() {
     confirmFfa,
     contestFfa,
     cancelFfaDeclaration,
+    confirmDarts,
+    contestDarts,
+    cancelDartsDeclaration,
   } = useDefisLogic();
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
@@ -136,6 +142,8 @@ export function DefisDesktop() {
     pendingWaiting.length > 0 ||
     ffaToConfirm.length > 0 ||
     ffaWaiting.length > 0 ||
+    dartsToConfirm.length > 0 ||
+    dartsWaiting.length > 0 ||
     incoming.length > 0 ||
     accepted.length > 0 ||
     outgoing.length > 0;
@@ -176,6 +184,7 @@ export function DefisDesktop() {
         myLogin={myLogin}
         myElo={gameStats?.elo}
         isSmash={game === 'smash'}
+        isDarts={game === 'flechettes'}
         locations={locations}
         onOpen={(c) => {
           if (c === 'challenge') setPresetOpp(null);
@@ -192,6 +201,8 @@ export function DefisDesktop() {
           pendingWaiting={pendingWaiting}
           ffaToConfirm={ffaToConfirm}
           ffaWaiting={ffaWaiting}
+          dartsToConfirm={dartsToConfirm}
+          dartsWaiting={dartsWaiting}
           incoming={incoming}
           accepted={accepted}
           outgoing={outgoing}
@@ -203,6 +214,9 @@ export function DefisDesktop() {
           confirmFfa={confirmFfa}
           contestFfa={contestFfa}
           cancelFfaDeclaration={cancelFfaDeclaration}
+          confirmDarts={confirmDarts}
+          contestDarts={contestDarts}
+          cancelDartsDeclaration={cancelDartsDeclaration}
         />
       )}
 
@@ -233,6 +247,8 @@ interface HeroCTAsProps {
   myElo?: number;
   /** Le mode FFA n'est proposé qu'en Smash. */
   isSmash: boolean;
+  /** Le mode Fléchettes n'est proposé qu'en flechettes. */
+  isDarts: boolean;
   locations: Map<string, string>;
   onOpen: (card: Exclude<OpenCard, null>) => void;
   onClose: () => void;
@@ -241,7 +257,7 @@ interface HeroCTAsProps {
 
 function HeroCTAs({
   openCard, presetOpp, others, recentOpponents, opponentCounts,
-  myLogin, myElo, isSmash, locations, onOpen, onClose, onDone,
+  myLogin, myElo, isSmash, isDarts, locations, onOpen, onClose, onDone,
 }: HeroCTAsProps) {
   const { game } = useGameMode();
   const [declareMode, setDeclareMode] = useState<DuelMode>('1v1');
@@ -382,6 +398,28 @@ function HeroCTAs({
             />
           </HeroCTACard>
         )}
+
+        {/* Fléchettes — uniquement en flechettes. */}
+        {isDarts && (openCard === null || openCard === 'darts') && (
+          <HeroCTACard
+            key="darts"
+            kind="darts"
+            expanded={openCard === 'darts'}
+            onOpen={() => onOpen('darts')}
+            onClose={onClose}
+          >
+            <DeclareDartsGameFlow
+              variant="desktop"
+              others={others}
+              recentOpponents={recentOpponents}
+              opponentCounts={opponentCounts}
+              myLogin={myLogin}
+              myElo={myElo}
+              locations={locations}
+              onSubmitted={submitAndClose}
+            />
+          </HeroCTACard>
+        )}
       </AnimatePresence>
     </motion.div>
     </>
@@ -419,6 +457,17 @@ const CTA_META = {
     iconBg: 'bg-red/20',
     accent: 'text-red',
   },
+  // Fléchettes : accent teal #14b8a6 (différent du token "teal" du thème qui est ambré).
+  darts: {
+    Icon: Target,
+    labelKey: 'darts.cta.title',
+    subKey: 'darts.cta.sub',
+    gradient: 'from-[#14b8a6]/20 via-[#14b8a6]/6 to-transparent',
+    border: 'border-[#14b8a6]/50 hover:border-[#14b8a6]',
+    glow: '0 0 36px rgba(20,184,166,0.20)',
+    iconBg: 'bg-[#14b8a6]/20',
+    accent: 'text-[#14b8a6]',
+  },
 } as const;
 
 interface HeroCTACardProps {
@@ -451,7 +500,7 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
           flex items-center gap-5 px-7 py-6
           transition-all duration-300 text-left
           active:scale-[0.98]
-          ${kind === 'ffa' ? 'md:col-span-2 md:w-[calc(50%-0.5rem)] md:mx-auto' : ''}`}
+          ${kind === 'ffa' || kind === 'darts' ? 'md:col-span-2 md:w-[calc(50%-0.5rem)] md:mx-auto' : ''}`}
         style={{ boxShadow: meta.glow }}
       >
         {/* Gradient d'accent en background */}
@@ -530,6 +579,8 @@ interface ActivityStreamProps {
   pendingWaiting: PendingMatch[];
   ffaToConfirm: PendingFfa[];
   ffaWaiting: PendingFfa[];
+  dartsToConfirm: PendingFfa[];
+  dartsWaiting: PendingFfa[];
   incoming: Challenge[];
   accepted: Challenge[];
   outgoing: Challenge[];
@@ -541,15 +592,20 @@ interface ActivityStreamProps {
   confirmFfa: (id: string, position: number) => Promise<void>;
   contestFfa: (id: string, claimedPosition: number, message?: string) => Promise<void>;
   cancelFfaDeclaration: (id: string) => Promise<void>;
+  confirmDarts: (id: string, remaining: number) => Promise<void>;
+  contestDarts: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
+  cancelDartsDeclaration: (id: string) => Promise<void>;
 }
 
 function ActivityStream({
-  pendingToConfirm, pendingWaiting, ffaToConfirm, ffaWaiting, incoming, accepted, outgoing,
+  pendingToConfirm, pendingWaiting, ffaToConfirm, ffaWaiting,
+  dartsToConfirm, dartsWaiting, incoming, accepted, outgoing,
   myLogin, lang, refresh, handleAction, cancelDeclaration,
   confirmFfa, contestFfa, cancelFfaDeclaration,
+  confirmDarts, contestDarts, cancelDartsDeclaration,
 }: ActivityStreamProps) {
   const t = useT();
-  const urgentCount = pendingToConfirm.length + ffaToConfirm.length + incoming.length;
+  const urgentCount = pendingToConfirm.length + ffaToConfirm.length + dartsToConfirm.length + incoming.length;
 
   return (
     <div className="mb-8">
@@ -579,6 +635,13 @@ function ActivityStream({
           <ActivityGroup label={t('ffa.toConfirm')} badge={ffaToConfirm.length} urgent>
             {ffaToConfirm.map((f) => (
               <FfaConfirmRow key={f.id} ffa={f} myLogin={myLogin} onConfirm={confirmFfa} onContest={contestFfa} />
+            ))}
+          </ActivityGroup>
+        )}
+        {dartsToConfirm.length > 0 && (
+          <ActivityGroup label={t('darts.toConfirm')} badge={dartsToConfirm.length} urgent>
+            {dartsToConfirm.map((d) => (
+              <DartsConfirmRow key={d.id} darts={d} myLogin={myLogin} onConfirm={confirmDarts} onContest={contestDarts} />
             ))}
           </ActivityGroup>
         )}
@@ -620,6 +683,13 @@ function ActivityStream({
           <ActivityGroup label={t('ffa.waiting')} badge={ffaWaiting.length}>
             {ffaWaiting.map((f) => (
               <FfaWaitRow key={f.id} ffa={f} myLogin={myLogin} onCancel={cancelFfaDeclaration} />
+            ))}
+          </ActivityGroup>
+        )}
+        {dartsWaiting.length > 0 && (
+          <ActivityGroup label={t('darts.waiting')} badge={dartsWaiting.length}>
+            {dartsWaiting.map((d) => (
+              <DartsWaitRow key={d.id} darts={d} myLogin={myLogin} onCancel={cancelDartsDeclaration} />
             ))}
           </ActivityGroup>
         )}
@@ -1021,6 +1091,185 @@ function FfaContestModal({
           <Button size="sm" variant="ghost" onClick={onClose} className="flex-1">{t('defis.confirm.keep')}</Button>
           <Button size="sm" variant="danger" onClick={() => onSubmit(claimed, message.trim() || undefined)} className="flex-1">
             {t('ffa.contest.submit')}
+          </Button>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fléchettes (301/501) : lignes d'activité ─────────────────────────────────
+// Réutilise le modèle FFA mais affiche les POINTS RESTANTS de chaque joueur
+// (remaining) au lieu d'une position. Le vainqueur a remaining===0 → 🏆.
+// Accent teal #14b8a6.
+
+const DARTS_TEAL = '#14b8a6';
+
+/** Récapitulatif compact : « @a 0🏆 @b 42 … » (mon reste en teal). */
+function DartsRemainingInline({ darts, myLogin }: { darts: PendingFfa; myLogin: string | undefined }) {
+  // Trié par reste croissant (le vainqueur, reste 0, en premier).
+  const ordered = [...darts.participants].sort(
+    (a, b) => (a.remaining ?? Infinity) - (b.remaining ?? Infinity),
+  );
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+      {ordered.map((p) => (
+        <span
+          key={p.login}
+          className={p.login === myLogin ? 'font-extrabold' : 'text-muted-2'}
+          style={p.login === myLogin ? { color: DARTS_TEAL } : undefined}
+        >
+          {p.login}
+          <span className="font-mono ml-0.5">{p.remaining ?? '—'}</span>
+          {p.remaining === 0 && <span className="ml-0.5">🏆</span>}
+          {p.confirmed && <span className="text-teal ml-0.5">✓</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function DartsConfirmRow({
+  darts, myLogin, onConfirm, onContest,
+}: {
+  darts: PendingFfa;
+  myLogin: string | undefined;
+  onConfirm: (id: string, remaining: number) => Promise<void>;
+  onContest: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [contesting, setContesting] = useState(false);
+  const mine = darts.participants.find((p) => p.login === myLogin);
+  const confirmedCount = darts.participants.filter((p) => p.confirmed).length;
+  const total = darts.participants.length;
+  if (!mine) return null;
+  const myRemaining = mine.remaining ?? 0;
+
+  return (
+    <>
+      <div
+        className="relative rounded-xl p-3 border animate-pop flex flex-wrap items-center gap-2.5"
+        style={{ borderColor: `${DARTS_TEAL}66`, background: `${DARTS_TEAL}0d` }}
+      >
+        <Target className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} style={{ color: DARTS_TEAL }} />
+        <PlayerLink login={darts.declarerLogin} className="font-semibold text-sm">
+          <span style={{ color: DARTS_TEAL }}>{darts.declarerLogin}</span>
+        </PlayerLink>
+        <span className="text-muted-2 text-sm">{t('darts.placedYou')}</span>
+        <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
+          {myRemaining}{myRemaining === 0 && ' 🏆'}
+        </span>
+        {darts.startScore != null && (
+          <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded font-mono">
+            {t('darts.startScore')} {darts.startScore}
+          </span>
+        )}
+        <GameTag game="flechettes" />
+        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded font-mono">{confirmedCount}/{total}</span>
+        <DartsRemainingInline darts={darts} myLogin={myLogin} />
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { await onConfirm(darts.id, myRemaining); } finally { setBusy(false); } }}>
+            {t('darts.confirmPlace')}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
+            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
+            {t('darts.contest')}
+          </Button>
+        </div>
+      </div>
+      {contesting && (
+        <DartsContestModal
+          darts={darts}
+          myRemaining={myRemaining}
+          onSubmit={async (claimed, msg) => { setContesting(false); setBusy(true); try { await onContest(darts.id, claimed, msg); } finally { setBusy(false); } }}
+          onClose={() => setContesting(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function DartsWaitRow({
+  darts, myLogin, onCancel,
+}: {
+  darts: PendingFfa;
+  myLogin: string | undefined;
+  onCancel: (id: string) => Promise<void>;
+}) {
+  const t = useT();
+  const confirmedCount = darts.participants.filter((p) => p.confirmed).length;
+  const total = darts.participants.length;
+  const isDeclarer = darts.declarerLogin === myLogin;
+  return (
+    <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
+      <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
+      <span className="text-muted-2">{t('darts.waitingFor')}</span>
+      <span className="font-mono font-extrabold text-text-strong">{confirmedCount}/{total}</span>
+      <GameTag game="flechettes" />
+      <DartsRemainingInline darts={darts} myLogin={myLogin} />
+      <span className="ml-auto text-[10px] text-muted italic">{t('defis.waitingConfirmEllipsis')}</span>
+      {isDeclarer && (
+        <button type="button" onClick={() => onCancel(darts.id)}
+          className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
+          title={t('defis.cancel')} aria-label={t('defis.cancel')}>
+          <X className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Modale de contestation Fléchettes : le joueur revendique son VRAI reste (annule la manche). */
+function DartsContestModal({
+  darts, myRemaining, onSubmit, onClose,
+}: {
+  darts: PendingFfa;
+  myRemaining: number;
+  onSubmit: (claimedRemaining: number, message?: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const max = darts.startScore ?? 501;
+  const [claimed, setClaimed] = useState(String(myRemaining));
+  const [message, setMessage] = useState('');
+
+  const claimedNum = Number(claimed);
+  const valid = claimed.trim() !== '' && Number.isInteger(claimedNum) && claimedNum >= 0 && claimedNum <= max;
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-sm">
+      <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-red/40 bg-bg-1 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-sm font-extrabold text-text-strong mb-1">{t('darts.contest.title')}</div>
+        <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">{t('darts.contest.sub')}</p>
+
+        <div className="text-[10px] uppercase tracking-wider font-bold text-muted mb-2">{t('darts.contest.yourRemaining')}</div>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={max}
+          value={claimed}
+          onChange={(e) => setClaimed(e.target.value)}
+          placeholder="0"
+          className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm font-mono font-extrabold tabular-nums focus:border-red outline-none text-text-strong placeholder:text-muted mb-1"
+        />
+        <p className="text-[10px] text-muted-2 mb-4">0 – {max}</p>
+
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          maxLength={500}
+          placeholder={t('darts.contest.messagePlaceholder')}
+          className="w-full h-20 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs resize-none focus:border-red outline-none text-text-strong placeholder:text-muted mb-4"
+        />
+
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose} className="flex-1">{t('defis.confirm.keep')}</Button>
+          <Button size="sm" variant="danger" disabled={!valid} onClick={() => onSubmit(claimedNum, message.trim() || undefined)} className="flex-1">
+            {t('darts.contest.submit')}
           </Button>
         </div>
       </div>

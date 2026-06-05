@@ -36,6 +36,10 @@ export interface LeagueData {
   pendingFfas: PendingFfa[];
   /** FFA Smash réglés (historique). */
   playedFfas: PlayedFfa[];
+  /** Manches de fléchettes en attente de confirmation (réutilise le modèle FFA). */
+  pendingDarts: PendingFfa[];
+  /** Manches de fléchettes réglées (historique). */
+  playedDarts: PlayedFfa[];
   challenges: Challenge[];
   leaderboard: LeaderboardEntry[];
   tournaments: Tournament[];
@@ -63,6 +67,8 @@ const EMPTY: LeagueData = {
   pending: [],
   pendingFfas: [],
   playedFfas: [],
+  pendingDarts: [],
+  playedDarts: [],
   challenges: [],
   leaderboard: [],
   tournaments: [],
@@ -96,12 +102,15 @@ const DOMAIN_FETCHERS: Record<Domain, () => Promise<Partial<LeagueData>>> = {
     ]);
     return { matches, pending };
   },
+  // Domaine « ffa » : couvre le FFA Smash ET les manches de fléchettes (même modèle).
   ffa: async () => {
-    const [pendingFfas, playedFfas] = await Promise.all([
+    const [pendingFfas, playedFfas, pendingDarts, playedDarts] = await Promise.all([
       api.pendingFfas(),
       api.playedFfas(),
+      api.pendingDarts().catch(() => [] as PendingFfa[]),
+      api.playedDarts().catch(() => [] as PlayedFfa[]),
     ]);
-    return { pendingFfas, playedFfas };
+    return { pendingFfas, playedFfas, pendingDarts, playedDarts };
   },
   challenges: async () => ({ challenges: await api.challenges() }),
   // Classement ET tournois sont par jeu : on interroge ceux du mode courant.
@@ -128,6 +137,11 @@ const EVENT_DOMAINS: Record<string, Domain[]> = {
   'ffa:confirmed': ['ffa', 'matches', 'me', 'leaderboard'],
   'ffa:contested': ['ffa'],
   'ffa:cancelled': ['ffa'],
+  'darts:pending': ['ffa'],
+  'darts:progress': ['ffa'],
+  'darts:confirmed': ['ffa', 'matches', 'me', 'leaderboard'],
+  'darts:contested': ['ffa'],
+  'darts:cancelled': ['ffa'],
   'challenge:received': ['challenges'],
   'challenge:accepted': ['challenges'],
   'challenge:declined': ['challenges'],
@@ -180,12 +194,14 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           if (!silent) setLoading(false);
           return;
         }
-        const [matches, pending, pendingFfas, playedFfas, challenges, leaderboard, tournaments, opsMe, allOps] =
+        const [matches, pending, pendingFfas, playedFfas, pendingDarts, playedDarts, challenges, leaderboard, tournaments, opsMe, allOps] =
           await Promise.all([
             api.playedMatches(),
             api.pendingMatches(),
             api.pendingFfas().catch(() => [] as PendingFfa[]),
             api.playedFfas().catch(() => [] as PlayedFfa[]),
+            api.pendingDarts().catch(() => [] as PendingFfa[]),
+            api.playedDarts().catch(() => [] as PlayedFfa[]),
             api.challenges(),
             api.leaderboard(getGame()),
             api.tournaments(getGame()),
@@ -198,6 +214,8 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           pending,
           pendingFfas,
           playedFfas,
+          pendingDarts,
+          playedDarts,
           challenges,
           leaderboard,
           tournaments,

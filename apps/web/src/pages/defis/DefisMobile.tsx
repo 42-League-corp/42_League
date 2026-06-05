@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Swords, Users, X, Zap } from 'lucide-react';
+import { Plus, Swords, Target, Users, X, Zap } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
 import { DeclareFfaGameSheet } from './mobile/DeclareFfaGameSheet';
+import { DeclareDartsGameSheet } from './mobile/DeclareDartsGameSheet';
 import { NewTeamCelebration } from '../../components/NewTeamCelebration';
 import { ChallengeSheet } from './mobile/ChallengeSheet';
 import { ChallengeRecordSheet } from './mobile/ChallengeRecordSheet';
@@ -30,6 +31,8 @@ export function DefisMobile() {
     pendingWaiting,
     ffaToConfirm,
     ffaWaiting,
+    dartsToConfirm,
+    dartsWaiting,
     others,
     recentOpponents,
     opponentCounts,
@@ -39,6 +42,9 @@ export function DefisMobile() {
     confirmFfa,
     contestFfa,
     cancelFfaDeclaration,
+    confirmDarts,
+    contestDarts,
+    cancelDartsDeclaration,
   } = useDefisLogic();
   const t = useT();
   const { leaderboard, locations } = useLeagueData();
@@ -48,6 +54,7 @@ export function DefisMobile() {
 
   const [declareOpen, setDeclareOpen] = useState(false);
   const [ffaOpen, setFfaOpen] = useState(false);
+  const [dartsOpen, setDartsOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
 
   // Célébration nouveau duo 2v2 — géré ici (niveau racine, jamais démonté)
@@ -104,6 +111,16 @@ export function DefisMobile() {
               onClick={() => setFfaOpen(true)}
             />
           )}
+          {/* Manche de fléchettes — uniquement en Fléchettes. */}
+          {game === 'flechettes' && (
+            <BigActionButton
+              Icon={Target}
+              tone="red"
+              title={t('darts.cta.title')}
+              subtitle={t('darts.cta.sub')}
+              onClick={() => setDartsOpen(true)}
+            />
+          )}
           <BigActionButton
             Icon={Swords}
             tone="gold"
@@ -154,6 +171,35 @@ export function DefisMobile() {
             <div className="space-y-2.5">
               {ffaWaiting.map((f) => (
                 <FfaMobileCard key={f.id} ffa={f} myLogin={myLogin} waiting onCancel={cancelFfaDeclaration} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Fléchettes — mon reste à confirmer */}
+        {dartsToConfirm.length > 0 && (
+          <section>
+            <SectionHeader
+              icon={<Target className="w-3.5 h-3.5" strokeWidth={2.5} style={{ color: '#14b8a6' }} />}
+              title={t('darts.toConfirm')}
+              badge={dartsToConfirm.length}
+              tone="gold"
+            />
+            <div className="space-y-2.5">
+              {dartsToConfirm.map((d) => (
+                <DartsMobileCard key={d.id} darts={d} myLogin={myLogin} onConfirm={confirmDarts} onContest={contestDarts} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Fléchettes — en attente des autres */}
+        {dartsWaiting.length > 0 && (
+          <section>
+            <SectionHeader title={t('darts.waiting')} />
+            <div className="space-y-2.5">
+              {dartsWaiting.map((d) => (
+                <DartsMobileCard key={d.id} darts={d} myLogin={myLogin} waiting onCancel={cancelDartsDeclaration} />
               ))}
             </div>
           </section>
@@ -352,6 +398,19 @@ export function DefisMobile() {
         onDone={refresh}
       />
 
+      {/* Sheet de déclaration d'une manche de fléchettes */}
+      <DeclareDartsGameSheet
+        open={dartsOpen}
+        onClose={() => setDartsOpen(false)}
+        others={others}
+        recentOpponents={recentOpponents}
+        opponentCounts={opponentCounts}
+        myLogin={myLogin}
+        myElo={myElo}
+        locations={locations}
+        onDone={refresh}
+      />
+
       {/* Sheet de défi (duel à venir) */}
       <ChallengeSheet
         open={challengeOpen}
@@ -521,6 +580,140 @@ function FfaMobileCard({
           type="button"
           disabled={busy}
           onClick={async () => { setBusy(true); try { await onCancel?.(ffa.id); } finally { setBusy(false); } }}
+          className="w-full py-2 rounded-xl border border-border text-muted-2 text-xs font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
+        >
+          {t('defis.cancel')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Fléchettes : carte mobile (confirmer son reste / contester / annuler) ────
+
+function DartsMobileCard({
+  darts, myLogin, waiting = false, onConfirm, onContest, onCancel,
+}: {
+  darts: PendingFfa;
+  myLogin: string | undefined;
+  waiting?: boolean;
+  onConfirm?: (id: string, remaining: number) => Promise<void>;
+  onContest?: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
+  onCancel?: (id: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [contesting, setContesting] = useState(false);
+  const [claimed, setClaimed] = useState('');
+  // Classement dérivé du reste (0 = vainqueur, puis du plus petit au plus grand).
+  const ordered = [...darts.participants].sort(
+    (a, b) => (a.remaining ?? Infinity) - (b.remaining ?? Infinity),
+  );
+  const mine = darts.participants.find((p) => p.login === myLogin);
+  const confirmedCount = darts.participants.filter((p) => p.confirmed).length;
+  const total = darts.participants.length;
+  const isDeclarer = darts.declarerLogin === myLogin;
+  const startScore = darts.startScore ?? null;
+  if (!mine) return null;
+  const myRemaining = mine.remaining ?? 0;
+
+  return (
+    <div className="relative card-hud px-4 py-3.5">
+      <div className="flex items-center gap-2 mb-2.5">
+        <Target className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} style={{ color: '#14b8a6' }} />
+        <span className="text-xs font-bold text-text-strong">{darts.declarerLogin}</span>
+        <span className="text-[10px] text-muted-2">{t('darts.placedYou')}</span>
+        {startScore != null && (
+          <span className="font-mono text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{startScore}</span>
+        )}
+        <span className="ml-auto font-mono text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{confirmedCount}/{total}</span>
+      </div>
+
+      {/* Restes proposés */}
+      <div className="space-y-1 mb-3">
+        {ordered.map((p) => (
+          <div
+            key={p.login}
+            className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs ${
+              p.login === myLogin ? 'bg-gold/[0.08] text-gold font-extrabold' : 'text-muted-2'
+            }`}
+          >
+            <span className="w-5 text-center">{(p.remaining ?? 0) === 0 ? '🏆' : ''}</span>
+            <span className="flex-1 truncate">{p.login}</span>
+            <span className="font-mono tabular-nums">{p.remaining ?? 0}</span>
+            {p.confirmed && <span style={{ color: '#14b8a6' }}>✓</span>}
+          </div>
+        ))}
+      </div>
+
+      {!waiting && !contesting && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => { setBusy(true); try { await onConfirm?.(darts.id, myRemaining); } finally { setBusy(false); } }}
+            className="flex-1 py-2.5 rounded-xl text-[#022] text-xs font-black uppercase tracking-wider active:scale-[0.98] transition-transform disabled:opacity-50"
+            style={{ background: 'linear-gradient(90deg, #2dd4bf 0%, #14b8a6 100%)' }}
+          >
+            {t('darts.confirmRemaining')} · {myRemaining}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setClaimed(String(myRemaining)); setContesting(true); }}
+            className="px-4 py-2.5 rounded-xl border text-xs font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
+            style={{ borderColor: 'rgba(20,184,166,0.4)', color: '#14b8a6' }}
+          >
+            {t('darts.contest')}
+          </button>
+        </div>
+      )}
+
+      {!waiting && contesting && (
+        <div className="rounded-xl border p-3" style={{ borderColor: 'rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.04)' }}>
+          <div className="text-[11px] text-muted-2 mb-2 leading-relaxed">{t('darts.contest.sub')}</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-muted mb-2">{t('darts.contest.yourRemaining')}</div>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={startScore ?? undefined}
+            value={claimed}
+            onChange={(e) => setClaimed(e.target.value)}
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-bg-2 text-text-strong font-mono tabular-nums text-sm outline-none focus:ring-2"
+            style={{ ['--tw-ring-color' as string]: 'rgba(20,184,166,0.5)' }}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setContesting(false)}
+              className="flex-1 py-2 rounded-lg bg-bg-2 text-muted-2 text-xs font-bold"
+            >
+              {t('defis.confirm.keep')}
+            </button>
+            <button
+              type="button"
+              disabled={busy || claimed.trim() === ''}
+              onClick={async () => {
+                const val = Number(claimed);
+                if (!Number.isFinite(val)) return;
+                setBusy(true);
+                try { await onContest?.(darts.id, val); } finally { setBusy(false); setContesting(false); }
+              }}
+              className="flex-1 py-2 rounded-lg text-white text-xs font-bold disabled:opacity-50"
+              style={{ background: '#14b8a6' }}
+            >
+              {t('darts.contest.submit')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {waiting && isDeclarer && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => { setBusy(true); try { await onCancel?.(darts.id); } finally { setBusy(false); } }}
           className="w-full py-2 rounded-xl border border-border text-muted-2 text-xs font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           {t('defis.cancel')}
