@@ -10,6 +10,8 @@ www.42league.fr {
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        # Isole le top-level window (audit Lighthouse "origin isolation with COOP").
+        Cross-Origin-Opener-Policy "same-origin"
         -Server
     }
 
@@ -36,6 +38,7 @@ staging.42league.fr {
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        Cross-Origin-Opener-Policy "same-origin"
         # Empêche l'indexation du staging par les moteurs de recherche.
         X-Robots-Tag "noindex, nofollow"
         -Server
