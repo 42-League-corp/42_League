@@ -97,6 +97,10 @@ import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.
 // Hardcoded — immutable. No API can grant or revoke this.
 const SUPERADMINS = new Set(['abidaux', 'throbert']);
 
+// Logins autorisés à basculer « Tester en mode user » (staging only). Volontairement
+// restreint à ces deux logins — les autres admins n'y ont PAS droit.
+const TESTER_SWITCH_LOGINS = new Set(['throbert', 'jagharra']);
+
 // Compte de test générique (rôle USER, cf. staging-seed.ts) sur lequel un admin
 // peut basculer pour vivre l'expérience d'un joueur lambda (POST /admin/impersonate-tester).
 const TESTER_LOGIN = 'tester';
@@ -523,7 +527,7 @@ async function badgesFor(login: string, role: string): Promise<string[]> {
     orderBy: { awardedAt: 'asc' },
   });
   const out: string[] = [];
-  if (login.toLowerCase() === 'throbert') out.push('founder');
+  if (['throbert', 'abidaux'].includes(login.toLowerCase())) out.push('founder');
   if (role === 'ADMIN') out.push('admin');
   for (const e of earned) out.push(e.code);
   return [...new Set(out)];
@@ -4984,7 +4988,9 @@ app.post('/admin/impersonate-tester', async (c) => {
     throw new HTTPException(403, { message: 'staging only' });
   }
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  if (!TESTER_SWITCH_LOGINS.has(me.toLowerCase())) {
+    throw new HTTPException(403, { message: 'tester switch not allowed' });
+  }
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new HTTPException(500, { message: 'server misconfigured' });
   // Garantit l'existence du compte (rôle USER) même si le seed n'a pas tourné.
@@ -5007,7 +5013,9 @@ app.post('/admin/impersonate-fresh-tester', async (c) => {
     throw new HTTPException(403, { message: 'staging only' });
   }
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  if (!TESTER_SWITCH_LOGINS.has(me.toLowerCase())) {
+    throw new HTTPException(403, { message: 'tester switch not allowed' });
+  }
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new HTTPException(500, { message: 'server misconfigured' });
   // Login unique court (≤ 20 car.) ; `onboardedAt` laissé null → onboarding rejoué.

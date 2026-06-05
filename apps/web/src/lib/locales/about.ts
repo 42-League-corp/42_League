@@ -53,7 +53,7 @@ export const dict: Record<Lang, Dict> = {
     // Rôles d'équipe
     'about.role.throbert': 'Founder',
     'about.role.nithomas': 'Parrain',
-    'about.role.abidaux': 'Cofondateur',
+    'about.role.abidaux': 'Founder',
     'about.role.jagharra': 'Sécurité · Pentester',
     'about.role.rbardet': 'Conseiller UX/UI',
     'about.role.sbonneau': 'Pen tester · Abuser',
@@ -133,7 +133,7 @@ export const dict: Record<Lang, Dict> = {
     // Team roles
     'about.role.throbert': 'Founder',
     'about.role.nithomas': 'Mentor',
-    'about.role.abidaux': 'Co-founder',
+    'about.role.abidaux': 'Founder',
     'about.role.jagharra': 'Security · Pentester',
     'about.role.rbardet': 'UX/UI advisor',
     'about.role.sbonneau': 'Pen tester · Abuser',
@@ -213,7 +213,7 @@ export const dict: Record<Lang, Dict> = {
     // Roles del equipo
     'about.role.throbert': 'Founder',
     'about.role.nithomas': 'Padrino',
-    'about.role.abidaux': 'Cofundador',
+    'about.role.abidaux': 'Founder',
     'about.role.jagharra': 'Seguridad · Pentester',
     'about.role.rbardet': 'Asesor UX/UI',
     'about.role.sbonneau': 'Pen tester · Abuser',

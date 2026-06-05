@@ -7,8 +7,11 @@ import { api } from '../lib/api';
 import { IS_STAGING } from '../lib/config';
 import { getImpersonatorLogin, startImpersonation, stopImpersonation } from '../lib/storage';
 
+// Logins autorisés à la bascule (pas tous les admins) — miroir du backend.
+const TESTER_SWITCH_LOGINS = new Set(['throbert', 'jagharra']);
+
 // ─────────────────────────────────────────────────────────────────────────────
-// « Tester en mode user » — STAGING + admins UNIQUEMENT.
+// « Tester en mode user » — STAGING, logins throbert/jagharra UNIQUEMENT.
 //
 // Permet à un admin/superadmin de basculer sur le compte générique `tester`
 // (rôle USER) pour vivre l'expérience d'un joueur lambda, puis de revenir à son
@@ -34,7 +37,8 @@ export function useTesterSwitch() {
   // pas besoin de réactivité sur le localStorage.
   const [impersonator] = useState(() => getImpersonatorLogin());
 
-  const isAdmin = me?.role === 'ADMIN' || me?.role === 'SUPERADMIN';
+  // Réservé à ces logins uniquement (pas tous les admins) — miroir du backend.
+  const canUseTester = !!me?.login && TESTER_SWITCH_LOGINS.has(me.login.toLowerCase());
 
   async function switchToTester() {
     setBusy(true);
@@ -71,8 +75,8 @@ export function useTesterSwitch() {
   return {
     busy,
     impersonator,
-    /** true ⇒ un admin sur staging peut basculer en mode tester. */
-    canSwitch: IS_STAGING && isAdmin,
+    /** true ⇒ login autorisé (throbert/jagharra) sur staging peut basculer en mode tester. */
+    canSwitch: IS_STAGING && canUseTester,
     switchToTester,
     switchToFresh,
     returnToSelf,
