@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, LocateFixed } from 'lucide-react';
-import { api, type Season, type SeasonStanding, type LeaderboardEntry } from '../../lib/api';
+import { api, type Season, type SeasonStanding, type LeaderboardEntry, type PlayedMatch } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
@@ -11,7 +11,7 @@ import { WinRateBar } from '../../components/WinRateBar';
 import { RankBadge } from '../../components/RankBadge';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
-import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView } from './LeaderboardScatter';
+import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView, type LeaderboardScatterHandle } from './LeaderboardScatter';
 import { GoatView } from '../GoatPage';
 import { TeamLeaderboard } from './TeamLeaderboard';
 import { RankingScopeToggle } from './RankingScopeToggle';
@@ -57,6 +57,142 @@ const EMPTY_STATS: PlayerStats = {
   maxLossBreaker: null,
 };
 
+interface LeaderboardStats {
+  /** Matchs du jeu courant (filtre déjà appliqué). */
+  matches: PlayedMatch[];
+  /** Stats dérivées par login. */
+  stats: Map<string, PlayerStats>;
+}
+
+/**
+ * Calcul lourd des stats du leaderboard (filtre matchs + W/L + séries) extrait du
+ * composant pour bénéficier d'un cache au niveau module : keyé sur les références
+ * stables `allMatches`/`leaderboard`/`game` (qui ne changent qu'au refetch), il
+ * survit aux démontages/remontages de page. Un `useMemo` de composant repartirait
+ * de zéro à chaque navigation, ce qui était la principale cause de lag.
+ */
+let _statsCache: ({ allMatches: PlayedMatch[]; leaderboard: LeaderboardEntry[]; game: string } & LeaderboardStats) | null = null;
+
+function computeLeaderboardStats(
+  allMatches: PlayedMatch[],
+  leaderboard: LeaderboardEntry[],
+  game: string,
+): LeaderboardStats {
+  if (
+    _statsCache &&
+    _statsCache.allMatches === allMatches &&
+    _statsCache.leaderboard === leaderboard &&
+    _statsCache.game === game
+  ) {
+    return _statsCache;
+  }
+
+  const matches = allMatches.filter((m) => (m.game ?? 'babyfoot') === game);
+  const map = new Map<string, PlayerStats>();
+  for (const u of leaderboard) {
+    map.set(u.login, { ...EMPTY_STATS });
+  }
+
+  // W/L cumulés
+  for (const m of matches) {
+    if (m.winner === 'draw') continue; // nulle : ni V ni D
+    for (const login of [m.playerALogin, m.playerBLogin]) {
+      const cur = map.get(login);
+      if (!cur) continue;
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      if (won) cur.wins++;
+      else cur.losses++;
+    }
+  }
+
+  // Photo Intra par login (pour le tooltip « brisée par … »).
+  const infoByLogin = new Map<string, string | null>();
+  for (const u of leaderboard) infoByLogin.set(u.login, u.imageUrl);
+
+  // Série en cours : on parcourt les matches récents → anciens par joueur.
+  const byPlayer = new Map<string, { won: boolean; at: number; opp: string }[]>();
+  for (const m of matches) {
+    if (m.winner === 'draw') continue; // nulle : hors série V/D
+    for (const login of [m.playerALogin, m.playerBLogin]) {
+      if (!map.has(login)) continue;
+      const isA = m.playerALogin === login;
+      const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+      const opp = isA ? m.playerBLogin : m.playerALogin;
+      const arr = byPlayer.get(login) ?? [];
+      arr.push({ won, at: new Date(m.playedAt).getTime(), opp });
+      byPlayer.set(login, arr);
+    }
+  }
+  for (const [login, results] of byPlayer) {
+    results.sort((a, b) => b.at - a.at);
+    let streak = 0;
+    const first = results[0];
+    if (first) {
+      for (const r of results) {
+        if (r.won === first.won) streak++;
+        else break;
+      }
+      if (!first.won) streak = -streak;
+    }
+    // Plus longues séries (V / D) + qui y a mis fin. On parcourt en ordre
+    // chronologique (ancien → récent). Un run n'est comptabilisé qu'à sa
+    // CLÔTURE (match de signe opposé) : c'est cet adversaire qui « brise » la
+    // série. Le run final, jamais clos, est le record « en cours » → pas de
+    // briseur (on ne montrera pas « brisée par … »).
+    const chrono = results.slice().reverse();
+    let maxWin = 0;
+    let maxLoss = 0;
+    let winBreaker: string | null = null; // adversaire qui a battu le joueur
+    let lossBreaker: string | null = null; // adversaire battu par le joueur
+    let winOngoing = false;
+    let lossOngoing = false;
+    let run = 0;
+    let runSign: 'W' | 'L' | null = null;
+    for (const r of chrono) {
+      const sign: 'W' | 'L' = r.won ? 'W' : 'L';
+      if (runSign === null || sign === runSign) {
+        run++;
+        runSign = sign;
+        continue;
+      }
+      // Le run précédent (runSign) est clos par r (signe opposé) → r.opp l'a brisé.
+      if (runSign === 'W') {
+        if (run > maxWin) { maxWin = run; winBreaker = r.opp; winOngoing = false; }
+      } else if (run > maxLoss) {
+        maxLoss = run; lossBreaker = r.opp; lossOngoing = false;
+      }
+      run = 1;
+      runSign = sign;
+    }
+    // Run final encore ouvert : record « en cours » s'il bat les précédents.
+    if (runSign === 'W') {
+      if (run > maxWin) { maxWin = run; winOngoing = true; winBreaker = null; }
+    } else if (runSign === 'L' && run > maxLoss) {
+      maxLoss = run; lossOngoing = true; lossBreaker = null;
+    }
+
+    const s = map.get(login)!;
+    s.streak = streak;
+    s.maxWinStreak = maxWin;
+    s.maxLossStreak = maxLoss;
+    s.maxWinBreaker = winBreaker && !winOngoing
+      ? { login: winBreaker, imageUrl: infoByLogin.get(winBreaker) ?? null }
+      : null;
+    s.maxLossBreaker = lossBreaker && !lossOngoing
+      ? { login: lossBreaker, imageUrl: infoByLogin.get(lossBreaker) ?? null }
+      : null;
+  }
+
+  for (const s of map.values()) {
+    s.games = s.wins + s.losses;
+    s.winRate = s.games === 0 ? 0 : Math.round((s.wins / s.games) * 100);
+  }
+
+  _statsCache = { allMatches, leaderboard, game, matches, stats: map };
+  return _statsCache;
+}
+
 type SortKey =
   | 'rank'
   | 'player'
@@ -87,124 +223,14 @@ export function LeaderboardDesktop() {
   useEffect(() => {
     if (game !== 'babyfoot') setActiveTab('personal');
   }, [game]);
-  // Le classement courant est celui du mode (babyfoot|smash) → on ne calcule les
-  // stats dérivées que sur les matchs de ce jeu.
-  const matches = useMemo(
-    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
-    [allMatches, game],
+  // Le classement courant est celui du mode (babyfoot|smash) → stats dérivées sur
+  // les matchs de ce jeu uniquement. Calcul lourd déporté dans une fonction cachée
+  // au niveau module (cf. computeLeaderboardStats) → instantané en revenant sur la
+  // page tant que les données n'ont pas changé.
+  const { stats: statsByLogin } = useMemo(
+    () => computeLeaderboardStats(allMatches, leaderboard, game),
+    [allMatches, leaderboard, game],
   );
-
-  // Statistiques complètes par login : W/L, games, winrate, série en cours.
-  const statsByLogin = useMemo(() => {
-    const map = new Map<string, PlayerStats>();
-    for (const u of leaderboard) {
-      map.set(u.login, { ...EMPTY_STATS });
-    }
-
-    // W/L cumulés
-    for (const m of matches) {
-      if (m.winner === 'draw') continue; // nulle : ni V ni D
-      for (const login of [m.playerALogin, m.playerBLogin]) {
-        const cur = map.get(login);
-        if (!cur) continue;
-        const isA = m.playerALogin === login;
-        const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-        if (won) cur.wins++;
-        else cur.losses++;
-      }
-    }
-
-    // Photo Intra par login (pour le tooltip « brisée par … »).
-    const infoByLogin = new Map<string, string | null>();
-    for (const u of leaderboard) infoByLogin.set(u.login, u.imageUrl);
-
-    // Série en cours : on parcourt les matches récents → anciens par joueur.
-    const byPlayer = new Map<string, { won: boolean; at: number; opp: string }[]>();
-    for (const m of matches) {
-      if (m.winner === 'draw') continue; // nulle : hors série V/D
-      for (const login of [m.playerALogin, m.playerBLogin]) {
-        if (!map.has(login)) continue;
-        const isA = m.playerALogin === login;
-        const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-        const opp = isA ? m.playerBLogin : m.playerALogin;
-        const arr = byPlayer.get(login) ?? [];
-        arr.push({ won, at: new Date(m.playedAt).getTime(), opp });
-        byPlayer.set(login, arr);
-      }
-    }
-    for (const [login, results] of byPlayer) {
-      results.sort((a, b) => b.at - a.at);
-      let streak = 0;
-      const first = results[0];
-      if (first) {
-        for (const r of results) {
-          if (r.won === first.won) streak++;
-          else break;
-        }
-        if (!first.won) streak = -streak;
-      }
-      // Plus longues séries (V / D) + qui y a mis fin. On parcourt en ordre
-      // chronologique (ancien → récent). Un run n'est comptabilisé qu'à sa
-      // CLÔTURE (match de signe opposé) : c'est cet adversaire qui « brise » la
-      // série. Le run final, jamais clos, est le record « en cours » → pas de
-      // briseur (on ne montrera pas « brisée par … »).
-      const chrono = results.slice().reverse();
-      let maxWin = 0;
-      let maxLoss = 0;
-      let winBreaker: string | null = null; // adversaire qui a battu le joueur
-      let lossBreaker: string | null = null; // adversaire battu par le joueur
-      let winOngoing = false;
-      let lossOngoing = false;
-      let run = 0;
-      let runSign: 'W' | 'L' | null = null;
-      for (const r of chrono) {
-        const sign: 'W' | 'L' = r.won ? 'W' : 'L';
-        if (runSign === null || sign === runSign) {
-          run++;
-          runSign = sign;
-          continue;
-        }
-        // Le run précédent (runSign) est clos par r (signe opposé) → r.opp l'a brisé.
-        if (runSign === 'W') {
-          if (run > maxWin) { maxWin = run; winBreaker = r.opp; winOngoing = false; }
-        } else if (run > maxLoss) {
-          maxLoss = run; lossBreaker = r.opp; lossOngoing = false;
-        }
-        run = 1;
-        runSign = sign;
-      }
-      // Run final encore ouvert : record « en cours » s'il bat les précédents.
-      if (runSign === 'W') {
-        if (run > maxWin) { maxWin = run; winOngoing = true; winBreaker = null; }
-      } else if (runSign === 'L' && run > maxLoss) {
-        maxLoss = run; lossOngoing = true; lossBreaker = null;
-      }
-
-      const s = map.get(login)!;
-      s.streak = streak;
-      s.maxWinStreak = maxWin;
-      s.maxLossStreak = maxLoss;
-      s.maxWinBreaker = winBreaker && !winOngoing
-        ? { login: winBreaker, imageUrl: infoByLogin.get(winBreaker) ?? null }
-        : null;
-      s.maxLossBreaker = lossBreaker && !lossOngoing
-        ? { login: lossBreaker, imageUrl: infoByLogin.get(lossBreaker) ?? null }
-        : null;
-    }
-
-    for (const s of map.values()) {
-      s.games = s.wins + s.losses;
-      s.winRate = s.games === 0 ? 0 : Math.round((s.wins / s.games) * 100);
-    }
-    return map;
-  }, [leaderboard, matches]);
-
-  // Win rate par login — abscisse du nuage de points.
-  const winRates = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const [login, s] of statsByLogin) m.set(login, s.winRate);
-    return m;
-  }, [statsByLogin]);
 
   // ─── Vue (liste / nuage) ─────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<RankingView>('list');
@@ -232,6 +258,16 @@ export function LeaderboardDesktop() {
 
   const viewingPast = standings !== null;
 
+  // Matchs de la saison affichée : en saison passée, on ne garde que ceux taggés
+  // de son seasonId. La saison BETA précède le tagging → 0 match rattaché : on la
+  // détecte ainsi (seasonHasMatches=false) pour masquer la vue G.O.A.T (et les
+  // séries), non recalculables sans historique. Nuage + Liste restent dispo.
+  const seasonMatches = useMemo(
+    () => (standings ? allMatches.filter((m) => m.seasonId === seasonId) : allMatches),
+    [standings, allMatches, seasonId],
+  );
+  const seasonHasMatches = !viewingPast || seasonMatches.length > 0;
+
   // Photos par login (les snapshots de saison ne stockent pas l'imageUrl → on
   // réutilise la photo actuelle du joueur, prise dans le classement courant).
   const imgByLogin = useMemo(() => {
@@ -241,8 +277,9 @@ export function LeaderboardDesktop() {
   }, [leaderboard]);
 
   // Données affichées : live (classement courant) ou snapshot d'une saison passée.
-  // Le snapshot ne contient que login/rang/elo/V/D → on en dérive games + winrate
-  // et on laisse les séries vides (l'historique match par match n'est pas figé).
+  // Le snapshot ne contient que login/rang/elo/V/D. Pour une saison V1 (matchs
+  // taggés), on recalcule les séries réelles depuis ses matchs ; pour la BETA
+  // (0 match rattaché), on se contente des V/D du snapshot (séries vides).
   const { entries, rowStats } = useMemo<{
     entries: LeaderboardEntry[];
     rowStats: Map<string, PlayerStats>;
@@ -258,6 +295,11 @@ export function LeaderboardDesktop() {
         campus: null,
       }),
     );
+    // V1 : historique match par match disponible → stats complètes (séries incluses).
+    if (seasonMatches.length > 0) {
+      return { entries: e, rowStats: computeLeaderboardStats(seasonMatches, e, game).stats };
+    }
+    // BETA : pas d'historique taggé → V/D figés du snapshot, séries vides.
     const st = new Map<string, PlayerStats>();
     for (const s of standings) {
       const games = s.wins + s.losses;
@@ -270,7 +312,15 @@ export function LeaderboardDesktop() {
       });
     }
     return { entries: e, rowStats: st };
-  }, [standings, imgByLogin, leaderboard, statsByLogin]);
+  }, [standings, imgByLogin, leaderboard, statsByLogin, seasonMatches, game]);
+
+  // Win rate par login — abscisse du nuage de points. Dérivé de rowStats pour
+  // suivre la saison affichée (live ou snapshot passé).
+  const scatterWinRates = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [login, s] of rowStats) m.set(login, s.winRate);
+    return m;
+  }, [rowStats]);
 
   // Top 3 par rang officiel (ELO) — pour le podium.
   const top3 = useMemo(
@@ -350,13 +400,25 @@ export function LeaderboardDesktop() {
     return rows;
   }, [entries, rowStats, sort]);
 
-  // Bouton « Où suis-je ? » : défile jusqu'à la ligne du joueur courant.
-  // (Plus d'auto-scroll au montage — on reste en haut du classement et le
-  // recentrage se déclenche à la demande via le bouton.)
+  // Bouton « Où suis-je ? » : recentre sur le joueur courant dans les 3 vues.
+  //  • Liste / G.O.A.T → défile jusqu'à l'élément #lb-me-row.
+  //  • Nuage → commande impérative du nuage (pan/zoom interne, pas de scroll).
+  // (Plus d'auto-scroll au montage — déclenché à la demande via le bouton.)
+  const scatterRef = useRef<LeaderboardScatterHandle>(null);
   const scrollToMe = useCallback(() => {
+    if (viewMode === 'graph') {
+      scatterRef.current?.locateMe();
+      return;
+    }
     const el = document.getElementById('lb-me-row');
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, []);
+  }, [viewMode]);
+
+  // Saison BETA sélectionnée alors qu'on était sur la vue G.O.A.T (indisponible) →
+  // bascule sur la liste pour ne pas rester sur une vue vide.
+  useEffect(() => {
+    if (viewMode === 'goat' && !seasonHasMatches) setViewMode('list');
+  }, [viewMode, seasonHasMatches]);
 
   return (
     <div>
@@ -403,34 +465,33 @@ export function LeaderboardDesktop() {
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} currentLabel={t('lb.season.current')} />
-          {!viewingPast && (
-            <div className="flex items-center gap-2">
-              {viewMode === 'list' && myLogin && sortedRows.some((r) => r.entry.login === myLogin) && (
-                <button
-                  type="button"
-                  onClick={scrollToMe}
-                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gold/30 bg-gold/10 text-gold text-xs font-semibold hover:bg-gold/15 hover:border-gold/50 transition-colors"
-                >
-                  <LocateFixed className="w-3.5 h-3.5" strokeWidth={2.4} />
-                  {t('lb.whereAmI')}
-                </button>
-              )}
-              <RankingViewToggle view={viewMode} onChange={setViewMode} />
-              <GradesNavButton />
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {myLogin && sortedRows.some((r) => r.entry.login === myLogin) && (
+              <button
+                type="button"
+                onClick={scrollToMe}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gold/30 bg-gold/10 text-gold text-xs font-semibold hover:bg-gold/15 hover:border-gold/50 transition-colors"
+              >
+                <LocateFixed className="w-3.5 h-3.5" strokeWidth={2.4} />
+                {t('lb.whereAmI')}
+              </button>
+            )}
+            <RankingViewToggle view={viewMode} onChange={setViewMode} showGoat={seasonHasMatches} />
+            <GradesNavButton />
+          </div>
         </div>
         {entries.length === 0 ? (
           <div className="text-center text-muted-2 py-10">
             {viewingPast ? t('lb.snapshot.empty') : t('lb.empty')}
           </div>
-        ) : !viewingPast && viewMode === 'goat' ? (
-          <GoatView />
-        ) : !viewingPast && viewMode === 'graph' ? (
+        ) : viewMode === 'goat' && seasonHasMatches ? (
+          viewingPast ? <GoatView leaderboard={entries} matches={seasonMatches} /> : <GoatView />
+        ) : viewMode === 'graph' ? (
           <LeaderboardScatter
-            entries={leaderboard}
+            ref={scatterRef}
+            entries={entries}
             myLogin={myLogin}
-            winRates={winRates}
+            winRates={scatterWinRates}
             className="h-[640px]"
           />
         ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGesture } from '@use-gesture/react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,6 +28,12 @@ interface View {
   scale: number;
   tx: number;
   ty: number;
+}
+
+/** Handle impératif exposé au parent — « Où suis-je ? » recentre le nuage sur moi. */
+export interface LeaderboardScatterHandle {
+  /** Renvoie true si le joueur courant a bien été trouvé et ciblé. */
+  locateMe: () => boolean;
 }
 
 /** Un amas = un ou plusieurs joueurs regroupés sur un même point du nuage. */
@@ -88,18 +94,16 @@ const clumpRadius = (total: number) => (total <= 1 ? 0 : CLUMP_STEP * Math.sqrt(
  * serrés ; au survol l'amas se déploie en éventail (vraies têtes).
  * Molette / pincement pour zoomer, glisser pour se déplacer.
  */
-export function LeaderboardScatter({
-  entries,
-  myLogin,
-  winRates,
-  className = '',
-}: {
-  entries: LeaderboardEntry[];
-  myLogin?: string;
-  /** Win rate (0–100) par login — affiché dans l'infobulle. */
-  winRates?: Map<string, number>;
-  className?: string;
-}) {
+export const LeaderboardScatter = forwardRef<
+  LeaderboardScatterHandle,
+  {
+    entries: LeaderboardEntry[];
+    myLogin?: string;
+    /** Win rate (0–100) par login — affiché dans l'infobulle. */
+    winRates?: Map<string, number>;
+    className?: string;
+  }
+>(function LeaderboardScatter({ entries, myLogin, winRates, className = '' }, ref) {
   const t = useT();
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -250,6 +254,56 @@ export function LeaderboardScatter({
     }
     return null;
   }, [hovered, openCluster, clusters]);
+
+  // ─── « Où suis-je ? » — recentre/zoome le nuage sur le joueur courant ───────
+  // Le parent ne connaît pas l'état interne (pan/zoom) du nuage ; on expose donc
+  // une commande impérative. La transition est tweenée pour un « vol » fluide
+  // (le rendu applique tx/ty/scale sans transition CSS, sinon le drag laggerait).
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const tweenRef = useRef<number | null>(null);
+
+  const animateTo = useCallback((target: View) => {
+    if (tweenRef.current != null) cancelAnimationFrame(tweenRef.current);
+    const from = viewRef.current;
+    const start = performance.now();
+    const DUR = 480;
+    const ease = (p: number) => 1 - Math.pow(1 - p, 3); // easeOutCubic
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / DUR);
+      const k = ease(p);
+      setView({
+        scale: from.scale + (target.scale - from.scale) * k,
+        tx: from.tx + (target.tx - from.tx) * k,
+        ty: from.ty + (target.ty - from.ty) * k,
+      });
+      tweenRef.current = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    tweenRef.current = requestAnimationFrame(step);
+  }, []);
+
+  useEffect(() => () => {
+    if (tweenRef.current != null) cancelAnimationFrame(tweenRef.current);
+  }, []);
+
+  const locateMe = useCallback((): boolean => {
+    if (!myLogin) return false;
+    const c = clusters.find((cl) => cl.members.some((m) => m.login === myLogin));
+    if (!c) return false;
+    // Amas à plusieurs : on le déploie pour que ma vraie tête soit visible…
+    const idx = c.members.findIndex((m) => m.login === myLogin);
+    const multi = c.members.length > 1;
+    if (multi) setOpenCluster(c.id);
+    // …et on vise la position déployée (éventail) plutôt que le centre de l'amas.
+    const off = multi ? fanOffset(idx, c.members.length) : { x: 0, y: 0 };
+    const bx = c.bx + off.x;
+    const by = c.by + off.y;
+    const scale = clamp(Math.max(viewRef.current.scale, 2), SCALE_MIN, SCALE_MAX);
+    animateTo({ scale, tx: plotW / 2 - bx * scale, ty: plotH / 2 - by * scale });
+    return true;
+  }, [myLogin, clusters, plotW, plotH, animateTo]);
+
+  useImperativeHandle(ref, () => ({ locateMe }), [locateMe]);
 
   return (
     <div className={`relative ${className}`}>
@@ -534,7 +588,7 @@ export function LeaderboardScatter({
       </div>
     </div>
   );
-}
+});
 
 function ScatterTooltip({ entry, winRate, left, top }: { entry: LeaderboardEntry; winRate?: number; left: number; top: number }) {
   const t = useT();
@@ -576,9 +630,12 @@ export type RankingView = 'list' | 'graph' | 'goat';
 export function RankingViewToggle({
   view,
   onChange,
+  showGoat = true,
 }: {
   view: RankingView;
   onChange: (v: RankingView) => void;
+  /** Masque la vue G.O.A.T (saison beta sans historique de matchs taggé). */
+  showGoat?: boolean;
 }) {
   const t = useT();
   return (
@@ -590,9 +647,11 @@ export function RankingViewToggle({
         {t('lb.view.graph')}
       </ToggleBtn>
       {/* G.O.A.T : 3ᵉ vue inline (plus de navigation vers une page séparée). */}
-      <ToggleBtn active={view === 'goat'} onClick={() => onChange('goat')} Icon={Crown}>
-        G.O.A.T
-      </ToggleBtn>
+      {showGoat && (
+        <ToggleBtn active={view === 'goat'} onClick={() => onChange('goat')} Icon={Crown}>
+          G.O.A.T
+        </ToggleBtn>
+      )}
     </div>
   );
 }

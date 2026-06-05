@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, LocateFixed } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
@@ -6,7 +6,7 @@ import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { RankingScopeToggle } from './RankingScopeToggle';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
-import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView } from './LeaderboardScatter';
+import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView, type LeaderboardScatterHandle } from './LeaderboardScatter';
 import { GoatView } from '../GoatPage';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { TeamLeaderboard } from './TeamLeaderboard';
@@ -62,6 +62,15 @@ export function LeaderboardMobile() {
   }, [seasonId, game]);
   const pastSeasons = seasons.filter((s) => !s.isActive);
   const viewingPast = standings !== null;
+
+  // Matchs de la saison affichée. La BETA précède le tagging par seasonId → 0
+  // match rattaché : on la détecte ainsi (seasonHasMatches=false) pour masquer la
+  // vue G.O.A.T (non recalculable). Nuage + Liste restent disponibles (snapshot).
+  const seasonMatches = useMemo(
+    () => (standings ? matches.filter((m) => m.seasonId === seasonId) : matches),
+    [standings, matches, seasonId],
+  );
+  const seasonHasMatches = !viewingPast || seasonMatches.length > 0;
 
   // Photos par login (le snapshot d'une saison ne stocke pas l'imageUrl → on
   // réutilise la photo actuelle du joueur, prise dans le classement courant).
@@ -150,12 +159,24 @@ export function LeaderboardMobile() {
 
   const myRank = sortedLeaderboard.find((u) => u.login === myLogin)?.rank;
 
-  // Bouton « Où suis-je ? » : centre la liste sur la carte du joueur courant.
+  // Bouton « Où suis-je ? » : recentre sur le joueur courant dans les 3 vues.
+  //  • Liste / G.O.A.T → centre la vue sur #lb-me-row.
+  //  • Nuage → commande impérative du nuage (pan/zoom interne).
   // (Plus d'auto-scroll au montage — déclenché à la demande via le bouton.)
+  const scatterRef = useRef<LeaderboardScatterHandle>(null);
   const scrollToMe = useCallback(() => {
+    if (viewMode === 'graph') {
+      scatterRef.current?.locateMe();
+      return;
+    }
     const el = document.getElementById('lb-me-row');
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, []);
+  }, [viewMode]);
+
+  // Saison BETA en vue G.O.A.T (indisponible) → repli sur la liste.
+  useEffect(() => {
+    if (viewMode === 'goat' && !seasonHasMatches) setViewMode('list');
+  }, [viewMode, seasonHasMatches]);
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -209,90 +230,66 @@ export function LeaderboardMobile() {
           </div>
         )}
 
-        {viewingPast ? (
-          sortedLeaderboard.length === 0 ? (
-            <div className="text-center text-muted-2 py-10 text-sm">{t('lb.snapshot.emptyShort')}</div>
-          ) : (
-            <div className="space-y-5">
-              {/* Podium top 3 — mêmes marches, photos grisées (classement figé) */}
-              {top3.length > 0 && <Podium top3={top3} statsByLogin={podiumStats} past />}
-              {/* Reste du classement : mêmes cartes que le live, photos grisées */}
-              <StaggerList className="space-y-2" stagger={0.03}>
-                {sortedLeaderboard.slice(3).map((entry) => {
-                  const wl = winsLossesByLogin.get(entry.login) ?? { wins: 0, losses: 0 };
-                  return (
-                    <StaggerItem key={entry.login}>
-                      <PlayerRankCard
-                        entry={entry}
-                        wins={wl.wins}
-                        losses={wl.losses}
-                        isMe={entry.login === myLogin}
-                        past
-                      />
-                    </StaggerItem>
-                  );
-                })}
-              </StaggerList>
-            </div>
-          )
-        ) : (
-        <>
-        {/* ── Banner GAME en tout premier, avant même le podium ────────── */}
-        <LeaderboardBanner />
+        {/* ── Banner GAME — live uniquement, avant même le podium ───────── */}
+        {!viewingPast && <LeaderboardBanner />}
 
         {/* Podium top 3 — uniquement en vue liste (ni nuage, ni G.O.A.T) */}
         {viewMode === 'list' && top3.length > 0 && !normalizedQuery && (
-          <Podium top3={top3} statsByLogin={podiumStats} />
+          <Podium top3={top3} statsByLogin={podiumStats} past={viewingPast} />
         )}
 
-        {/* Barre d'outils : bascule liste / nuage / G.O.A.T + accès Paliers */}
+        {/* Barre d'outils : bascule liste / nuage / G.O.A.T + accès Paliers.
+            G.O.A.T masqué pour la BETA (pas d'historique de matchs taggé). */}
         <div className="flex items-center justify-center gap-2 flex-wrap">
-          <RankingViewToggle view={viewMode} onChange={setViewMode} />
+          <RankingViewToggle view={viewMode} onChange={setViewMode} showGoat={seasonHasMatches} />
           <GradesNavButton />
         </div>
 
         {viewMode === 'graph' ? (
-          <LeaderboardScatter
-            entries={sortedLeaderboard}
-            myLogin={myLogin}
-            winRates={winRates}
-            className="h-[clamp(320px,70vh,560px)]"
-          />
-        ) : viewMode === 'goat' ? (
-          <GoatView />
+          <>
+            {myRank && <WhereAmIButton onClick={scrollToMe} label={t('lb.whereAmI')} />}
+            <LeaderboardScatter
+              ref={scatterRef}
+              entries={sortedLeaderboard}
+              myLogin={myLogin}
+              winRates={winRates}
+              className="h-[clamp(320px,70vh,560px)]"
+            />
+          </>
+        ) : viewMode === 'goat' && seasonHasMatches ? (
+          <>
+            {myRank && <WhereAmIButton onClick={scrollToMe} label={t('lb.whereAmI')} />}
+            {viewingPast ? <GoatView leaderboard={pastEntries} matches={seasonMatches} /> : <GoatView />}
+          </>
+        ) : sortedLeaderboard.length === 0 ? (
+          <div className="text-center text-muted-2 py-10 text-sm">
+            {viewingPast ? t('lb.snapshot.emptyShort') : t('lb.search.empty')}
+          </div>
         ) : (
         <>
-        {/* (podium déjà rendu au-dessus) */}
-        {false && null /* placeholder to keep nesting */}
-
-        {/* Stats globales */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-center justify-around py-2 px-3 rounded-2xl card-hud"
-        >
-          <Stat label={t('lb.stat.players')} value={leaderboard.length} />
-          <div className="w-px h-8 bg-border" />
-          <Stat label={t('lb.stat.matches')} value={matches.length} />
-          {myRank && (
-            <>
-              <div className="w-px h-8 bg-border" />
-              <Stat label={t('lb.me')} value={`#${myRank}`} tone="teal" />
-            </>
-          )}
-        </motion.div>
+        {/* Stats globales — live uniquement (sans objet sur un classement figé) */}
+        {!viewingPast && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="flex items-center justify-around py-2 px-3 rounded-2xl card-hud"
+          >
+            <Stat label={t('lb.stat.players')} value={leaderboard.length} />
+            <div className="w-px h-8 bg-border" />
+            <Stat label={t('lb.stat.matches')} value={matches.length} />
+            {myRank && (
+              <>
+                <div className="w-px h-8 bg-border" />
+                <Stat label={t('lb.me')} value={`#${myRank}`} tone="teal" />
+              </>
+            )}
+          </motion.div>
+        )}
 
         {/* Bouton « Où suis-je ? » — recentre la liste sur ma carte (hors recherche). */}
         {myRank && !normalizedQuery && (
-          <button
-            type="button"
-            onClick={scrollToMe}
-            className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl border border-gold/30 bg-gold/10 text-gold text-sm font-semibold active:scale-[0.98] transition-transform tap-transparent"
-          >
-            <LocateFixed className="w-4 h-4" strokeWidth={2.4} />
-            {t('lb.whereAmI')}
-          </button>
+          <WhereAmIButton onClick={scrollToMe} label={t('lb.whereAmI')} />
         )}
 
         {/* Recherche */}
@@ -326,7 +323,9 @@ export function LeaderboardMobile() {
             {rest.map((entry) => {
               const wl = winsLossesByLogin.get(entry.login) ?? { wins: 0, losses: 0 };
               const isMe = entry.login === myLogin;
-              const targetedBy = allOps.find((o) => o.targetLogin === entry.login);
+              // Indicateurs temps réel (Ops, en ligne) : sans objet sur un
+              // classement figé d'une saison passée → masqués.
+              const targetedBy = viewingPast ? undefined : allOps.find((o) => o.targetLogin === entry.login);
               return (
                 <StaggerItem key={entry.login}>
                   <div id={isMe ? 'lb-me-row' : undefined} className="scroll-mt-24">
@@ -336,7 +335,8 @@ export function LeaderboardMobile() {
                       losses={wl.losses}
                       isMe={isMe}
                       targetedBy={targetedBy}
-                      host={locations.get(entry.login)}
+                      host={viewingPast ? undefined : locations.get(entry.login)}
+                      past={viewingPast}
                     />
                   </div>
                 </StaggerItem>
@@ -346,14 +346,26 @@ export function LeaderboardMobile() {
         )}
         </>
         )}
-        </>
-        )}
             </motion.div>
           )}
         </AnimatePresence>
 
       </div>
     </PullToRefresh>
+  );
+}
+
+// Bouton « Où suis-je ? » — partagé par les 3 vues (liste / nuage / G.O.A.T).
+function WhereAmIButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl border border-gold/30 bg-gold/10 text-gold text-sm font-semibold active:scale-[0.98] transition-transform tap-transparent"
+    >
+      <LocateFixed className="w-4 h-4" strokeWidth={2.4} />
+      {label}
+    </button>
   );
 }
 
