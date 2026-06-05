@@ -12,6 +12,7 @@ import {
   RecordResultSchema,
   CreateTournamentSchema,
   ShopItemCreateSchema,
+  MAX_BANNER_DATAURL_LEN,
   TournamentRecordSchema,
   SetTitleSchema,
   DeclareOpsSchema,
@@ -1618,7 +1619,7 @@ const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
 // saison). Passage instantané à la saison suivante.
 app.post('/seasons', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requireSuperAdmin(me);
   const body = await c.req.json().catch(() => ({}));
   const parsed = CreateSeasonSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -1745,7 +1746,7 @@ app.post('/seasons', async (c) => {
 // snapshot — on ne fait que choisir quelle saison est « la courante ». Admin only.
 app.post('/seasons/:id/activate', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requireSuperAdmin(me);
   const id = c.req.param('id');
   const season = await prisma.$transaction(async (tx) => {
     const target = await tx.season.findUnique({ where: { id } });
@@ -1763,13 +1764,55 @@ app.post('/seasons/:id/activate', async (c) => {
 // IRRÉVERSIBLE — ne restaure pas les ELO déjà remis à zéro. Admin only.
 app.delete('/seasons/:id', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
+  await requireSuperAdmin(me);
   const id = c.req.param('id');
   await prisma.$transaction(async (tx) => {
     const season = await tx.season.findUnique({ where: { id } });
     if (!season) throw new HTTPException(404, { message: 'Saison introuvable.' });
+    // On refuse de supprimer la saison active : sinon plus aucune saison courante.
+    if (season.isActive) {
+      throw new HTTPException(409, {
+        message: 'Impossible de supprimer la saison active : activez d\'abord une autre saison.',
+      });
+    }
+    // Badges champion : la clé est (userLogin, code, game) — le seasonId ne pointe
+    // que la DERNIÈRE saison gagnée. Avant de supprimer en masse, on regarde pour
+    // chaque badge pointant cette saison si le joueur reste champion (rank 1) d'une
+    // AUTRE saison encore existante, via ses snapshots de standings.
+    const champBadges = await tx.userBadge.findMany({
+      where: { seasonId: id, code: 'season_champion' },
+    });
+    if (champBadges.length > 0) {
+      // Ordre des autres saisons (plus récente d'abord) pour re-pointer le badge
+      // vers la dernière saison gagnée encore existante (pas de relation Prisma
+      // entre standing et saison → on classe via startedAt côté code).
+      const otherSeasons = await tx.season.findMany({
+        where: { id: { not: id } },
+        orderBy: { startedAt: 'desc' },
+        select: { id: true },
+      });
+      const seasonOrder = new Map(otherSeasons.map((s, i) => [s.id, i]));
+      for (const badge of champBadges) {
+        // Snapshots rank 1 du joueur sur ce jeu, dans une autre saison existante.
+        const wins = await tx.seasonStanding.findMany({
+          where: { login: badge.userLogin, game: badge.game, rank: 1, seasonId: { not: id } },
+          select: { seasonId: true },
+        });
+        // Ne garder que les saisons toujours existantes, classer par récence.
+        const candidates = wins
+          .map((w) => w.seasonId)
+          .filter((sid) => seasonOrder.has(sid))
+          .sort((a, b) => (seasonOrder.get(a)! - seasonOrder.get(b)!));
+        if (candidates.length > 0) {
+          // Toujours champion ailleurs : on re-pointe vers la saison la plus récente.
+          await tx.userBadge.update({ where: { id: badge.id }, data: { seasonId: candidates[0] } });
+        } else {
+          // Plus champion nulle part : on retire le badge.
+          await tx.userBadge.delete({ where: { id: badge.id } });
+        }
+      }
+    }
     await tx.seasonStanding.deleteMany({ where: { seasonId: id } });
-    await tx.userBadge.deleteMany({ where: { seasonId: id, code: 'season_champion' } });
     await tx.playedMatch.updateMany({ where: { seasonId: id }, data: { seasonId: null } });
     await tx.season.delete({ where: { id } });
   });
@@ -2542,6 +2585,7 @@ app.get('/matches/ffa/pending', async (c) => {
   await getCurrentLogin(c);
   return c.json(
     await prisma.pendingFfa.findMany({
+      where: { game: 'smash' },
       orderBy: { declaredAt: 'desc' },
       include: { participants: true },
     }),
@@ -2552,6 +2596,7 @@ app.get('/matches/ffa', async (c) => {
   await getCurrentLogin(c);
   return c.json(
     await prisma.playedFfa.findMany({
+      where: { game: 'smash' },
       orderBy: { playedAt: 'desc' },
       include: { participants: true },
     }),
@@ -2955,6 +3000,13 @@ app.post('/matches/darts/:id/confirm', async (c) => {
     if (!mine) {
       throw new HTTPException(403, { message: 'tu ne fais pas partie de cette manche' });
     }
+    // Le schéma borne à 501 ; on vérifie ici le vrai startScore de la manche (301/501).
+    const startScore = pending.startScore ?? 501;
+    if (remaining < 0 || remaining > startScore) {
+      throw new HTTPException(400, {
+        message: `reste invalide : doit être entre 0 et ${startScore}`,
+      });
+    }
     if (mine.remaining !== remaining) {
       throw new HTTPException(409, {
         message: 'le score a changé — recharge la manche avant de confirmer ton reste',
@@ -3031,6 +3083,13 @@ app.post('/matches/darts/:id/contest', async (c) => {
     if (!mine) throw new HTTPException(403, { message: 'tu ne fais pas partie de cette manche' });
     if (me === pending.declarerLogin) {
       throw new HTTPException(400, { message: 'le déclarant annule sa manche, il ne la conteste pas' });
+    }
+    // Le schéma borne à 501 ; on vérifie ici le vrai startScore de la manche (301/501).
+    const startScore = pending.startScore ?? 501;
+    if (claimedRemaining < 0 || claimedRemaining > startScore) {
+      throw new HTTPException(400, {
+        message: `reste revendiqué invalide : doit être entre 0 et ${startScore}`,
+      });
     }
     info = {
       declarerLogin: pending.declarerLogin,
@@ -5888,7 +5947,9 @@ app.get('/shop', async (c) => {
   const [user, items, owned] = await Promise.all([
     prisma.user.findUnique({ where: { login }, select: { leagueCoins: true } }),
     prisma.shopItem.findMany({
-      where: { active: true },
+      // 'cosmetic' = catégorie réservée (sans payload ni effet) : non achetable,
+      // donc exclue du catalogue joueur (elle reste visible côté GOD/admin).
+      where: { active: true, category: { not: 'cosmetic' } },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     }),
     prisma.shopInventory.findMany({ where: { userLogin: login }, select: { itemId: true } }),
@@ -5910,6 +5971,10 @@ app.post('/shop/:id/buy', async (c) => {
   const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
   if (!item || !item.active) {
     throw new HTTPException(404, { message: 'objet introuvable' });
+  }
+  // 'cosmetic' n'a aucun effet et n'est pas équipable → achat refusé (pas de coins brûlés).
+  if (item.category === 'cosmetic') {
+    throw new HTTPException(400, { message: 'objet sans effet, non disponible à l\'achat' });
   }
 
   const coins = await prisma.$transaction(async (tx) => {
@@ -6021,19 +6086,41 @@ app.post('/me/inventory/:id/equip', async (c) => {
 // `ShopItemCreateSchema` + `MAX_BANNER_DATAURL_LEN` sont désormais partagés
 // (@42-league/shared) car réutilisés par la récompense de tournoi officiel.
 // `.partial()` n'existe pas sur un ZodEffects → on repart de l'objet de base.
-const ShopItemUpdateSchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  description: z.string().nullish(),
-  category: z.enum(['title', 'banner', 'badge', 'cosmetic']).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
-    .nullish(),
-  price: z.number().int().min(0).optional(),
-  payload: z.record(z.any()).nullish(),
-  active: z.boolean().optional(),
-  sortOrder: z.number().int().optional(),
-});
+const ShopItemUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    description: z.string().nullish(),
+    category: z.enum(['title', 'banner', 'badge', 'cosmetic']).optional(),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
+      .nullish(),
+    price: z.number().int().min(0).optional(),
+    payload: z.record(z.any()).nullish(),
+    active: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  // Même validation payload↔catégorie qu'à la création, mais en PATCH : on ne
+  // contrôle que si la catégorie ET le payload sont réellement fournis (sinon on
+  // n'a pas de quoi décider — la valeur en base reste inchangée).
+  .superRefine((d, ctx) => {
+    if (d.category === undefined || d.payload === undefined || d.payload === null) return;
+    if (d.category === 'banner') {
+      const img = typeof d.payload.image === 'string' ? d.payload.image : '';
+      if (!img.startsWith('data:image/')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
+      } else if (img.length > MAX_BANNER_DATAURL_LEN) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+      }
+    }
+    if (d.category === 'badge') {
+      const code = typeof d.payload.code === 'string' ? d.payload.code : '';
+      const label = typeof d.payload.label === 'string' ? d.payload.label : '';
+      if (!code || !label) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
+      }
+    }
+  });
 
 // ── Permissions des modérateurs ──────────────────────────────────────────────
 // Seuls les ADMIN/SUPERADMIN peuvent attribuer des permissions à un modérateur.
