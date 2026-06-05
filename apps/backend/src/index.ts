@@ -281,12 +281,14 @@ interface NotifInput {
   link?: string;
   /** Jeu d'origine (couleur/emoji + bascule de mode au clic). Absent = transverse. */
   game?: string;
+  /** Entité liée (pendingMatch / playedMatch / challenge) → marquage auto-lu. */
+  refId?: string;
 }
 
 async function notify(to: string, n: NotifInput): Promise<void> {
   try {
     await prisma.notification.create({
-      data: { id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null },
+      data: { id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null, refId: n.refId ?? null },
     });
     emit([to], { type: 'notification', payload: {} });
   } catch {
@@ -298,11 +300,63 @@ async function notifyMany(tos: string[], n: NotifInput): Promise<void> {
   if (tos.length === 0) return;
   try {
     await prisma.notification.createMany({
-      data: tos.map((to) => ({ id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null })),
+      data: tos.map((to) => ({ id: randomUUID(), recipientLogin: to, type: n.type, title: n.title, body: n.body ?? null, link: n.link ?? null, game: n.game ?? null, refId: n.refId ?? null })),
     });
     emit(tos, { type: 'notification', payload: {} });
   } catch {
     /* noop */
+  }
+}
+
+// Marque « lues » toutes les notifs cloche liées à une entité (refId) pour les
+// destinataires donnés — appelé dès que l'action est traitée (score validé /
+// contesté, défi accepté / refusé) pour ne pas laisser de doublon non-lu dans
+// la cloche alors que le popup + la section Défis l'ont déjà géré.
+async function markNotifsReadByRef(logins: string | string[], refId: string): Promise<void> {
+  const list = (Array.isArray(logins) ? logins : [logins]).filter(Boolean);
+  if (list.length === 0) return;
+  try {
+    const res = await prisma.notification.updateMany({
+      where: { recipientLogin: { in: list }, refId, read: false },
+      data: { read: true },
+    });
+    if (res.count > 0) emit(list, { type: 'notification', payload: {} });
+  } catch {
+    /* noop */
+  }
+}
+
+// Notifie chaque joueur d'un match réglé du résultat (cloche), teinté à la
+// discipline. Orienté par joueur : « Victoire / Défaite / Match nul » + score
+// dans son sens. refId = id du match (informationnel, pas d'action à traiter).
+async function notifyMatchResult(match: {
+  id: string;
+  game: string;
+  scoreA: number;
+  scoreB: number;
+  winner: string;
+  playerALogin: string;
+  playerBLogin: string;
+  playerA2Login?: string | null;
+  playerB2Login?: string | null;
+}): Promise<void> {
+  const teamA = [match.playerALogin, match.playerA2Login].filter(Boolean) as string[];
+  const teamB = [match.playerBLogin, match.playerB2Login].filter(Boolean) as string[];
+  for (const login of [...teamA, ...teamB]) {
+    const onA = teamA.includes(login);
+    const outcome =
+      match.winner === 'draw' ? 'Match nul' : (match.winner === 'A') === onA ? 'Victoire' : 'Défaite';
+    const score = onA ? `${match.scoreA}–${match.scoreB}` : `${match.scoreB}–${match.scoreA}`;
+    void notify(login, {
+      type: 'match_result',
+      title: outcome,
+      body: `${score} · ELO mis à jour`,
+      link: `/challenges?game=${encodeURIComponent(match.game)}`,
+      game: match.game,
+      // Suffixe `:result` : le match réglé réutilise l'id du pending, or l'auto-lecture
+      // cible ce même id — sans suffixe, le résultat tout juste créé serait marqué lu.
+      refId: `${match.id}:result`,
+    });
   }
 }
 
@@ -1790,9 +1844,16 @@ app.post('/matches', async (c) => {
     type: 'match:pending',
     payload: { id: pending.id, declarerLogin: me, scoreDeclarer: scoreSelf, scoreOpponent },
   });
-  // Pas de notif cloche pour les matchs : les scores à valider vivent
-  // uniquement dans la section Défis (+ la bannière popup), via l'event SSE
-  // `match:pending` ci-dessus.
+  // Notif cloche pour l'adversaire (en plus du popup + section Défis). Auto-lue
+  // dès qu'il valide ou conteste (cf. /matches/:id/confirm & /reject).
+  void notify(opponentLogin, {
+    type: 'match_pending',
+    title: `@${me} a déclaré un score`,
+    body: 'Score à valider',
+    link: `/challenges?game=${encodeURIComponent(game)}`,
+    game,
+    refId: pending.id,
+  });
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
 
@@ -1844,6 +1905,15 @@ app.post('/matches/2v2', async (c) => {
   emit([partnerLogin, opponentLogin, opponent2Login], {
     type: 'match:pending',
     payload: { id: pending.id, mode: '2v2', declarerLogin: me },
+  });
+  // Notif cloche pour les 3 non-déclarants (auto-lue dès confirmation/contestation).
+  void notifyMany([partnerLogin, opponentLogin, opponent2Login], {
+    type: 'match_pending',
+    title: `@${me} a déclaré un match 2v2`,
+    body: 'Score à valider',
+    link: '/challenges?game=babyfoot',
+    game: 'babyfoot',
+    refId: pending.id,
   });
 
   // Aperçu de l'équipe du déclarant (le duo n'est créé qu'à la validation).
@@ -2118,6 +2188,10 @@ app.post('/matches/:id/confirm', async (c) => {
       const rcp = [m2v2.playerALogin, m2v2.playerBLogin, m2v2.playerA2Login, m2v2.playerB2Login]
         .filter(Boolean) as string[];
       emit(rcp, { type: 'match:confirmed', payload: m2v2 });
+      // Le « score à valider » est traité → on solde les notifs cloche associées
+      // et on pousse le résultat dans la cloche des 4 joueurs.
+      void markNotifsReadByRef(rcp, id);
+      void notifyMatchResult(m2v2);
       broadcast({ type: 'leaderboard:update', payload: {} });
       return c.json(m2v2);
     }
@@ -2197,8 +2271,11 @@ app.post('/matches/:id/confirm', async (c) => {
       : [match.playerALogin, match.playerBLogin];
 
   // Résultat poussé en temps réel (section Défis + bannière) via cet event.
-  // Pas de notif cloche pour les matchs.
   emit(matchRecipients, { type: 'match:confirmed', payload: match });
+  // Mon « score à valider » est traité → notif cloche soldée, puis résultat poussé
+  // dans la cloche des deux joueurs.
+  void markNotifsReadByRef(me, id);
+  void notifyMatchResult(match);
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
   // Abonnés notifiés si un joueur entre dans le top 3.
@@ -2234,6 +2311,7 @@ app.post('/matches/:id/reject', async (c) => {
   const { contestReason, contestMessage } = parsed.data;
 
   let rejectRecipients: string[] = [];
+  let rejectGame = 'babyfoot';
   await prisma.$transaction(async (tx) => {
     const p = await tx.pendingMatch.findUnique({ where: { id } });
     if (!p) {
@@ -2247,6 +2325,7 @@ app.post('/matches/:id/reject', async (c) => {
         message: 'only the opponent can reject this match',
       });
     }
+    rejectGame = p.game;
     // Le déclarant + son coéquipier (en 2v2) sont prévenus de la contestation.
     rejectRecipients = [p.declarerLogin, p.partner1Login].filter(Boolean) as string[];
     await tx.rejectedMatch.create({
@@ -2265,9 +2344,19 @@ app.post('/matches/:id/reject', async (c) => {
 
   if (rejectRecipients.length > 0) {
     // Contestation poussée en temps réel via l'event `match:rejected`
-    // (section Défis + bannière). Pas de notif cloche pour les matchs.
+    // (section Défis + bannière) + notif cloche pour le(s) déclarant(s).
     emit(rejectRecipients, { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
+    void notifyMany(rejectRecipients, {
+      type: 'match_rejected',
+      title: `@${me} a contesté ton score`,
+      body: contestReason === 'never_played' ? 'Match jamais joué' : 'Score incorrect',
+      link: `/challenges?game=${encodeURIComponent(rejectGame)}`,
+      game: rejectGame,
+      refId: id,
+    });
   }
+  // Mon « score à valider » est traité (rejeté) → notif cloche soldée.
+  void markNotifsReadByRef(me, id);
   return c.json({ id, status: 'rejected', contestReason });
 });
 
@@ -2428,8 +2517,9 @@ app.post('/matches/ffa', async (c) => {
     type: 'ffa_pending',
     title: `@${me} t'a placé dans un FFA Smash`,
     body: 'Confirme ta position dans le classement.',
-    link: '/defis',
+    link: '/challenges?game=smash',
     game: 'smash',
+    refId: pending.id,
   });
   return c.json({ id: pending.id, status: 'pending' }, 201);
 });
@@ -2495,6 +2585,20 @@ app.post('/matches/ffa/:id/confirm', async (c) => {
     const played = result.played;
     const logins = played.participants.map((pp) => pp.login);
     emit(logins, { type: 'ffa:confirmed', payload: played });
+    // Le FFA est réglé → notifs « score à valider » soldées, puis résultat (place +
+    // ELO) poussé en cloche pour chaque participant. refId suffixé `:result` car le
+    // PlayedFfa réutilise l'id du pending (sinon l'auto-lecture effacerait le résultat).
+    void markNotifsReadByRef(logins, played.id);
+    for (const pp of played.participants) {
+      void notify(pp.login, {
+        type: 'ffa_result',
+        title: `FFA Smash — ${pp.position}${pp.position === 1 ? 'er' : 'e'}`,
+        body: `ELO ${pp.delta >= 0 ? '+' : ''}${pp.delta}`,
+        link: '/challenges?game=smash',
+        game: 'smash',
+        refId: `${played.id}:result`,
+      });
+    }
     // L'ELO Smash de plusieurs joueurs a changé → le classement bouge pour tous.
     broadcast({ type: 'leaderboard:update', payload: {} });
     for (const pp of played.participants) void maybeNotifyTop3(pp.login, pp.delta);
@@ -2546,11 +2650,14 @@ app.post('/matches/ffa/:id/contest', async (c) => {
       type: 'ffa_contested',
       title: `@${me} conteste le FFA Smash`,
       body: `Position revendiquée : ${claimedPosition}${message ? ` — « ${message} »` : ''}. FFA annulé.`,
-      link: '/defis',
+      link: '/challenges?game=smash',
       game: 'smash',
+      refId: id,
     });
     // Les autres participants voient le FFA disparaître.
     emit(info.others.filter((l) => l !== info!.declarerLogin), { type: 'ffa:cancelled', payload: { id, cancelledBy: me, reason: 'contested' } });
+    // Le FFA est annulé → les « score à valider » de tous les participants sont soldés.
+    void markNotifsReadByRef([me, ...info.others], id);
   }
   return c.json({ id, status: 'cancelled' });
 });
@@ -2573,6 +2680,8 @@ app.post('/matches/ffa/:id/cancel', async (c) => {
 
   if (others.length > 0) {
     emit(others, { type: 'ffa:cancelled', payload: { id, cancelledBy: me } });
+    // Le déclarant annule → les « score à valider » des participants sont soldés.
+    void markNotifsReadByRef(others, id);
   }
   return c.json({ id, status: 'cancelled' });
 });
@@ -2606,6 +2715,14 @@ app.post('/admin/matches/:id/force-confirm', async (c) => {
   });
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  // Score à valider soldé pour tous les participants + résultat poussé en cloche.
+  void markNotifsReadByRef(
+    [match.playerALogin, match.playerBLogin, match.playerA2Login, match.playerB2Login].filter(
+      Boolean,
+    ) as string[],
+    id,
+  );
+  void notifyMatchResult(match);
   broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json(match);
 });
@@ -2881,6 +2998,7 @@ app.post('/admin/matches/force-result', async (c) => {
   });
 
   emit([match.playerALogin, match.playerBLogin], { type: 'match:confirmed', payload: match });
+  void notifyMatchResult(match);
   broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json(match);
 });
@@ -2946,6 +3064,7 @@ app.post('/challenges/2v2', async (c) => {
       body: 'Un nouveau défi en équipe t\'attend',
       link: `/challenges?game=babyfoot`,
       game: 'babyfoot',
+      refId: challenge.id,
     });
   }
   return c.json(challenge, 201);
@@ -2982,6 +3101,7 @@ app.post('/challenges', async (c) => {
     body: 'Un nouveau défi t\'attend',
     link: `/challenges?game=${encodeURIComponent(game)}`,
     game,
+    refId: challenge.id,
   });
   return c.json(challenge, 201);
 });
@@ -3044,6 +3164,22 @@ app.post('/challenges/:id/accept', async (c) => {
   emit(acceptRecipients, {
     type: 'challenge:accepted',
     payload: challenge,
+  });
+  // Le défi est traité → notif cloche « duel reçu » soldée pour qui accepte.
+  void markNotifsReadByRef(me, challenge.id);
+  // L'initiateur (+ son coéquipier en 2v2) est prévenu en cloche que le duel est prêt.
+  const acceptedTargets = (
+    challenge.mode === '2v2'
+      ? [challenge.challengerLogin, challenge.partnerLogin]
+      : [challenge.challengerLogin]
+  ).filter((l) => l && l !== me) as string[];
+  void notifyMany(acceptedTargets, {
+    type: 'challenge_accepted',
+    title: `@${me} a accepté ton défi`,
+    body: 'Le duel est prêt à être joué.',
+    link: `/challenges?game=${encodeURIComponent(challenge.game)}`,
+    game: challenge.game,
+    refId: `${challenge.id}:accepted`,
   });
   return c.json(challenge);
 });
@@ -3133,6 +3269,7 @@ app.post('/challenges/:id/decline', async (c) => {
       status: newStatus,
       penalty,
       isOps: opsPenalty > 0,
+      game: ch.game,
       challengerLogin: ch.challengerLogin,
       opponentLogin: ch.opponentLogin,
       // Tous les participants (4 en 2v2) à prévenir, hormis celui qui refuse.
@@ -3143,6 +3280,17 @@ app.post('/challenges/:id/decline', async (c) => {
   emit(declineRecipients, {
     type: 'challenge:declined',
     payload: { id, status: result.status, eloPenalty: result.penalty, declinedBy: me },
+  });
+  // Le défi est traité → notif cloche « duel reçu » soldée pour qui refuse.
+  void markNotifsReadByRef(me, id);
+  // L'autre camp est prévenu en cloche du refus / de l'annulation.
+  void notifyMany(declineRecipients, {
+    type: 'challenge_declined',
+    title: result.status === 'declined' ? `@${me} a refusé ton défi` : `@${me} a annulé le défi`,
+    body: result.penalty > 0 ? 'Pénalité ELO appliquée.' : 'Défi clos.',
+    link: `/challenges?game=${encodeURIComponent(result.game)}`,
+    game: result.game,
+    refId: `${id}:declined`,
   });
   // Se désister d'un défi accepté applique une pénalité d'ELO → classement global.
   if (result.penalty > 0) {

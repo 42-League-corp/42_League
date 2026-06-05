@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, type LucideIcon } from 'lucide-react';
+import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, type LucideIcon } from 'lucide-react';
 import { api, type AppNotification } from '../lib/api';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { gameColor, GAME_EMOJI } from '../lib/gameVisuals';
@@ -8,15 +8,24 @@ import { setGame } from '../lib/gameMode';
 
 const POLL_MS = 30_000;
 
-// Les notifs de match (score à confirmer / résultat) ne vont PAS dans la cloche :
-// elles vivent uniquement dans la section Défis + la bannière popup. On les filtre
-// ici pour couvrir aussi d'éventuelles notifs déjà persistées en base.
-const HIDDEN_TYPES = new Set(['match_pending', 'match_result']);
+// Les notifs de match (score à valider, résultat, contestation) remontent aussi
+// dans la cloche, en plus de la bannière popup + la section Défis. Le « score à
+// valider » et le « duel reçu » sont marqués lus automatiquement côté serveur dès
+// qu'ils sont traités (validation/contestation/accept/refus) → pas de doublon
+// non-lu qui traîne. Rien n'est masqué ici.
+const HIDDEN_TYPES = new Set<string>([]);
 
 const ICON_BY_TYPE: Record<string, LucideIcon> = {
   challenge_received: Swords,
+  challenge_accepted: Swords,
+  challenge_declined: Flag,
+  matchmaking: Swords,
   match_pending: Swords,
   match_result: Trophy,
+  match_rejected: Flag,
+  ffa_pending: Users,
+  ffa_result: Trophy,
+  ffa_contested: Flag,
   tournament: Trophy,
   ops_targeted: Skull,
   new_player: UserPlus,

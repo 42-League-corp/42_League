@@ -156,6 +156,10 @@ model Notification {
   title          String
   body           String?
   link           String? // route front contextuelle (ex. '/challenges')
+  // Entité liée (pendingMatch / playedMatch / challenge). Permet de marquer la
+  // notif « lue » automatiquement quand l'action sous-jacente est traitée
+  // (score validé/contesté…), pour ne pas la laisser traîner dans la cloche.
+  refId          String?  @map("ref_id")
   read           Boolean  @default(false)
   createdAt      DateTime @default(now()) @map("created_at")
 
@@ -163,6 +167,7 @@ model Notification {
 
   @@index([recipientLogin, read])
   @@index([recipientLogin, createdAt])
+  @@index([recipientLogin, refId])
   @@map("notifications")
 }
 
