@@ -319,6 +319,11 @@ model TournamentMatch {
   recordedByLogin String?   @map("recorded_by_login")
   recordedAt      DateTime? @map("recorded_at")
   confirmedAt     DateTime? @map("confirmed_at")
+  // Pile-ou-face d'avant-duel : désigne qui choisit son avantage (résultat partagé).
+  tossWinnerLogin String?   @map("toss_winner_login") // gagnant du pile-ou-face
+  tossSide        String?   @map("toss_side") // 'heads' | 'tails' (face affichée par l'anim)
+  advantagePick   String?   @map("advantage_pick") // clé d'option choisie par le gagnant du toss
+  tossAt          DateTime? @map("toss_at")
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   playerA    User?      @relation("tournPlayerA", fields: [playerALogin], references: [login])

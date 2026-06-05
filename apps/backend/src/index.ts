@@ -48,6 +48,7 @@ import {
   GAME_IDS,
   applyGameElo,
   eloOrderBy,
+  getGameAdvantage,
   getGameDef,
   parseGameId,
   projectStats,
@@ -4547,6 +4548,96 @@ app.post('/tournaments/:id/matches/:matchId/reject', async (c) => {
     });
   });
   return c.json({ id: matchId, rejected: true });
+});
+
+// Pile-ou-face d'avant-duel : tire au sort le gagnant (résultat partagé via la
+// base → identique sur les 2 écrans). Le gagnant choisira ensuite son avantage.
+app.post('/tournaments/:id/matches/:matchId/toss', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  const updated = await prisma.$transaction(async (tx) => {
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (m.stage !== 'bracket') {
+      throw new HTTPException(409, { message: 'le pile-ou-face ne concerne que le bracket' });
+    }
+    if (!m.playerALogin || !m.playerBLogin) {
+      throw new HTTPException(409, {
+        message: 'match has no players yet (previous round pending)',
+      });
+    }
+    if (m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match already confirmed' });
+    }
+    if (m.playerALogin !== me && m.playerBLogin !== me) {
+      throw new HTTPException(403, { message: 'not a participant' });
+    }
+    if (m.tossWinnerLogin) {
+      throw new HTTPException(400, { message: 'tirage déjà effectué' });
+    }
+    // Aléatoire côté backend (résultat figé en base, partagé aux 2 joueurs).
+    const heads = Math.random() < 0.5;
+    const tossWinnerLogin = heads ? m.playerALogin : m.playerBLogin;
+    return tx.tournamentMatch.update({
+      where: { id: matchId },
+      data: {
+        tossWinnerLogin,
+        tossSide: heads ? 'heads' : 'tails',
+        tossAt: new Date(),
+      },
+    });
+  });
+  return c.json(updated);
+});
+
+const TournamentAdvantageSchema = z.object({
+  pick: z.string().trim().min(1).max(20),
+});
+
+// Le gagnant du toss choisit son avantage (clé d'option propre au jeu). Seul lui
+// peut appeler ; l'option complémentaire (le cas échéant) revient à l'adversaire.
+app.post('/tournaments/:id/matches/:matchId/advantage', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  const body = await c.req.json().catch(() => null);
+  const parsed = TournamentAdvantageSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { pick } = parsed.data;
+  const updated = await prisma.$transaction(async (tx) => {
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match already confirmed' });
+    }
+    if (m.tossWinnerLogin !== me) {
+      throw new HTTPException(403, { message: 'not the toss winner' });
+    }
+    if (m.advantagePick) {
+      throw new HTTPException(400, { message: 'avantage déjà choisi' });
+    }
+    // L'option choisie doit appartenir au jeu du tournoi (pas n'importe quelle chaîne).
+    const tour = await tx.tournament.findUnique({
+      where: { id },
+      select: { game: true },
+    });
+    const allowed = getGameAdvantage(parseGameId(tour?.game)).options.map((o) => o.key);
+    if (!allowed.includes(pick)) {
+      throw new HTTPException(400, { message: 'option d’avantage invalide' });
+    }
+    return tx.tournamentMatch.update({
+      where: { id: matchId },
+      data: { advantagePick: pick },
+    });
+  });
+  return c.json(updated);
 });
 
 /* ============ ADMIN — ROLE MANAGEMENT ============ */

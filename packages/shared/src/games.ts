@@ -59,6 +59,17 @@ export interface GameDef {
   formatScore(scoreA: number, scoreB: number): string;
   /** Libellé d'un résultat selon le point de vue (gagné / perdu / nul). */
   outcomeLabel(perspective: Perspective): string;
+  /**
+   * Avantage tiré au pile-ou-face avant un duel de tournoi : le gagnant du toss
+   * choisit une option adaptée au jeu (balle/terrain, couleur, stage, commencer).
+   * `complementary` → l'option NON choisie revient automatiquement à l'adversaire.
+   */
+  advantage?: {
+    /** Intro affichée (ex « Le gagnant choisit la balle ou le terrain »). */
+    label: string;
+    options: { key: string; label: string; icon: string }[];
+    complementary: boolean;
+  };
 }
 
 export const GAMES: Record<GameId, GameDef> = {
@@ -70,6 +81,14 @@ export const GAMES: Record<GameId, GameDef> = {
     elo: (a, b, w, o) => calculateBabyfootElo(a, b, w, o.scoreA, o.scoreB),
     formatScore: (a, b) => `${a}-${b}`,
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+    advantage: {
+      label: 'Le gagnant choisit son avantage',
+      options: [
+        { key: 'ball', label: 'La balle', icon: '⚽' },
+        { key: 'terrain', label: 'Le terrain', icon: '🥅' },
+      ],
+      complementary: true,
+    },
   },
   smash: {
     id: 'smash',
@@ -81,6 +100,11 @@ export const GAMES: Record<GameId, GameDef> = {
       calculateSmashElo(a, b, w, o.scoreA, o.scoreB, o.bestOf ?? 3, o.winnerStocks ?? 1),
     formatScore: (a, b) => `${a}-${b}`,
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+    advantage: {
+      label: 'Le gagnant choisit le stage',
+      options: [{ key: 'stage', label: 'Choisir le stage', icon: '🎮' }],
+      complementary: false,
+    },
   },
   chess: {
     id: 'chess',
@@ -91,6 +115,14 @@ export const GAMES: Record<GameId, GameDef> = {
     // Score binaire stocké 1-0 / 0-1 ; la nulle (futur) se rend "½-½".
     formatScore: (a, b) => (a === b ? '½-½' : a > b ? '1-0' : '0-1'),
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nulle'),
+    advantage: {
+      label: 'Le gagnant choisit sa couleur',
+      options: [
+        { key: 'white', label: 'Les Blancs', icon: '♔' },
+        { key: 'black', label: 'Les Noirs', icon: '♚' },
+      ],
+      complementary: true,
+    },
   },
   // Street Fighter == Smash mécaniquement (set Bo3/Bo5, persos, même Elo), mais
   // discipline distincte (rating + roster + branding propres).
@@ -104,6 +136,11 @@ export const GAMES: Record<GameId, GameDef> = {
       calculateSmashElo(a, b, w, o.scoreA, o.scoreB, o.bestOf ?? 3, o.winnerStocks ?? 1),
     formatScore: (a, b) => `${a}-${b}`,
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+    advantage: {
+      label: 'Le gagnant choisit le stage',
+      options: [{ key: 'stage', label: 'Choisir le stage', icon: '🥊' }],
+      complementary: false,
+    },
   },
   // Fléchettes : discipline MULTIJOUEUR (2..8, 301/501). L'Elo réel est calculé
   // par `calculateDartsElo` sur le chemin de règlement dédié (cf. settle darts),
@@ -116,6 +153,11 @@ export const GAMES: Record<GameId, GameDef> = {
     elo: (a, b, w) => calculateChessElo(a, b, w),
     formatScore: (a, b) => `${a}-${b}`,
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+    advantage: {
+      label: 'Le gagnant commence',
+      options: [{ key: 'first', label: 'Commencer', icon: '🎯' }],
+      complementary: false,
+    },
   },
 };
 
@@ -138,6 +180,17 @@ export function parseGameId(value: unknown): GameId {
 /** Récupère la définition d'une discipline (retombe sur babyfoot si inconnue). */
 export function getGameDef(game: GameId): GameDef {
   return GAMES[game] ?? GAMES.babyfoot;
+}
+
+/** Avantage de pile-ou-face d'une discipline (fallback générique si non défini). */
+export function getGameAdvantage(game: GameId): NonNullable<GameDef['advantage']> {
+  return (
+    getGameDef(game).advantage ?? {
+      label: 'Le gagnant choisit',
+      options: [{ key: 'choice', label: 'Choisir', icon: '🎲' }],
+      complementary: false,
+    }
+  );
 }
 
 /**
