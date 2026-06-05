@@ -89,6 +89,8 @@ export function DesktopShell({ children }: DesktopShellProps) {
             <img
               src="/logo-wordmark.png"
               alt="42 League"
+              width={512}
+              height={103}
               className="w-full h-auto select-none drop-shadow-[0_2px_8px_rgba(255,201,74,0.25)]"
               draggable={false}
             />
