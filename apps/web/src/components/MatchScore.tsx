@@ -1,4 +1,6 @@
 import type { Game } from '../lib/api';
+import { GAME_META } from '../lib/gameMeta';
+import { GAME_EMOJI } from '../lib/gameVisuals';
 
 /**
  * ─── MatchScore — Atomic Design ─────────────────────────────────────────────
@@ -45,14 +47,20 @@ export function GameIcon({ game, size = 'sm' }: { game?: Game; size?: 'xs' | 'sm
 }
 
 // ─── Pill de discipline ────────────────────────────────────────────────────────
-// Affichée seulement pour smash et chess (babyfoot est le contexte par défaut).
+// Affichée pour TOUTES les disciplines (babyfoot inclus), colorée à la couleur du
+// mode de jeu (source de vérité : GAME_META). L'encart marque le label de la partie.
 
 export function GamePill({ game }: { game?: Game }) {
-  if (!game || game === 'babyfoot') return null;
-  const label = game === 'smash' ? '🎮 Smash' : game === 'streetfighter' ? '🥊 Street Fighter' : '♟ Échecs';
+  const g = game ?? 'babyfoot';
+  const meta = GAME_META[g];
+  if (!meta) return null;
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] bg-accent/12 text-accent border border-accent/25 leading-none">
-      {label}
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.12em] border leading-none"
+      style={{ color: meta.color, backgroundColor: meta.bgColor, borderColor: `${meta.color}40` }}
+    >
+      <span aria-hidden>{GAME_EMOJI[g]}</span>
+      {meta.label}
     </span>
   );
 }
