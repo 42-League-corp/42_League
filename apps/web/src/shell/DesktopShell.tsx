@@ -72,10 +72,10 @@ export function DesktopShell({ children }: DesktopShellProps) {
 
   const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
 
-  // Remet le contenu en haut à chaque changement de page. La page classement
-  // gère elle-même un scroll vers la place du joueur (cf. LeaderboardDesktop).
+  // Remet le contenu en haut à chaque changement de page. Le classement n'a plus
+  // d'auto-scroll : on arrive en haut, le recentrage sur sa place se fait à la
+  // demande via le bouton « Où suis-je ? » (cf. LeaderboardDesktop).
   useEffect(() => {
-    if (pathname === '/leaderboard') return;
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, Flame, Snowflake, Skull } from 'lucide-react';
+import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, LocateFixed } from 'lucide-react';
 import { api, type Season, type SeasonStanding } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
@@ -310,17 +310,13 @@ export function LeaderboardDesktop() {
     return rows;
   }, [leaderboard, statsByLogin, sort]);
 
-  // À l'arrivée sur le classement, on défile jusqu'à la place du joueur courant.
-  // (Le shell desktop ne reset pas le scroll sur /leaderboard, cf. DesktopShell.)
-  useEffect(() => {
-    if (!myLogin || viewMode !== 'list' || viewingPast || activeTab !== 'personal') return;
+  // Bouton « Où suis-je ? » : défile jusqu'à la ligne du joueur courant.
+  // (Plus d'auto-scroll au montage — on reste en haut du classement et le
+  // recentrage se déclenche à la demande via le bouton.)
+  const scrollToMe = useCallback(() => {
     const el = document.getElementById('lb-me-row');
-    if (!el) return;
-    const id = window.setTimeout(() => {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 160);
-    return () => window.clearTimeout(id);
-  }, [myLogin, viewMode, viewingPast, activeTab, sortedRows.length]);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
 
   return (
     <div>
@@ -367,6 +363,16 @@ export function LeaderboardDesktop() {
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} currentLabel={t('lb.season.current')} />
           {!viewingPast && (
             <div className="flex items-center gap-2">
+              {viewMode === 'list' && myLogin && sortedRows.some((r) => r.entry.login === myLogin) && (
+                <button
+                  type="button"
+                  onClick={scrollToMe}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gold/30 bg-gold/10 text-gold text-xs font-semibold hover:bg-gold/15 hover:border-gold/50 transition-colors"
+                >
+                  <LocateFixed className="w-3.5 h-3.5" strokeWidth={2.4} />
+                  {t('lb.whereAmI')}
+                </button>
+              )}
               <RankingViewToggle view={viewMode} onChange={setViewMode} />
               <GradesNavButton />
             </div>
@@ -463,7 +469,7 @@ export function LeaderboardDesktop() {
                         style={{ textShadow: '0 0 10px rgba(255,201,74,0.25)' }}
                       >
                         <span className="inline-flex items-center gap-1.5">
-                          <RankBadge elo={u.elo} size="xs" showLabel={false} />
+                          <RankBadge elo={u.elo} rank={u.rank} size="xs" showLabel={false} />
                           {u.elo}
                         </span>
                       </td>

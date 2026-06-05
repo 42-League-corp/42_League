@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X } from 'lucide-react';
+import { Search, X, LocateFixed } from 'lucide-react';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { RankingScopeToggle } from './RankingScopeToggle';
@@ -125,17 +125,12 @@ export function LeaderboardMobile() {
 
   const myRank = sortedLeaderboard.find((u) => u.login === myLogin)?.rank;
 
-  // À l'arrivée sur la page (et hors recherche), on centre la liste sur la carte
-  // de l'utilisateur. Différé pour passer APRÈS le reset de scroll du shell.
-  useEffect(() => {
-    if (!myLogin || normalizedQuery) return;
+  // Bouton « Où suis-je ? » : centre la liste sur la carte du joueur courant.
+  // (Plus d'auto-scroll au montage — déclenché à la demande via le bouton.)
+  const scrollToMe = useCallback(() => {
     const el = document.getElementById('lb-me-row');
-    if (!el) return;
-    const id = window.setTimeout(() => {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 160);
-    return () => window.clearTimeout(id);
-  }, [myLogin, normalizedQuery, sortedLeaderboard.length]);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -206,7 +201,7 @@ export function LeaderboardMobile() {
                     <span className="font-semibold text-text-strong truncate">{s.login}</span>
                   </PlayerLink>
                   <span className="inline-flex items-center gap-1 font-display font-extrabold text-gold tabular-nums text-sm">
-                    <RankBadge elo={s.elo} size="xs" showLabel={false} />
+                    <RankBadge elo={s.elo} rank={s.rank} size="xs" showLabel={false} />
                     {s.elo}
                   </span>
                   <span className="text-[11px] text-muted-2 font-mono tabular-nums w-12 text-right">
@@ -263,6 +258,18 @@ export function LeaderboardMobile() {
             </>
           )}
         </motion.div>
+
+        {/* Bouton « Où suis-je ? » — recentre la liste sur ma carte (hors recherche). */}
+        {myRank && !normalizedQuery && (
+          <button
+            type="button"
+            onClick={scrollToMe}
+            className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl border border-gold/30 bg-gold/10 text-gold text-sm font-semibold active:scale-[0.98] transition-transform tap-transparent"
+          >
+            <LocateFixed className="w-4 h-4" strokeWidth={2.4} />
+            {t('lb.whereAmI')}
+          </button>
+        )}
 
         {/* Recherche */}
         <div className="relative">

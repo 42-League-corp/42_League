@@ -12,6 +12,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.tab.teams': '2v2',
     // Badge « moi »
     'lb.me': 'Toi',
+    'lb.whereAmI': 'Où suis-je ?',
     // Ops (ciblé par) — {owner} remplacé côté composant
     'lb.opsOf': 'Ops de',
     // Sélecteur de saison
@@ -58,6 +59,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.tab.solo': 'Solo',
     'lb.tab.teams': '2v2',
     'lb.me': 'You',
+    'lb.whereAmI': 'Where am I?',
     'lb.opsOf': 'Ops by',
     'lb.season.current': 'Current',
     'lb.season.currentLong': 'Current season',
@@ -94,6 +96,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.tab.solo': 'Solo',
     'lb.tab.teams': '2v2',
     'lb.me': 'Tú',
+    'lb.whereAmI': '¿Dónde estoy?',
     'lb.opsOf': 'Ops de',
     'lb.season.current': 'Actual',
     'lb.season.currentLong': 'Temporada actual',
