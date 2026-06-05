@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, X, Clock, Zap, Users, Target } from 'lucide-react';
 import { Panel } from '../../components/Panel';
@@ -270,6 +270,14 @@ function HeroCTAs({
 
   const submitAndClose = async () => { await onDone(); onClose(); };
 
+  // Échap referme la carte ouverte (déclarer une game / défi) — comme la croix.
+  useEffect(() => {
+    if (openCard === null) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openCard, onClose]);
+
   const submit2v2AndClose = async (result: Declare2v2Response, partnerLogin: string) => {
     await onDone();
     onClose();
@@ -489,10 +497,15 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
     return (
       <motion.button
         layout
+        layoutId={`hero-cta-${kind}`}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        exit={{ opacity: 0 }}
+        transition={{
+          layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
+          duration: 0.22,
+          ease: [0.16, 1, 0.3, 1],
+        }}
         type="button"
         onClick={onOpen}
         className={`shine group relative overflow-hidden rounded-2xl border-2 ${meta.border}
@@ -538,10 +551,15 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      layoutId={`hero-cta-${kind}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{
+        layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
+        duration: 0.26,
+        ease: [0.16, 1, 0.3, 1],
+      }}
       className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col"
       style={{
         backgroundImage:
