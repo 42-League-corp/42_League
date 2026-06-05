@@ -1,8 +1,12 @@
 import { useEffect, useState, useCallback, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useIsMobile } from '../hooks/useViewport';
+import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe';
+import { haptic } from '../mobile/feedback/useHaptic';
 import { useT } from '../lib/i18n';
 import { SortableTh, useTableSort, sortRows } from '../components/SortableTh';
 import {
@@ -3135,6 +3139,33 @@ export function GODPage() {
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('users');
+  // Sens de la dernière transition d'onglet (1 = suivant, -1 = précédent),
+  // pour orienter la petite animation de glissement sur mobile.
+  const [navDir, setNavDir] = useState(0);
+  const isMobile = useIsMobile();
+
+  // Onglets réellement visibles selon le rôle — base de la nav par swipe.
+  const visibleTabs = TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN');
+
+  const goToTab = useCallback(
+    (dir: 1 | -1) => {
+      setActiveTab((current) => {
+        const idx = visibleTabs.findIndex((tab) => tab.id === current);
+        const target = visibleTabs[idx + dir];
+        if (!target) return current; // borné aux extrémités
+        setNavDir(dir);
+        haptic('selection');
+        return target.id;
+      });
+    },
+    [visibleTabs],
+  );
+
+  const swipeRef = useHorizontalSwipe<HTMLDivElement>({
+    enabled: isMobile,
+    onSwipeLeft: () => goToTab(1),
+    onSwipeRight: () => goToTab(-1),
+  });
 
   useEffect(() => {
     api.me()
@@ -3202,10 +3233,15 @@ export function GODPage() {
       {/* Tab bar */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/30">
         <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN').map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                const from = visibleTabs.findIndex((x) => x.id === activeTab);
+                const to = visibleTabs.findIndex((x) => x.id === tab.id);
+                setNavDir(to === from ? 0 : to > from ? 1 : -1);
+                setActiveTab(tab.id);
+              }}
               className={`px-4 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 whitespace-nowrap shrink-0 ${
                 activeTab === tab.id
                   ? 'text-zinc-100 border-zinc-400'
@@ -3218,9 +3254,15 @@ export function GODPage() {
         </div>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-screen-2xl mx-auto">
+      {/* Scrollable content — swipe horizontal mobile pour changer d'onglet */}
+      <div ref={swipeRef} className="flex-1 overflow-y-auto">
+        <motion.div
+          key={isMobile ? activeTab : 'static'}
+          initial={isMobile ? { opacity: 0, x: navDir * 24 } : false}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          className="max-w-screen-2xl mx-auto"
+        >
           {activeTab === 'users' && <UsersTab myRole={myRole} myLogin={myLogin} />}
           {activeTab === 'moderation' && <ModerationTab />}
           {activeTab === 'rejets' && <RejetsTab />}
@@ -3233,7 +3275,7 @@ export function GODPage() {
           {activeTab === 'history' && <AllHistoryTab />}
           {activeTab === 'tournaments' && <TournamentsTab />}
           {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
