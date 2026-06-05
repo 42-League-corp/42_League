@@ -18,11 +18,14 @@ import {
 /** Catégories pour lesquelles « équiper » a du sens (titre / bannière / badge actifs). */
 const EQUIPPABLE: ShopCategory[] = ['title', 'banner', 'badge'];
 
+/** Ordre d'affichage stable des catégories dans la barre de filtres. */
+const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'badge'];
+
 /** Nombre minimum de cases affichées : la grille est comblée par des cartes
  *  placeholder « Bientôt » pour qu'elle paraisse toujours pleine, même quand le
  *  catalogue réel est vide ou peu fourni. */
 const MIN_TILES = 6;
-const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'cosmetic'];
+const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'badge'];
 
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
@@ -41,7 +44,7 @@ function payloadOf(item: ShopItemData): Record<string, unknown> {
 }
 
 /** Aperçu visuel de ce qu'on achète, selon la catégorie (bannière = image,
- *  titre = texte coloré, badge = icône+label coloré, cosmétique = générique).
+ *  titre = texte coloré, badge = icône+label coloré).
  *  Hauteur fixe pour garder la grille de cartes alignée. */
 function ShopItemVisual({ item }: { item: ShopItemData }) {
   const p = payloadOf(item);
@@ -84,10 +87,6 @@ function ShopItemVisual({ item }: { item: ShopItemData }) {
           <Icon className="w-4 h-4" strokeWidth={2.5} />
           {badgeLabel}
         </span>
-      )}
-
-      {item.category === 'cosmetic' && (
-        <Sparkles className="relative w-7 h-7 text-violet-300" strokeWidth={1.6} />
       )}
     </div>
   );
@@ -137,6 +136,7 @@ export function ShopPage() {
   const [equipped, setEquipped] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [activeCat, setActiveCat] = useState<ShopCategory | 'all'>('all');
 
   const load = useCallback(async () => {
     try {
@@ -203,6 +203,12 @@ export function ShopPage() {
 
   const catLabel = (c: ShopCategory) => t(`shop.cat.${c}`);
 
+  /** Catégories réellement présentes dans le catalogue, dans un ordre stable,
+   *  pour ne proposer comme filtre que des onglets non vides. */
+  const presentCats = CATEGORY_ORDER.filter((c) => items.some((it) => it.category === c));
+  const filteredItems =
+    activeCat === 'all' ? items : items.filter((it) => it.category === activeCat);
+
   return (
     <div className="space-y-5">
       {/* ── En-tête + carte solde ──────────────────────────────────────── */}
@@ -249,6 +255,29 @@ export function ShopPage() {
         </div>
       </section>
 
+      {/* ── Barre de filtres par catégorie ─────────────────────────────── */}
+      {!loading && presentCats.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {(['all', ...presentCats] as const).map((c) => {
+            const active = activeCat === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setActiveCat(c)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
+                  active
+                    ? 'bg-gold/15 border-gold/40 text-gold shadow-gold-glow'
+                    : 'bg-bg-1 border-border/60 text-muted-2 hover:text-text'
+                }`}
+              >
+                {c === 'all' ? t('shop.cat.all') : catLabel(c)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Catalogue ──────────────────────────────────────────────────── */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -258,7 +287,7 @@ export function ShopPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {items.map((item) => {
+          {filteredItems.map((item) => {
             const isOwned = owned.has(item.id);
             const canAfford = coins >= item.price;
             const isEquipped = equipped.has(item.id);
@@ -342,7 +371,8 @@ export function ShopPage() {
               </motion.div>
             );
           })}
-          {Array.from({ length: Math.max(0, MIN_TILES - items.length) }).map((_, i) => {
+          {activeCat === 'all' &&
+            Array.from({ length: Math.max(0, MIN_TILES - items.length) }).map((_, i) => {
             const cat = PLACEHOLDER_CATS[i % PLACEHOLDER_CATS.length]!;
             return (
               <PlaceholderCard

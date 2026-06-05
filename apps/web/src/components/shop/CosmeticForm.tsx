@@ -16,13 +16,12 @@ export const BANNER_H = 512;
 // Cap d'octets côté client (le serveur revérifie) — évite les data-URL énormes.
 export const BANNER_MAX_BYTES = 700_000;
 
-export const CATEGORIES: ShopCategory[] = ['title', 'badge', 'banner', 'cosmetic'];
+export const CATEGORIES: ShopCategory[] = ['title', 'badge', 'banner'];
 
 export const CATEGORY_LABEL: Record<ShopCategory, string> = {
   title: 'TITRE',
   badge: 'BADGE',
   banner: 'BANNIÈRE',
-  cosmetic: 'COSMÉTIQUE',
 };
 
 // ── Primitives partagées (langage visuel GODPage) ───────────────────────────
@@ -156,9 +155,6 @@ export function buildInput(f: FormState): ShopItemInput {
       payload = { image: f.bannerImage };
       break;
     }
-    case 'cosmetic':
-      payload = undefined;
-      break;
   }
 
   return {
@@ -299,11 +295,6 @@ export function ItemPreview({ form }: { form: FormState }) {
         ) : (
           <span className="text-xs text-zinc-600 font-mono">Dépose une image pour l'aperçu.</span>
         ))}
-      {form.category === 'cosmetic' && (
-        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold bg-sky-400/15 text-sky-300 border border-sky-400/30">
-          {form.name || 'Cosmétique…'}
-        </span>
-      )}
     </div>
   );
 }

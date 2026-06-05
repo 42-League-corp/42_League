@@ -152,7 +152,7 @@ export const ShopItemCreateSchema = z
   .object({
     name: z.string().trim().min(1),
     description: z.string().nullish(),
-    category: z.enum(['title', 'banner', 'badge', 'cosmetic']),
+    category: z.enum(['title', 'banner', 'badge']),
     color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
