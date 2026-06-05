@@ -11,6 +11,8 @@ interface DesktopPodiumProps {
   top3: LeaderboardEntry[];
   /** login → { winRate, games } pour afficher un badge sous chaque marche. */
   statsByLogin: Map<string, { winRate: number; games: number }>;
+  /** Saison passée : grise les photos (classement figé). */
+  past?: boolean;
 }
 
 /**
@@ -20,7 +22,7 @@ interface DesktopPodiumProps {
  * - Rayons de lumière + particules dorées en fond
  * - Hover : la marche se soulève légèrement et brille
  */
-export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
+export function DesktopPodium({ top3, statsByLogin, past = false }: DesktopPodiumProps) {
   const [p1, p2, p3] = top3;
 
   return (
@@ -58,6 +60,7 @@ export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
             stepClass="h-28"
             delay={0.12}
             stats={statsByLogin.get(p2.login)}
+            past={past}
           />
         )}
         {p1 && (
@@ -68,6 +71,7 @@ export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
             stepClass="h-44"
             delay={0}
             stats={statsByLogin.get(p1.login)}
+            past={past}
           />
         )}
         {p3 && (
@@ -78,6 +82,7 @@ export function DesktopPodium({ top3, statsByLogin }: DesktopPodiumProps) {
             stepClass="h-20"
             delay={0.22}
             stats={statsByLogin.get(p3.login)}
+            past={past}
           />
         )}
       </div>
@@ -120,6 +125,7 @@ function PodiumColumn({
   stepClass,
   delay,
   stats,
+  past = false,
 }: {
   entry: LeaderboardEntry;
   rank: number;
@@ -127,11 +133,12 @@ function PodiumColumn({
   stepClass: string;
   delay: number;
   stats?: { winRate: number; games: number };
+  past?: boolean;
 }) {
   const navigate = useNavigate();
   const t = useT();
   const isFirst = rank === 1;
-  const spinRef = useFlickSpin<HTMLImageElement>();
+  const spinRef = useFlickSpin<HTMLDivElement>();
 
   return (
     <motion.button
@@ -170,13 +177,20 @@ function PodiumColumn({
             <Crown className="w-9 h-9" strokeWidth={2.5} fill="currentColor" />
           </motion.div>
         )}
-        <Avatar
-          login={entry.login}
-          imageUrl={entry.imageUrl}
-          imgRef={spinRef}
-          size={isFirst ? 'xl' : 'lg'}
-          className={`ring-[3px] ring-offset-2 ring-offset-bg-1 transition-transform duration-300 group-hover:scale-105 ${RING[color]}`}
-        />
+        {/* Hover-zoom sur le wrapper externe (CSS), spin 3D sur le wrapper interne
+            (inline, sans transition → pas de lag). L'Avatar rond reste un enfant
+            NON transformé → la pièce ronde entière pivote, pas juste le carré. */}
+        <div className="transition-transform duration-300 ease-out group-hover:scale-105">
+          <div ref={spinRef}>
+            <Avatar
+              login={entry.login}
+              imageUrl={entry.imageUrl}
+              size={isFirst ? 'xl' : 'lg'}
+              grayscale={past}
+              className={`ring-[3px] ring-offset-2 ring-offset-bg-1 ${RING[color]}`}
+            />
+          </div>
+        </div>
         {/* Pastille rang */}
         <div
           className={`absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full flex items-center justify-center font-mono font-black ring-2 ring-bg-1 ${BADGE[color]} ${

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Flame, Snowflake, Skull, LocateFixed } from 'lucide-react';
-import { api, type Season, type SeasonStanding } from '../../lib/api';
+import { api, type Season, type SeasonStanding, type LeaderboardEntry } from '../../lib/api';
 import { Panel } from '../../components/Panel';
 import { PlayerLink } from '../../components/PlayerLink';
 import { Avatar } from '../../components/Avatar';
@@ -206,21 +206,6 @@ export function LeaderboardDesktop() {
     return m;
   }, [statsByLogin]);
 
-  // Top 3 par rang officiel (ELO) — pour le podium.
-  const top3 = useMemo(
-    () => [...leaderboard].sort((a, b) => a.rank - b.rank).slice(0, 3),
-    [leaderboard],
-  );
-
-  const podiumStats = useMemo(() => {
-    const m = new Map<string, { winRate: number; games: number }>();
-    for (const u of top3) {
-      const s = statsByLogin.get(u.login);
-      m.set(u.login, { winRate: s?.winRate ?? 0, games: s?.games ?? 0 });
-    }
-    return m;
-  }, [top3, statsByLogin]);
-
   // ─── Vue (liste / nuage) ─────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<RankingView>('list');
 
@@ -247,6 +232,61 @@ export function LeaderboardDesktop() {
 
   const viewingPast = standings !== null;
 
+  // Photos par login (les snapshots de saison ne stockent pas l'imageUrl → on
+  // réutilise la photo actuelle du joueur, prise dans le classement courant).
+  const imgByLogin = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const u of leaderboard) m.set(u.login, u.imageUrl);
+    return m;
+  }, [leaderboard]);
+
+  // Données affichées : live (classement courant) ou snapshot d'une saison passée.
+  // Le snapshot ne contient que login/rang/elo/V/D → on en dérive games + winrate
+  // et on laisse les séries vides (l'historique match par match n'est pas figé).
+  const { entries, rowStats } = useMemo<{
+    entries: LeaderboardEntry[];
+    rowStats: Map<string, PlayerStats>;
+  }>(() => {
+    if (!standings) return { entries: leaderboard, rowStats: statsByLogin };
+    const e = standings.map(
+      (s): LeaderboardEntry => ({
+        rank: s.rank,
+        login: s.login,
+        elo: s.elo,
+        imageUrl: imgByLogin.get(s.login) ?? null,
+        matchesPlayed: s.wins + s.losses,
+        campus: null,
+      }),
+    );
+    const st = new Map<string, PlayerStats>();
+    for (const s of standings) {
+      const games = s.wins + s.losses;
+      st.set(s.login, {
+        ...EMPTY_STATS,
+        wins: s.wins,
+        losses: s.losses,
+        games,
+        winRate: games === 0 ? 0 : Math.round((s.wins / games) * 100),
+      });
+    }
+    return { entries: e, rowStats: st };
+  }, [standings, imgByLogin, leaderboard, statsByLogin]);
+
+  // Top 3 par rang officiel (ELO) — pour le podium.
+  const top3 = useMemo(
+    () => [...entries].sort((a, b) => a.rank - b.rank).slice(0, 3),
+    [entries],
+  );
+
+  const podiumStats = useMemo(() => {
+    const m = new Map<string, { winRate: number; games: number }>();
+    for (const u of top3) {
+      const s = rowStats.get(u.login);
+      m.set(u.login, { winRate: s?.winRate ?? 0, games: s?.games ?? 0 });
+    }
+    return m;
+  }, [top3, rowStats]);
+
   // ─── Tri ───────────────────────────────────────────────────────────────────
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'rank', dir: 'asc' });
 
@@ -261,9 +301,9 @@ export function LeaderboardDesktop() {
   };
 
   const sortedRows = useMemo(() => {
-    const rows = leaderboard.map((u) => ({
+    const rows = entries.map((u) => ({
       entry: u,
-      stats: statsByLogin.get(u.login) ?? EMPTY_STATS,
+      stats: rowStats.get(u.login) ?? EMPTY_STATS,
     }));
     const dir = sort.dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
@@ -308,7 +348,7 @@ export function LeaderboardDesktop() {
       return cmp * dir;
     });
     return rows;
-  }, [leaderboard, statsByLogin, sort]);
+  }, [entries, rowStats, sort]);
 
   // Bouton « Où suis-je ? » : défile jusqu'à la ligne du joueur courant.
   // (Plus d'auto-scroll au montage — on reste en haut du classement et le
@@ -322,9 +362,11 @@ export function LeaderboardDesktop() {
     <div>
       {!viewingPast && <LeaderboardBanner />}
 
-      {!viewingPast && top3.length === 3 && <DesktopPodium top3={top3} statsByLogin={podiumStats} />}
+      {top3.length === 3 && (
+        <DesktopPodium top3={top3} statsByLogin={podiumStats} past={viewingPast} />
+      )}
 
-      <Panel title={t('panel.lb.title')} sub={`${leaderboard.length} ${t('panel.lb.sub')}`} accent="crown">
+      <Panel title={t('panel.lb.title')} sub={`${entries.length} ${t('panel.lb.sub')}`} accent="crown">
         {/* Onglets Personnel / Équipes — Babyfoot uniquement */}
         {showTeamsTab && (
           <div className="mb-4 max-w-xs">
@@ -378,13 +420,13 @@ export function LeaderboardDesktop() {
             </div>
           )}
         </div>
-        {viewingPast ? (
-          <SnapshotTable standings={standings ?? []} />
-        ) : leaderboard.length === 0 ? (
-          <div className="text-center text-muted-2 py-10">{t('lb.empty')}</div>
-        ) : viewMode === 'goat' ? (
+        {entries.length === 0 ? (
+          <div className="text-center text-muted-2 py-10">
+            {viewingPast ? t('lb.snapshot.empty') : t('lb.empty')}
+          </div>
+        ) : !viewingPast && viewMode === 'goat' ? (
           <GoatView />
-        ) : viewMode === 'graph' ? (
+        ) : !viewingPast && viewMode === 'graph' ? (
           <LeaderboardScatter
             entries={leaderboard}
             myLogin={myLogin}
@@ -409,8 +451,10 @@ export function LeaderboardDesktop() {
               <tbody>
                 {sortedRows.map(({ entry: u, stats }) => {
                   const isMe = u.login === myLogin;
-                  const targetedBy = allOps.find((o) => o.targetLogin === u.login);
-                  const host = locations.get(u.login);
+                  // Indicateurs temps réel (Ops, en ligne) : sans objet sur un
+                  // classement figé d'une saison passée → on les masque.
+                  const targetedBy = viewingPast ? undefined : allOps.find((o) => o.targetLogin === u.login);
+                  const host = viewingPast ? undefined : locations.get(u.login);
                   const rankCls =
                     u.rank === 1
                       ? 'text-gold'
@@ -436,7 +480,7 @@ export function LeaderboardDesktop() {
                       <td className="px-2 sm:px-3 py-2.5">
                         <PlayerLink login={u.login}>
                           <div className="relative flex-shrink-0">
-                            <Avatar login={u.login} imageUrl={u.imageUrl} size="sm" />
+                            <Avatar login={u.login} imageUrl={u.imageUrl} size="sm" grayscale={viewingPast} />
                             {host && (
                               <OnlineBadge host={host} compact className="absolute -bottom-0.5 -right-0.5" />
                             )}
@@ -536,50 +580,6 @@ function SeasonSelect({
         </option>
       ))}
     </select>
-  );
-}
-
-// ─── Classement figé d'une saison passée ──────────────────────────────────────
-function SnapshotTable({ standings }: { standings: SeasonStanding[] }) {
-  const t = useT();
-  if (standings.length === 0) {
-    return <div className="text-center text-muted-2 py-10">{t('lb.snapshot.empty')}</div>;
-  }
-  return (
-    <div className="overflow-x-auto -mx-4 sm:mx-0">
-      <table className="w-full text-sm border-separate border-spacing-0">
-        <thead>
-          <tr className="font-gaming text-[10px] uppercase tracking-[0.14em] text-gold/80 font-extrabold">
-            <th className="px-3 py-2 border-b border-gold/20 text-left">#</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-left">{t('lb.col.player')}</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-right">{t('lb.col.eloFinal')}</th>
-            <th className="px-3 py-2 border-b border-gold/20 text-right">{t('lb.col.wd')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((s) => {
-            const rankCls =
-              s.rank === 1 ? 'text-gold' : s.rank === 2 ? 'text-muted-2' : s.rank === 3 ? 'text-[#cd7f32]' : 'text-muted';
-            return (
-              <tr key={s.login} className="border-t border-gold/10 hover:bg-gold/[0.04] transition-colors">
-                <td className={`px-3 py-2.5 font-display font-black tabular-nums ${rankCls}`}>
-                  {s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : `#${s.rank}`}
-                </td>
-                <td className="px-3 py-2.5">
-                  <PlayerLink login={s.login}>
-                    <span className="font-semibold truncate">{s.login}</span>
-                  </PlayerLink>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-display font-extrabold text-gold">{s.elo}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-muted-2">
-                  {s.wins}-{s.losses}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

@@ -1,12 +1,12 @@
-import { useState, type Ref } from 'react';
+import { useState } from 'react';
 
 interface AvatarProps {
   login: string;
   imageUrl: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
-  /** Ref posée sur la photo elle-même (ex: pour la faire tourner). */
-  imgRef?: Ref<HTMLImageElement>;
+  /** Grise la photo (saisons passées : classement figé, plus "live"). */
+  grayscale?: boolean;
 }
 
 const SIZE = {
@@ -20,14 +20,14 @@ const SIZE = {
 /**
  * Avatar rond — design friendly et coloré.
  */
-export function Avatar({ login, imageUrl, size = 'md', className = '', imgRef }: AvatarProps) {
+export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false }: AvatarProps) {
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
   const initial = (login[0] ?? '?').toUpperCase();
 
   return (
     <div
-      className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${className}`}
+      className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
       style={{
         background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)',
         boxShadow: '0 2px 10px rgba(255, 154, 158, 0.3)',
@@ -36,7 +36,6 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', imgRef }:
     >
       {showImg ? (
         <img
-          ref={imgRef}
           src={imageUrl}
           alt={login}
           className="w-full h-full object-cover block"

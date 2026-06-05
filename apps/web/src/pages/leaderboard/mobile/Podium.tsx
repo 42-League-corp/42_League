@@ -10,6 +10,8 @@ interface PodiumProps {
   top3: LeaderboardEntry[];
   /** login → { winRate, games } affiché sous l'ELO de chaque marche. */
   statsByLogin?: Map<string, { winRate: number; games: number }>;
+  /** Saison passée : grise les photos (classement figé). */
+  past?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface PodiumProps {
  * - Bronze à droite
  * - Tap sur un joueur → sa page profil
  */
-export function Podium({ top3, statsByLogin }: PodiumProps) {
+export function Podium({ top3, statsByLogin, past = false }: PodiumProps) {
   const navigate = useNavigate();
   const [p1, p2, p3] = top3;
 
@@ -62,6 +64,7 @@ export function Podium({ top3, statsByLogin }: PodiumProps) {
             height="h-24"
             color="silver"
             delay={0.15}
+            past={past}
           />
         )}
 
@@ -75,6 +78,7 @@ export function Podium({ top3, statsByLogin }: PodiumProps) {
             height="h-32"
             color="gold"
             delay={0}
+            past={past}
           />
         )}
 
@@ -88,6 +92,7 @@ export function Podium({ top3, statsByLogin }: PodiumProps) {
             height="h-20"
             color="bronze"
             delay={0.25}
+            past={past}
           />
         )}
       </div>
@@ -105,6 +110,7 @@ interface PodiumSlotProps {
   height: string;
   color: PodiumColor;
   delay: number;
+  past?: boolean;
 }
 
 const COLOR_STEP: Record<PodiumColor, string> = {
@@ -131,8 +137,8 @@ const COLOR_RANK: Record<PodiumColor, string> = {
   bronze: 'bg-gradient-to-br from-[#cd7f32] to-[#8b5722] text-white',
 };
 
-function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: PodiumSlotProps) {
-  const spinRef = useFlickSpin<HTMLImageElement>();
+function PodiumSlot({ rank, entry, stats, onClick, height, color, delay, past = false }: PodiumSlotProps) {
+  const spinRef = useFlickSpin<HTMLDivElement>();
   return (
     <motion.button
       type="button"
@@ -167,16 +173,21 @@ function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: Podiu
             <Crown className="w-7 h-7" strokeWidth={2.5} fill="currentColor" />
           </motion.div>
         )}
-        <div
-          className={`relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-offset-2 ring-offset-bg-0 ${COLOR_RING[color]}`}
-        >
-          {entry.imageUrl ? (
-            <img ref={spinRef} src={entry.imageUrl} alt={entry.login} className="w-full h-full object-cover" />
-          ) : (
-            <div className={`w-full h-full bg-bg-2 flex items-center justify-center text-lg font-extrabold ${COLOR_TEXT[color]}`}>
-              {entry.login[0]?.toUpperCase()}
-            </div>
-          )}
+        {/* Le spin 3D est porté par CE wrapper ; le cercle (clip rond + ring) est
+            un enfant non-transformé → toute la pièce ronde pivote ensemble, sans
+            que les coins carrés de la photo ne dépassent. */}
+        <div ref={spinRef}>
+          <div
+            className={`relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-offset-2 ring-offset-bg-0 ${COLOR_RING[color]} ${past ? 'grayscale opacity-80' : ''}`}
+          >
+            {entry.imageUrl ? (
+              <img src={entry.imageUrl} alt={entry.login} className="w-full h-full object-cover" />
+            ) : (
+              <div className={`w-full h-full bg-bg-2 flex items-center justify-center text-lg font-extrabold ${COLOR_TEXT[color]}`}>
+                {entry.login[0]?.toUpperCase()}
+              </div>
+            )}
+          </div>
         </div>
         {/* Rank chip */}
         <div

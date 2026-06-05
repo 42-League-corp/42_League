@@ -8,11 +8,9 @@ import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
 import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView } from './LeaderboardScatter';
 import { GoatView } from '../GoatPage';
-import { PlayerLink } from '../../components/PlayerLink';
-import { RankBadge } from '../../components/RankBadge';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { TeamLeaderboard } from './TeamLeaderboard';
-import { api, type Season, type SeasonStanding } from '../../lib/api';
+import { api, type Season, type SeasonStanding, type LeaderboardEntry } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
@@ -65,8 +63,34 @@ export function LeaderboardMobile() {
   const pastSeasons = seasons.filter((s) => !s.isActive);
   const viewingPast = standings !== null;
 
+  // Photos par login (le snapshot d'une saison ne stocke pas l'imageUrl → on
+  // réutilise la photo actuelle du joueur, prise dans le classement courant).
+  const imgByLogin = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const u of leaderboard) m.set(u.login, u.imageUrl);
+    return m;
+  }, [leaderboard]);
+
+  // Classement figé d'une saison passée transformé en entrées « façon live ».
+  const pastEntries = useMemo<LeaderboardEntry[]>(() => {
+    if (!standings) return [];
+    return standings.map((s) => ({
+      rank: s.rank,
+      login: s.login,
+      elo: s.elo,
+      imageUrl: imgByLogin.get(s.login) ?? null,
+      matchesPlayed: s.wins + s.losses,
+      campus: null,
+    }));
+  }, [standings, imgByLogin]);
+
   const winsLossesByLogin = useMemo(() => {
     const map = new Map<string, { wins: number; losses: number }>();
+    // Saison passée : V/D figés dans le snapshot.
+    if (standings) {
+      for (const s of standings) map.set(s.login, { wins: s.wins, losses: s.losses });
+      return map;
+    }
     for (const u of leaderboard) map.set(u.login, { wins: 0, losses: 0 });
     for (const m of matches) {
       if (m.winner === 'draw') continue; // nulle : ni V ni D
@@ -80,7 +104,7 @@ export function LeaderboardMobile() {
       }
     }
     return map;
-  }, [leaderboard, matches]);
+  }, [standings, leaderboard, matches]);
 
   // Win rate par login — abscisse du nuage de points.
   const winRates = useMemo(() => {
@@ -92,10 +116,11 @@ export function LeaderboardMobile() {
     return map;
   }, [winsLossesByLogin]);
 
-  // Tri par rang officiel (ELO) — comme la vue desktop.
+  // Tri par rang officiel (ELO) — comme la vue desktop. En saison passée, on
+  // affiche le classement figé (mêmes composants, photos grisées).
   const sortedLeaderboard = useMemo(
-    () => [...leaderboard].sort((a, b) => a.rank - b.rank),
-    [leaderboard],
+    () => [...(viewingPast ? pastEntries : leaderboard)].sort((a, b) => a.rank - b.rank),
+    [viewingPast, pastEntries, leaderboard],
   );
 
   // Top 3 par rang → podium (or / argent / bronze cohérents avec l'ELO).
@@ -185,32 +210,31 @@ export function LeaderboardMobile() {
         )}
 
         {viewingPast ? (
-          <div className="space-y-1.5">
-            {(standings ?? []).length === 0 ? (
-              <div className="text-center text-muted-2 py-10 text-sm">{t('lb.snapshot.emptyShort')}</div>
-            ) : (
-              (standings ?? []).map((s) => (
-                <div
-                  key={s.login}
-                  className="flex items-center gap-3 card-hud rounded-xl px-3 py-2.5"
-                >
-                  <span className="w-8 text-center font-display font-black tabular-nums text-sm">
-                    {s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : `#${s.rank}`}
-                  </span>
-                  <PlayerLink login={s.login} className="flex-1 min-w-0">
-                    <span className="font-semibold text-text-strong truncate">{s.login}</span>
-                  </PlayerLink>
-                  <span className="inline-flex items-center gap-1 font-display font-extrabold text-gold tabular-nums text-sm">
-                    <RankBadge elo={s.elo} rank={s.rank} size="xs" showLabel={false} />
-                    {s.elo}
-                  </span>
-                  <span className="text-[11px] text-muted-2 font-mono tabular-nums w-12 text-right">
-                    {s.wins}-{s.losses}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+          sortedLeaderboard.length === 0 ? (
+            <div className="text-center text-muted-2 py-10 text-sm">{t('lb.snapshot.emptyShort')}</div>
+          ) : (
+            <div className="space-y-5">
+              {/* Podium top 3 — mêmes marches, photos grisées (classement figé) */}
+              {top3.length > 0 && <Podium top3={top3} statsByLogin={podiumStats} past />}
+              {/* Reste du classement : mêmes cartes que le live, photos grisées */}
+              <StaggerList className="space-y-2" stagger={0.03}>
+                {sortedLeaderboard.slice(3).map((entry) => {
+                  const wl = winsLossesByLogin.get(entry.login) ?? { wins: 0, losses: 0 };
+                  return (
+                    <StaggerItem key={entry.login}>
+                      <PlayerRankCard
+                        entry={entry}
+                        wins={wl.wins}
+                        losses={wl.losses}
+                        isMe={entry.login === myLogin}
+                        past
+                      />
+                    </StaggerItem>
+                  );
+                })}
+              </StaggerList>
+            </div>
+          )
         ) : (
         <>
         {/* ── Banner GAME en tout premier, avant même le podium ────────── */}

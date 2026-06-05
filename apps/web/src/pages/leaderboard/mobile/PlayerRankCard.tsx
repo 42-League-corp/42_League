@@ -20,6 +20,8 @@ interface PlayerRankCardProps {
   host?: string;
   /** Si fourni, le swipe gauche → droite déclenche cette action (défier). */
   onDefi?: (entry: LeaderboardEntry) => void;
+  /** Saison passée : grise la photo (classement figé). */
+  past?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export function PlayerRankCard({
   targetedBy,
   host,
   onDefi,
+  past = false,
 }: PlayerRankCardProps) {
   const t = useT();
   const navigate = useNavigate();
@@ -77,7 +80,7 @@ export function PlayerRankCard({
 
       {/* Avatar */}
       <div className="relative flex-shrink-0">
-        <Avatar login={entry.login} imageUrl={entry.imageUrl} size="md" />
+        <Avatar login={entry.login} imageUrl={entry.imageUrl} size="md" grayscale={past} />
         {targetedBy && (
           <span
             className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center ring-2 ring-bg-0"

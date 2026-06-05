@@ -117,7 +117,7 @@ function TrophyPodiumColumn({
   const { rank } = entry;
   const tier = TIER_BY_RANK[rank] ?? 'third';
   const isFirst = rank === 1;
-  const spinRef = useFlickSpin<HTMLImageElement>();
+  const spinRef = useFlickSpin<HTMLDivElement>();
 
   return (
     <motion.div
@@ -162,13 +162,18 @@ function TrophyPodiumColumn({
             </motion.div>
           )}
           <PlayerLink login={entry.login} className="!block">
-            <Avatar
-              login={entry.login}
-              imageUrl={entry.imageUrl}
-              imgRef={spinRef}
-              size={isFirst ? 'lg' : 'md'}
-              className={`ring-[3px] ring-offset-2 ring-offset-bg-1 transition-transform duration-300 group-hover:scale-105 ${RING[tier]}`}
-            />
+            {/* Hover-zoom (CSS) à l'extérieur, spin 3D (inline) à l'intérieur,
+                Avatar rond non-transformé → la pièce ronde pivote en entier. */}
+            <div className="transition-transform duration-300 group-hover:scale-105">
+              <div ref={spinRef}>
+                <Avatar
+                  login={entry.login}
+                  imageUrl={entry.imageUrl}
+                  size={isFirst ? 'lg' : 'md'}
+                  className={`ring-[3px] ring-offset-2 ring-offset-bg-1 ${RING[tier]}`}
+                />
+              </div>
+            </div>
           </PlayerLink>
           {/* Pastille rang */}
           <div
