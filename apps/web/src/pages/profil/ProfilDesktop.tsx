@@ -10,6 +10,7 @@ import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
+import { RecentMatchRow } from './shared/RecentMatchRow';
 import { displayTitle } from '../../lib/cosmeticTitles';
 import { TitlePicker } from '../../components/TitlePicker';
 import { BannerPicker } from '../../components/BannerPicker';
@@ -23,7 +24,7 @@ import { favoritesForGame, type FightingGame } from '../../lib/chars';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
-import { fmtCountdown, fmtDatePair } from '../../lib/format';
+import { fmtCountdown } from '../../lib/format';
 import { pickRating } from '../../lib/gameStats';
 
 /**
@@ -32,7 +33,7 @@ import { pickRating } from '../../lib/gameStats';
  */
 export function ProfilDesktop() {
   const t = useT();
-  const { locale, lang } = useI18n();
+  const { locale } = useI18n();
   const { me, matches, opsMe, leaderboard, tournaments, locations, refresh } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
@@ -333,53 +334,17 @@ export function ProfilDesktop() {
 
       <OpsWidget opsMe={opsMe} locale={locale} t={t} />
 
-      {/* Historique récent — même présentation que la fiche des autres joueurs. */}
+      {/* Historique récent — cartes partagées avec le profil mobile (même
+          agencement : badge V/N/D + avatar + nom/date + score + delta ELO). */}
       {myRecent.length > 0 && (
         <>
           <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
             {t('profil.recent')}
           </div>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-muted">
-                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.date')}</th>
-                  <th className="text-left px-2 sm:px-3 py-2">{t('history.col.opp')}</th>
-                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.score')}</th>
-                  <th className="text-right px-2 sm:px-3 py-2">{t('history.col.result')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myRecent.slice(0, 20).map((m) => {
-                  const isA = m.playerALogin === u.login;
-                  const opp = isA ? m.playerBLogin : m.playerALogin;
-                  const isDraw = m.winner === 'draw';
-                  const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-                  const sYou = isA ? m.scoreA : m.scoreB;
-                  const sOpp = isA ? m.scoreB : m.scoreA;
-                  return (
-                    <tr key={m.id} className="border-t border-border/40">
-                      <td className="px-2 sm:px-3 py-2 text-muted-2 text-xs whitespace-nowrap">
-                        {fmtDatePair(m.playedAt, lang).short}
-                        <span className="mx-1 opacity-40">·</span>
-                        <span className="text-muted">{fmtDatePair(m.playedAt, lang).long}</span>
-                      </td>
-                      <td className="px-2 sm:px-3 py-2">
-                        <PlayerLink login={opp}>{opp}</PlayerLink>
-                      </td>
-                      <td className="px-2 sm:px-3 py-2 text-right tabular-nums">
-                        {isDraw && m.game === 'chess' ? '½–½' : `${sYou}–${sOpp}`}
-                      </td>
-                      <td
-                        className={`px-2 sm:px-3 py-2 text-right text-[10px] uppercase font-extrabold ${isDraw ? 'text-gold' : won ? 'text-gold' : 'text-red'}`}
-                      >
-                        {isDraw ? t('history.draw') : won ? t('history.win') : t('history.loss')}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-1.5">
+            {myRecent.slice(0, 20).map((m, i) => (
+              <RecentMatchRow key={m.id} match={m} ownerLogin={u.login} delay={i * 0.03} />
+            ))}
           </div>
         </>
       )}

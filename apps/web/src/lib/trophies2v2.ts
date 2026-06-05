@@ -22,6 +22,14 @@ const MURAILLE_MIN_MATCHES = 8; // matchs 2v2 mini pour "La Muraille"
 const INCREVABLES_MIN_MATCHES = 12; // matchs 2v2 mini pour "Les Increvables"
 const JUMEAUX_MIN_MATCHES = 6; // matchs 2v2 mini pour "Les Jumeaux" (duo le plus équilibré)
 const INVAINCUS_MIN_WINS = 5; // victoires mini (0 défaite) pour "Les Invaincus"
+const DREAM_TEAM_MIN_MATCHES = 3; // matchs 2v2 mini pour "La Dream Team" (plus gros ELO cumulé)
+const ODD_COUPLE_MIN_MATCHES = 5; // matchs 2v2 mini pour "Le Couple Improbable"
+const ODD_COUPLE_MAX_SOLO_WR = 0.5; // chaque joueur doit être SOUS 50% de WR en solo (1v1)
+const WOODEN_SPOON_MIN_MATCHES = 8; // matchs 2v2 mini pour "La Cuillère de Bois" (pire WR)
+const MONTAGNES_MIN_MATCHES = 6; // matchs 2v2 mini pour "Les Montagnes Russes" (alternances)
+const ROULEAU_MIN_WINS = 5; // victoires 2v2 mini pour "Le Rouleau Compresseur" (écart moyen)
+const SANGFROID_MIN_CLOSEWINS = 3; // victoires à 1 but mini pour "Sang-Froid"
+const BOURREAUX_MIN_UPSETS = 3; // upsets mini pour "Les Bourreaux"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +41,14 @@ export type TeamTrophyCode =
   | 'muraille'
   | 'increvables'
   | 'jumeaux'
-  | 'invaincus';
+  | 'invaincus'
+  | 'dream_team'
+  | 'odd_couple'
+  | 'wooden_spoon'
+  | 'montagnes_russes'
+  | 'rouleau'
+  | 'sang_froid'
+  | 'bourreaux';
 
 /** Équipe gagnante enrichie pour l'affichage (avatars dénormalisés). */
 export interface TeamTrophyWinner extends BabyfootTeamEntry {
@@ -71,6 +86,7 @@ export function computeTeamTrophies(
   leaderboard: LeaderboardEntry[],
   matches: PlayedMatch[],
 ): TeamTrophyResult[] {
+  const agg = aggregateTeam2v2(teams, matches);
   return [
     computeSommetTrophy(teams),
     computeMachineTrophy(teams),
@@ -80,6 +96,13 @@ export function computeTeamTrophies(
     computeIncrevablesTrophy(teams),
     computeJumeauxTrophy(teams, leaderboard),
     computeInvaincusTrophy(teams),
+    computeDreamTeamTrophy(teams, leaderboard),
+    computeOddCoupleTrophy(teams, matches),
+    computeWoodenSpoonTrophy(teams),
+    computeMontagnesRussesTrophy(teams, agg),
+    computeRouleauTrophy(teams, agg),
+    computeSangFroidTrophy(teams, agg),
+    computeBourreauxTrophy(teams, agg),
   ];
 }
 
@@ -412,6 +435,397 @@ function computeInvaincusTrophy(teams: TeamTrophyWinner[]): TeamTrophyResult {
     winner: earned ? winner : null,
     value: earned ? `${maxWins}-0, invaincus` : '—',
     hint: `0 défaite, ≥${INVAINCUS_MIN_WINS} victoires`,
+  };
+}
+
+// ─── Trophée 9 : La Dream Team ────────────────────────────────────────────────
+
+/**
+ * Duo « stické » : la plus grosse somme d'ELO individuel des deux joueurs.
+ * Deux pointures qui s'allient — distinct du Sommet (ELO 2v2 de l'équipe) et
+ * du Carry (écart entre les deux) : ici c'est la puissance brute cumulée.
+ */
+function computeDreamTeamTrophy(
+  teams: TeamTrophyWinner[],
+  leaderboard: LeaderboardEntry[],
+): TeamTrophyResult {
+  const eloByLogin = new Map(leaderboard.map((u) => [u.login, u.elo]));
+
+  let winner: TeamTrophyWinner | null = null;
+  let maxSum = -Infinity;
+
+  for (const team of teams) {
+    if (team.wins + team.losses < DREAM_TEAM_MIN_MATCHES) continue;
+    const sum =
+      (eloByLogin.get(team.player1Login) ?? 1000) + (eloByLogin.get(team.player2Login) ?? 1000);
+    if (sum > maxSum) {
+      maxSum = sum;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null;
+
+  return {
+    code: 'dream_team',
+    emoji: '🌟',
+    title: 'La Dream Team',
+    subtitle: 'Le plus gros ELO individuel cumulé',
+    description:
+      `Décerné au duo (≥${DREAM_TEAM_MIN_MATCHES} matchs 2v2) dont la somme des ELO individuels de ses ` +
+      `deux joueurs est la plus élevée. Deux pointures qui unissent leurs forces : sur le papier, ` +
+      `personne ne devrait leur résister.`,
+    color: 'violet',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${maxSum} ELO cumulé` : '—',
+    hint: `≥${DREAM_TEAM_MIN_MATCHES} matchs, plus gros ELO cumulé`,
+  };
+}
+
+// ─── Trophée 10 : Le Couple Improbable (Odd Couple) ───────────────────────────
+
+/**
+ * « Odd Couple » : les DEUX joueurs sont sous 50 % de WR en 1v1 (nuls séparément),
+ * mais le duo gagne plus souvent que chacun ne gagne seul. La preuve que 1 + 1 > 2 :
+ * pris à part on ne miserait pas un kopeck sur eux, ensemble ils renversent la table.
+ * On couronne le duo dont l'écart "à deux vs meilleur des deux en solo" est le plus grand.
+ */
+function computeOddCoupleTrophy(
+  teams: TeamTrophyWinner[],
+  matches: PlayedMatch[],
+): TeamTrophyResult {
+  const onev1 = matches.filter(
+    (m) => (m.game ?? 'babyfoot') === 'babyfoot' && (m as { mode?: string | null }).mode !== '2v2',
+  );
+
+  const indivStats = new Map<string, { wins: number; total: number }>();
+  const ensure = (login: string) => {
+    if (!indivStats.has(login)) indivStats.set(login, { wins: 0, total: 0 });
+    return indivStats.get(login)!;
+  };
+  for (const m of onev1) {
+    const a = ensure(m.playerALogin);
+    const b = ensure(m.playerBLogin);
+    a.total++;
+    b.total++;
+    if (m.winner === 'A') a.wins++;
+    else b.wins++;
+  }
+
+  // WR solo seulement si le joueur a réellement un bilan 1v1 (sinon null → inéligible).
+  const soloWR = (login: string): number | null => {
+    const s = indivStats.get(login);
+    return s && s.total > 0 ? s.wins / s.total : null;
+  };
+
+  let winner: TeamTrophyWinner | null = null;
+  let bestOverperf = 0;
+  let wTeamPct = 0;
+  let wSolo1Pct = 0;
+  let wSolo2Pct = 0;
+
+  for (const team of teams) {
+    const total = team.wins + team.losses;
+    if (total < ODD_COUPLE_MIN_MATCHES) continue;
+
+    const wr1 = soloWR(team.player1Login);
+    const wr2 = soloWR(team.player2Login);
+    if (wr1 === null || wr2 === null) continue; // besoin d'un vrai bilan solo pour les deux
+    if (wr1 >= ODD_COUPLE_MAX_SOLO_WR || wr2 >= ODD_COUPLE_MAX_SOLO_WR) continue; // nuls séparément
+
+    const teamWR = team.wins / total;
+    if (teamWR <= wr1 || teamWR <= wr2) continue; // strictement meilleurs à deux que chacun seul
+
+    const overperf = teamWR - Math.max(wr1, wr2);
+    if (overperf > bestOverperf) {
+      bestOverperf = overperf;
+      winner = team;
+      wTeamPct = Math.round(teamWR * 100);
+      wSolo1Pct = Math.round(wr1 * 100);
+      wSolo2Pct = Math.round(wr2 * 100);
+    }
+  }
+
+  const earned = winner !== null;
+
+  return {
+    code: 'odd_couple',
+    emoji: '🃏',
+    title: 'Le Couple Improbable',
+    subtitle: 'Nuls séparément, redoutables ensemble',
+    description:
+      `Décerné au duo (≥${ODD_COUPLE_MIN_MATCHES} matchs 2v2) dont les DEUX joueurs ont un win rate ` +
+      `individuel sous les 50 % en 1v1, mais qui gagnent plus souvent à deux que chacun ne gagne seul. ` +
+      `Pris séparément on ne miserait pas un kopeck sur eux ; ensemble, ils renversent la table. ` +
+      `La pure magie de l'alchimie.`,
+    color: 'green',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${wTeamPct}% à deux (vs ${wSolo1Pct}% / ${wSolo2Pct}% solo)` : '—',
+    hint: '2 joueurs <50% solo, meilleur WR à deux',
+  };
+}
+
+// ─── Trophée 11 : La Cuillère de Bois (Wooden Spoon) ──────────────────────────
+
+/**
+ * Le pire win rate 2v2 de la ligue (sur un volume minimal de matchs). La
+ * distinction des perdants magnifiques : ils enchaînent les défaites mais
+ * reviennent toujours. À WR égal, le plus de matchs (la souffrance la plus
+ * longue) départage.
+ */
+function computeWoodenSpoonTrophy(teams: TeamTrophyWinner[]): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let worstWR = Infinity;
+  let winnerWRPct = 0;
+
+  for (const team of teams) {
+    const total = team.wins + team.losses;
+    if (total < WOODEN_SPOON_MIN_MATCHES) continue;
+
+    const wr = team.wins / total;
+    const better =
+      wr < worstWR ||
+      (wr === worstWR && winner !== null && total > winner.wins + winner.losses);
+    if (better) {
+      worstWR = wr;
+      winner = team;
+      winnerWRPct = Math.round(wr * 100);
+    }
+  }
+
+  const earned = winner !== null;
+
+  return {
+    code: 'wooden_spoon',
+    emoji: '🥄',
+    title: 'La Cuillère de Bois',
+    subtitle: 'Le pire win rate 2v2 de la ligue',
+    description:
+      `La distinction la plus chérie des perdants magnifiques : le plus faible pourcentage de victoires ` +
+      `en 2v2, sur un minimum de ${WOODEN_SPOON_MIN_MATCHES} matchs. Ils enchaînent les défaites… ` +
+      `mais reviennent toujours, le sourire aux lèvres. Respect.`,
+    color: 'bronze',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${winnerWRPct}% WR (${winner!.wins}V-${winner!.losses}D)` : '—',
+    hint: `≥${WOODEN_SPOON_MIN_MATCHES} matchs, plus faible WR`,
+  };
+}
+
+// ─── Agrégat détaillé des matchs 2v2 par équipe (scores, ordre, ELO adverse) ──
+
+interface Team2v2Agg {
+  /** Résultats chronologiques (true = victoire), triés par date croissante. */
+  resultsChrono: boolean[];
+  /** Écart de buts de chaque victoire (|score vainqueur − score perdant|). */
+  winMargins: number[];
+  /** Victoires à 1 but d'écart (matchs serrés). */
+  closeWins: number;
+  /** Victoires contre une équipe au meilleur ELO 2v2 courant (upsets). */
+  upsetWins: number;
+}
+
+/**
+ * Construit, pour chaque équipe, le détail de ses matchs 2v2 (mode='2v2',
+ * comptabilisés). Mutualise un seul balayage de l'historique pour alimenter les
+ * trophées « scénario » (alternances, écart de score, matchs serrés, upsets).
+ * Miroir de `loadTeam2v2Details` côté backend.
+ */
+function aggregateTeam2v2(
+  teams: TeamTrophyWinner[],
+  matches: PlayedMatch[],
+): Map<string, Team2v2Agg> {
+  const eloById = new Map(teams.map((t) => [t.id, t.elo]));
+  type Entry = { playedAt: string; won: boolean; margin: number; oppElo: number | null };
+  const raw = new Map<string, Entry[]>();
+  const push = (id: string, e: Entry) => {
+    if (!raw.has(id)) raw.set(id, []);
+    raw.get(id)!.push(e);
+  };
+
+  for (const m of matches) {
+    if (m.mode !== '2v2' || m.countedForElo === false) continue;
+    const aId = m.teamAId ?? null;
+    const bId = m.teamBId ?? null;
+    if (!aId || !bId) continue;
+    const margin = Math.abs(m.scoreA - m.scoreB);
+    if (eloById.has(aId)) {
+      push(aId, { playedAt: m.playedAt, won: m.winner === 'A', margin, oppElo: eloById.get(bId) ?? null });
+    }
+    if (eloById.has(bId)) {
+      push(bId, { playedAt: m.playedAt, won: m.winner === 'B', margin, oppElo: eloById.get(aId) ?? null });
+    }
+  }
+
+  const out = new Map<string, Team2v2Agg>();
+  for (const [id, list] of raw) {
+    list.sort((x, y) => +new Date(x.playedAt) - +new Date(y.playedAt));
+    const selfElo = eloById.get(id) ?? 1000;
+    out.set(id, {
+      resultsChrono: list.map((e) => e.won),
+      winMargins: list.filter((e) => e.won).map((e) => e.margin),
+      closeWins: list.filter((e) => e.won && e.margin === 1).length,
+      upsetWins: list.filter((e) => e.won && e.oppElo !== null && e.oppElo > selfElo).length,
+    });
+  }
+  return out;
+}
+
+// ─── Trophée 12 : Les Montagnes Russes ────────────────────────────────────────
+
+/** Duo qui alterne le plus victoire/défaite d'un match à l'autre (imprévisible). */
+function computeMontagnesRussesTrophy(
+  teams: TeamTrophyWinner[],
+  agg: Map<string, Team2v2Agg>,
+): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let maxFlips = -1;
+
+  for (const team of teams) {
+    const a = agg.get(team.id);
+    if (!a || a.resultsChrono.length < MONTAGNES_MIN_MATCHES) continue;
+    let flips = 0;
+    for (let i = 1; i < a.resultsChrono.length; i++) {
+      if (a.resultsChrono[i] !== a.resultsChrono[i - 1]) flips++;
+    }
+    if (flips > maxFlips) {
+      maxFlips = flips;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null && maxFlips > 0;
+
+  return {
+    code: 'montagnes_russes',
+    emoji: '🎢',
+    title: 'Les Montagnes Russes',
+    subtitle: 'Le duo le plus imprévisible',
+    description:
+      `Décerné au duo (≥${MONTAGNES_MIN_MATCHES} matchs 2v2) qui alterne le plus souvent entre victoire ` +
+      `et défaite d'un match à l'autre. Une partie ils marchent sur l'eau, la suivante ils coulent : ` +
+      `impossible de deviner quelle version se présentera.`,
+    color: 'magenta',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${maxFlips} revirements` : '—',
+    hint: `≥${MONTAGNES_MIN_MATCHES} matchs, max d'alternances V/D`,
+  };
+}
+
+// ─── Trophée 13 : Le Rouleau Compresseur ──────────────────────────────────────
+
+/** Duo aux victoires les plus écrasantes (plus gros écart de buts moyen en victoire). */
+function computeRouleauTrophy(
+  teams: TeamTrophyWinner[],
+  agg: Map<string, Team2v2Agg>,
+): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let bestAvg = -1;
+  let winnerAvg = 0;
+
+  for (const team of teams) {
+    const a = agg.get(team.id);
+    if (!a || a.winMargins.length < ROULEAU_MIN_WINS) continue;
+    const avg = a.winMargins.reduce((s, x) => s + x, 0) / a.winMargins.length;
+    if (avg > bestAvg) {
+      bestAvg = avg;
+      winner = team;
+      winnerAvg = avg;
+    }
+  }
+
+  const earned = winner !== null;
+
+  return {
+    code: 'rouleau',
+    emoji: '🚜',
+    title: 'Le Rouleau Compresseur',
+    subtitle: 'Les victoires les plus écrasantes',
+    description:
+      `Décerné au duo (≥${ROULEAU_MIN_WINS} victoires 2v2) au plus gros écart de buts moyen dans ses ` +
+      `victoires. Quand ils gagnent, ils ne font pas dans la dentelle : ils roulent sur l'adversaire.`,
+    color: 'red',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `+${winnerAvg.toFixed(1)} buts/victoire` : '—',
+    hint: `≥${ROULEAU_MIN_WINS} victoires, plus gros écart moyen`,
+  };
+}
+
+// ─── Trophée 14 : Sang-Froid ──────────────────────────────────────────────────
+
+/** Duo au plus grand nombre de victoires à 1 but d'écart (nerfs d'acier). */
+function computeSangFroidTrophy(
+  teams: TeamTrophyWinner[],
+  agg: Map<string, Team2v2Agg>,
+): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let maxClose = 0;
+
+  for (const team of teams) {
+    const a = agg.get(team.id);
+    if (!a) continue;
+    if (a.closeWins > maxClose) {
+      maxClose = a.closeWins;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null && maxClose >= SANGFROID_MIN_CLOSEWINS;
+
+  return {
+    code: 'sang_froid',
+    emoji: '🧊',
+    title: 'Sang-Froid',
+    subtitle: 'Le roi des fins de match serrées',
+    description:
+      `Pour le duo qui a remporté le plus de matchs 2v2 à un seul but d'écart. Quand tout se joue sur ` +
+      `la dernière balle, ce sont eux qui gardent les nerfs et plient la partie. Minimum ${SANGFROID_MIN_CLOSEWINS} victoires serrées.`,
+    color: 'cyan',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${maxClose} victoires à 1 but` : '—',
+    hint: `≥${SANGFROID_MIN_CLOSEWINS} victoires à 1 but d'écart`,
+  };
+}
+
+// ─── Trophée 15 : Les Bourreaux ───────────────────────────────────────────────
+
+/** Duo qui a fait tomber le plus d'équipes mieux classées qu'elles (upsets). */
+function computeBourreauxTrophy(
+  teams: TeamTrophyWinner[],
+  agg: Map<string, Team2v2Agg>,
+): TeamTrophyResult {
+  let winner: TeamTrophyWinner | null = null;
+  let maxUpsets = 0;
+
+  for (const team of teams) {
+    const a = agg.get(team.id);
+    if (!a) continue;
+    if (a.upsetWins > maxUpsets) {
+      maxUpsets = a.upsetWins;
+      winner = team;
+    }
+  }
+
+  const earned = winner !== null && maxUpsets >= BOURREAUX_MIN_UPSETS;
+
+  return {
+    code: 'bourreaux',
+    emoji: '😈',
+    title: 'Les Bourreaux',
+    subtitle: 'Tombeurs de plus forts qu’eux',
+    description:
+      `Récompense le duo qui a battu le plus d'équipes au meilleur ELO 2v2 que le sien. Les briseurs de ` +
+      `hiérarchie : peu importe le favori en face, ils n'ont peur de personne. Minimum ${BOURREAUX_MIN_UPSETS} upsets.`,
+    color: 'crimson',
+    earned,
+    winner: earned ? winner : null,
+    value: earned ? `${maxUpsets} upsets` : '—',
+    hint: `≥${BOURREAUX_MIN_UPSETS} victoires contre mieux classé`,
   };
 }
 

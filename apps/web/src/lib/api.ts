@@ -868,6 +868,12 @@ export const api = {
     ),
   userProfile: (login: string) =>
     request<UserProfile>(`/users/${encodeURIComponent(login)}`),
+  // Photos de l'équipe (page About) résolues par login depuis l'API 42, sans créer
+  // de comptes joueurs côté serveur. Voir GET /team/photos.
+  teamPhotos: (logins: string[]) =>
+    request<{ photos: Record<string, string | null> }>(
+      `/team/photos?logins=${encodeURIComponent(logins.join(','))}`,
+    ),
   opsList: () => request<Ops[]>('/ops'),
   opsMe: () => request<OpsMeResponse>('/ops/me'),
   opsForUser: (login: string) =>

@@ -1855,18 +1855,17 @@ function TeamSectionAuthed() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all(
-      TEAM.map(async (m) => {
-        try {
-          const { user } = await api.userProfile(m.login);
-          return [m.login, user.imageUrl] as const;
-        } catch {
-          return [m.login, null] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (!cancelled) setFetched(Object.fromEntries(entries));
-    });
+    // Résolution par login via l'API 42 (cache serveur), y compris pour les membres
+    // « crédits » qui ne sont pas des joueurs inscrits — sinon leur fiche 404ait et
+    // la photo retombait sur l'initiale. Voir GET /team/photos.
+    api
+      .teamPhotos(TEAM.map((m) => m.login))
+      .then(({ photos }) => {
+        if (!cancelled) setFetched(photos);
+      })
+      .catch(() => {
+        /* le leaderboard sert d'amorce ; à défaut, fallback initiale */
+      });
     return () => {
       cancelled = true;
     };

@@ -91,6 +91,30 @@ export async function fetchAndSavePublicUser(login: string): Promise<void> {
   }
 }
 
+// Récupère UNIQUEMENT l'URL de la photo d'un login 42, SANS rien écrire en base
+// (ni créer de compte joueur). Sert aux « crédits » de la page About : des membres
+// de l'équipe qui ne sont pas forcément des joueurs inscrits — on ne veut donc pas
+// les matérialiser dans la table user (sinon ils apparaîtraient au classement).
+// Renvoie null si pas de token app, 404, ou profil 42 sans image.
+export async function fetchPublicUserImage(login: string): Promise<string | null> {
+  try {
+    const token = await getAppToken();
+    if (!token) return null;
+    const res = await fetch(`${FT_USERS_URL}/${encodeURIComponent(login)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      if (res.status !== 404) console.warn(`[ft-api] image ${login} failed`, res.status);
+      return null;
+    }
+    const u = (await res.json()) as FtPublicUser;
+    return u.image?.versions?.medium ?? u.image?.versions?.small ?? u.image?.link ?? null;
+  } catch (err) {
+    console.warn(`[ft-api] image ${login} error`, err);
+    return null;
+  }
+}
+
 // Rattrape les profils incomplets (image OU nom manquant) en re-tapant l'API 42.
 // Sert au rétro-remplissage des comptes existants après l'ajout des colonnes nom.
 export async function backfillMissingProfiles(): Promise<number> {

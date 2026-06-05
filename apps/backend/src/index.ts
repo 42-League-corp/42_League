@@ -67,7 +67,7 @@ import {
   isTrusted42Origin,
   type FtProfile,
 } from './auth.js';
-import { backfillMissingProfiles, fetchAndSavePublicUser } from './ft-api.js';
+import { backfillMissingProfiles, fetchAndSavePublicUser, fetchPublicUserImage } from './ft-api.js';
 import { getCampusLocations } from './locations.js';
 import {
   advanceWinner,
@@ -644,7 +644,14 @@ if (process.env.APP_ENV === 'staging') {
     if (p === '/health' || p.startsWith('/auth') || p === '/me' || p.startsWith('/me/')) {
       return next();
     }
-    const login = await getSessionLogin(c);
+    // Le flux SSE (/events) s'ouvre via EventSource, qui ne peut PAS envoyer de
+    // header Authorization : il s'authentifie par le token éphémère ?token=… (scope
+    // 'sse'). On le résout donc comme le handler /events lui-même, sinon le gate le
+    // refuserait en 401 avant même d'atteindre la route. Voir getStreamLogin.
+    const login =
+      p === '/events'
+        ? await getStreamLogin(c).catch(() => null)
+        : await getSessionLogin(c);
     if (!login) throw new HTTPException(401, { message: 'staging: connexion requise' });
     if (!STAGING_ALLOWED.has(login.toLowerCase()) && !isTesterLogin(login.toLowerCase())) {
       // Vérifie le flag stagingAllowed en base (accordé via /admin/users/:login/staging-access).
@@ -1157,6 +1164,38 @@ app.get('/users', async (c) => {
   return c.json(
     await prisma.user.findMany({ where: VISIBLE_USER_WHERE, orderBy: { elo: 'desc' } }),
   );
+});
+
+// Photos de l'équipe (page About / Team) — résolues depuis l'API 42 PAR LOGIN, avec
+// cache mémoire. On ne crée AUCUN compte joueur : ces membres « crédits » ne sont pas
+// forcément des joueurs inscrits et ne doivent pas apparaître au classement (raison
+// pour laquelle /users/:login échouait en 404 pour eux). Voir fetchPublicUserImage.
+const TEAM_PHOTO_TTL_MS = 6 * 3600_000; // 6 h
+const teamPhotoCache = new Map<string, { url: string | null; expiresAt: number }>();
+
+app.get('/team/photos', async (c) => {
+  await getCurrentLogin(c);
+  const logins = (c.req.query('logins') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 30); // garde-fou anti-abus
+  const now = Date.now();
+  const entries = await Promise.all(
+    logins.map(async (login) => {
+      // 1) joueur déjà connu avec une photo en base → on la sert directement.
+      const user = await prisma.user.findUnique({ where: { login }, select: { imageUrl: true } });
+      if (user?.imageUrl) return [login, user.imageUrl] as const;
+      // 2) cache mémoire (évite de retaper l'API 42 à chaque visite).
+      const hit = teamPhotoCache.get(login);
+      if (hit && hit.expiresAt > now) return [login, hit.url] as const;
+      // 3) fetch 42 par login, sans écrire en base.
+      const url = await fetchPublicUserImage(login);
+      teamPhotoCache.set(login, { url, expiresAt: now + TEAM_PHOTO_TTL_MS });
+      return [login, url] as const;
+    }),
+  );
+  return c.json({ photos: Object.fromEntries(entries) });
 });
 
 app.get('/users/:login', async (c) => {
