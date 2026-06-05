@@ -14,6 +14,10 @@ export interface GameMeta {
   borderColor: string;
   bgColor: string;
   glowColor: string;
+  // Palette du bouton « Match aléatoire » déclinée à l'identité du mode (dégradé
+  // clair→profond, couleur du texte, bordure et glow). Le design du bouton reste
+  // le même ; seules les couleurs changent selon l'univers courant.
+  button: { from: string; via: string; to: string; text: string; border: string; glow: string };
   // Reçoit `sel` (univers sélectionné) : les logos PNG basculent gris↔couleur ;
   // les SVG l'ignorent et se colorent via `currentColor` sur le parent.
   icon: (sel: boolean) => React.ReactElement;
@@ -27,6 +31,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     borderColor: 'rgba(255,201,74,0.6)',
     bgColor: 'rgba(255,201,74,0.10)',
     glowColor: 'rgba(255,201,74,0.45)',
+    button: { from: '#ffd87a', via: '#f0a020', to: '#c5520a', text: '#1a0d00', border: 'rgba(255,201,102,0.6)', glow: 'rgba(255,128,32,0.4)' },
     icon: () => (
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
         <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
@@ -44,6 +49,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     borderColor: 'rgba(255,61,80,0.6)',
     bgColor: 'rgba(255,61,80,0.10)',
     glowColor: 'rgba(255,61,80,0.45)',
+    button: { from: '#ff9aa6', via: '#ff3d50', to: '#a8121f', text: '#2a0307', border: 'rgba(255,128,140,0.6)', glow: 'rgba(255,61,80,0.4)' },
     icon: (sel) => (
       <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
@@ -55,6 +61,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     borderColor: 'rgba(86,196,110,0.6)',
     bgColor: 'rgba(86,196,110,0.10)',
     glowColor: 'rgba(86,196,110,0.45)',
+    button: { from: '#9ce6ab', via: '#56c46e', to: '#2c7a40', text: '#04240e', border: 'rgba(140,224,160,0.6)', glow: 'rgba(86,196,110,0.4)' },
     icon: () => (
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
         <path d="M12 2 v4 M10 4 h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -71,6 +78,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     borderColor: 'rgba(255,122,24,0.6)',
     bgColor: 'rgba(255,122,24,0.10)',
     glowColor: 'rgba(255,122,24,0.45)',
+    button: { from: '#ffc08a', via: '#ff7a18', to: '#b8480a', text: '#2a1200', border: 'rgba(255,176,102,0.6)', glow: 'rgba(255,122,24,0.4)' },
     icon: (sel) => (
       <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
@@ -82,6 +90,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     borderColor: 'rgba(20,184,166,0.6)',
     bgColor: 'rgba(20,184,166,0.10)',
     glowColor: 'rgba(20,184,166,0.45)',
+    button: { from: '#6fe3d6', via: '#14b8a6', to: '#0a7064', text: '#04241f', border: 'rgba(95,224,210,0.6)', glow: 'rgba(20,184,166,0.4)' },
     // Cible de fléchettes — anneaux concentriques + bull, en currentColor.
     icon: () => (
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>

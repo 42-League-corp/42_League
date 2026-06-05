@@ -9,8 +9,6 @@ import { TournamentCup } from './TournamentCup';
 import { SmashTrophy } from './SmashTrophy';
 import { ChessTrophy } from './ChessTrophy';
 import { Button } from './Button';
-import { CharMultiGrid } from './FavoriteCharsEditor';
-import { type FightingGame } from '../lib/chars';
 import { useT } from '../lib/i18n';
 
 // Le nom est un nom propre (marque) → non traduit ; la tagline est une clé i18n
@@ -66,24 +64,19 @@ export function GameOnboarding() {
   const t = useT();
   const [sel, setSel] = useState<Set<Game>>(new Set<Game>(['babyfoot']));
   const [busy, setBusy] = useState(false);
-  // Étape 2 (optionnelle) : choix des persos favoris si Smash/SF sélectionnés.
-  const [step, setStep] = useState<'games' | 'favs'>('games');
-  const [favs, setFavs] = useState<Record<string, string[]>>({});
 
-  // Échap = même fermeture que la croix rouge selon l'étape affichée
-  // (skipOnboarding sur le choix des modes, skip des favoris sur l'étape 2).
-  // Appelé avant tout return anticipé (règles des hooks) ; la modale n'est
-  // montée que si elle est visible → active = true.
+  // Échap = même fermeture que la croix rouge (skip de l'onboarding). Appelé
+  // avant tout return anticipé (règles des hooks) ; la modale n'est montée que
+  // si elle est visible → active = true. Le wrapper useCallback diffère l'appel
+  // à `skipOnboarding` (défini plus bas), évitant la zone morte temporelle.
   const onEscape = useCallback(() => {
-    if (step === 'favs') void finishFavorites(false);
-    else void skipOnboarding();
-  }, [step]);
+    void skipOnboarding();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEscapeKey(true, onEscape);
 
   // Affiché uniquement si le compte existe et n'a pas encore choisi ses modes.
   if (!me?.user || me.user.onboardedAt) return null;
-
-  const fightingGames = (['smash', 'streetfighter'] as const).filter((g) => sel.has(g));
 
   const toggle = (g: Game) =>
     setSel((prev) => {
@@ -93,16 +86,9 @@ export function GameOnboarding() {
       return next;
     });
 
-  const toggleFav = (game: FightingGame, id: string) =>
-    setFavs((prev) => {
-      const cur = prev[game] ?? [];
-      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-      return { ...prev, [game]: next };
-    });
-
-  // Étape 1 : enregistre les modes (pose onboardedAt). Si un jeu de combat est
-  // choisi → passe à l'étape favoris SANS refresh (la modale reste ouverte tant
-  // que `me` n'est pas rafraîchi). Sinon, refresh = fermeture.
+  // Enregistre les modes (pose onboardedAt) puis refresh → fermeture. Le choix
+  // des persos favoris (Smash/SF) ne se fait plus ici : il reste disponible sur
+  // la page profil.
   const submit = async () => {
     const games = [...sel];
     if (games.length === 0) {
@@ -116,11 +102,7 @@ export function GameOnboarding() {
       const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
       const first = order.find((g) => sel.has(g));
       if (first) setActiveGame(first);
-      if (fightingGames.length > 0) {
-        setStep('favs');
-      } else {
-        await refresh();
-      }
+      await refresh();
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     } finally {
@@ -145,59 +127,6 @@ export function GameOnboarding() {
       setBusy(false);
     }
   };
-
-  // Étape 2 : enregistre les favoris (ou skip), puis refresh → fermeture.
-  const finishFavorites = async (save: boolean) => {
-    setBusy(true);
-    try {
-      if (save) {
-        await api.setFavorites({
-          ...(sel.has('smash') ? { smash: favs.smash ?? [] } : {}),
-          ...(sel.has('streetfighter') ? { streetfighter: favs.streetfighter ?? [] } : {}),
-        });
-      }
-      await refresh();
-    } catch (err) {
-      flash.show(err instanceof Error ? err.message : String(err), 'error');
-      setBusy(false);
-    }
-  };
-
-  if (step === 'favs') {
-    return (
-      <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
-        <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-md rounded-2xl border border-gold/30 bg-bg-1 p-6 shadow-2xl">
-          <CloseX onClick={() => finishFavorites(false)} disabled={busy} t={t} />
-          <div className="text-center mb-5">
-            <div className="font-display text-2xl font-black text-text-strong">{t('onboarding.favs.title')}</div>
-            <p className="text-sm text-muted-2 mt-1">{t('onboarding.favs.desc')}</p>
-          </div>
-
-          <div className="space-y-4 max-h-[55vh] overflow-y-auto scrollbar-none">
-            {fightingGames.map((g) => (
-              <CharMultiGrid key={g} game={g} selected={favs[g] ?? []} onToggle={(id) => toggleFav(g, id)} />
-            ))}
-          </div>
-
-          <div className="flex gap-3 mt-5">
-            <button
-              type="button"
-              onClick={() => finishFavorites(false)}
-              disabled={busy}
-              className="flex-1 py-3 rounded-xl border border-border text-xs font-extrabold uppercase tracking-wide text-muted-2 hover:text-text hover:border-border-strong transition-colors tap-transparent disabled:opacity-50"
-            >
-              {t('onboarding.favs.skip')}
-            </button>
-            <Button loading={busy} onClick={() => finishFavorites(true)} className="flex-1 py-3">
-              {t('onboarding.favs.finish')}
-            </Button>
-          </div>
-        </div>
-      </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/80 backdrop-blur-md">
