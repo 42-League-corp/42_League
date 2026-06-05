@@ -103,6 +103,33 @@ const RED = '#ff5366';
 const WIN = '#7fd66e';
 const LOSS = '#ff5366';
 
+// Rampe d'amplitude du dégradé de ligne : jaune quand ça stagne (petit delta),
+// vert de plus en plus vif à mesure que le gain grossit, rouge quand ça descend.
+const STAG = '#ffd24a'; // stagnation (jaune)
+const GREEN_STRONG = '#2ee06b'; // gros up : beaucoup plus vert
+const DELTA_REF = 22; // |delta| atteignant la teinte pleine (K=32 → ~gros up)
+
+function mixHex(a: string, b: string, t: number): string {
+  const u = Math.max(0, Math.min(1, t));
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => {
+    const ca = (pa >> sh) & 0xff, cb = (pb >> sh) & 0xff;
+    return Math.round(ca + (cb - ca) * u);
+  };
+  return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
+}
+
+/** Couleur d'un point selon l'amplitude de son delta ELO. */
+function colorForDelta(d: number): string {
+  const n = Math.max(-1, Math.min(1, d / DELTA_REF));
+  // ease : garde la teinte jaune sur les petits deltas (stagnation), ne vire au
+  // vert/rouge vif que pour les vrais écarts.
+  const m = Math.pow(Math.abs(n), 1.5);
+  if (d < 0) return mixHex(STAG, RED, m);
+  // jaune → vert → vert vif (deux paliers pour un « beaucoup plus vert » au sommet)
+  return m < 0.5 ? mixHex(STAG, WIN, m / 0.5) : mixHex(WIN, GREEN_STRONG, (m - 0.5) / 0.5);
+}
+
 /** Fondu des couleurs quand on passe d'une case (match) à l'autre. */
 const COLOR_T = { duration: 0.4, ease: [0.16, 1, 0.3, 1] } as const;
 
@@ -209,18 +236,15 @@ export function EloChart({
   const lineColor = isUp ? GOLD : RED;
   const uid = `${myLogin.replace(/\W/g, '')}-${game}`;
 
-  // Couleur par point selon la tendance locale : vert quand le match fait monter
-  // l'ELO, rouge quand il le fait descendre. Le point de départ adopte la couleur
-  // du premier segment (pas de delta propre). Le dégradé de la ligne interpole
-  // ensuite entre ces couleurs → fondu fluide vert↔rouge aux retournements, et
-  // teinte pleine sur les séries de victoires/défaites.
+  // Couleur par point selon l'AMPLITUDE du delta ELO : jaune quand ça stagne,
+  // vert de plus en plus vif quand le gain est gros, rouge quand ça descend. Le
+  // point de départ adopte le delta du premier segment (pas de delta propre). Le
+  // dégradé de la ligne interpole ensuite entre ces couleurs → fondu fluide qui
+  // « chauffe » en vert sur les gros ups et reste jaune sur les plateaux.
   const trendColors = useMemo(() => {
     const m = geo?.mapped;
     if (!m || m.length === 0) return [] as string[];
-    return m.map((p, i) => {
-      if (i === 0) return (m[1]?.elo ?? p.elo) >= p.elo ? WIN : LOSS;
-      return (p.delta ?? 0) >= 0 ? WIN : LOSS;
-    });
+    return m.map((p, i) => colorForDelta(i === 0 ? (m[1]?.delta ?? 0) : (p.delta ?? 0)));
   }, [geo]);
 
   // Stops du dégradé positionnés à l'abscisse exacte de chaque point (userSpace).
