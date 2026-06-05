@@ -15,7 +15,7 @@ import { useLeagueData } from '../../hooks/useLeagueData';
 import { haptic } from '../../mobile/feedback/useHaptic';
 import { useT } from '../../lib/i18n';
 
-type Capacity = 8 | 16;
+type Capacity = 8 | 16 | 32;
 
 export function CreateTournamentPage() {
   const navigate = useNavigate();
@@ -151,8 +151,8 @@ export function CreateTournamentPage() {
           <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
             {t('tournois.field.players')}
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            {([8, 16] as Capacity[]).map((c) => {
+          <div className="grid grid-cols-3 gap-3">
+            {([8, 16, 32] as Capacity[]).map((c) => {
               const active = capacity === c;
               return (
                 <motion.button

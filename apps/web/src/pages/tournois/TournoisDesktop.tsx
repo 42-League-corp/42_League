@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
-import { PlayerCountPicker } from '../../components/PlayerCountPicker';
 import {
   TournamentPrizePicker,
   buildPrizePayload,
@@ -411,13 +410,17 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               className="w-full px-3 py-2.5 bg-bg-1 border border-border rounded-xl text-sm focus:border-gold outline-none transition-colors"
             />
           </Field>
+          {/* Capacités en puissances de 2 uniquement → bracket toujours plein,
+              jamais de joueur exempt/seul au 1er tour. */}
           <Field label={t('tournois.field.players')}>
-            <PlayerCountPicker
-              value={capacity}
-              onChange={setCapacity}
-              min={6}
-              max={32}
-              label={t('tournois.mobile.players')}
+            <Pills<string>
+              value={String(capacity)}
+              onChange={(v) => setCapacity(Number(v))}
+              choices={[
+                { value: '8', label: '8' },
+                { value: '16', label: '16' },
+                { value: '32', label: '32' },
+              ]}
             />
           </Field>
           <Field label={t('tournois.field.type')} hint={isAdmin ? undefined : t('tournois.field.type.hint')}>

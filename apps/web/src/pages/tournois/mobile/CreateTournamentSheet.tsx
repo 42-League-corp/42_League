@@ -10,7 +10,7 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { useT } from '../../../lib/i18n';
 
-type Capacity = 8 | 16;
+type Capacity = 8 | 16 | 32;
 type Kind = 'friendly' | 'official';
 
 interface CreateTournamentSheetProps {
@@ -19,7 +19,7 @@ interface CreateTournamentSheetProps {
   onDone: () => Promise<void>;
 }
 
-const CAPACITY_CHOICES: Capacity[] = [8, 16];
+const CAPACITY_CHOICES: Capacity[] = [8, 16, 32];
 
 /**
  * BottomSheet de création de tournoi.
@@ -154,7 +154,7 @@ export function CreateTournamentSheet({ open, onClose, onDone }: CreateTournamen
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
             {t('tournois.sheet.capacity')}
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {CAPACITY_CHOICES.map((c) => {
               const active = capacity === c;
               return (

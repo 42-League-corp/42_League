@@ -6043,7 +6043,16 @@ const AdminUpdateTournamentSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   kind: z.enum(['friendly', 'official']).optional(),
   isPrivate: z.boolean().optional(),
-  capacity: z.number().int().min(6).max(64).optional(),
+  // Puissance de 2 uniquement (8/16/32/64) → bracket toujours plein, jamais d'exempt.
+  capacity: z
+    .number()
+    .int()
+    .min(8)
+    .max(64)
+    .refine((n) => (n & (n - 1)) === 0, {
+      message: 'la capacité doit être une puissance de 2 (8, 16, 32, 64)',
+    })
+    .optional(),
   format: z.enum(['elimination', 'pools']).optional(),
 });
 

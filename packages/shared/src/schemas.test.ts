@@ -663,6 +663,11 @@ describe('CreateTournamentSchema', () => {
         CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 16 }).success,
       ).toBe(true);
     });
+    it('accepte un tournoi de capacité 32', () => {
+      expect(
+        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 32 }).success,
+      ).toBe(true);
+    });
     it('applique kind=friendly par défaut', () => {
       const r = CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 8 });
       expect(r.success).toBe(true);
@@ -710,6 +715,11 @@ describe('CreateTournamentSchema', () => {
     it('rejette une capacité de 4 (sous le minimum de 8)', () => {
       expect(
         CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 4 }).success,
+      ).toBe(false);
+    });
+    it('rejette une capacité de 12 (pas une puissance de 2 → byes)', () => {
+      expect(
+        CreateTournamentSchema.safeParse({ name: 'Cup', capacity: 12 }).success,
       ).toBe(false);
     });
     it('rejette une capacité sous forme de chaîne', () => {

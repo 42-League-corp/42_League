@@ -195,9 +195,10 @@ export type TournamentPrizeInput = z.infer<typeof TournamentPrizeSchema>;
 export const CreateTournamentSchema = z
   .object({
     name: z.string().min(2).max(60),
-    // Nombre de joueurs : libre à partir de 6 (le bracket gère les byes si ce n'est
-    // pas une puissance de 2). Les poules s'activent à partir de 12.
-    capacity: z.number().int().min(6).max(64),
+    // Nombre de joueurs : puissance de 2 uniquement (8, 16, 32, 64) → le bracket est
+    // toujours plein, jamais de joueur exempt/seul au 1er tour (cf. refine plus bas).
+    // Les poules s'activent à partir de 12 (donc capacité ≥ 16).
+    capacity: z.number().int().min(8).max(64),
     kind: z.enum(['friendly', 'official']).default('friendly'),
     // Format : élimination directe, ou phase de poules (puis bracket des qualifiés).
     format: z.enum(['elimination', 'pools']).default('elimination'),
@@ -224,6 +225,10 @@ export const CreateTournamentSchema = z
       .optional(),
     // Récompense du vainqueur — réservée aux tournois officiels (cf. refine).
     prize: TournamentPrizeSchema.optional().default({ kind: 'none' }),
+  })
+  .refine((d) => (d.capacity & (d.capacity - 1)) === 0, {
+    message: 'la capacité doit être une puissance de 2 (8, 16, 32, 64)',
+    path: ['capacity'],
   })
   .refine((d) => d.format !== 'pools' || d.capacity >= 12, {
     message: 'les poules nécessitent au moins 12 joueurs',
