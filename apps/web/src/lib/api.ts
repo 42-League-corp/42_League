@@ -1257,6 +1257,21 @@ export const api = {
     request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminDeleteTournament: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/tournaments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminForceTournamentAccept: (tournamentId: string, inviteId: string) =>
+    request<{ id: string; inviteId: string; status: string; started: boolean }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/invites/${encodeURIComponent(inviteId)}/force-accept`,
+      { method: 'POST' },
+    ),
+  adminForceTournamentMatch: (
+    tournamentId: string,
+    matchId: string,
+    scoreA: number,
+    scoreB: number,
+  ) =>
+    request<{ id: string; winnerLogin: string | null; finished: boolean; bracketGenerated: boolean }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/force-result`,
+      { method: 'POST', body: JSON.stringify({ scoreA, scoreB }) },
+    ),
   adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; game?: Game; limit?: number }) => {
     const params = new URLSearchParams();
     if (filters?.login) params.set('login', filters.login);
