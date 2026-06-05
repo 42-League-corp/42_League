@@ -5873,6 +5873,219 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
   });
 });
 
+/* ─── Admin : gestion complète d'un tournoi (panneau /god) ─────────────────── */
+
+// Admin : annuler (retirer) une invitation en attente — la ligne disparaît de la
+// liste « en attente ». Idempotent côté UI (404 si déjà retirée).
+app.post('/admin/tournaments/:id/invites/:inviteId/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id, inviteId } = c.req.param();
+  const invite = await prisma.tournamentInvite.findUnique({ where: { id: inviteId } });
+  if (!invite || invite.tournamentId !== id) {
+    throw new HTTPException(404, { message: 'invitation introuvable' });
+  }
+  await prisma.tournamentInvite.delete({ where: { id: inviteId } });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: invite.inviteeLogin,
+    payload: { forced: 'cancel-invite', tournamentId: id, inviteId, invitee: invite.inviteeLogin },
+  });
+  return c.json({ id, inviteId, cancelled: true });
+});
+
+// Admin : retirer un participant inscrit. Réservé à la phase d'inscription —
+// retirer un joueur d'un bracket déjà lancé corromprait l'arbre.
+app.post('/admin/tournaments/:id/entries/:login/remove', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id, login } = c.req.param();
+  await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: 'le tournoi a démarré — impossible de retirer un joueur' });
+    }
+    const entry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login } },
+    });
+    if (!entry) throw new HTTPException(404, { message: 'participant introuvable' });
+    await tx.tournamentEntry.delete({
+      where: { tournamentId_login: { tournamentId: id, login } },
+    });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: login,
+    payload: { forced: 'remove-entry', tournamentId: id, login },
+  });
+  return c.json({ id, removed: login });
+});
+
+// Admin : ajouter directement un joueur (phase d'inscription). Auto-start si la
+// capacité est atteinte — même chemin que /tournaments/:id/add-player.
+app.post('/admin/tournaments/:id/players', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = AddTournamentPlayerSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const login = parsed.data.login;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    const target = await tx.user.findUnique({ where: { login } });
+    if (!target || target.bannedAt || target.anonymizedAt || target.deletionScheduledAt) {
+      throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
+    }
+    if (t.entries.some((e) => e.login === login)) {
+      throw new HTTPException(409, { message: 'joueur déjà inscrit' });
+    }
+    if (t.entries.length >= t.capacity) {
+      throw new HTTPException(409, { message: 'tournoi complet' });
+    }
+    await tx.tournamentEntry.create({ data: { tournamentId: id, login } });
+    const newCount = t.entries.length + 1;
+    if (newCount === t.capacity) {
+      const logins = [...t.entries.map((e) => e.login), login];
+      await launchTournamentMatches(id, t.format, logins);
+      await tx.tournament.update({
+        where: { id },
+        data: { status: 'in_progress', startedAt: new Date() },
+      });
+      void notifyMany(logins, {
+        type: 'tournament',
+        title: `Tournoi "${t.name}" lancé`,
+        body: 'Le bracket est généré — à toi de jouer !',
+        link: `/tournaments/${id}`,
+      });
+      return { autoStarted: true };
+    }
+    return { autoStarted: false };
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: login,
+    payload: { forced: 'add-player', tournamentId: id, login, autoStarted: result.autoStarted },
+  });
+  return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
+});
+
+// Admin : forcer le lancement d'un tournoi en inscription, même incomplet
+// (>= 2 joueurs ; le bracket gère les byes). Génère le bracket / les poules.
+app.post('/admin/tournaments/:id/start', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const launched = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: `tournament is ${t.status}` });
+    }
+    if (t.entries.length < 2) {
+      throw new HTTPException(409, { message: 'il faut au moins 2 joueurs pour lancer' });
+    }
+    if (t.format === 'pools' && t.entries.length < 12) {
+      throw new HTTPException(409, { message: 'les poules nécessitent au moins 12 joueurs' });
+    }
+    const logins = t.entries.map((e) => e.login);
+    await launchTournamentMatches(id, t.format, logins);
+    await tx.tournament.update({
+      where: { id },
+      data: { status: 'in_progress', startedAt: new Date() },
+    });
+    return logins;
+  });
+  void notifyMany(launched, {
+    type: 'tournament',
+    title: 'Tournoi lancé',
+    body: 'Le bracket est généré — à toi de jouer !',
+    link: `/tournaments/${id}`,
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: me,
+    payload: { forced: 'start', tournamentId: id, players: launched.length },
+  });
+  return c.json({ id, started: true, players: launched.length });
+});
+
+// Admin : modifier les paramètres d'un tournoi. name / kind / isPrivate éditables
+// à tout moment ; capacity / format uniquement en inscription (le bracket est figé
+// une fois lancé).
+const AdminUpdateTournamentSchema = z.object({
+  name: z.string().trim().min(2).max(60).optional(),
+  kind: z.enum(['friendly', 'official']).optional(),
+  isPrivate: z.boolean().optional(),
+  capacity: z.number().int().min(6).max(64).optional(),
+  format: z.enum(['elimination', 'pools']).optional(),
+});
+
+app.patch('/admin/tournaments/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = AdminUpdateTournamentSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const patch = parsed.data;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+
+    const data: Prisma.TournamentUpdateInput = {};
+    if (patch.name !== undefined) data.name = patch.name;
+    if (patch.kind !== undefined) data.kind = patch.kind;
+    if (patch.isPrivate !== undefined) data.isPrivate = patch.isPrivate;
+
+    if (patch.capacity !== undefined || patch.format !== undefined) {
+      if (t.status !== 'registration') {
+        throw new HTTPException(409, { message: 'capacité / format non modifiables après le lancement' });
+      }
+      const nextCapacity = patch.capacity ?? t.capacity;
+      const nextFormat = patch.format ?? t.format;
+      if (nextCapacity < t.entries.length) {
+        throw new HTTPException(409, { message: `capacité < inscrits (${t.entries.length})` });
+      }
+      if (nextFormat === 'pools' && nextCapacity < 12) {
+        throw new HTTPException(409, { message: 'les poules nécessitent au moins 12 joueurs' });
+      }
+      if (patch.capacity !== undefined) data.capacity = patch.capacity;
+      if (patch.format !== undefined) data.format = patch.format;
+    }
+
+    return tx.tournament.update({ where: { id }, data });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: updated.createdByLogin,
+    payload: { forced: 'edit-tournament', tournamentId: id, patch },
+  });
+  return c.json({ id, updated: true });
+});
+
 app.get('/admin/suspicious', async (c) => {
   const me = await getCurrentLogin(c);
   await requirePerm(me, 'canViewSuspicious');
@@ -6245,9 +6458,7 @@ app.get('/shop', async (c) => {
   const [user, items, owned] = await Promise.all([
     prisma.user.findUnique({ where: { login }, select: { leagueCoins: true } }),
     prisma.shopItem.findMany({
-      // 'cosmetic' = catégorie réservée (sans payload ni effet) : non achetable,
-      // donc exclue du catalogue joueur (elle reste visible côté GOD/admin).
-      where: { active: true, category: { not: 'cosmetic' } },
+      where: { active: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     }),
     prisma.shopInventory.findMany({ where: { userLogin: login }, select: { itemId: true } }),
@@ -6270,11 +6481,6 @@ app.post('/shop/:id/buy', async (c) => {
   if (!item || !item.active) {
     throw new HTTPException(404, { message: 'objet introuvable' });
   }
-  // 'cosmetic' n'a aucun effet et n'est pas équipable → achat refusé (pas de coins brûlés).
-  if (item.category === 'cosmetic') {
-    throw new HTTPException(400, { message: 'objet sans effet, non disponible à l\'achat' });
-  }
-
   const coins = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
     if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
@@ -6388,7 +6594,7 @@ const ShopItemUpdateSchema = z
   .object({
     name: z.string().trim().min(1).optional(),
     description: z.string().nullish(),
-    category: z.enum(['title', 'banner', 'badge', 'cosmetic']).optional(),
+    category: z.enum(['title', 'banner', 'badge']).optional(),
     color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')

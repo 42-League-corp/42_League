@@ -210,7 +210,7 @@ export interface TeamProfile extends BabyfootTeamEntry {
 
 // ─── League Coin · Boutique ───────────────────────────────────────────────────
 
-export type ShopCategory = 'title' | 'banner' | 'badge' | 'cosmetic';
+export type ShopCategory = 'title' | 'banner' | 'badge';
 
 export interface ShopItemData {
   id: string;
@@ -1273,6 +1273,40 @@ export const api = {
     request<{ id: string; winnerLogin: string | null; finished: boolean; bracketGenerated: boolean }>(
       `/admin/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/force-result`,
       { method: 'POST', body: JSON.stringify({ scoreA, scoreB }) },
+    ),
+  adminCancelTournamentInvite: (tournamentId: string, inviteId: string) =>
+    request<{ id: string; inviteId: string; cancelled: true }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/invites/${encodeURIComponent(inviteId)}/cancel`,
+      { method: 'POST' },
+    ),
+  adminRemoveTournamentEntry: (tournamentId: string, login: string) =>
+    request<{ id: string; removed: string }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/entries/${encodeURIComponent(login)}/remove`,
+      { method: 'POST' },
+    ),
+  adminAddTournamentPlayer: (tournamentId: string, login: string) =>
+    request<{ id: string; added: string; status: string }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/players`,
+      { method: 'POST', body: JSON.stringify({ login }) },
+    ),
+  adminStartTournament: (tournamentId: string) =>
+    request<{ id: string; started: boolean; players: number }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}/start`,
+      { method: 'POST' },
+    ),
+  adminUpdateTournament: (
+    tournamentId: string,
+    patch: {
+      name?: string;
+      kind?: 'friendly' | 'official';
+      isPrivate?: boolean;
+      capacity?: number;
+      format?: 'elimination' | 'pools';
+    },
+  ) =>
+    request<{ id: string; updated: true }>(
+      `/admin/tournaments/${encodeURIComponent(tournamentId)}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
     ),
   adminAllHistory: (filters?: { login?: string; type?: AllHistoryEventType; game?: Game; limit?: number }) => {
     const params = new URLSearchParams();

@@ -2981,6 +2981,11 @@ function ManagePanel({
   actionBusy,
   onForceAccept,
   onForceMatch,
+  onCancelInvite,
+  onRemoveEntry,
+  onAddPlayer,
+  onStart,
+  onUpdateParams,
 }: {
   tr: (k: string) => string;
   detail: Tournament;
@@ -2989,11 +2994,63 @@ function ManagePanel({
   actionBusy: string | null;
   onForceAccept: (invite: TournamentInvite) => void;
   onForceMatch: (match: TournamentMatch) => void;
+  onCancelInvite: (invite: TournamentInvite) => void;
+  onRemoveEntry: (login: string) => void;
+  onAddPlayer: (login: string) => void;
+  onStart: () => void;
+  onUpdateParams: (patch: {
+    name?: string;
+    kind?: 'friendly' | 'official';
+    isPrivate?: boolean;
+    capacity?: number;
+    format?: 'elimination' | 'pools';
+  }) => void;
 }) {
+  const isReg = detail.status === 'registration';
   const pendingInvites = (detail.invites ?? []).filter((i) => i.status === 'pending');
+  const entries = detail.entries ?? [];
   const matchesToForce = (detail.matches ?? []).filter(
     (m) => m.confirmedAt == null && m.playerALogin && m.playerBLogin,
   );
+
+  // Formulaire de paramètres — initialisé depuis `detail` (le composant est
+  // remonté via key={detail.id} quand on change de tournoi).
+  const [name, setName] = useState(detail.name);
+  const [kind, setKind] = useState<'friendly' | 'official'>(detail.kind);
+  const [isPrivate, setIsPrivate] = useState(Boolean(detail.isPrivate));
+  const [capacity, setCapacity] = useState(String(detail.capacity));
+  const [format, setFormat] = useState<'elimination' | 'pools'>(detail.format ?? 'elimination');
+  const [addLogin, setAddLogin] = useState('');
+
+  const curFormat = detail.format ?? 'elimination';
+  const dirty =
+    name.trim() !== detail.name ||
+    kind !== detail.kind ||
+    isPrivate !== Boolean(detail.isPrivate) ||
+    (isReg && (Number(capacity) !== detail.capacity || format !== curFormat));
+
+  function saveParams() {
+    const patch: {
+      name?: string;
+      kind?: 'friendly' | 'official';
+      isPrivate?: boolean;
+      capacity?: number;
+      format?: 'elimination' | 'pools';
+    } = {};
+    if (name.trim() !== detail.name) patch.name = name.trim();
+    if (kind !== detail.kind) patch.kind = kind;
+    if (isPrivate !== Boolean(detail.isPrivate)) patch.isPrivate = isPrivate;
+    if (isReg && Number(capacity) !== detail.capacity) patch.capacity = Number(capacity);
+    if (isReg && format !== curFormat) patch.format = format;
+    onUpdateParams(patch);
+  }
+
+  function submitAdd() {
+    const v = addLogin.trim();
+    if (!v) return;
+    onAddPlayer(v);
+    setAddLogin('');
+  }
 
   function matchLabel(m: TournamentMatch) {
     const place =
@@ -3003,38 +3060,126 @@ function ManagePanel({
     return `${m.playerALogin} ${tr('god.tourn.vs')} ${m.playerBLogin} · ${place}`;
   }
 
+  const sectionTitle = 'text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2';
+  const segBtn = (active: boolean) =>
+    `px-2.5 py-1.5 rounded font-mono text-xs border transition-colors ${
+      active ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+    }`;
+
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      {/* Invitations en attente */}
+    <div className="flex flex-col gap-6">
+      {/* ── Paramètres ─────────────────────────────────────────────────────── */}
       <div>
-        <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">
-          {tr('god.tourn.pendingInvites')}
-        </div>
-        {pendingInvites.length === 0 ? (
-          <div className="text-zinc-600 text-xs font-mono">{tr('god.tourn.noPendingInvites')}</div>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {pendingInvites.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between gap-3 bg-zinc-800/40 rounded px-3 py-1.5">
-                <span className="text-zinc-200 font-mono text-xs truncate">{inv.inviteeLogin}</span>
-                <Btn onClick={() => onForceAccept(inv)} disabled={actionBusy === inv.id} variant="success">
-                  {tr('god.tourn.forceAccept')}
-                </Btn>
-              </div>
-            ))}
+        <div className={sectionTitle}>{tr('god.tourn.params')}</div>
+        <div className="flex flex-col gap-3 max-w-2xl">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-zinc-500 font-mono text-xs w-20">{tr('god.tourn.name')}</span>
+            <Input value={name} onChange={setName} className="flex-1 min-w-[180px]" />
           </div>
-        )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-zinc-500 font-mono text-xs w-20">{tr('god.tourn.col.type')}</span>
+            <button type="button" onClick={() => setKind('friendly')} className={segBtn(kind === 'friendly')}>
+              {tr('god.tourn.friendly')}
+            </button>
+            <button type="button" onClick={() => setKind('official')} className={segBtn(kind === 'official')}>
+              {tr('god.tourn.official')}
+            </button>
+            <button type="button" onClick={() => setIsPrivate((v) => !v)} className={segBtn(isPrivate)}>
+              {isPrivate ? `🔒 ${tr('god.tourn.private')}` : tr('god.tourn.public')}
+            </button>
+          </div>
+          {isReg && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-zinc-500 font-mono text-xs w-20">{tr('god.tourn.col.format')}</span>
+              <button type="button" onClick={() => setFormat('elimination')} className={segBtn(format === 'elimination')}>
+                {tr('god.tourn.elim')}
+              </button>
+              <button type="button" onClick={() => setFormat('pools')} className={segBtn(format === 'pools')}>
+                {tr('god.tourn.pools')}
+              </button>
+              <span className="text-zinc-500 font-mono text-xs ml-2">{tr('god.tourn.capacity')}</span>
+              <Input type="number" value={capacity} onChange={setCapacity} className="w-20" />
+            </div>
+          )}
+          <div>
+            <Btn onClick={saveParams} disabled={!dirty || actionBusy === 'edit'} variant="success">
+              {tr('god.tourn.save')}
+            </Btn>
+          </div>
+        </div>
       </div>
 
-      {/* Matchs à valider / forcer */}
-      <div>
-        <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">
-          {tr('god.tourn.matchesToForce')}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* ── Participants ─────────────────────────────────────────────────── */}
+        <div>
+          <div className={sectionTitle}>
+            {tr('god.tourn.participants')} ({entries.length}/{detail.capacity})
+          </div>
+          {entries.length === 0 ? (
+            <div className="text-zinc-600 text-xs font-mono mb-2">{tr('god.tourn.noParticipants')}</div>
+          ) : (
+            <div className="flex flex-col gap-1.5 mb-2">
+              {entries.map((e) => (
+                <div key={e.login} className="flex items-center justify-between gap-3 bg-zinc-800/40 rounded px-3 py-1.5">
+                  <span className="text-zinc-200 font-mono text-xs truncate">{e.login}</span>
+                  {isReg && (
+                    <Btn onClick={() => onRemoveEntry(e.login)} disabled={actionBusy === `rm-${e.login}`} variant="danger">
+                      {tr('god.tourn.remove')}
+                    </Btn>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {isReg && (
+            <div className="flex items-center gap-2">
+              <Input
+                value={addLogin}
+                onChange={setAddLogin}
+                placeholder={tr('god.tourn.addPlayerPh')}
+                className="flex-1"
+              />
+              <Btn onClick={submitAdd} disabled={!addLogin.trim() || actionBusy === 'add-player'} variant="success">
+                {tr('god.tourn.add')}
+              </Btn>
+            </div>
+          )}
         </div>
+
+        {/* ── Invitations en attente ───────────────────────────────────────── */}
+        <div>
+          <div className={sectionTitle}>{tr('god.tourn.pendingInvites')}</div>
+          {pendingInvites.length === 0 ? (
+            <div className="text-zinc-600 text-xs font-mono">{tr('god.tourn.noPendingInvites')}</div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {pendingInvites.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-2 bg-zinc-800/40 rounded px-3 py-1.5">
+                  <span className="text-zinc-200 font-mono text-xs truncate">{inv.inviteeLogin}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isReg && (
+                      <Btn onClick={() => onForceAccept(inv)} disabled={actionBusy === inv.id} variant="success">
+                        {tr('god.tourn.forceAccept')}
+                      </Btn>
+                    )}
+                    <Btn onClick={() => onCancelInvite(inv)} disabled={actionBusy === `cancel-${inv.id}`} variant="danger">
+                      {tr('god.tourn.cancelInvite')}
+                    </Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Matchs à valider / forcer ──────────────────────────────────────── */}
+      <div>
+        <div className={sectionTitle}>{tr('god.tourn.matchesToForce')}</div>
         {matchesToForce.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono">{tr('god.tourn.noMatchToForce')}</div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid gap-2 md:grid-cols-2">
             {matchesToForce.map((m) => {
               const s = scores[m.id] ?? { a: '', b: '' };
               return (
@@ -3066,6 +3211,19 @@ function ManagePanel({
           </div>
         )}
       </div>
+
+      {/* ── Cycle de vie ───────────────────────────────────────────────────── */}
+      {isReg && (
+        <div>
+          <div className={sectionTitle}>{tr('god.tourn.lifecycle')}</div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Btn onClick={onStart} disabled={entries.length < 2 || actionBusy === 'start'} variant="warn">
+              {tr('god.tourn.start')}
+            </Btn>
+            <span className="text-zinc-600 text-xs font-mono">{tr('god.tourn.startHint')}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3181,6 +3339,22 @@ function TournamentsTab() {
     setError('');
     try {
       await api.adminForceTournamentMatch(t.id, match.id, Number(s.a), Number(s.b));
+      await loadDetail(t.id);
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  // Wrapper générique : exécute une action de gestion, recharge le détail + la
+  // liste, et remonte l'erreur éventuelle dans le bandeau du panneau.
+  async function runAction(t: Tournament, busyKey: string, fn: () => Promise<unknown>) {
+    setActionBusy(busyKey);
+    setError('');
+    try {
+      await fn();
       await loadDetail(t.id);
       load(true);
     } catch (e) {
@@ -3324,6 +3498,7 @@ function TournamentsTab() {
                         <div className="text-zinc-600 text-xs font-mono">{tr('god.loading')}</div>
                       ) : (
                         <ManagePanel
+                          key={detail.id}
                           tr={tr}
                           detail={detail}
                           scores={scores}
@@ -3331,6 +3506,19 @@ function TournamentsTab() {
                           actionBusy={actionBusy}
                           onForceAccept={(inv) => handleForceAccept(t, inv)}
                           onForceMatch={(m) => handleForceMatch(t, m)}
+                          onCancelInvite={(inv) =>
+                            runAction(t, `cancel-${inv.id}`, () => api.adminCancelTournamentInvite(t.id, inv.id))
+                          }
+                          onRemoveEntry={(login) =>
+                            runAction(t, `rm-${login}`, () => api.adminRemoveTournamentEntry(t.id, login))
+                          }
+                          onAddPlayer={(login) =>
+                            runAction(t, 'add-player', () => api.adminAddTournamentPlayer(t.id, login))
+                          }
+                          onStart={() => runAction(t, 'start', () => api.adminStartTournament(t.id))}
+                          onUpdateParams={(patch) =>
+                            runAction(t, 'edit', () => api.adminUpdateTournament(t.id, patch))
+                          }
                         />
                       )}
                     </td>
