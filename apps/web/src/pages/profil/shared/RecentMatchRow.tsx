@@ -25,7 +25,10 @@ interface RecentMatchRowProps {
  * mobile). Agencement harmonisé en 3 zones alignées d'une ligne à l'autre :
  *   [badge V/N/D] [avatar + nom + date]          [score]  [Δ elo]
  * Les zones de droite ont des largeurs fixes → colonnes alignées, pas tassées.
- * Couleurs conservées : or = nul, teal = victoire, rouge = défaite.
+ * Couleurs : or = nul, VERT = victoire, ROUGE = défaite. On utilise `accent`
+ * (vert fixe) et `red` (rouge fixe) plutôt que `teal` — qui est la couleur
+ * d'accent THÉMATISABLE (or/rouge/… selon le mode) — pour que victoire = vert et
+ * défaite = rouge QUEL QUE SOIT le mode de jeu / thème.
  */
 export function RecentMatchRow({ match, ownerLogin, delay = 0 }: RecentMatchRowProps) {
   const t = useT();
@@ -54,16 +57,16 @@ export function RecentMatchRow({ match, ownerLogin, delay = 0 }: RecentMatchRowP
       transition={{ delay, duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${
         isDraw
-          ? 'border-gold/20 bg-gold/[0.04]'
+          ? 'border-gold/25 bg-gold/[0.06]'
           : youWon
-            ? 'border-teal/20 bg-teal/[0.04]'
-            : 'border-red/20 bg-red/[0.04]'
+            ? 'border-accent/35 bg-accent/[0.08]'
+            : 'border-red/35 bg-red/[0.08]'
       }`}
     >
       {/* Badge résultat V / N / D — carré fixe */}
       <div
         className={`flex-shrink-0 grid place-items-center w-9 h-9 rounded-lg font-mono font-black text-sm ${
-          isDraw ? 'bg-gold/15 text-gold' : youWon ? 'bg-teal/15 text-teal' : 'bg-red/15 text-red'
+          isDraw ? 'bg-gold/15 text-gold' : youWon ? 'bg-accent/20 text-accent' : 'bg-red/20 text-red'
         }`}
       >
         {isDraw ? t('lb.abbr.draw') : youWon ? t('lb.abbr.win') : t('lb.abbr.loss')}
