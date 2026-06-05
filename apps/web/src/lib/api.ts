@@ -712,6 +712,68 @@ export interface AppNotification {
   createdAt: string;
 }
 
+// ── Économie de coins : quêtes hebdomadaires + paris ────────────────────────
+
+/** Une quête hebdo telle que renvoyée par GET /quests (progression bornée à la cible). */
+export interface QuestView {
+  id: string;
+  reward: number;
+  target: number;
+  progress: number;
+  claimed: boolean;
+  claimable: boolean;
+}
+export interface QuestsResponse {
+  weekKey: string;
+  coins: number;
+  quests: QuestView[];
+}
+
+export type BetStatus = 'open' | 'won' | 'lost' | 'refunded';
+export interface MyBet {
+  id: string;
+  targetType: 'tournament' | 'match';
+  tournamentId: string;
+  tournamentName: string | null;
+  game: Game | null;
+  matchId: string | null;
+  choiceLogin: string;
+  stake: number;
+  status: BetStatus;
+  payout: number;
+  createdAt: string;
+  settledAt: string | null;
+}
+export interface OpenBetTournament {
+  id: string;
+  name: string;
+  game: Game;
+  status: string;
+  entrants: string[];
+}
+export interface OpenBetMatch {
+  id: string;
+  tournamentId: string;
+  tournamentName: string;
+  game: Game;
+  round: number;
+  playerALogin: string;
+  playerBLogin: string;
+}
+export interface BetsResponse {
+  coins: number;
+  myBets: MyBet[];
+  openTournaments: OpenBetTournament[];
+  openMatches: OpenBetMatch[];
+}
+export interface PlaceBetInput {
+  targetType: 'tournament' | 'match';
+  tournamentId: string;
+  matchId?: string;
+  choiceLogin: string;
+  stake: number;
+}
+
 export const api = {
   me: () => request<MeResponse>('/me'),
   // Sélection de titre self-service : `null`/'' retire le titre. Le serveur
@@ -1278,4 +1340,17 @@ export const api = {
       '/admin/shop/grant-item',
       { method: 'POST', body: JSON.stringify({ login, itemId, equip }) },
     ),
+  // ── Économie de coins : quêtes hebdo + paris ──────────────────────────────
+  quests: () => request<QuestsResponse>('/quests'),
+  claimQuest: (id: string) =>
+    request<{ id: string; reward: number; coins: number }>(
+      `/quests/${encodeURIComponent(id)}/claim`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  bets: () => request<BetsResponse>('/bets'),
+  placeBet: (input: PlaceBetInput) =>
+    request<{ bet: { id: string }; coins: number }>('/bets', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };

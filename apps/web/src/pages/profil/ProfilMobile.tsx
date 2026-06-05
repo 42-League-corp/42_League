@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ChevronRight, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
@@ -9,12 +10,17 @@ import { MyTeamsSection } from './mobile/MyTeamsSection';
 import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
 import { SectionHeader } from './shared/SectionHeader';
+import { RankingScopeToggle } from '../leaderboard/RankingScopeToggle';
+import { QuestsPanel } from './QuestsPanel';
+import { BetsPanel } from './BetsPanel';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useAuth } from '../../hooks/useAuth';
 import { useT } from '../../lib/i18n';
 import { haptic } from '../../mobile/feedback/useHaptic';
+
+type ProfilTab = 'profile' | 'quests' | 'bets';
 
 export function ProfilMobile() {
   const { stats, recentMatches, myLogin } = useProfilLogic();
@@ -23,6 +29,7 @@ export function ProfilMobile() {
   const { signOut } = useAuth();
   const t = useT();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<ProfilTab>('profile');
 
   if (!me?.user) {
     return (
@@ -42,6 +49,22 @@ export function ProfilMobile() {
         {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
         <ProfileHeroCard stats={stats} onlineHost={myLogin ? locations.get(myLogin) : undefined} />
 
+        {/* Onglets : profil · quêtes hebdo · paris */}
+        <RankingScopeToggle<ProfilTab>
+          value={tab}
+          onChange={setTab}
+          choices={[
+            { value: 'profile', label: t('profil.tab.profile') },
+            { value: 'quests', label: t('profil.tab.quests') },
+            { value: 'bets', label: t('profil.tab.bets') },
+          ]}
+        />
+
+        {tab === 'quests' && <QuestsPanel />}
+        {tab === 'bets' && <BetsPanel />}
+
+        {tab === 'profile' && (
+          <>
         {/* ELO evolution chart */}
         {myLogin && (
           <div className="card-hud rounded-2xl px-4 pt-3 pb-4 border-gold/20">
@@ -93,6 +116,8 @@ export function ProfilMobile() {
             </div>
             <MyTeamsSection myLogin={myLogin} />
           </section>
+        )}
+          </>
         )}
 
         {/* Sign out button */}
