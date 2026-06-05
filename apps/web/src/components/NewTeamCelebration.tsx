@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Pencil, Check, ArrowRight, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useFlash } from '../hooks/useFlash';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { haptic } from '../mobile/feedback/useHaptic';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -121,6 +122,9 @@ export function NewTeamCelebration({
       navigate(teamTarget);
     }, 300);
   };
+
+  // Escape ferme l'overlay (même comportement que le bouton X).
+  useEscapeKey(!dismissed, handleGoToTeam);
 
   const content = (
     <AnimatePresence>

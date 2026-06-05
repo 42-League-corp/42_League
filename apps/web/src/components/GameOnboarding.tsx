@@ -58,6 +58,16 @@ export function GameOnboarding() {
   const [step, setStep] = useState<'games' | 'favs'>('games');
   const [favs, setFavs] = useState<Record<string, string[]>>({});
 
+  // Échap = même fermeture que la croix rouge selon l'étape affichée
+  // (skipOnboarding sur le choix des modes, skip des favoris sur l'étape 2).
+  // Appelé avant tout return anticipé (règles des hooks) ; la modale n'est
+  // montée que si elle est visible → active = true.
+  const onEscape = useCallback(() => {
+    if (step === 'favs') void finishFavorites(false);
+    else void skipOnboarding();
+  }, [step]);
+  useEscapeKey(true, onEscape);
+
   // Affiché uniquement si le compte existe et n'a pas encore choisi ses modes.
   if (!me?.user || me.user.onboardedAt) return null;
 

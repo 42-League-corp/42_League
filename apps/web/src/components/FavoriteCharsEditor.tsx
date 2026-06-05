@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useFlash } from '../hooks/useFlash';
 import { useT } from '../lib/i18n';
 import { haptic } from '../mobile/feedback/useHaptic';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { rosterForGame, iconForGame, filterRoster, type FightingGame } from '../lib/chars';
 import { gameColor, GAME_LOGO_SRC } from '../lib/gameVisuals';
 
@@ -113,6 +114,10 @@ export function FavoriteCharsEditor({ games, initial, onClose, onSaved }: Favori
     return init;
   });
   const [busy, setBusy] = useState(false);
+
+  // La modale n'a pas d'état d'ouverture interne : elle est montée
+  // conditionnellement par son parent, donc toujours active quand elle existe.
+  useEscapeKey(true, onClose);
 
   const toggle = (game: FightingGame, id: string) =>
     setSel((prev) => {

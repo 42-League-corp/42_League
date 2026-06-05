@@ -18,6 +18,7 @@ import {
   formFromItem,
   type FormState,
 } from '../components/shop/CosmeticForm';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 type Role = 'ADMIN' | 'SUPERADMIN';
 
@@ -95,6 +96,9 @@ function EditItemModal({
   const [form, setForm] = useState<FormState>(() => formFromItem(item));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Échap ferme la modale (montée uniquement quand ouverte → active = true).
+  useEscapeKey(true, onClose);
 
   const set = useCallback(<K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm((prev) => ({ ...prev, [k]: v }));

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
@@ -20,7 +20,9 @@ import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
+import { useScrollRoot } from '../../shell/scrollRoot';
 import { useT } from '../../lib/i18n';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 const POOLS_MIN = 12;
 
@@ -29,6 +31,18 @@ export function TournoisDesktop() {
   const { game } = useGameMode();
   const t = useT();
   const isAdmin = !!me?.isAdmin;
+  const scrollRoot = useScrollRoot();
+
+  // Cette page (réutilisée sur mobile) est lourde : le reset de scroll synchrone du
+  // MobileShell s'applique parfois avant que le layout soit prêt et ne « prend » pas.
+  // On rejoue donc le reset au montage, après une frame, pour repartir en haut.
+  // (Sur desktop `scrollRoot` est null → no-op, le DesktopShell s'en charge déjà.)
+  useEffect(() => {
+    const root = scrollRoot?.current;
+    if (!root) return;
+    const id = requestAnimationFrame(() => root.scrollTo({ top: 0 }));
+    return () => cancelAnimationFrame(id);
+  }, [scrollRoot]);
 
   // Un seul clic « Créer » ouvre directement le panneau de paramètres : nom,
   // capacité, joueurs et réglages se choisissent désormais à l'intérieur.
@@ -317,6 +331,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   isAdmin: boolean; initialKind: 'friendly' | 'official';
   onClose: () => void; onCreated: () => Promise<void>;
 }) {
+  useEscapeKey(true, onClose);
   const flash = useFlash();
   const navigate = useNavigate();
   const { game } = useGameMode();

@@ -310,6 +310,18 @@ export function LeaderboardDesktop() {
     return rows;
   }, [leaderboard, statsByLogin, sort]);
 
+  // À l'arrivée sur le classement, on défile jusqu'à la place du joueur courant.
+  // (Le shell desktop ne reset pas le scroll sur /leaderboard, cf. DesktopShell.)
+  useEffect(() => {
+    if (!myLogin || viewMode !== 'list' || viewingPast || activeTab !== 'personal') return;
+    const el = document.getElementById('lb-me-row');
+    if (!el) return;
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 160);
+    return () => window.clearTimeout(id);
+  }, [myLogin, viewMode, viewingPast, activeTab, sortedRows.length]);
+
   return (
     <div>
       {!viewingPast && <LeaderboardBanner />}
@@ -404,8 +416,9 @@ export function LeaderboardDesktop() {
                   return (
                     <tr
                       key={u.login}
+                      id={isMe ? 'lb-me-row' : undefined}
                       className={
-                        'group border-t border-gold/10 transition-colors ' +
+                        'group border-t border-gold/10 transition-colors scroll-mt-24 ' +
                         (isMe
                           ? 'bg-gold/[0.06] shadow-[inset_3px_0_0_0_rgba(255,201,74,0.7)]'
                           : 'hover:bg-gold/[0.04]')

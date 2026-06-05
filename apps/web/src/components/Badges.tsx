@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, type LucideIcon } from 'lucide-react';
 import { badgeDef } from '../lib/badges';
 import { badgeIcon } from '../lib/badgeIcons';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import type { EquippedBadge } from '../lib/api';
 
 /** Def de rendu d'un badge (catalogue OU badge acheté en boutique). */
@@ -193,6 +194,8 @@ function BadgesModal({
   extra?: EquippedBadge[];
   onClose: () => void;
 }) {
+  // La modale n'est montée que lorsqu'elle est ouverte → `active` toujours vrai.
+  useEscapeKey(true, onClose);
   const total = codes.length + extra.length;
   return (
     <motion.div

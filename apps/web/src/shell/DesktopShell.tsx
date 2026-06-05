@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Swords,
@@ -67,8 +67,17 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const { login } = useAuth();
   const { me, pending } = useLeagueData();
   const { game } = useGameMode();
+  const { pathname } = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
 
   const pendingCount = pending.filter((p) => p.opponentLogin === me?.login).length;
+
+  // Remet le contenu en haut à chaque changement de page. La page classement
+  // gère elle-même un scroll vers la place du joueur (cf. LeaderboardDesktop).
+  useEffect(() => {
+    if (pathname === '/leaderboard') return;
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [pathname]);
 
   return (
     <div className="h-dvh flex flex-row relative overflow-hidden">
@@ -165,7 +174,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
       </aside>
 
       {/* ─── Main ────────────────────────────────────────────────────── */}
-      <main className="flex-1 min-w-0 relative overflow-y-auto custom-scrollbar">
+      <main ref={mainRef} className="flex-1 min-w-0 relative overflow-y-auto custom-scrollbar">
         {/* Vignette dorée derrière le contenu */}
         <div className="absolute inset-0 bg-gold-vignette pointer-events-none" />
         <div className="relative px-6 lg:px-10 py-8 max-w-[1600px] mx-auto w-full">
