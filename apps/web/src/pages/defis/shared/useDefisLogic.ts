@@ -98,6 +98,10 @@ export function useDefisLogic(): DefisLogic {
     const toConfirm: PendingFfa[] = [];
     const waiting: PendingFfa[] = [];
     for (const f of pendingFfas) {
+      // Les fléchettes réutilisent les tables FFA (game='flechettes') ; elles
+      // ont leur propre source (pendingDarts) et ne doivent JAMAIS apparaître
+      // dans un flux/carte Smash.
+      if (f.game === 'flechettes') continue;
       const mine = f.participants.find((p) => p.login === myLogin);
       if (!mine) continue;
       if (mine.confirmed) waiting.push(f);

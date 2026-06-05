@@ -616,6 +616,14 @@ function DartsMobileCard({
   const startScore = darts.startScore ?? null;
   if (!mine) return null;
   const myRemaining = mine.remaining ?? 0;
+  // Le reste revendiqué doit être un entier compris entre 0 et le startScore de
+  // la manche (défense côté front, sans dépendre du rejet backend).
+  const claimedNum = Number(claimed);
+  const claimedValid =
+    claimed.trim() !== '' &&
+    Number.isInteger(claimedNum) &&
+    claimedNum >= 0 &&
+    (startScore == null || claimedNum <= startScore);
 
   return (
     <div className="relative card-hud px-4 py-3.5">
@@ -680,10 +688,13 @@ function DartsMobileCard({
             max={startScore ?? undefined}
             value={claimed}
             onChange={(e) => setClaimed(e.target.value)}
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-bg-2 text-text-strong font-mono tabular-nums text-sm outline-none focus:ring-2"
+            className="w-full mb-1 px-3 py-2 rounded-lg bg-bg-2 text-text-strong font-mono tabular-nums text-sm outline-none focus:ring-2"
             style={{ ['--tw-ring-color' as string]: 'rgba(20,184,166,0.5)' }}
           />
-          <div className="flex gap-2">
+          {claimed.trim() !== '' && !claimedValid && (
+            <div className="text-[10px] text-red-400 mb-2">{t('darts.contest.range')} {startScore ?? 501}</div>
+          )}
+          <div className="flex gap-2 mt-2">
             <button
               type="button"
               onClick={() => setContesting(false)}
@@ -693,12 +704,11 @@ function DartsMobileCard({
             </button>
             <button
               type="button"
-              disabled={busy || claimed.trim() === ''}
+              disabled={busy || !claimedValid}
               onClick={async () => {
-                const val = Number(claimed);
-                if (!Number.isFinite(val)) return;
+                if (!claimedValid) return;
                 setBusy(true);
-                try { await onContest?.(darts.id, val); } finally { setBusy(false); setContesting(false); }
+                try { await onContest?.(darts.id, claimedNum); } finally { setBusy(false); setContesting(false); }
               }}
               className="flex-1 py-2 rounded-lg text-white text-xs font-bold disabled:opacity-50"
               style={{ background: '#14b8a6' }}
