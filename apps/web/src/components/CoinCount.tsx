@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { useId } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useId, useRef, useState } from 'react';
 
 export const INFINITE_COIN_LOGINS = new Set(['abidaux', 'throbert']);
 
@@ -16,144 +16,232 @@ export function CoinCount({
   value: number;
   className?: string;
 }) {
-  if (!hasInfiniteCoins(login)) {
-    return <span className={`tabular-nums ${className}`}>{value}</span>;
-  }
-  return <InfiniteGlyph className={className} />;
+  const gains = useCoinGains(value);
+  return (
+    <span className="relative inline-flex items-center">
+      {hasInfiniteCoins(login) ? (
+        <InfiniteGlyph className={className} />
+      ) : (
+        <span className={`tabular-nums ${className}`}>{value}</span>
+      )}
+      <CoinGains gains={gains} />
+    </span>
+  );
 }
 
-// ── SVG ∞ path ─────────────────────────────────────────────────────────────
-// Lemniscate symétrique : deux lobes miroir autour du centre (100, 50) dans un
-// espace 200×100. Les points de contrôle gauche/droite sont l'exact miroir
-// (x → 200−x) pour une forme nette et équilibrée.
-// Lemniscate ENTRELACÉE : un seul tracé continu qui se croise au centre (100,50)
-// en formant un X, façon ruban — le « vrai » ∞, plein et symétrique (les lobes
-// gauche/droite sont l'exact miroir autour du centre).
+// ── Animation « +N » au gain de coins ────────────────────────────────────────
+// Détecte chaque AUGMENTATION du solde et empile une bulle « +montant » qui
+// monte à droite du nombre puis s'estompe. Ignore le montage initial et les
+// baisses (achats) — feedback uniquement quand on gagne.
+
+interface CoinGain {
+  id: number;
+  amount: number;
+}
+
+function useCoinGains(value: number): CoinGain[] {
+  const prev = useRef<number | null>(null);
+  const idRef = useRef(0);
+  const [gains, setGains] = useState<CoinGain[]>([]);
+
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = value;
+    if (before === null || value <= before) return;
+    const id = (idRef.current += 1);
+    const amount = value - before;
+    setGains((g) => [...g, { id, amount }]);
+    const tm = setTimeout(() => setGains((g) => g.filter((x) => x.id !== id)), 1100);
+    return () => clearTimeout(tm);
+  }, [value]);
+
+  return gains;
+}
+
+function CoinGains({ gains }: { gains: CoinGain[] }) {
+  return (
+    <span className="absolute left-full top-1/2 ml-1.5 -translate-y-1/2 pointer-events-none select-none">
+      <AnimatePresence>
+        {gains.map((g) => (
+          <motion.span
+            key={g.id}
+            initial={{ opacity: 0, y: 2, scale: 0.7 }}
+            animate={{ opacity: 1, y: -16, scale: 1 }}
+            exit={{ opacity: 0, y: -24 }}
+            transition={{ duration: 0.9, ease: 'easeOut' }}
+            className="absolute left-0 top-0 whitespace-nowrap font-gaming text-xs font-extrabold tabular-nums text-gold"
+            style={{ textShadow: '0 0 8px rgba(255,201,74,0.8)' }}
+          >
+            +{g.amount}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </span>
+  );
+}
+
+// ── Tracé du ∞ ──────────────────────────────────────────────────────────────
+// Lemniscate propre : deux lobes miroir qui se croisent net au centre (100,50)
+// dans un espace 200×100. Un seul sous-tracé continu → pas de couture, le glint
+// peut faire le tour complet sans rupture.
 const INF_PATH =
-  'M 20 50 C 20 20 70 20 100 50 C 130 80 180 80 180 50 C 180 20 130 20 100 50 C 70 80 20 80 20 50 Z';
+  'M 100 50 C 76 16, 26 16, 26 50 C 26 84, 76 84, 100 50 C 124 16, 174 16, 174 50 C 174 84, 124 84, 100 50 Z';
 
-// Longueur LOGIQUE imposée via l'attribut SVG `pathLength` : le navigateur
-// remappe tout le calcul de pointillés sur cette valeur, indépendamment de la
-// longueur géométrique réelle. dasharray (SEG+GAP) et l'offset animé (−L) sont
-// donc EXACTS → le motif boucle pile, sans couture ni saccade.
+// Longueur LOGIQUE imposée via `pathLength` : le navigateur remappe tout le
+// calcul de pointillés dessus → le glint qui parcourt le ∞ boucle pile.
 const L = 490;
+const DUR = 3.4; // secondes par tour complet
 
-// 24 teintes HSL espacées de 15° — arc-en-ciel continu et lisse.
-const N = 24;
-const SEG = (L / N) * 1.1; // léger overlap pour éviter les trous entre segments
-const GAP = L - SEG;
-const DUR = 3; // secondes par boucle complète
+// Glints : courtes traînées blanches qui balaient le ruban, décalées d'un
+// demi-tour pour un équilibre gauche/droite.
+const GLINTS = [
+  { len: 46, delay: 0 },
+  { len: 30, delay: -DUR / 2 },
+];
 
-// Segments précalculés : chacun démarre décalé de L/N le long du path.
-const SEGS = Array.from({ length: N }, (_, i) => ({
-  hue: (i / N) * 360,
-  // delay négatif = la boucle démarre décalée → distribution uniforme à t=0
-  delay: -((i / N) * DUR),
-}));
-
-// Étincelles RGB (rouge / vert / bleu)
-const SPARKLES = [
-  { top: '-14%', left: '6%',  size: '0.42em', delay: 0,   color: '#ff4466', shadow: 'rgba(255,68,102,0.9)' },
-  { top: '52%',  left: '88%', size: '0.34em', delay: 0.7, color: '#44ffbb', shadow: 'rgba(68,255,187,0.9)' },
-  { top: '70%',  left: '14%', size: '0.3em',  delay: 1.3, color: '#44aaff', shadow: 'rgba(68,170,255,0.9)' },
+// Points lumineux en orbite autour du glyphe (remplacent les anciennes étoiles).
+const ORBITS = [
+  { r: '0.9em', size: '0.16em', dur: 5.5, dir: 1, color: '#c084fc', shadow: 'rgba(192,132,252,0.95)' },
+  { r: '0.72em', size: '0.12em', dur: 4, dir: -1, color: '#f472b6', shadow: 'rgba(244,114,182,0.95)' },
+  { r: '1.02em', size: '0.1em', dur: 7, dir: 1, color: '#818cf8', shadow: 'rgba(129,140,248,0.95)' },
 ];
 
 function InfiniteGlyph({ className = '' }: { className?: string }) {
-  // ID unique par instance pour éviter les collisions de filtres SVG.
+  // IDs uniques par instance → pas de collision de <defs> entre plusieurs glyphes.
   const uid = useId().replace(/:/g, '');
-  const filterId = `glow-inf-${uid}`;
+  const sheenId = `sheen-${uid}`;
+  const glowId = `glow-${uid}`;
 
   return (
     <motion.span
       className={`relative inline-flex items-center justify-center align-middle leading-none font-black ${className}`}
       style={{ fontSize: '1.7em' }}
-      animate={{ scale: [1, 1.08, 1], y: [0, -1, 0] }}
-      transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+      animate={{ scale: [1, 1.05, 1], y: [0, -0.8, 0] }}
+      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       aria-label="solde illimité"
       title="Solde illimité — accès fondateur"
     >
       <svg
-        viewBox="10 12 180 76"
-        width="1.7em"
-        height="0.72em"
+        viewBox="0 0 200 100"
+        width="1.9em"
+        height="0.95em"
         aria-hidden
         style={{ overflow: 'visible' }}
       >
         <defs>
-          {/* Filtre lueur — copie floue en dessous du tracé principal. */}
-          <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="4" result="b" />
-            <feComposite in="SourceGraphic" in2="b" operator="over" />
+          {/* Arc-en-ciel ancré VIOLET (la couleur des League Coins), élargi
+              bleu→indigo→violet→fuchsia→rose. Il FLUE le long du ruban :
+              userSpaceOnUse + spreadMethod=repeat + translate animé sur une
+              largeur de tuile (80) → écoulement sans couture. */}
+          <linearGradient
+            id={sheenId}
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="80"
+            y2="0"
+            spreadMethod="repeat"
+          >
+            <stop offset="0%" stopColor="#60a5fa" />
+            <stop offset="14%" stopColor="#818cf8" />
+            <stop offset="28%" stopColor="#a78bfa" />
+            <stop offset="42%" stopColor="#c084fc" />
+            <stop offset="56%" stopColor="#e879f9" />
+            <stop offset="70%" stopColor="#f472b6" />
+            <stop offset="85%" stopColor="#a78bfa" />
+            <stop offset="100%" stopColor="#60a5fa" />
+            <animateTransform
+              attributeName="gradientTransform"
+              type="translate"
+              from="0 0"
+              to="80 0"
+              dur={`${DUR}s`}
+              repeatCount="indefinite"
+            />
+          </linearGradient>
+
+          {/* Lueur douce : flou gaussien réutilisé par la couche glow. */}
+          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="6" />
           </filter>
         </defs>
 
-        {/* Couche lueur (segments floutés) */}
-        <g filter={`url(#${filterId})`} opacity={0.65}>
-          {SEGS.map((s, i) => (
-            <path
-              key={`g${i}`}
-              d={INF_PATH}
-              pathLength={L}
-              fill="none"
-              stroke={`hsl(${s.hue} 100% 58%)`}
-              strokeWidth={19}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={`${SEG} ${GAP}`}
-              style={{
-                animation: `rgb-path-travel ${DUR}s linear infinite`,
-                animationDelay: `${s.delay}s`,
-              }}
-            />
-          ))}
-        </g>
+        {/* Halo qui respire, posé sous le ruban. */}
+        <motion.path
+          d={INF_PATH}
+          pathLength={L}
+          fill="none"
+          stroke={`url(#${sheenId})`}
+          strokeWidth={32}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          filter={`url(#${glowId})`}
+          animate={{ opacity: [0.4, 0.65, 0.4] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
 
-        {/* Segments colorés principaux — défilent le long du ∞ comme une route. */}
-        {SEGS.map((s, i) => (
+        {/* Ruban principal — bien épais, net, peint par le dégradé. */}
+        <path
+          d={INF_PATH}
+          pathLength={L}
+          fill="none"
+          stroke={`url(#${sheenId})`}
+          strokeWidth={22}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Reflet supérieur fin — donne le galbe « tube » brillant. */}
+        <path
+          d={INF_PATH}
+          pathLength={L}
+          fill="none"
+          stroke="rgba(255,255,255,0.5)"
+          strokeWidth={4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Glints : traînées blanches qui balaient le ∞. */}
+        {GLINTS.map((g, i) => (
           <path
-            key={`m${i}`}
+            key={`glint${i}`}
             d={INF_PATH}
             pathLength={L}
             fill="none"
-            stroke={`hsl(${s.hue} 100% 62%)`}
-            strokeWidth={12}
+            stroke="#ffffff"
+            strokeWidth={10}
             strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={`${SEG} ${GAP}`}
+            strokeDasharray={`${g.len} ${L - g.len}`}
             style={{
+              filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.95))',
               animation: `rgb-path-travel ${DUR}s linear infinite`,
-              animationDelay: `${s.delay}s`,
+              animationDelay: `${g.delay}s`,
             }}
           />
         ))}
-
-        {/* Reflet blanc central — lisibilité + effet tube néon. */}
-        <path
-          d={INF_PATH}
-          fill="none"
-          stroke="rgba(255,255,255,0.4)"
-          strokeWidth={3}
-          strokeLinejoin="round"
-        />
       </svg>
 
-      {/* Étincelles RGB décalées */}
-      {SPARKLES.map((s, i) => (
+      {/* Points lumineux en orbite — chaque dot tourne autour du centre. */}
+      {ORBITS.map((o, i) => (
         <motion.span
           key={i}
           aria-hidden
-          className="absolute pointer-events-none font-black"
-          style={{
-            top: s.top,
-            left: s.left,
-            fontSize: s.size,
-            color: s.color,
-            textShadow: `0 0 6px ${s.shadow}`,
-          }}
-          animate={{ opacity: [0, 1, 0], scale: [0.4, 1, 0.4], rotate: [0, 90, 180] }}
-          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: s.delay }}
+          className="absolute pointer-events-none"
+          style={{ left: '50%', top: '50%', width: 0, height: 0 }}
+          animate={{ rotate: 360 * o.dir }}
+          transition={{ duration: o.dur, repeat: Infinity, ease: 'linear' }}
         >
-          ✦
+          <span
+            className="block rounded-full"
+            style={{
+              width: o.size,
+              height: o.size,
+              background: o.color,
+              boxShadow: `0 0 6px 1px ${o.shadow}`,
+              transform: `translate(-50%, -50%) translateY(-${o.r})`,
+            }}
+          />
         </motion.span>
       ))}
     </motion.span>

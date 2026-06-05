@@ -151,16 +151,16 @@ export function DesktopShell({ children }: DesktopShellProps) {
                 to="/profile"
                 className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gold/5 transition-colors group flex-1 min-w-0"
               >
-                <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold text-text-strong truncate group-hover:text-gold transition-colors">
+                <Avatar login={login ?? '?'} imageUrl={me.user.imageUrl} size="md" />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="text-[15px] font-bold text-text-strong truncate group-hover:text-gold transition-colors">
                     {login}
                   </div>
-                  <div className="text-[10px] text-gold uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
+                  <div className="text-xs text-gold uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
                     {pickRating(me.user, game).elo} ELO
                   </div>
-                  <div className="text-[10px] text-violet-300 uppercase tracking-wider font-extrabold tabular-nums flex items-center gap-1">
-                    <img src="/42coin.png" alt="" className="w-3.5 h-3.5" />
+                  <div className="text-sm text-violet-300 font-extrabold tabular-nums flex items-center gap-1.5">
+                    <img src="/42coin.png" alt="" className="w-4 h-4" />
                     <CoinCount login={login} value={me.coins ?? 0} />
                   </div>
                 </div>
