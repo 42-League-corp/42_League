@@ -131,6 +131,9 @@ export function TournoiDetailPage() {
   const myLogin = me?.login;
   const isOrganizer = tournament.createdByLogin === myLogin;
   const isAdmin = !!me?.isAdmin;
+  // « Officiant » : peut saisir un score / lancer la pièce SANS jouer le match.
+  // Admin/superadmin partout ; le créateur seulement sur un tournoi amical.
+  const canOfficiate = isAdmin || (isOrganizer && tournament.kind === 'friendly');
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
 
@@ -473,6 +476,7 @@ export function TournoiDetailPage() {
               tournament={tournament}
               myLogin={myLogin ?? null}
               canManage={isOrganizer || isAdmin}
+              canOfficiate={canOfficiate}
               onChange={refreshSilent}
             />
           )}
@@ -550,11 +554,13 @@ function PoolsAndBracket({
   tournament,
   myLogin,
   canManage,
+  canOfficiate,
   onChange,
 }: {
   tournament: Tournament;
   myLogin: string | null;
   canManage: boolean;
+  canOfficiate: boolean;
   onChange: () => Promise<void>;
 }) {
   const t = useT();
@@ -650,6 +656,7 @@ function PoolsAndBracket({
                 tournament={tournament}
                 pool={g}
                 myLogin={myLogin}
+                canOfficiate={canOfficiate}
                 onChange={onChange}
               />
             ))}
@@ -706,6 +713,7 @@ function PoolsAndBracket({
                 tournament={tournament}
                 match={selectedMatch}
                 myLogin={myLogin}
+                canOfficiate={canOfficiate}
                 onChange={onChange}
               />
             </div>
@@ -724,11 +732,13 @@ function PoolCard({
   tournament,
   pool,
   myLogin,
+  canOfficiate,
   onChange,
 }: {
   tournament: Tournament;
   pool: { index: number; matches: TournamentMatch[]; standings: Standing[] };
   myLogin: string | null;
+  canOfficiate: boolean;
   onChange: () => Promise<void>;
 }) {
   const t = useT();
@@ -795,6 +805,7 @@ function PoolCard({
             tournament={tournament}
             match={m}
             myLogin={myLogin}
+            canOfficiate={canOfficiate}
             onChange={onChange}
           />
         ))}
@@ -807,11 +818,13 @@ function BracketMatch({
   tournament,
   match,
   myLogin,
+  canOfficiate,
   onChange,
 }: {
   tournament: Tournament;
   match: TournamentMatch;
   myLogin: string | null;
+  canOfficiate: boolean;
   onChange: () => Promise<void>;
 }) {
   const flash = useFlash();
@@ -830,10 +843,13 @@ function BracketMatch({
   const iAmIn = !!(myLogin && (match.playerALogin === myLogin || match.playerBLogin === myLogin));
   const recorded = match.recordedByLogin != null && match.scoreA != null && match.scoreB != null;
   const iRecorded = recorded && match.recordedByLogin === myLogin;
+  // Officiant non-joueur : saisit le score d'autorité (force-result, validé direct)
+  // au lieu du double-aveugle record/confirm réservé aux 2 joueurs.
+  const officiating = canOfficiate && !iAmIn;
 
   const canRecord =
     tournament.status === 'in_progress' &&
-    iAmIn &&
+    (iAmIn || canOfficiate) &&
     !!match.playerALogin &&
     !!match.playerBLogin &&
     !match.confirmedAt;
@@ -873,8 +889,15 @@ function BracketMatch({
 
   const handleRecordSubmit = async (scoreA: number, scoreB: number) => {
     try {
-      await api.recordTournamentMatch(tournament.id, match.id, scoreA, scoreB);
-      flash.show(t('tournois.flash.scoreRecorded'));
+      if (officiating) {
+        // Saisie d'autorité : score validé immédiatement (pas de confirmation
+        // de l'adversaire puisque l'officiant ne joue pas le match).
+        await api.adminForceTournamentMatch(tournament.id, match.id, scoreA, scoreB);
+        flash.show(t('tournois.flash.scoreConfirmed'));
+      } else {
+        await api.recordTournamentMatch(tournament.id, match.id, scoreA, scoreB);
+        flash.show(t('tournois.flash.scoreRecorded'));
+      }
       setRecording(false);
       await onChange();
     } catch (err) {

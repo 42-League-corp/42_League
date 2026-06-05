@@ -79,6 +79,7 @@ import {
   type FtProfile,
 } from './auth.js';
 import { backfillMissingProfiles, fetchAndSavePublicUser, fetchPublicUserImage } from './ft-api.js';
+import { getContributorStats } from './contributor-stats.js';
 import { getCampusLocations } from './locations.js';
 import {
   advanceWinner,
@@ -1357,6 +1358,14 @@ app.get('/team/photos', async (c) => {
     }),
   );
   return c.json({ photos: Object.fromEntries(entries) });
+});
+
+// Stats de contributions git (lignes ajout/suppr/net) des membres fondateurs,
+// affichées sur leur carte « À propos ». Public (la page équipe est visible
+// déconnecté). Live via git en dev, valeurs injectées au build en prod.
+app.get('/contributors/stats', async (c) => {
+  const stats = await getContributorStats();
+  return c.json({ stats });
 });
 
 app.get('/users/:login', async (c) => {
@@ -4930,7 +4939,17 @@ app.post('/tournaments/:id/matches/:matchId/toss', async (c) => {
     if (m.confirmedAt) {
       throw new HTTPException(409, { message: 'match already confirmed' });
     }
-    if (m.playerALogin !== me && m.playerBLogin !== me) {
+    // Participant OU officiant (admin/superadmin partout, créateur d'un tournoi
+    // amical) — l'officiant peut lancer la pièce sans jouer le match.
+    const tour = await tx.tournament.findUnique({
+      where: { id },
+      select: { createdByLogin: true, kind: true },
+    });
+    const isParticipant = m.playerALogin === me || m.playerBLogin === me;
+    const canOfficiate =
+      (await isAdminLogin(me)) ||
+      (!!tour && tour.createdByLogin === me && tour.kind === 'friendly');
+    if (!isParticipant && !canOfficiate) {
       throw new HTTPException(403, { message: 'not a participant' });
     }
     if (m.tossWinnerLogin) {
@@ -5981,9 +6000,21 @@ app.post('/admin/tournaments/:id/invites/:inviteId/force-accept', async (c) => {
 // propagation que la confirmation normale (paris, bracket, finale, récompense).
 app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdmin(me);
   const id = c.req.param('id');
   const matchId = c.req.param('matchId');
+  // Officiant : admin/superadmin partout, OU le créateur d'un tournoi amical.
+  // Lui permet de saisir le score d'autorité sans jouer le match.
+  const owner = await prisma.tournament.findUnique({
+    where: { id },
+    select: { createdByLogin: true, kind: true },
+  });
+  if (!owner) throw new HTTPException(404, { message: 'tournament not found' });
+  const ownerIsFriendlyOrganizer = owner.createdByLogin === me && owner.kind === 'friendly';
+  if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
+    throw new HTTPException(403, {
+      message: 'admins or the organizer of a friendly tournament only',
+    });
+  }
   const body = await c.req.json().catch(() => null);
   const parsed = TournamentForceResultSchema.safeParse(body);
   if (!parsed.success) {
@@ -7298,7 +7329,7 @@ app.post('/quests/:id/claim', async (c) => {
 
 app.get('/bets', async (c) => {
   const me = await getCurrentLogin(c);
-  const [user, myBetsRaw, openTours, openMatchesRaw] = await Promise.all([
+  const [user, myBetsRaw, openTours] = await Promise.all([
     prisma.user.findUnique({ where: { login: me }, select: { leagueCoins: true } }),
     prisma.bet.findMany({
       where: { bettorLogin: me },
@@ -7306,27 +7337,17 @@ app.get('/bets', async (c) => {
       include: { tournament: { select: { name: true, game: true } } },
     }),
     // Tournois ouverts aux paris : UNIQUEMENT en cours (plus pendant l'inscription),
-    // vainqueur inconnu. On parie sur le tournoi courant et le pari est verrouillé
-    // dès qu'il est posé (aucune modification possible — cf. garde anti-doublon).
+    // vainqueur inconnu, et AVANT le premier résultat — dès qu'un match est confirmé
+    // le marché se ferme (on ne parie qu'au tout début, sur le vainqueur). Le pari
+    // est verrouillé dès qu'il est posé (aucune modif — cf. garde anti-doublon).
     prisma.tournament.findMany({
-      where: { status: 'in_progress', winnerLogin: null },
+      where: {
+        status: 'in_progress',
+        winnerLogin: null,
+        matches: { none: { confirmedAt: { not: null } } },
+      },
       orderBy: { createdAt: 'desc' },
       include: { entries: { select: { login: true } } },
-    }),
-    // Matchs ouverts aux paris : 2 joueurs connus, aucun score encore saisi
-    // (dès qu'un score est saisi, l'issue est connue du rapporteur → fermé).
-    prisma.tournamentMatch.findMany({
-      where: {
-        confirmedAt: null,
-        recordedByLogin: null,
-        // Un match dont un score a DÉJÀ été saisi puis annulé reste fermé aux paris.
-        betsLockedAt: null,
-        playerALogin: { not: null },
-        playerBLogin: { not: null },
-        tournament: { status: 'in_progress' },
-      },
-      orderBy: [{ round: 'asc' }, { slot: 'asc' }],
-      include: { tournament: { select: { id: true, name: true, game: true } } },
     }),
   ]);
   return c.json({
@@ -7352,22 +7373,14 @@ app.get('/bets', async (c) => {
       status: t.status,
       entrants: t.entries.map((e) => e.login),
     })),
-    openMatches: openMatchesRaw.map((m) => ({
-      id: m.id,
-      tournamentId: m.tournamentId,
-      tournamentName: m.tournament.name,
-      game: m.tournament.game,
-      round: m.round,
-      playerALogin: m.playerALogin,
-      playerBLogin: m.playerBLogin,
-    })),
   });
 });
 
+// On ne parie plus que sur le VAINQUEUR d'un tournoi (les paris match par match
+// ont été retirés). `targetType` reste un littéral pour compat de payload.
 const PlaceBetSchema = z.object({
-  targetType: z.enum(['tournament', 'match']),
+  targetType: z.literal('tournament'),
   tournamentId: z.string().min(1),
-  matchId: z.string().min(1).optional(),
   choiceLogin: z.string().min(1),
   stake: z.number().int().positive(),
 });
@@ -7377,11 +7390,15 @@ app.post('/bets', async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  const { targetType, tournamentId, matchId, choiceLogin, stake } = parsed.data;
+  const { targetType, tournamentId, choiceLogin, stake } = parsed.data;
   const result = await prisma.$transaction(async (tx) => {
     const tour = await tx.tournament.findUnique({
       where: { id: tournamentId },
-      include: { entries: { select: { login: true } } },
+      include: {
+        entries: { select: { login: true } },
+        // Un seul match confirmé suffit à fermer les paris (cf. garde « au début »).
+        matches: { where: { confirmedAt: { not: null } }, select: { id: true }, take: 1 },
+      },
     });
     if (!tour) throw new HTTPException(404, { message: 'tournoi introuvable' });
     // Paris ouverts uniquement quand le tournoi est EN COURS : pas pendant
@@ -7389,41 +7406,25 @@ app.post('/bets', async (c) => {
     if (tour.status !== 'in_progress') {
       throw new HTTPException(409, { message: 'les paris sont fermés sur ce tournoi' });
     }
-
-    if (targetType === 'tournament') {
-      // Symétrique du garde-fou des paris de match : un participant ne peut pas
-      // parier sur le tournoi auquel il joue (il en arrange/contrôle les scores).
-      if (tour.entries.some((e) => e.login === me)) {
-        throw new HTTPException(403, { message: 'tu ne peux pas parier sur un tournoi auquel tu participes' });
-      }
-      if (!tour.entries.some((e) => e.login === choiceLogin)) {
-        throw new HTTPException(400, { message: 'le pronostic doit être un participant du tournoi' });
-      }
-    } else {
-      if (!matchId) throw new HTTPException(400, { message: 'matchId requis pour un pari de match' });
-      const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
-      if (!m || m.tournamentId !== tournamentId) {
-        throw new HTTPException(404, { message: 'match introuvable' });
-      }
-      if (m.confirmedAt || m.recordedByLogin || m.betsLockedAt) {
-        throw new HTTPException(409, { message: 'les paris sont fermés sur ce match' });
-      }
-      if (!m.playerALogin || !m.playerBLogin) {
-        throw new HTTPException(409, { message: 'match sans joueurs définis' });
-      }
-      if (m.playerALogin === me || m.playerBLogin === me) {
-        throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre match' });
-      }
-      if (choiceLogin !== m.playerALogin && choiceLogin !== m.playerBLogin) {
-        throw new HTTPException(400, { message: 'le pronostic doit être un joueur du match' });
-      }
+    // On ne parie qu'AU DÉBUT : dès qu'un match est confirmé (1er résultat), fermé.
+    if (tour.matches.length > 0) {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le tournoi a déjà commencé' });
     }
 
-    // Un seul pari ouvert par cible (tournoi global, ou match précis).
+    // Un participant ne peut pas parier sur le tournoi auquel il joue (il en
+    // arrange/contrôle les scores).
+    if (tour.entries.some((e) => e.login === me)) {
+      throw new HTTPException(403, { message: 'tu ne peux pas parier sur un tournoi auquel tu participes' });
+    }
+    if (!tour.entries.some((e) => e.login === choiceLogin)) {
+      throw new HTTPException(400, { message: 'le pronostic doit être un participant du tournoi' });
+    }
+
+    // Un seul pari ouvert par tournoi.
     const dup = await tx.bet.findFirst({
-      where: { bettorLogin: me, status: 'open', tournamentId, matchId: matchId ?? null },
+      where: { bettorLogin: me, status: 'open', tournamentId, matchId: null },
     });
-    if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur cette cible' });
+    if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur ce tournoi' });
 
     // Débit de la mise : vérifie le solde AVANT (grantCoinsTx borne à 0 — on ne
     // veut pas qu'un solde insuffisant soit silencieusement ramené à 0).
@@ -7438,7 +7439,7 @@ app.post('/bets', async (c) => {
         bettorLogin: me,
         targetType,
         tournamentId,
-        matchId: targetType === 'match' ? matchId! : null,
+        matchId: null,
         choiceLogin,
         stake,
       },

@@ -39,6 +39,7 @@ interface Flight {
   avatarUrl: string | null;
   x1: number;
   y1: number;
+  midX: number; // coude du connecteur (sortie de carte → montée verticale)
   x2: number;
   y2: number;
 }
@@ -109,7 +110,10 @@ export default function BracketTree({
     const landsA = m.slot % 2 === 0; // branche A si slot pair (cf. connecteurs)
     const x2 = colX(m.round + 1) + AVATAR_X;
     const y2 = cardTop(m.round + 1, parentSlot) + (landsA ? ROW_A_Y : ROW_B_Y);
-    return { key: m.id, login: m.winnerLogin, avatarUrl: avatarOf.get(m.winnerLogin) ?? null, x1, y1, x2, y2 };
+    // Coude du connecteur : milieu de l'inter-colonne (cf. `connectors`). L'avatar
+    // sort de la carte, longe ce coude, puis monte/descend le long de la branche.
+    const midX = colX(m.round) + CARD_W + COL_GAP / 2;
+    return { key: m.id, login: m.winnerLogin, avatarUrl: avatarOf.get(m.winnerLogin) ?? null, x1, y1, midX, x2, y2 };
   };
 
   useEffect(() => {
@@ -133,7 +137,7 @@ export default function BracketTree({
     const keys = new Set(added.map((f) => f.key));
     const tm = setTimeout(() => {
       setFlights((prev) => prev.filter((f) => !keys.has(f.key)));
-    }, 1200);
+    }, 1500);
     return () => clearTimeout(tm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches, rounds]);
@@ -232,13 +236,17 @@ export default function BracketTree({
               style={{ width: AVATAR_D, height: AVATAR_D, left: 0, top: 0 }}
               initial={{ x: f.x1 - AVATAR_D / 2, y: f.y1 - AVATAR_D / 2, scale: 1, opacity: 1 }}
               animate={{
-                x: f.x2 - AVATAR_D / 2,
-                y: f.y2 - AVATAR_D / 2,
-                scale: [1, 1.25, 1],
-                opacity: [1, 1, 0],
+                // Trajet en 3 segments calqué sur le connecteur orthogonal :
+                // (1) sortie horizontale de la carte jusqu'au coude, (2) montée/
+                // descente verticale le long de la branche, (3) entrée dans la
+                // carte parent jusqu'à la place de l'avatar.
+                x: [f.x1, f.midX, f.midX, f.x2].map((v) => v - AVATAR_D / 2),
+                y: [f.y1, f.y1, f.y2, f.y2].map((v) => v - AVATAR_D / 2),
+                scale: [1, 1.15, 1.15, 1],
+                opacity: [1, 1, 1, 0],
               }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.9, ease: [0.4, 0, 0.2, 1], times: [0, 0.7, 1] }}
+              transition={{ duration: 1.1, ease: 'easeInOut', times: [0, 0.3, 0.75, 1] }}
             >
               <div className="rounded-full ring-2 ring-gold shadow-[0_0_18px_rgba(255,201,74,0.8)]">
                 <Avatar login={f.login} imageUrl={f.avatarUrl} size="sm" />
@@ -270,47 +278,50 @@ function MatchCard({
   const clickable = !!onSelect;
 
   return (
-    <motion.div
-      layout
-      onClick={() => onSelect?.(match)}
-      className={`relative rounded-lg border bg-bg-2/50 overflow-hidden transition-colors ${
-        active
-          ? 'border-gold'
-          : selected
-            ? 'border-gold/60 ring-1 ring-gold/40'
-            : done
-              ? 'border-teal/40'
-              : 'border-border'
-      } ${clickable ? 'cursor-pointer hover:border-gold/40' : ''}`}
-      animate={
-        active
-          ? { boxShadow: ['0 0 0 0 rgba(255,201,74,0.0)', '0 0 16px 2px rgba(255,201,74,0.55)', '0 0 0 0 rgba(255,201,74,0.0)'] }
-          : { boxShadow: '0 0 0 0 rgba(255,201,74,0)' }
-      }
-      transition={active ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
-    >
-      {/* Badge « EN COURS » sur le match désigné. */}
+    <div className="relative">
+      {/* Badge « EN COURS » : posé HORS de la carte (qui est en overflow-hidden
+          pour arrondir les coins des lignes) afin de ne pas être rogné. */}
       {active && !done && (
-        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 px-2 py-0.5 rounded-full bg-gold text-[#1a0d00] text-[9px] font-extrabold uppercase tracking-wider shadow">
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 rounded-full bg-gold text-[#1a0d00] text-[9px] font-extrabold uppercase tracking-wider shadow whitespace-nowrap pointer-events-none">
           ⚔ En cours
         </div>
       )}
-      <SlotRow
-        login={match.playerALogin}
-        score={match.scoreA}
-        winner={winnerA}
-        loser={done && !winnerA && !!match.playerALogin}
-        avatarUrl={match.playerALogin ? avatarOf.get(match.playerALogin) ?? null : null}
-      />
-      <div className="h-px bg-border/40" />
-      <SlotRow
-        login={match.playerBLogin}
-        score={match.scoreB}
-        winner={winnerB}
-        loser={done && !winnerB && !!match.playerBLogin}
-        avatarUrl={match.playerBLogin ? avatarOf.get(match.playerBLogin) ?? null : null}
-      />
-    </motion.div>
+      <motion.div
+        layout
+        onClick={() => onSelect?.(match)}
+        className={`relative rounded-lg border bg-bg-2/50 overflow-hidden transition-colors ${
+          active
+            ? 'border-gold'
+            : selected
+              ? 'border-gold/60 ring-1 ring-gold/40'
+              : done
+                ? 'border-teal/40'
+                : 'border-border'
+        } ${clickable ? 'cursor-pointer hover:border-gold/40' : ''}`}
+        animate={
+          active
+            ? { boxShadow: ['0 0 0 0 rgba(255,201,74,0.0)', '0 0 16px 2px rgba(255,201,74,0.55)', '0 0 0 0 rgba(255,201,74,0.0)'] }
+            : { boxShadow: '0 0 0 0 rgba(255,201,74,0)' }
+        }
+        transition={active ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+      >
+        <SlotRow
+          login={match.playerALogin}
+          score={match.scoreA}
+          winner={winnerA}
+          loser={done && !winnerA && !!match.playerALogin}
+          avatarUrl={match.playerALogin ? avatarOf.get(match.playerALogin) ?? null : null}
+        />
+        <div className="h-px bg-border/40" />
+        <SlotRow
+          login={match.playerBLogin}
+          score={match.scoreB}
+          winner={winnerB}
+          loser={done && !winnerB && !!match.playerBLogin}
+          avatarUrl={match.playerBLogin ? avatarOf.get(match.playerBLogin) ?? null : null}
+        />
+      </motion.div>
+    </div>
   );
 }
 
