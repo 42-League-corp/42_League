@@ -91,6 +91,8 @@ export interface PlayedMatch {
   deltaA: number;
   deltaB: number;
   game?: Game;
+  /** Saison à laquelle ce match est rattaché. null = matchs d'avant le tagging (BETA). */
+  seasonId?: string | null;
   bestOf?: number | null;
   charA?: string | null;
   charB?: string | null;
@@ -763,27 +765,24 @@ export interface OpenBetTournament {
   status: string;
   entrants: string[];
 }
-export interface OpenBetMatch {
-  id: string;
-  tournamentId: string;
-  tournamentName: string;
-  game: Game;
-  round: number;
-  playerALogin: string;
-  playerBLogin: string;
-}
 export interface BetsResponse {
   coins: number;
   myBets: MyBet[];
   openTournaments: OpenBetTournament[];
-  openMatches: OpenBetMatch[];
 }
+/** On ne parie plus que sur le vainqueur d'un tournoi (plus de paris par match). */
 export interface PlaceBetInput {
-  targetType: 'tournament' | 'match';
+  targetType: 'tournament';
   tournamentId: string;
-  matchId?: string;
   choiceLogin: string;
   stake: number;
+}
+
+/** Stats de contributions git d'un membre (lignes ajoutées / supprimées / net). */
+export interface ContributorStat {
+  added: number;
+  deleted: number;
+  net: number;
 }
 
 export const api = {
@@ -1033,6 +1032,10 @@ export const api = {
     request<{ photos: Record<string, string | null> }>(
       `/team/photos?logins=${encodeURIComponent(logins.join(','))}`,
     ),
+  // Stats de contributions git (lignes ajout/suppr/net) par login. Voir GET
+  // /contributors/stats. Se rafraîchit naturellement (live en dev, au build en prod).
+  contributorStats: () =>
+    request<{ stats: Record<string, ContributorStat> }>('/contributors/stats'),
   opsList: () => request<Ops[]>('/ops'),
   opsMe: () => request<OpsMeResponse>('/ops/me'),
   opsForUser: (login: string) =>

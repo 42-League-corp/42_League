@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { BetStatus } from '../../lib/api';
 import { useT } from '../../lib/i18n';
+import { Avatar } from '../Avatar';
 
 /** Cote fixe des paris : un pari gagnant rapporte 2× la mise. */
 export const BET_MULTIPLIER = 2;
@@ -46,12 +47,15 @@ export function betStatusStyle(status: BetStatus): string {
  */
 export function BetForm({
   choices,
+  avatars,
   maxStake,
   busy,
   onSubmit,
   onCancel,
 }: {
   choices: string[];
+  /** Map login → URL de photo, pour afficher la pp à côté de chaque choix. */
+  avatars?: Record<string, string | null>;
   maxStake: number;
   busy: boolean;
   onSubmit: (choiceLogin: string, stake: number) => void;
@@ -72,17 +76,19 @@ export function BetForm({
         <div className="flex flex-wrap gap-2">
           {choices.map((login) => {
             const active = login === choice;
+            const hasAvatar = avatars !== undefined;
             return (
               <button
                 key={login}
                 type="button"
                 onClick={() => setChoice(login)}
-                className={`px-3 h-8 rounded-lg text-xs font-bold tap-transparent transition-colors ${
+                className={`flex items-center gap-2 ${hasAvatar ? 'pl-1.5 pr-3' : 'px-3'} h-8 rounded-lg text-xs font-bold tap-transparent transition-colors ${
                   active
                     ? 'border border-gold/50 bg-gold/20 text-gold'
                     : 'border border-white/8 bg-white/[0.02] text-muted hover:text-text'
                 }`}
               >
+                {hasAvatar && <Avatar login={login} imageUrl={avatars[login] ?? null} size="xs" />}
                 @{login}
               </button>
             );

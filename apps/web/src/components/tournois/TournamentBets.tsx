@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Trophy, Swords } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import { api, type MyBet, type PlaceBetInput, type Tournament } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
@@ -16,11 +16,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Onglet « Parier » d'un tournoi en cours. Réutilise exactement la feature de
- * paris (cote fixe ×2, endpoints /bets) mais cadrée sur CE tournoi : pari sur le
- * vainqueur du tournoi + sur chaque match ouvert. Les cibles sont dérivées du
- * tournoi affiché (toujours synchro avec le bracket) ; le solde et mes paris
- * viennent de GET /bets. Les règles de validation restent côté serveur.
+ * Onglet « Parier » d'un tournoi en cours. Réutilise la feature de paris (cote
+ * fixe ×2, endpoints /bets) mais cadrée sur CE tournoi : on parie UNIQUEMENT sur
+ * le vainqueur du tournoi (pas de pari match par match), et seulement AU DÉBUT —
+ * dès qu'un match est confirmé, le marché se ferme. Les participants sont dérivés
+ * du tournoi affiché (avec leur photo) ; le solde et mes paris viennent de GET
+ * /bets. Les règles de validation restent côté serveur.
  */
 export function TournamentBets({
   tournament,
@@ -72,20 +73,17 @@ export function TournamentBets({
     [loadBets, refresh, t],
   );
 
-  const entrants = (tournament.entries ?? []).map((e) => e.login);
-  // Matchs ouverts aux paris : 2 joueurs connus, aucun score saisi et marché non
-  // verrouillé (un score saisi puis annulé garde le match fermé). Mêmes règles
-  // que le serveur (GET /bets), pour rester synchro avec ce qui sera accepté.
-  const openMatches = (tournament.matches ?? []).filter(
-    (m) =>
-      m.playerALogin &&
-      m.playerBLogin &&
-      !m.recordedByLogin &&
-      !m.confirmedAt &&
-      !m.betsLockedAt,
-  );
+  const entries = tournament.entries ?? [];
+  const entrants = entries.map((e) => e.login);
+  // Map login → photo pour afficher la pp des participants dans le formulaire.
+  const avatars = Object.fromEntries(entries.map((e) => [e.login, e.user?.imageUrl ?? null]));
+  // On ne parie qu'AU DÉBUT du tournoi : dès qu'un match est confirmé (un premier
+  // résultat est tombé), le marché se ferme. Même règle côté serveur (POST /bets).
+  const hasResult = (tournament.matches ?? []).some((m) => m.confirmedAt);
   const winnerKnown = !!tournament.winnerLogin;
-  const canBetWinner = !winnerKnown && entrants.length > 0;
+  // Un participant ne peut pas parier sur son propre tournoi (refus serveur 403).
+  const iAmEntrant = !!myLogin && entrants.includes(myLogin);
+  const canBetWinner = !winnerKnown && !hasResult && !iAmEntrant && entrants.length > 0;
 
   return (
     <section className="space-y-5">
@@ -100,31 +98,33 @@ export function TournamentBets({
         </div>
       )}
 
-      {/* Pari sur le vainqueur du tournoi */}
-      {canBetWinner && (
-        <section>
-          <SectionTitle>{t('bets.tournamentWinner')}</SectionTitle>
-          <div className="rounded-2xl border border-gold/15 bg-bg-1/70 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Trophy className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
-                <span className="font-extrabold text-text-strong text-sm truncate">{tournament.name}</span>
-                <GameTag game={tournament.game ?? null} />
-              </div>
-              {openForm !== 'winner' && (
-                <button
-                  type="button"
-                  onClick={() => setOpenForm('winner')}
-                  className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
-                >
-                  {t('bets.placeBet')}
-                </button>
-              )}
+      {/* Pari sur le vainqueur du tournoi — l'unique pari possible, ouvert
+          seulement tant qu'aucun match n'a livré de résultat. */}
+      <section>
+        <SectionTitle>{t('bets.tournamentWinner')}</SectionTitle>
+        <div className="rounded-2xl border border-gold/15 bg-bg-1/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Trophy className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
+              <span className="font-extrabold text-text-strong text-sm truncate">{tournament.name}</span>
+              <GameTag game={tournament.game ?? null} />
             </div>
-            <div className="text-[11px] text-muted-2 mt-1">{entrants.length} 👥</div>
-            {openForm === 'winner' && (
+            {canBetWinner && openForm !== 'winner' && (
+              <button
+                type="button"
+                onClick={() => setOpenForm('winner')}
+                className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
+              >
+                {t('bets.placeBet')}
+              </button>
+            )}
+          </div>
+          <div className="text-[11px] text-muted-2 mt-1">{entrants.length} 👥</div>
+          {canBetWinner ? (
+            openForm === 'winner' && (
               <BetForm
                 choices={entrants}
+                avatars={avatars}
                 maxStake={coins}
                 busy={placing}
                 onCancel={() => setOpenForm(null)}
@@ -137,73 +137,17 @@ export function TournamentBets({
                   })
                 }
               />
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Paris sur les matchs ouverts */}
-      <section>
-        <SectionTitle>{t('bets.openMatches')}</SectionTitle>
-        {openMatches.length === 0 ? (
-          <div className="text-center text-muted-2 py-6 text-sm">{t('bets.noOpen')}</div>
-        ) : (
-          <div className="space-y-3">
-            {openMatches.map((m) => {
-              const key = `m:${m.id}`;
-              const a = m.playerALogin!;
-              const b = m.playerBLogin!;
-              const iAmIn = myLogin === a || myLogin === b;
-              return (
-                <div key={m.id} className="rounded-2xl border border-gold/15 bg-bg-1/70 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Swords className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
-                      <span className="font-bold text-text-strong text-sm truncate">
-                        @{a} <span className="text-muted-2">vs</span> @{b}
-                      </span>
-                    </div>
-                    {iAmIn ? (
-                      <span className="shrink-0 text-[10px] text-muted-2 uppercase tracking-wider font-bold">
-                        {t('bets.ownMatch')}
-                      </span>
-                    ) : (
-                      openForm !== key && (
-                        <button
-                          type="button"
-                          onClick={() => setOpenForm(key)}
-                          className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
-                        >
-                          {t('bets.placeBet')}
-                        </button>
-                      )
-                    )}
-                  </div>
-                  <div className="text-[11px] text-muted-2 mt-1">
-                    {t('bets.round')} {m.round}
-                  </div>
-                  {openForm === key && !iAmIn && (
-                    <BetForm
-                      choices={[a, b]}
-                      maxStake={coins}
-                      busy={placing}
-                      onCancel={() => setOpenForm(null)}
-                      onSubmit={(choiceLogin, stake) =>
-                        placeBet({
-                          targetType: 'match',
-                          tournamentId: tournament.id,
-                          matchId: m.id,
-                          choiceLogin,
-                          stake,
-                        })
-                      }
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+            )
+          ) : (
+            <div className="mt-3 pt-3 border-t border-gold/10 text-[12px] text-muted-2">
+              {iAmEntrant
+                ? t('bets.ownTournament')
+                : winnerKnown
+                  ? t('bets.tournamentOver')
+                  : t('bets.closedStarted')}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Mes paris sur ce tournoi */}

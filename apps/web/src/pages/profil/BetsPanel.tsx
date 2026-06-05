@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Trophy, Swords } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import {
   api,
   type BetsResponse,
-  type OpenBetMatch,
   type OpenBetTournament,
   type PlaceBetInput,
 } from '../../lib/api';
@@ -55,7 +54,7 @@ export function BetsPanel() {
   );
 
   const coins = data?.coins ?? 0;
-  const hasOpen = !!data && (data.openTournaments.length > 0 || data.openMatches.length > 0);
+  const hasOpen = !!data && data.openTournaments.length > 0;
 
   return (
     <section className="space-y-5">
@@ -120,61 +119,6 @@ export function BetsPanel() {
                             placeBet({
                               targetType: 'tournament',
                               tournamentId: tour.id,
-                              choiceLogin,
-                              stake,
-                            })
-                          }
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Matchs ouverts aux paris */}
-          {data.openMatches.length > 0 && (
-            <section>
-              <SectionHeader title={t('bets.openMatches')} />
-              <div className="space-y-3 mt-2">
-                {data.openMatches.map((m: OpenBetMatch) => {
-                  const key = `m:${m.id}`;
-                  return (
-                    <div key={m.id} className="rounded-2xl border border-gold/15 bg-bg-1/70 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Swords className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
-                          <span className="font-bold text-text-strong text-sm truncate">
-                            @{m.playerALogin} <span className="text-muted-2">vs</span> @{m.playerBLogin}
-                          </span>
-                        </div>
-                        {openForm !== key && (
-                          <button
-                            type="button"
-                            onClick={() => setOpenForm(key)}
-                            className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
-                          >
-                            {t('bets.placeBet')}
-                          </button>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-muted-2 mt-1 flex items-center gap-2">
-                        <span className="truncate">{m.tournamentName}</span>
-                        <GameTag game={m.game} />
-                        <span>· {t('bets.round')} {m.round}</span>
-                      </div>
-                      {openForm === key && (
-                        <BetForm
-                          choices={[m.playerALogin, m.playerBLogin]}
-                          maxStake={coins}
-                          busy={placing}
-                          onCancel={() => setOpenForm(null)}
-                          onSubmit={(choiceLogin, stake) =>
-                            placeBet({
-                              targetType: 'match',
-                              tournamentId: m.tournamentId,
-                              matchId: m.id,
                               choiceLogin,
                               stake,
                             })
