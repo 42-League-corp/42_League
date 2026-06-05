@@ -23,6 +23,10 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
+    <!-- Préchargement de l'icône du SplashScreen (élément LCP) : la requête part
+         dès le parsing HTML au lieu d'attendre le bootstrap JS. -->
+    <link rel="preload" as="image" href="/apple-touch-icon.png" />
+
     <!-- Préchargement des logos d'univers (évite le flash gris↔couleur du GameModeSwitch) -->
     <link rel="preload" as="image" href="/smash-color.png" />
     <link rel="preload" as="image" href="/smash-grey.png" />
