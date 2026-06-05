@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
+import { useEffect, useState, useCallback, Fragment, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
@@ -28,6 +28,8 @@ import {
   type AllHistoryEventType,
   type Season,
   type Tournament,
+  type TournamentInvite,
+  type TournamentMatch,
 } from '../lib/api';
 
 type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
@@ -2970,6 +2972,104 @@ const TOURN_STATUS_CLS: Record<Tournament['status'], string> = {
 
 type TournSortKey = 'name' | 'game' | 'type' | 'format' | 'players' | 'status' | 'organizer' | 'winner' | 'created';
 
+// Panneau de gestion des « en attente » d'un tournoi (invitations + matchs).
+function ManagePanel({
+  tr,
+  detail,
+  scores,
+  setScores,
+  actionBusy,
+  onForceAccept,
+  onForceMatch,
+}: {
+  tr: (k: string) => string;
+  detail: Tournament;
+  scores: Record<string, { a: string; b: string }>;
+  setScores: (fn: (prev: Record<string, { a: string; b: string }>) => Record<string, { a: string; b: string }>) => void;
+  actionBusy: string | null;
+  onForceAccept: (invite: TournamentInvite) => void;
+  onForceMatch: (match: TournamentMatch) => void;
+}) {
+  const pendingInvites = (detail.invites ?? []).filter((i) => i.status === 'pending');
+  const matchesToForce = (detail.matches ?? []).filter(
+    (m) => m.confirmedAt == null && m.playerALogin && m.playerBLogin,
+  );
+
+  function matchLabel(m: TournamentMatch) {
+    const place =
+      m.stage === 'pool'
+        ? `${tr('god.tourn.pool')} ${(m.poolIndex ?? 0) + 1}`
+        : `${tr('god.tourn.round')} ${m.round}`;
+    return `${m.playerALogin} ${tr('god.tourn.vs')} ${m.playerBLogin} · ${place}`;
+  }
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      {/* Invitations en attente */}
+      <div>
+        <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">
+          {tr('god.tourn.pendingInvites')}
+        </div>
+        {pendingInvites.length === 0 ? (
+          <div className="text-zinc-600 text-xs font-mono">{tr('god.tourn.noPendingInvites')}</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {pendingInvites.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between gap-3 bg-zinc-800/40 rounded px-3 py-1.5">
+                <span className="text-zinc-200 font-mono text-xs truncate">{inv.inviteeLogin}</span>
+                <Btn onClick={() => onForceAccept(inv)} disabled={actionBusy === inv.id} variant="success">
+                  {tr('god.tourn.forceAccept')}
+                </Btn>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Matchs à valider / forcer */}
+      <div>
+        <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">
+          {tr('god.tourn.matchesToForce')}
+        </div>
+        {matchesToForce.length === 0 ? (
+          <div className="text-zinc-600 text-xs font-mono">{tr('god.tourn.noMatchToForce')}</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {matchesToForce.map((m) => {
+              const s = scores[m.id] ?? { a: '', b: '' };
+              return (
+                <div key={m.id} className="bg-zinc-800/40 rounded px-3 py-2">
+                  <div className="text-zinc-300 font-mono text-xs mb-1.5 truncate">{matchLabel(m)}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Input
+                      type="number"
+                      value={s.a}
+                      onChange={(v) => setScores((prev) => ({ ...prev, [m.id]: { a: v, b: prev[m.id]?.b ?? '' } }))}
+                      placeholder={tr('god.tourn.scoreA')}
+                      className="w-16"
+                    />
+                    <span className="text-zinc-500 font-mono text-xs">{tr('god.tourn.vs')}</span>
+                    <Input
+                      type="number"
+                      value={s.b}
+                      onChange={(v) => setScores((prev) => ({ ...prev, [m.id]: { a: prev[m.id]?.a ?? '', b: v } }))}
+                      placeholder={tr('god.tourn.scoreB')}
+                      className="w-16"
+                    />
+                    <Btn onClick={() => onForceMatch(m)} disabled={actionBusy === m.id} variant="warn">
+                      {tr('god.tourn.forceValidate')}
+                    </Btn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TournamentsTab() {
   const tr = useT();
   const [rows, setRows] = useState<Tournament[]>([]);
@@ -2978,6 +3078,13 @@ function TournamentsTab() {
   const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess'>('all');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Gestion « en attente » : un seul tournoi déplié à la fois.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Tournament | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  // Action en cours dans le panneau (id invite/match) + scores saisis par match.
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [scores, setScores] = useState<Record<string, { a: string; b: string }>>({});
 
   // Le GOD gère TOUTES les disciplines : on agrège les 3 listes (chaque endpoint
   // est filtré par jeu côté serveur).
@@ -3017,6 +3124,69 @@ function TournamentsTab() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // Charge le détail complet (entries/invites/matches) d'un tournoi.
+  const loadDetail = useCallback(async (id: string) => {
+    setDetailLoading(true);
+    setError('');
+    try {
+      const full = await api.tournament(id);
+      setDetail(full);
+      // Pré-remplit les scores avec ceux déjà saisis (cas « valider »).
+      const init: Record<string, { a: string; b: string }> = {};
+      for (const m of full.matches ?? []) {
+        init[m.id] = {
+          a: m.scoreA != null ? String(m.scoreA) : '',
+          b: m.scoreB != null ? String(m.scoreB) : '',
+        };
+      }
+      setScores(init);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  function toggleManage(t: Tournament) {
+    if (openId === t.id) {
+      setOpenId(null);
+      setDetail(null);
+      return;
+    }
+    setOpenId(t.id);
+    setDetail(null);
+    loadDetail(t.id);
+  }
+
+  async function handleForceAccept(t: Tournament, invite: TournamentInvite) {
+    setActionBusy(invite.id);
+    setError('');
+    try {
+      await api.adminForceTournamentAccept(t.id, invite.id);
+      await loadDetail(t.id);
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleForceMatch(t: Tournament, match: TournamentMatch) {
+    const s = scores[match.id] ?? { a: '', b: '' };
+    setActionBusy(match.id);
+    setError('');
+    try {
+      await api.adminForceTournamentMatch(t.id, match.id, Number(s.a), Number(s.b));
+      await loadDetail(t.id);
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(null);
     }
   }
 
@@ -3097,8 +3267,12 @@ function TournamentsTab() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((t) => (
-                <tr key={t.id} className="border-b border-zinc-800/60 hover:bg-zinc-800/30">
+              {sorted.map((t) => {
+                const manageable = t.status === 'registration' || t.status === 'in_progress';
+                const isOpen = openId === t.id;
+                return (
+                <Fragment key={t.id}>
+                <tr className="border-b border-zinc-800/60 hover:bg-zinc-800/30">
                   <td className="py-2 px-3 text-zinc-100 font-medium max-w-[200px] truncate">
                     <button
                       onClick={() => window.open(`/tournaments/${encodeURIComponent(t.id)}`, '_blank')}
@@ -3132,13 +3306,39 @@ function TournamentsTab() {
                     {t.winner?.login ? `🏆 ${t.winner.login}` : '—'}
                   </td>
                   <td className="py-2 px-3 text-zinc-500 font-mono text-xs whitespace-nowrap">{fmtDate(t.createdAt)}</td>
-                  <td className="py-2 px-3 text-right">
+                  <td className="py-2 px-3 text-right whitespace-nowrap">
+                    {manageable && (
+                      <Btn onClick={() => toggleManage(t)} variant={isOpen ? 'warn' : 'default'} className="mr-1.5">
+                        {isOpen ? tr('god.tourn.close') : tr('god.tourn.manage')}
+                      </Btn>
+                    )}
                     <Btn onClick={() => handleDelete(t)} disabled={busyId === t.id} variant="danger">
                       {tr('god.tourn.delete')}
                     </Btn>
                   </td>
                 </tr>
-              ))}
+                {isOpen && (
+                  <tr className="border-b border-zinc-800/60 bg-zinc-900/40">
+                    <td colSpan={10} className="px-3 py-4">
+                      {detailLoading || !detail ? (
+                        <div className="text-zinc-600 text-xs font-mono">{tr('god.loading')}</div>
+                      ) : (
+                        <ManagePanel
+                          tr={tr}
+                          detail={detail}
+                          scores={scores}
+                          setScores={setScores}
+                          actionBusy={actionBusy}
+                          onForceAccept={(inv) => handleForceAccept(t, inv)}
+                          onForceMatch={(m) => handleForceMatch(t, m)}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
