@@ -10,7 +10,7 @@ import { BadgesRow } from '../../components/Badges';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
-import { RecentMatchRow } from './shared/RecentMatchRow';
+import { ProfilHistory } from './shared/ProfilHistory';
 import { displayTitle } from '../../lib/cosmeticTitles';
 import { TitlePicker } from '../../components/TitlePicker';
 import { BannerPicker } from '../../components/BannerPicker';
@@ -114,15 +114,6 @@ export function ProfilDesktop() {
     [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
     [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
   const myOnlineHost = locations.get(u.login);
-
-  // Mes matchs récents du mode courant — même historique que la fiche des autres joueurs.
-  const myRecent = matches
-    .filter(
-      (m) =>
-        (m.game ?? 'babyfoot') === game &&
-        (m.playerALogin === u.login || m.playerBLogin === u.login),
-    )
-    .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
@@ -334,20 +325,12 @@ export function ProfilDesktop() {
 
       <OpsWidget opsMe={opsMe} locale={locale} t={t} />
 
-      {/* Historique récent — cartes partagées avec le profil mobile (même
-          agencement : badge V/N/D + avatar + nom/date + score + delta ELO). */}
-      {myRecent.length > 0 && (
-        <>
-          <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
-            {t('profil.recent')}
-          </div>
-          <div className="space-y-1.5">
-            {myRecent.slice(0, 20).map((m, i) => (
-              <RecentMatchRow key={m.id} match={m} ownerLogin={u.login} delay={i * 0.03} />
-            ))}
-          </div>
-        </>
-      )}
+      {/* Historique récent — filtrable par mode (Tous + disciplines jouées),
+          rendu partagé avec le profil mobile et la fiche des autres joueurs. */}
+      <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
+        {t('profil.recent')}
+      </div>
+      <ProfilHistory login={u.login} matches={matches} limit={20} />
       </Panel>
 
       {editGame && (

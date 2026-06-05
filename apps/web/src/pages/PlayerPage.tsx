@@ -9,7 +9,7 @@ import { Palmares } from '../components/Palmares';
 import { EloChart } from '../components/EloChart';
 import { FollowLists } from '../components/FollowLists';
 import { ProfileHeroCard } from './profil/mobile/ProfileHeroCard';
-import { RecentMatchesList } from './profil/mobile/RecentMatchesList';
+import { ProfilHistory } from './profil/shared/ProfilHistory';
 import { MyTeamsSection } from './profil/mobile/MyTeamsSection';
 import { SectionHeader } from './profil/shared/SectionHeader';
 import { computeProfilStats } from './profil/shared/useProfilLogic';
@@ -257,7 +257,7 @@ export function PlayerPage() {
       {/* Matchs récents — même liste que le profil perso */}
       <section>
         <SectionHeader title={t('profil.recent')} badge={stats.total} />
-        <RecentMatchesList matches={recentMatches} myLogin={p.user.login} />
+        <ProfilHistory login={p.user.login} matches={matches} limit={10} showFullHistoryLink />
       </section>
 
       {/* Équipes 2v2 — uniquement en Babyfoot */}

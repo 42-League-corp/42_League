@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
-import { RecentMatchesList } from './mobile/RecentMatchesList';
+import { ProfilHistory } from './shared/ProfilHistory';
 import { OpsCard } from './mobile/OpsCard';
 import { MyTeamsSection } from './mobile/MyTeamsSection';
 import { FollowLists } from '../../components/FollowLists';
@@ -23,7 +23,7 @@ import { haptic } from '../../mobile/feedback/useHaptic';
 type ProfilTab = 'profile' | 'quests' | 'bets';
 
 export function ProfilMobile() {
-  const { stats, recentMatches, myLogin } = useProfilLogic();
+  const { stats, myLogin } = useProfilLogic();
   const { me, matches, locations, refresh } = useLeagueData();
   const { game } = useGameMode();
   const { signOut } = useAuth();
@@ -91,7 +91,7 @@ export function ProfilMobile() {
         {/* Recent matches */}
         <section>
           <SectionHeader title={t('profil.recent')} badge={stats.total} />
-          <RecentMatchesList matches={recentMatches} myLogin={myLogin} />
+          <ProfilHistory login={myLogin ?? ''} matches={matches} limit={10} showFullHistoryLink />
         </section>
 
         {/* Mes Équipes 2v2 — uniquement en Babyfoot */}

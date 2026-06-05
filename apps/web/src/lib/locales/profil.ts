@@ -36,6 +36,7 @@ export const dict: Record<Lang, Dict> = {
     // Matchs récents
     'profil.noMatchYet': 'Aucun match enregistré.',
     'profil.seeFullHistory': "Voir tout l'historique",
+    'profil.histFilter.all': 'Tous',
     // Ops
     'profil.opsTitle': 'OPS · ton ennemi juré',
     'profil.opsTitleMobile': 'Ops · Ennemi juré',
@@ -88,6 +89,7 @@ export const dict: Record<Lang, Dict> = {
     // Recent matches
     'profil.noMatchYet': 'No match recorded.',
     'profil.seeFullHistory': 'See full history',
+    'profil.histFilter.all': 'All',
     // Ops
     'profil.opsTitle': 'OPS · your nemesis',
     'profil.opsTitleMobile': 'Ops · Nemesis',
@@ -140,6 +142,7 @@ export const dict: Record<Lang, Dict> = {
     // Partidas recientes
     'profil.noMatchYet': 'Ningún partido registrado.',
     'profil.seeFullHistory': 'Ver todo el historial',
+    'profil.histFilter.all': 'Todos',
     // Ops
     'profil.opsTitle': 'OPS · tu némesis',
     'profil.opsTitleMobile': 'Ops · Némesis',
