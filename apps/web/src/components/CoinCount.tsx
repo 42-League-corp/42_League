@@ -1,21 +1,12 @@
 import { motion } from 'framer-motion';
+import { useId } from 'react';
 
-/**
- * Logins au solde de League Coins ILLIMITÉ : on affiche un ∞ premium arc-en-ciel
- * animé plutôt qu'un nombre. (Comptes fondateurs / privilégiés — ils ne sont
- * que 2 à l'avoir, ça se mérite un vrai effet.)
- */
 export const INFINITE_COIN_LOGINS = new Set(['abidaux', 'throbert']);
 
 export function hasInfiniteCoins(login?: string | null): boolean {
   return !!login && INFINITE_COIN_LOGINS.has(login.toLowerCase());
 }
 
-/**
- * Solde de League Coins. Affiche le nombre, ou un ∞ arc-en-ciel RGB animé pour
- * les comptes à solde illimité. Le ∞ est volontairement plus grand que le texte
- * environnant (1.7×) pour rester lisible et spectaculaire dans tous les contextes.
- */
 export function CoinCount({
   login,
   value,
@@ -31,26 +22,39 @@ export function CoinCount({
   return <InfiniteGlyph className={className} />;
 }
 
-// Arc-en-ciel ROYGBIV complet qui se répète 2× pour un loop parfaitement seamless
-const RAINBOW =
-  'linear-gradient(to right, #ff0000, #ff7700, #ffee00, #00ee77, #00aaff, #7700ff, #ff0066, #ff0000, #ff7700, #ffee00, #00ee77, #00aaff, #7700ff, #ff0066, #ff0000)';
+// ── SVG ∞ path ─────────────────────────────────────────────────────────────
+// Deux lobes elliptiques se croisant en (100, 50) dans un espace 200×100.
+const INF_PATH =
+  'M 100 50 C 100 22 82 8 65 8 C 45 8 28 22 28 50 C 28 78 45 92 65 92 C 82 92 100 78 100 50 C 100 22 118 8 135 8 C 155 8 172 22 172 50 C 172 78 155 92 135 92 C 118 92 100 78 100 50 Z';
 
-// Couleurs RGB des étincelles : rouge, vert, bleu — tournent en décalé
-const SPARKLE_COLORS = ['#ff4466', '#44ffbb', '#44aaff'];
-const SPARKLE_SHADOWS = [
-  'rgba(255,68,102,0.9)',
-  'rgba(68,255,187,0.9)',
-  'rgba(68,170,255,0.9)',
-];
+// Longueur estimée du tracé ≈ 2 × périmètre ellipse (36×42) ≈ 490 unités.
+const L = 490;
 
-// 3 étincelles autour du ∞ — scintillent en décalé, chacune d'une couleur primaire RGB
+// 24 teintes HSL espacées de 15° — arc-en-ciel continu et lisse.
+const N = 24;
+const SEG = (L / N) * 1.1; // léger overlap pour éviter les trous entre segments
+const GAP = L - SEG;
+const DUR = 3; // secondes par boucle complète
+
+// Segments précalculés : chacun démarre décalé de L/N le long du path.
+const SEGS = Array.from({ length: N }, (_, i) => ({
+  hue: (i / N) * 360,
+  // delay négatif = la boucle démarre décalée → distribution uniforme à t=0
+  delay: -((i / N) * DUR),
+}));
+
+// Étincelles RGB (rouge / vert / bleu)
 const SPARKLES = [
-  { top: '-14%', left: '6%', size: '0.42em', delay: 0 },
-  { top: '52%', left: '88%', size: '0.34em', delay: 0.7 },
-  { top: '70%', left: '14%', size: '0.3em', delay: 1.3 },
+  { top: '-14%', left: '6%',  size: '0.42em', delay: 0,   color: '#ff4466', shadow: 'rgba(255,68,102,0.9)' },
+  { top: '52%',  left: '88%', size: '0.34em', delay: 0.7, color: '#44ffbb', shadow: 'rgba(68,255,187,0.9)' },
+  { top: '70%',  left: '14%', size: '0.3em',  delay: 1.3, color: '#44aaff', shadow: 'rgba(68,170,255,0.9)' },
 ];
 
 function InfiniteGlyph({ className = '' }: { className?: string }) {
+  // ID unique par instance pour éviter les collisions de filtres SVG.
+  const uid = useId().replace(/:/g, '');
+  const filterId = `glow-inf-${uid}`;
+
   return (
     <motion.span
       className={`relative inline-flex items-center justify-center align-middle leading-none font-black ${className}`}
@@ -60,42 +64,67 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
       aria-label="solde illimité"
       title="Solde illimité — accès fondateur"
     >
-      {/* Halo conic RGB tournant derrière le glyphe */}
-      <motion.span
+      <svg
+        viewBox="20 3 161 94"
+        width="1.55em"
+        height="0.6em"
         aria-hidden
-        className="absolute pointer-events-none rounded-full"
-        style={{
-          width: '2em',
-          height: '2em',
-          background:
-            'conic-gradient(from 0deg, #ff0000, #ff7700, #ffee00, #00ee77, #00aaff, #7700ff, #ff0066, #ff0000)',
-          filter: 'blur(10px)',
-          opacity: 0.55,
-        }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-      />
-
-      {/* Glyphe ∞ : arc-en-ciel RGB complet qui parcourt le signe comme une route.
-          backgroundSize 200% + animation rgb-road déplace le gradient de 0→100%
-          (= exactement une période, seamless) en continu. */}
-      <span
-        className="relative"
-        style={{
-          backgroundImage: RAINBOW,
-          backgroundSize: '200% 100%',
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          color: 'transparent',
-          animation: 'rgb-road 2.5s linear infinite',
-          filter:
-            'drop-shadow(0 0 9px rgba(0,170,255,0.65)) drop-shadow(0 0 5px rgba(255,0,100,0.75)) drop-shadow(0 0 3px rgba(255,238,0,0.55))',
-        }}
+        style={{ overflow: 'visible' }}
       >
-        ∞
-      </span>
+        <defs>
+          {/* Filtre lueur — copie floue en dessous du tracé principal. */}
+          <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="b" />
+            <feComposite in="SourceGraphic" in2="b" operator="over" />
+          </filter>
+        </defs>
 
-      {/* Étincelles RGB colorées (rouge / vert / bleu) */}
+        {/* Couche lueur (segments floutés) */}
+        <g filter={`url(#${filterId})`} opacity={0.65}>
+          {SEGS.map((s, i) => (
+            <path
+              key={`g${i}`}
+              d={INF_PATH}
+              fill="none"
+              stroke={`hsl(${s.hue} 100% 58%)`}
+              strokeWidth={16}
+              strokeLinecap="round"
+              strokeDasharray={`${SEG} ${GAP}`}
+              style={{
+                animation: `rgb-path-travel ${DUR}s linear infinite`,
+                animationDelay: `${s.delay}s`,
+              }}
+            />
+          ))}
+        </g>
+
+        {/* Segments colorés principaux — défilent le long du ∞ comme une route. */}
+        {SEGS.map((s, i) => (
+          <path
+            key={`m${i}`}
+            d={INF_PATH}
+            fill="none"
+            stroke={`hsl(${s.hue} 100% 62%)`}
+            strokeWidth={9}
+            strokeLinecap="round"
+            strokeDasharray={`${SEG} ${GAP}`}
+            style={{
+              animation: `rgb-path-travel ${DUR}s linear infinite`,
+              animationDelay: `${s.delay}s`,
+            }}
+          />
+        ))}
+
+        {/* Reflet blanc central — lisibilité + effet tube néon. */}
+        <path
+          d={INF_PATH}
+          fill="none"
+          stroke="rgba(255,255,255,0.38)"
+          strokeWidth={2.5}
+        />
+      </svg>
+
+      {/* Étincelles RGB décalées */}
       {SPARKLES.map((s, i) => (
         <motion.span
           key={i}
@@ -105,8 +134,8 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
             top: s.top,
             left: s.left,
             fontSize: s.size,
-            color: SPARKLE_COLORS[i % 3],
-            textShadow: `0 0 6px ${SPARKLE_SHADOWS[i % 3]}`,
+            color: s.color,
+            textShadow: `0 0 6px ${s.shadow}`,
           }}
           animate={{ opacity: [0, 1, 0], scale: [0.4, 1, 0.4], rotate: [0, 90, 180] }}
           transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: s.delay }}

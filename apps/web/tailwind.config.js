@@ -185,10 +185,11 @@ export default {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
-        // Arc-en-ciel RGB qui parcourt le ∞ en continu (route de couleurs).
-        'rgb-road': {
-          '0%': { backgroundPosition: '0% center' },
-          '100%': { backgroundPosition: '100% center' },
+        // Segments colorés qui défilent le long du tracé SVG ∞.
+        // strokeDashoffset 0 → -490 = une période complète du path (≈ 2 lobes).
+        'rgb-path-travel': {
+          '0%': { strokeDashoffset: '0' },
+          '100%': { strokeDashoffset: '-490' },
         },
         'glow-pulse': {
           '0%, 100%': {
@@ -251,6 +252,7 @@ export default {
         'gold-sweep': 'gold-sweep 3.6s ease-in-out infinite',
         'pulse-ring': 'pulse-ring 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite',
         ember: 'ember 2.2s ease-in-out infinite',
+        'rgb-path-travel': 'rgb-path-travel 3s linear infinite',
       },
     },
   },
