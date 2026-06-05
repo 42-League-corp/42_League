@@ -187,6 +187,7 @@ function PodiumColumn({
               imageUrl={entry.imageUrl}
               size={isFirst ? 'xl' : 'lg'}
               grayscale={past}
+              coin
               className={`ring-[3px] ring-offset-2 ring-offset-bg-1 ${RING[color]}`}
             />
           </div>

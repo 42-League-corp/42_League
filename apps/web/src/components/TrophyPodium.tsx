@@ -170,6 +170,7 @@ function TrophyPodiumColumn({
                   login={entry.login}
                   imageUrl={entry.imageUrl}
                   size={isFirst ? 'lg' : 'md'}
+                  coin
                   className={`ring-[3px] ring-offset-2 ring-offset-bg-1 ${RING[tier]}`}
                 />
               </div>

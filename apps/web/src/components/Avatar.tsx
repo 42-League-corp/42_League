@@ -7,6 +7,13 @@ interface AvatarProps {
   className?: string;
   /** Grise la photo (saisons passées : classement figé, plus "live"). */
   grayscale?: boolean;
+  /**
+   * Ajoute un reflet diagonal sur le placeholder (sans photo). Le disque uni
+   * tourne déjà en 3D sur les podiums, mais sans surface à suivre du regard la
+   * rotation se lit mal ; le reflet donne le repère qui manque → la pièce ronde
+   * "flippe" comme une photo. Sans effet quand une photo est affichée.
+   */
+  coin?: boolean;
 }
 
 const SIZE = {
@@ -20,16 +27,20 @@ const SIZE = {
 /**
  * Avatar rond — design friendly et coloré.
  */
-export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false }: AvatarProps) {
+export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false }: AvatarProps) {
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
   const initial = (login[0] ?? '?').toUpperCase();
+  // Reflet diagonal posé sur le placeholder pour rendre la rotation 3D lisible.
+  const sheen = coin && !showImg
+    ? 'linear-gradient(115deg, rgba(255,255,255,0) 36%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 64%), '
+    : '';
 
   return (
     <div
       className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
       style={{
-        background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)',
+        background: `${sheen}linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)`,
         boxShadow: '0 2px 10px rgba(255, 154, 158, 0.3)',
         color: '#fff',
       }}

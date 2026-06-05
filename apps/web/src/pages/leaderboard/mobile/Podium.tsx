@@ -183,8 +183,14 @@ function PodiumSlot({ rank, entry, stats, onClick, height, color, delay, past = 
             {entry.imageUrl ? (
               <img src={entry.imageUrl} alt={entry.login} className="w-full h-full object-cover" />
             ) : (
-              <div className={`w-full h-full bg-bg-2 flex items-center justify-center text-lg font-extrabold ${COLOR_TEXT[color]}`}>
-                {entry.login[0]?.toUpperCase()}
+              <div className={`relative w-full h-full bg-bg-2 flex items-center justify-center text-lg font-extrabold ${COLOR_TEXT[color]}`}>
+                {/* Reflet diagonal : surface à suivre du regard → la rotation 3D du
+                    disque uni se lit comme une pièce qui tourne (cf. la photo). */}
+                <span
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ background: 'linear-gradient(115deg, rgba(255,255,255,0) 36%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0) 64%)' }}
+                />
+                <span className="relative">{entry.login[0]?.toUpperCase()}</span>
               </div>
             )}
           </div>
