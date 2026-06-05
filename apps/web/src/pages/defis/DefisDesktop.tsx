@@ -270,12 +270,14 @@ function HeroCTAs({
 
   const submitAndClose = async () => { await onDone(); onClose(); };
 
-  // Échap referme la carte ouverte (déclarer une game / défi) — comme la croix.
+  // Échap referme la carte ouverte (déclarer une game / défi / ffa / fléchettes) —
+  // comme la croix. Phase CAPTURE : sinon un combobox interne (picker d'adversaire)
+  // intercepte Escape et bloque la propagation, et la carte ne se ferme jamais.
   useEffect(() => {
     if (openCard === null) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [openCard, onClose]);
 
   const submit2v2AndClose = async (result: Declare2v2Response, partnerLogin: string) => {
@@ -308,7 +310,7 @@ function HeroCTAs({
         onClose={() => setCelebration(null)}
       />
     )}
-    <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+    <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
       {/* initial={false} : les cartes déjà présentes à l'arrivée s'affichent
           instantanément (sinon leur animation d'entrée rejoue à chaque visite de
           la page → clignotement). L'ouverture/fermeture reste animée. */}
@@ -496,10 +498,9 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
   if (!expanded) {
     return (
       <motion.button
-        layout
         layoutId={`hero-cta-${kind}`}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{
           layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
@@ -550,7 +551,6 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
 
   return (
     <motion.div
-      layout
       layoutId={`hero-cta-${kind}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
