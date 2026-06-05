@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Lock, Check } from 'lucide-react';
+import { Sparkles, Lock, Check, Image as ImageIcon } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
+import { badgeIcon } from '../lib/badgeIcons';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useT } from '../lib/i18n';
@@ -32,6 +33,66 @@ function CoinAmount({ value, className = '' }: { value: number; className?: stri
   );
 }
 
+/** Lit le payload d'un item de façon sûre (objet simple, jamais un tableau). */
+function payloadOf(item: ShopItemData): Record<string, unknown> {
+  return item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+    ? (item.payload as Record<string, unknown>)
+    : {};
+}
+
+/** Aperçu visuel de ce qu'on achète, selon la catégorie (bannière = image,
+ *  titre = texte coloré, badge = icône+label coloré, cosmétique = générique).
+ *  Hauteur fixe pour garder la grille de cartes alignée. */
+function ShopItemVisual({ item }: { item: ShopItemData }) {
+  const p = payloadOf(item);
+  const color = item.color || '#ffc94a';
+  const image = typeof p.image === 'string' ? p.image : null;
+  const titleText = typeof p.title === 'string' ? p.title : item.name;
+  const badgeLabel = typeof p.label === 'string' ? p.label : item.name;
+  const Icon = badgeIcon(typeof p.icon === 'string' ? p.icon : null);
+
+  return (
+    <div className="relative h-24 w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-gradient-to-br from-bg-1 to-bg-0 flex items-center justify-center px-3">
+      <div className="absolute inset-0 hud-diag pointer-events-none opacity-20" />
+
+      {item.category === 'banner' &&
+        (image ? (
+          <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <ImageIcon className="relative w-6 h-6 text-muted-2" strokeWidth={1.8} />
+        ))}
+
+      {item.category === 'title' && (
+        <span className="relative inline-flex items-center gap-1.5 text-center">
+          <span style={{ color }} className="opacity-70 leading-none">❝</span>
+          <span style={{ color }} className="italic font-bold tracking-wide line-clamp-2">
+            {titleText}
+          </span>
+          <span style={{ color }} className="opacity-70 leading-none">❞</span>
+        </span>
+      )}
+
+      {item.category === 'badge' && (
+        <span
+          className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border"
+          style={{
+            color,
+            borderColor: `${color}55`,
+            background: `linear-gradient(110deg, ${color}14 0%, ${color}33 45%, ${color}14 70%)`,
+          }}
+        >
+          <Icon className="w-4 h-4" strokeWidth={2.5} />
+          {badgeLabel}
+        </span>
+      )}
+
+      {item.category === 'cosmetic' && (
+        <Sparkles className="relative w-7 h-7 text-violet-300" strokeWidth={1.6} />
+      )}
+    </div>
+  );
+}
+
 /** Carte « à venir » : emplacement vide et verrouillé, juste pour montrer la
  *  mise en page tant qu'aucun cosmétique réel n'est en boutique. */
 function PlaceholderCard({ category, label, soon }: { category: ShopCategory; label: string; soon: string }) {
@@ -47,6 +108,10 @@ function PlaceholderCard({ category, label, soon }: { category: ShopCategory; la
         <span className="shrink-0 px-2 py-0.5 rounded-full bg-muted/10 border border-border/50 text-[9px] font-extrabold uppercase tracking-[0.12em] text-muted-2">
           {label}
         </span>
+      </div>
+      {/* Emplacement visuel (vide tant qu'aucun item réel) */}
+      <div className="relative h-24 w-full shrink-0 rounded-xl border border-border/40 bg-bg-1/40 flex items-center justify-center">
+        <ImageIcon className="w-6 h-6 text-muted/40" strokeWidth={1.8} />
       </div>
       <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
         <CoinAmount value={0} className="font-gaming text-base font-extrabold text-muted-2 blur-[1.5px]" />
@@ -223,6 +288,9 @@ export function ShopPage() {
                     {catLabel(item.category)}
                   </span>
                 </div>
+
+                {/* Aperçu visuel de l'item acheté */}
+                <ShopItemVisual item={item} />
 
                 <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
                   <CoinAmount
