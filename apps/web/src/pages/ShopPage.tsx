@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Lock, Check, Image as ImageIcon } from 'lucide-react';
+import {
+  Sparkles,
+  Lock,
+  Check,
+  Image as ImageIcon,
+  Swords,
+  Target,
+  Dices,
+  type LucideIcon,
+} from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
@@ -33,6 +42,136 @@ function CoinAmount({ value, className = '' }: { value: number; className?: stri
       <img src="/42coin.png" alt="" className="w-4 h-4" />
       {value}
     </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Guide « comment gagner des coins » — 3 méthodes claires, chacune avec son
+ * accent de couleur, sa grosse valeur chiffrée et une explication courte.
+ * C'est la pièce maîtresse pédagogique de la page.
+ * ──────────────────────────────────────────────────────────────────────── */
+interface EarnMethod {
+  key: 'match' | 'quests' | 'bets';
+  icon: LucideIcon;
+  /** Valeur mise en avant (chiffre ou ×2). */
+  value: string;
+  /** Affiche l'icône 42coin avant la valeur (vrai pour des montants de coins). */
+  coin: boolean;
+  /** Jeu de classes Tailwind statiques propre à la méthode (couleurs figées
+   *  pour rester compatibles avec le JIT — pas de classe construite à la volée). */
+  ring: string;
+  tile: string;
+  iconColor: string;
+  valueColor: string;
+  glow: string;
+}
+
+const EARN_METHODS: EarnMethod[] = [
+  {
+    key: 'match',
+    icon: Swords,
+    value: '20–50',
+    coin: true,
+    ring: 'border-gold/30 hover:border-gold/55',
+    tile: 'bg-gold/12 border-gold/35',
+    iconColor: 'text-gold',
+    valueColor: 'text-gold',
+    glow: 'from-gold/12',
+  },
+  {
+    key: 'quests',
+    icon: Target,
+    value: '850',
+    coin: true,
+    ring: 'border-violet-400/30 hover:border-violet-400/55',
+    tile: 'bg-violet-500/14 border-violet-400/35',
+    iconColor: 'text-violet-300',
+    valueColor: 'text-violet-200',
+    glow: 'from-violet-500/12',
+  },
+  {
+    key: 'bets',
+    icon: Dices,
+    value: '×2',
+    coin: false,
+    ring: 'border-emerald-400/30 hover:border-emerald-400/55',
+    tile: 'bg-emerald-500/14 border-emerald-400/35',
+    iconColor: 'text-emerald-300',
+    valueColor: 'text-emerald-200',
+    glow: 'from-emerald-500/12',
+  },
+];
+
+function EarnGuide() {
+  const t = useT();
+  return (
+    <section className="relative card-hud overflow-hidden rounded-2xl p-5 border border-gold/20">
+      <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
+
+      {/* En-tête du guide */}
+      <header className="relative flex items-center gap-3">
+        <div className="shrink-0 w-9 h-9 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center shadow-gold-glow">
+          <Sparkles className="w-5 h-5 text-gold" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-gaming text-sm font-extrabold uppercase tracking-[0.14em] text-text-strong leading-tight">
+            {t('shop.howToEarn.title')}
+          </h3>
+          <p className="text-[11px] text-muted font-medium tracking-wide">
+            {t('shop.howToEarn.subtitle')}
+          </p>
+        </div>
+      </header>
+
+      {/* Trois méthodes */}
+      <div className="relative mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {EARN_METHODS.map((m, i) => {
+          const Icon = m.icon;
+          return (
+            <div
+              key={m.key}
+              className={`group relative overflow-hidden rounded-2xl border bg-bg-1/60 p-4 flex flex-col gap-3 transition-colors ${m.ring}`}
+            >
+              {/* Lueur de fond propre à la méthode */}
+              <div
+                className={`absolute -inset-px bg-gradient-to-br ${m.glow} via-transparent to-transparent opacity-60 pointer-events-none`}
+              />
+              {/* Numéro d'étape */}
+              <span className="absolute top-3 right-3 font-display text-2xl font-extrabold leading-none text-white/5 select-none">
+                {i + 1}
+              </span>
+
+              <div
+                className={`relative shrink-0 w-11 h-11 rounded-xl border flex items-center justify-center ${m.tile}`}
+              >
+                <Icon className={`w-6 h-6 ${m.iconColor}`} strokeWidth={2.1} />
+              </div>
+
+              <div className="relative">
+                <div className="font-gaming text-[13px] font-extrabold uppercase tracking-wide text-text-strong leading-tight">
+                  {t(`shop.earn.${m.key}.title`)}
+                </div>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span
+                    className={`font-display text-2xl font-extrabold tabular-nums leading-none flex items-center gap-1 ${m.valueColor}`}
+                  >
+                    {m.coin && <img src="/42coin.png" alt="" className="w-5 h-5" />}
+                    {m.value}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">
+                    {t(`shop.earn.${m.key}.unit`)}
+                  </span>
+                </div>
+              </div>
+
+              <p className="relative text-[11.5px] text-muted leading-relaxed">
+                {t(`shop.earn.${m.key}.desc`)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -213,47 +352,27 @@ export function ShopPage() {
     <div className="space-y-5">
       {/* ── En-tête + carte solde ──────────────────────────────────────── */}
       <Panel title={t('shop.title')} sub={t('shop.sub')}>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="relative flex-1 card-hud overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-gradient-to-br from-violet-500/10 via-bg-1 to-bg-0 border border-violet-400/25">
-            <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
-            <div className="relative shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-gold/20 to-violet-500/10 border border-gold/30 flex items-center justify-center shadow-gold-glow">
-              <img src="/42coin.png" alt="League Coin" className="w-9 h-9" />
+        <div className="relative card-hud overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-gradient-to-br from-violet-500/12 via-bg-1 to-bg-0 border border-violet-400/25">
+          <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
+          {/* Lueur dorée derrière la pièce */}
+          <div className="absolute -left-6 -top-6 w-32 h-32 rounded-full bg-gold/10 blur-2xl pointer-events-none" />
+          <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-gold/25 to-violet-500/10 border border-gold/35 flex items-center justify-center shadow-gold-glow">
+            <img src="/42coin.png" alt="League Coin" className="w-10 h-10 drop-shadow" />
+          </div>
+          <div className="relative min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-muted">
+              {t('shop.balance')}
             </div>
-            <div className="relative min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.18em] font-extrabold text-muted">
-                {t('shop.balance')}
-              </div>
-              <div className="font-gaming text-3xl font-extrabold text-text-strong tabular-nums leading-tight flex items-center gap-1.5">
-                <CoinCount login={me?.login} value={coins} />
-                <span className="text-sm text-violet-300 font-bold">League Coin</span>
-              </div>
+            <div className="font-display text-[2.1rem] font-extrabold text-text-strong tabular-nums leading-tight flex items-baseline gap-2">
+              <CoinCount login={me?.login} value={coins} />
+              <span className="text-sm text-violet-300 font-bold tracking-wide">League Coin</span>
             </div>
           </div>
         </div>
       </Panel>
 
-      {/* ── Carte « comment gagner des coins » (bientôt) ───────────────── */}
-      <section className="relative card-hud overflow-hidden rounded-2xl p-5 border border-gold/20">
-        <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
-        <div className="relative flex items-start gap-3">
-          <div className="shrink-0 w-9 h-9 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-gold" strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-gaming text-sm font-extrabold uppercase tracking-[0.14em] text-text-strong">
-                {t('shop.howToEarn.title')}
-              </h3>
-              <span className="px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-400/40 text-[9px] font-extrabold uppercase tracking-[0.14em] text-violet-200">
-                {t('shop.howToEarn.soon')}
-              </span>
-            </div>
-            <p className="mt-1.5 text-sm text-muted leading-relaxed">
-              {t('shop.howToEarn.body')}
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* ── Guide « comment gagner des coins » ─────────────────────────── */}
+      <EarnGuide />
 
       {/* ── Barre de filtres par catégorie ─────────────────────────────── */}
       {!loading && presentCats.length > 1 && (
@@ -299,9 +418,14 @@ export function ShopPage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
-                className="relative card-hud overflow-hidden rounded-2xl p-4 flex flex-col gap-3"
+                className={`group relative card-hud hover-glow overflow-hidden rounded-2xl p-4 flex flex-col gap-3 ${
+                  isOwned ? 'border-gold/30' : ''
+                }`}
               >
                 <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
+                {isOwned && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-gold/8 via-transparent to-transparent pointer-events-none" />
+                )}
                 <div className="relative flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-gaming text-sm font-extrabold text-text-strong truncate">
