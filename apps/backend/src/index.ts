@@ -1319,7 +1319,11 @@ app.get('/users', async (c) => {
 // cache mémoire. On ne crée AUCUN compte joueur : ces membres « crédits » ne sont pas
 // forcément des joueurs inscrits et ne doivent pas apparaître au classement (raison
 // pour laquelle /users/:login échouait en 404 pour eux). Voir fetchPublicUserImage.
-const TEAM_PHOTO_TTL_MS = 6 * 3600_000; // 6 h
+const TEAM_PHOTO_TTL_MS = 6 * 3600_000; // 6 h (succès)
+// TTL négatif court : un fetch 42 raté (token pas encore prêt au boot, hoquet
+// réseau, 404 transitoire) ne doit PAS rester collé 6 h — sinon la photo d'un
+// membre (ex. rbardet-) disparaît jusqu'à expiration. On retente au bout de 5 min.
+const TEAM_PHOTO_NEG_TTL_MS = 5 * 60_000; // 5 min (échec)
 const teamPhotoCache = new Map<string, { url: string | null; expiresAt: number }>();
 
 app.get('/team/photos', async (c) => {
@@ -1338,9 +1342,13 @@ app.get('/team/photos', async (c) => {
       // 2) cache mémoire (évite de retaper l'API 42 à chaque visite).
       const hit = teamPhotoCache.get(login);
       if (hit && hit.expiresAt > now) return [login, hit.url] as const;
-      // 3) fetch 42 par login, sans écrire en base.
+      // 3) fetch 42 par login, sans écrire en base. On cache longuement un succès,
+      // brièvement un échec (retry rapide — un null stické 6 h masquerait la photo).
       const url = await fetchPublicUserImage(login);
-      teamPhotoCache.set(login, { url, expiresAt: now + TEAM_PHOTO_TTL_MS });
+      teamPhotoCache.set(login, {
+        url,
+        expiresAt: now + (url ? TEAM_PHOTO_TTL_MS : TEAM_PHOTO_NEG_TTL_MS),
+      });
       return [login, url] as const;
     }),
   );
