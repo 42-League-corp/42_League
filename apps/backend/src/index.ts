@@ -14,6 +14,7 @@ import {
   ShopItemCreateSchema,
   MAX_BANNER_DATAURL_LEN,
   TournamentRecordSchema,
+  TournamentForceResultSchema,
   SetTitleSchema,
   DeclareOpsSchema,
   FeatureRequestSchema,
@@ -3978,6 +3979,97 @@ async function launchTournamentMatches(
   else await generateBracket(tournamentId, logins);
 }
 
+// Propagation post-confirmation d'un match de tournoi, PARTAGÉE entre la
+// confirmation normale (route /confirm) et le forçage admin (/force-result).
+// Pré-requis : `m.winnerLogin`/`m.confirmedAt` viennent d'être posés par l'appelant
+// (avec le score validé). Ici : règlement des paris du match, puis selon le stage
+// → génération du bracket (poules terminées) ou avancement du gagnant (bracket),
+// finale → tournoi terminé + titre + récompense + paris du tournoi.
+// Renvoie le même objet de résultat que la route confirm (emits/notifs APRÈS commit).
+async function settleConfirmedTournamentMatch(
+  tx: Prisma.TransactionClient,
+  id: string,
+  m: { stage: string; round: number; slot: number; winnerLogin: string },
+): Promise<{
+  winnerLogin: string;
+  finished: boolean;
+  prizeAwarded: boolean;
+  bracketGenerated: boolean;
+  betWinners: string[];
+}> {
+  const winnerLogin = m.winnerLogin;
+  // Règlement des paris placés sur CE match (cote fixe ×2). `betWinners`
+  // accumule les parieurs crédités (match + plus bas la finale) pour un emit
+  // après commit.
+  const betWinners = await settleMatchBetsTx(tx, id, winnerLogin);
+
+  // Match de poule : pas de propagation. Quand toutes les poules sont terminées,
+  // on génère le bracket des qualifiés (top 2 par poule, seeding croisé).
+  if (m.stage === 'pool') {
+    const remaining = await tx.tournamentMatch.count({
+      where: { tournamentId: id, stage: 'pool', confirmedAt: null },
+    });
+    let bracketGenerated = false;
+    if (remaining === 0) {
+      const poolMatches = await tx.tournamentMatch.findMany({
+        where: { tournamentId: id, stage: 'pool' },
+        select: {
+          poolIndex: true,
+          playerALogin: true,
+          playerBLogin: true,
+          scoreA: true,
+          scoreB: true,
+          winnerLogin: true,
+        },
+      });
+      const qualifiers = qualifiersFromPools(poolMatches);
+      await generateBracket(id, qualifiers, { preSeeded: true });
+      bracketGenerated = true;
+    }
+    return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
+  }
+
+  // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
+  // les matchs réels (byes / poules font diverger taille du bracket et capacité).
+  const agg = await tx.tournamentMatch.aggregate({
+    where: { tournamentId: id, stage: 'bracket' },
+    _max: { round: true },
+  });
+  const totalBracketRounds = agg._max.round ?? 1;
+  const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
+  let finished = false;
+  let prizeAwarded = false;
+  if (adv.isFinal) {
+    const tour = await tx.tournament.update({
+      where: { id },
+      data: {
+        status: 'finished',
+        finishedAt: new Date(),
+        winnerLogin,
+      },
+      select: { game: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
+    });
+    // Crédite le bon compteur de titres selon la discipline du tournoi.
+    await tx.user.update({
+      where: { login: winnerLogin },
+      data: tournamentsWonDelta(parseGameId(tour.game), 1),
+    });
+    // Récompense du vainqueur (tournois officiels uniquement) — une seule fois,
+    // ici, dans la transaction. Cosmétique → inventaire SANS auto-équipement.
+    if (tour.kind === 'official' && tour.prizeKind === 'coins' && tour.prizeCoins) {
+      await grantCoinsTx(tx, winnerLogin, tour.prizeCoins);
+      prizeAwarded = true;
+    } else if (tour.kind === 'official' && tour.prizeKind === 'cosmetic' && tour.prizeItemId) {
+      await grantItemTx(tx, winnerLogin, tour.prizeItemId, false);
+      prizeAwarded = true;
+    }
+    // Règlement des paris sur le VAINQUEUR du tournoi (cote fixe ×2).
+    betWinners.push(...(await settleTournamentBetsTx(tx, id, winnerLogin)));
+    finished = true;
+  }
+  return { winnerLogin, finished, prizeAwarded, bracketGenerated: false, betWinners };
+}
+
 app.get('/tournaments', async (c) => {
   const me = await getCurrentLogin(c);
   // Tournois filtrés par discipline (mode courant) : pas de partage entre modes.
@@ -4601,77 +4693,13 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       where: { id: matchId },
       data: { winnerLogin, confirmedAt: new Date() },
     });
-
-    // Règlement des paris placés sur CE match (cote fixe ×2). `betWinners`
-    // accumule les parieurs crédités (match + plus bas la finale) pour un emit
-    // après commit.
-    const betWinners = await settleMatchBetsTx(tx, matchId, winnerLogin);
-
-    // Match de poule : pas de propagation. Quand toutes les poules sont terminées,
-    // on génère le bracket des qualifiés (top 2 par poule, seeding croisé).
-    if (m.stage === 'pool') {
-      const remaining = await tx.tournamentMatch.count({
-        where: { tournamentId: id, stage: 'pool', confirmedAt: null },
-      });
-      let bracketGenerated = false;
-      if (remaining === 0) {
-        const poolMatches = await tx.tournamentMatch.findMany({
-          where: { tournamentId: id, stage: 'pool' },
-          select: {
-            poolIndex: true,
-            playerALogin: true,
-            playerBLogin: true,
-            scoreA: true,
-            scoreB: true,
-            winnerLogin: true,
-          },
-        });
-        const qualifiers = qualifiersFromPools(poolMatches);
-        await generateBracket(id, qualifiers, { preSeeded: true });
-        bracketGenerated = true;
-      }
-      return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
-    }
-
-    // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
-    // les matchs réels (byes / poules font diverger taille du bracket et capacité).
-    const agg = await tx.tournamentMatch.aggregate({
-      where: { tournamentId: id, stage: 'bracket' },
-      _max: { round: true },
+    // Propagation partagée avec /force-result (paris, bracket, finale, récompense).
+    return settleConfirmedTournamentMatch(tx, id, {
+      stage: m.stage,
+      round: m.round,
+      slot: m.slot,
+      winnerLogin,
     });
-    const totalBracketRounds = agg._max.round ?? 1;
-    const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
-    let finished = false;
-    let prizeAwarded = false;
-    if (adv.isFinal) {
-      const tour = await tx.tournament.update({
-        where: { id },
-        data: {
-          status: 'finished',
-          finishedAt: new Date(),
-          winnerLogin,
-        },
-        select: { game: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
-      });
-      // Crédite le bon compteur de titres selon la discipline du tournoi.
-      await tx.user.update({
-        where: { login: winnerLogin },
-        data: tournamentsWonDelta(parseGameId(tour.game), 1),
-      });
-      // Récompense du vainqueur (tournois officiels uniquement) — une seule fois,
-      // ici, dans la transaction. Cosmétique → inventaire SANS auto-équipement.
-      if (tour.kind === 'official' && tour.prizeKind === 'coins' && tour.prizeCoins) {
-        await grantCoinsTx(tx, winnerLogin, tour.prizeCoins);
-        prizeAwarded = true;
-      } else if (tour.kind === 'official' && tour.prizeKind === 'cosmetic' && tour.prizeItemId) {
-        await grantItemTx(tx, winnerLogin, tour.prizeItemId, false);
-        prizeAwarded = true;
-      }
-      // Règlement des paris sur le VAINQUEUR du tournoi (cote fixe ×2).
-      betWinners.push(...(await settleTournamentBetsTx(tx, id, winnerLogin)));
-      finished = true;
-    }
-    return { winnerLogin, finished, prizeAwarded, bracketGenerated: false, betWinners };
   });
   // Push live au vainqueur APRÈS commit (jamais d'emit dans la transaction).
   if (result.finished && result.prizeAwarded) {
@@ -5670,6 +5698,179 @@ app.delete('/admin/tournaments/:id', async (c) => {
     payload: { id, name: row.name, kind: row.kind, status: row.status, winnerLogin: row.winnerLogin },
   });
   return c.json({ id, deleted: true });
+});
+
+// Admin : forcer l'acceptation d'une invitation (le joueur invité est inscrit
+// d'office). Auto-start si le tournoi atteint sa capacité — même chemin que la
+// route /accept normale.
+app.post('/admin/tournaments/:id/invites/:inviteId/force-accept', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const { id, inviteId } = c.req.param();
+
+  const { started, invitee } = await prisma.$transaction(async (tx) => {
+    const invite = await tx.tournamentInvite.findUnique({ where: { id: inviteId } });
+    if (!invite || invite.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'invitation introuvable' });
+    }
+    const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: 'le tournoi n’est plus en phase d’inscription' });
+    }
+
+    // Marque l'invite acceptée (idempotent : ne réécrit pas decidedAt si déjà décidée).
+    await tx.tournamentInvite.update({
+      where: { id: inviteId },
+      data: {
+        status: 'accepted',
+        decidedAt: invite.decidedAt ?? new Date(),
+      },
+    });
+
+    // Crée l'entry si absente (idempotent — re-invite / déjà inscrit).
+    const already = t.entries.some((e) => e.login === invite.inviteeLogin);
+    if (already) {
+      return { started: false, invitee: invite.inviteeLogin };
+    }
+    await tx.tournamentEntry.create({ data: { tournamentId: id, login: invite.inviteeLogin } });
+
+    const newCount = t.entries.length + 1;
+    if (newCount === t.capacity) {
+      const logins = [...t.entries.map((e) => e.login), invite.inviteeLogin];
+      await launchTournamentMatches(id, t.format, logins);
+      await tx.tournament.update({
+        where: { id },
+        data: { status: 'in_progress', startedAt: new Date() },
+      });
+      void notifyMany(logins, {
+        type: 'tournament',
+        title: `Tournoi "${t.name}" lancé`,
+        body: 'Le bracket est généré — à toi de jouer !',
+        link: `/tournaments/${id}`,
+      });
+      return { started: true, invitee: invite.inviteeLogin };
+    }
+    return { started: false, invitee: invite.inviteeLogin };
+  });
+
+  broadcast({ type: 'tournament:update', payload: {} });
+  void notify(invitee, {
+    type: 'tournament',
+    title: 'Inscription confirmée par un admin',
+    body: 'Tu as été inscrit à un tournoi.',
+    link: `/tournaments/${id}`,
+  });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: invitee,
+    payload: { forced: 'force-accept', tournamentId: id, inviteId, invitee, started },
+  });
+
+  return c.json({ id, inviteId, status: 'accepted' as const, started });
+});
+
+// Admin : forcer le résultat d'un match de tournoi (sans confirmation des joueurs).
+// Pose le score + le gagnant + confirmedAt, puis applique EXACTEMENT la même
+// propagation que la confirmation normale (paris, bracket, finale, récompense).
+app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  const body = await c.req.json().catch(() => null);
+  const parsed = TournamentForceResultSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { scoreA, scoreB } = parsed.data;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match already confirmed' });
+    }
+    if (!m.playerALogin || !m.playerBLogin) {
+      throw new HTTPException(409, {
+        message: 'match has no players yet (previous round pending)',
+      });
+    }
+    // Validation du score selon la discipline du tournoi (même règle que record/confirm).
+    const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    if (scoreErr) throw new HTTPException(400, { message: scoreErr });
+
+    const winnerLogin = scoreA > scoreB ? m.playerALogin : m.playerBLogin;
+    await tx.tournamentMatch.update({
+      where: { id: matchId },
+      data: {
+        scoreA,
+        scoreB,
+        recordedByLogin: me,
+        recordedAt: new Date(),
+        winnerLogin,
+        confirmedAt: new Date(),
+        // Ferme les paris s'ils ne l'étaient pas déjà (cohérent avec record).
+        betsLockedAt: m.betsLockedAt ?? new Date(),
+      },
+    });
+    // Propagation partagée avec la route /confirm (comportement IDENTIQUE).
+    return settleConfirmedTournamentMatch(tx, id, {
+      stage: m.stage,
+      round: m.round,
+      slot: m.slot,
+      winnerLogin,
+    });
+  });
+
+  // Emits/notifs APRÈS commit (jamais dans la transaction) — calqués sur /confirm.
+  if (result.finished && result.prizeAwarded) {
+    emit([result.winnerLogin], { type: 'panel:update', payload: {} });
+  }
+  if (result.betWinners.length) {
+    emit(result.betWinners, { type: 'panel:update', payload: {} });
+  }
+  if (result.bracketGenerated) {
+    const players = await prisma.tournamentEntry.findMany({
+      where: { tournamentId: id },
+      select: { login: true },
+    });
+    void notifyMany(players.map((p) => p.login), {
+      type: 'tournament',
+      title: 'Phase de poules terminée',
+      body: 'Le bracket des qualifiés est prêt — place à l’élimination directe !',
+      link: `/tournaments/${id}`,
+      game: await tournamentGame(id),
+    });
+  }
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: result.winnerLogin,
+    payload: {
+      forced: 'force-result',
+      tournamentId: id,
+      matchId,
+      scoreA,
+      scoreB,
+      winnerLogin: result.winnerLogin,
+      finished: result.finished,
+    },
+  });
+
+  return c.json({
+    id: matchId,
+    winnerLogin: result.winnerLogin,
+    finished: result.finished,
+    bracketGenerated: result.bracketGenerated,
+  });
 });
 
 app.get('/admin/suspicious', async (c) => {

@@ -258,6 +258,15 @@ export const TournamentRecordSchema = z.object({
 
 export type TournamentRecordInput = z.infer<typeof TournamentRecordSchema>;
 
+// Forçage admin du résultat d'un match de tournoi : même forme de score que la
+// saisie normale (validation par discipline appliquée côté serveur).
+export const TournamentForceResultSchema = z.object({
+  scoreA: MatchScoreSchema,
+  scoreB: MatchScoreSchema,
+});
+
+export type TournamentForceResultInput = z.infer<typeof TournamentForceResultSchema>;
+
 export const FeatureRequestSchema = z.object({
   text: z.string().min(10, 'description must be at least 10 characters').max(500),
 });
