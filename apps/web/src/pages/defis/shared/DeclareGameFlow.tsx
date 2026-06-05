@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X } from 'lucide-react';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
@@ -13,96 +12,15 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
-import { filterRoster } from '../../../lib/chars';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { PlayerSearch } from './PlayerSearch';
+import { CharPicker, PerGameCharsEditor, type PerGameChars } from './CharPicker';
 
 export const WINNING_SCORE = 10;
 export const LOSER_SCORE_MIN = -10;
 export const LOSER_SCORE_MAX = WINNING_SCORE - 1;
 
 const smashTargetOf = (bestOf: number) => Math.ceil(bestOf / 2);
-
-/** Grille de sélection d'un personnage (Smash ou Street Fighter selon le roster). */
-function CharPicker({
-  label,
-  value,
-  onChange,
-  roster,
-  Icon,
-  favorites = [],
-  favoritesLabel,
-}: {
-  label: string;
-  value: string | null;
-  onChange: (id: string) => void;
-  roster: { id: string; name: string }[];
-  Icon: typeof SmashCharIcon;
-  /** Ids épinglés en haut (mes favoris / ceux de l'adversaire). */
-  favorites?: string[];
-  favoritesLabel?: string;
-}) {
-  const t = useT();
-  const [query, setQuery] = useState('');
-  const shown = filterRoster(roster, query);
-  const cell = (c: { id: string; name: string }) => (
-    <button
-      key={c.id}
-      type="button"
-      onClick={() => onChange(c.id)}
-      title={c.name}
-      className={`rounded-lg transition-all ${
-        value === c.id
-          ? 'ring-2 ring-[#c97bff] scale-105'
-          : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'
-      }`}
-    >
-      <Icon id={c.id} size={40} className="w-full aspect-square" />
-    </button>
-  );
-  // Favoris connus du roster (ignore les ids obsolètes).
-  const favCells = favorites
-    .map((id) => roster.find((c) => c.id === id))
-    .filter((c): c is { id: string; name: string } => !!c);
-  return (
-    <div>
-      <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{label}</label>
-      {favCells.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[9px] uppercase tracking-wider text-[#c97bff] font-bold mb-1">
-            {favoritesLabel ?? 'Favoris'}
-          </div>
-          <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 p-1 rounded-lg bg-[#c97bff]/[0.06] border border-[#c97bff]/25">
-            {favCells.map(cell)}
-          </div>
-        </div>
-      )}
-      {/* Recherche / filtre par nom de perso */}
-      <div className="relative mb-2">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-2 pointer-events-none" strokeWidth={2.5} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('favorites.search')}
-          className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg bg-bg-1/60 border border-border/60 focus:border-[#c97bff] outline-none transition-colors"
-        />
-        {query && (
-          <button type="button" onClick={() => setQuery('')} aria-label="×"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded text-muted-2 hover:text-text">
-            <X className="w-3 h-3" strokeWidth={2.5} />
-          </button>
-        )}
-      </div>
-      {shown.length === 0 ? (
-        <div className="py-5 text-center text-[11px] text-muted-2">{t('favorites.noResult')}</div>
-      ) : (
-        <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-          {shown.map(cell)}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const SEND_AWAY_ANIM_MS = 140;
 
@@ -171,8 +89,12 @@ export function DeclareGameFlow({
   const [charSelf, setCharSelf] = useState<string | null>(null);
   const [charOpp, setCharOpp] = useState<string | null>(null);
   const [winnerStocks, setWinnerStocks] = useState(3);
+  // Persos par manche (optionnel) : null = un seul perso pour tout le set.
+  const [perGameChars, setPerGameChars] = useState<PerGameChars | null>(null);
 
   const target = smashTargetOf(bestOf);
+  // Nombre de manches réellement jouées dans le set (gagnant + perdant).
+  const totalGames = target + loserGames;
 
   const handleOutcome = (o: 'win' | 'loss' | 'draw') => {
     haptic(o === 'win' ? 'success' : o === 'draw' ? 'medium' : 'warning');
@@ -196,14 +118,18 @@ export function DeclareGameFlow({
         }
         const myGames = iWon ? target : loserGames;
         const oppGames = iWon ? loserGames : target;
+        // Persos : par défaut un seul perso pour tout le set ; si « par manche » est
+        // actif, on envoie la liste encodée (mario>luigi>…) dans le même champ.
+        const finalSelf = perGameChars ? perGameChars.self || charSelf : charSelf;
+        const finalOpp = perGameChars ? perGameChars.opp || charOpp : charOpp;
         await api.declareMatch({
           opponentLogin: opponent.login,
           scoreSelf: myGames,
           scoreOpponent: oppGames,
           game: isSf ? 'streetfighter' : 'smash',
           bestOf,
-          charSelf,
-          charOpponent: charOpp,
+          charSelf: finalSelf,
+          charOpponent: finalOpp,
           // Les stocks (vies) sont spécifiques au Smash ; SF n'en a pas.
           ...(isSmash ? { stocks: winnerStocks } : {}),
         });
@@ -230,7 +156,7 @@ export function DeclareGameFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, hasOutcome, iWon, isDraw, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, flash, onSubmitted, t]);
+  }, [opponent, hasOutcome, iWon, isDraw, loserScore, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, perGameChars, target, loserGames, bestOf, winnerStocks, flash, onSubmitted, t]);
 
   const triggerSend = () => {
     setSending(true);
@@ -501,6 +427,19 @@ export function DeclareGameFlow({
             Icon={CharIcon}
             favorites={favOf(opponent)}
             favoritesLabel={t('favorites.label')}
+          />
+
+          {/* Persos par manche (optionnel) — un seul perso par défaut. */}
+          <PerGameCharsEditor
+            totalGames={totalGames}
+            defaultSelf={charSelf}
+            defaultOpp={charOpp}
+            roster={charRoster}
+            Icon={CharIcon}
+            myFavorites={myFavorites}
+            oppFavorites={favOf(opponent)}
+            oppLabel={opponent.login}
+            onChange={setPerGameChars}
           />
 
           <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 leading-relaxed shadow-inner">

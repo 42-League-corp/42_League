@@ -13,6 +13,7 @@ import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { CharPicker, PerGameCharsEditor, type PerGameChars } from '../shared/CharPicker';
 
 const WINNING_SCORE = 10;
 const LOSER_SCORE_MIN = -10;
@@ -20,26 +21,6 @@ const LOSER_SCORE_MAX = 9;
 
 function smashTarget(bestOf: 3 | 5) {
   return Math.ceil(bestOf / 2);
-}
-
-function CharPicker({ label, value, onChange, roster, Icon }: {
-  label: string; value: string | null; onChange: (id: string) => void;
-  roster: { id: string; name: string }[]; Icon: typeof SmashCharIcon;
-}) {
-  return (
-    <div>
-      <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{label}</label>
-      <div className="grid grid-cols-6 gap-1.5 max-h-40 overflow-y-auto scrollbar-none p-1 rounded-lg bg-bg-1/50 border border-border/50">
-        {roster.map((c) => (
-          <button key={c.id} type="button" onClick={() => onChange(c.id)} title={c.name}
-            className={`rounded-lg transition-all ${value === c.id ? 'ring-2 ring-[#c97bff] scale-105' : 'opacity-75 hover:opacity-100 ring-1 ring-transparent'}`}
-          >
-            <Icon id={c.id} size={38} className="w-full aspect-square" />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 interface ChallengeRecordSheetProps {
@@ -75,7 +56,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
   challenge: Challenge; myLogin: string | undefined; onClose: () => void; onDone: () => Promise<void>;
 }) {
   const t = useT();
-  const { refresh } = useLeagueData();
+  const { refresh, me } = useLeagueData();
   const flash = useFlash();
 
   const game = challenge.game ?? 'babyfoot';
@@ -85,6 +66,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
   const isSetGame = isSmash || isSf;
   const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
   const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
+  const myFavorites = (isSf ? me?.user?.favSf : me?.user?.favSmash) ?? [];
   const isChess = game === 'chess';
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
 
@@ -95,10 +77,12 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
   const [charSelf, setCharSelf] = useState<string | null>(null);
   const [charOpp, setCharOpp] = useState<string | null>(null);
   const [winnerStocks, setWinnerStocks] = useState(3);
+  const [perGameChars, setPerGameChars] = useState<PerGameChars | null>(null);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
 
   const target = smashTarget(bestOf);
+  const totalGames = target + loserGames;
 
   const handleSubmit = useCallback(async () => {
     if (iWon === null) return;
@@ -106,10 +90,13 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
     try {
       if (isSetGame) {
         if (!charSelf || !charOpp) { flash.show(t('defis.chooseBothChars'), 'error'); setBusy(false); setSending(false); return; }
+        // Par défaut un seul perso pour tout le set ; sinon liste encodée par manche.
+        const finalSelf = perGameChars ? perGameChars.self || charSelf : charSelf;
+        const finalOpp = perGameChars ? perGameChars.opp || charOpp : charOpp;
         await api.recordChallengeResult(challenge.id, {
           scoreSelf: iWon ? target : loserGames,
           scoreOpponent: iWon ? loserGames : target,
-          game: isSf ? 'streetfighter' : 'smash', bestOf, charSelf, charOpponent: charOpp,
+          game: isSf ? 'streetfighter' : 'smash', bestOf, charSelf: finalSelf, charOpponent: finalOpp,
           // Les stocks (vies) sont spécifiques au Smash ; SF n'en a pas.
           ...(isSmash ? { stocks: winnerStocks } : {}),
         });
@@ -130,7 +117,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
       haptic('error');
     } finally { setBusy(false); setSending(false); }
-  }, [iWon, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, target, loserGames, bestOf, winnerStocks, loserScore, challenge.id, opponent, flash, refresh, onDone, onClose]);
+  }, [iWon, isSetGame, isSmash, isSf, isChess, charSelf, charOpp, perGameChars, target, loserGames, bestOf, winnerStocks, loserScore, challenge.id, opponent, flash, refresh, onDone, onClose]);
 
   const triggerSend = () => { setSending(true); haptic('medium'); window.setTimeout(handleSubmit, 140); };
 
@@ -240,8 +227,18 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
                 </div>
               </div>
             )}
-            <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} />
+            <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} favorites={myFavorites} favoritesLabel={t('favorites.label')} />
             <CharPicker label={`${t('defis.charOf')} ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+            <PerGameCharsEditor
+              totalGames={totalGames}
+              defaultSelf={charSelf}
+              defaultOpp={charOpp}
+              roster={charRoster}
+              Icon={CharIcon}
+              myFavorites={myFavorites}
+              oppLabel={opponent}
+              onChange={setPerGameChars}
+            />
             <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
               <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
               {' '}{t('defis.winsShort')}{' '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>

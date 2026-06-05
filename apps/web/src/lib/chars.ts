@@ -49,6 +49,38 @@ export function filterRoster<T extends { id: string; name: string }>(roster: T[]
   return roster.filter((c) => normalizeSearch(c.name).includes(q) || normalizeSearch(c.id).includes(q));
 }
 
+// ─── Persos PAR MANCHE (encodage dans le champ perso unique) ──────────────────
+//
+// Par défaut un joueur choisit UN perso pour tout le set (charA/charB = "mario").
+// S'il détaille manche par manche, on encode la liste dans le même champ avec un
+// séparateur ("mario>luigi>mario") — aucune migration nécessaire, et rétro-
+// compatible : un ancien match (un seul id, sans séparateur) se décode en une
+// liste d'un élément.
+
+export const CHAR_SEP = '>';
+
+/** Découpe un champ perso en liste de persos par manche (vide si null). */
+export function decodeChars(s: string | null | undefined): string[] {
+  if (!s) return [];
+  return s.split(CHAR_SEP).map((x) => x.trim()).filter(Boolean);
+}
+
+/**
+ * Encode une liste de persos par manche. Si tous identiques (ou un seul), renvoie
+ * l'id simple → reste propre et rétro-compatible quand aucun détail n'est saisi.
+ */
+export function encodeChars(ids: (string | null | undefined)[]): string {
+  const list = ids.map((x) => (x ?? '').trim()).filter(Boolean);
+  if (list.length === 0) return '';
+  if (list.every((x) => x === list[0])) return list[0]!;
+  return list.join(CHAR_SEP);
+}
+
+/** Premier perso d'un champ (affichage compact à une seule icône). */
+export function primaryChar(s: string | null | undefined): string | null {
+  return decodeChars(s)[0] ?? null;
+}
+
 /** Favoris stockés sur l'utilisateur pour ce jeu (jamais undefined). */
 export function favoritesForGame(
   user: NonNullable<MeResponse['user']> | undefined | null,
