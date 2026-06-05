@@ -447,6 +447,7 @@ export type AdminAuditAction =
   | 'DELETE_OPS'
   | 'DELETE_TOURNAMENT'
   | 'IMPERSONATE_TESTER'
+  | 'SYNC_ELO_FROM_PROD'
   | 'RESET_DATABASE';
 
 export interface AdminAuditEntry {
@@ -873,6 +874,13 @@ export const api = {
     request<Season>(`/seasons/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   deleteSeason: (id: string) =>
     request<{ deleted: true }>(`/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Synchro ELO/stats prod → staging (staging only, superadmin). Renvoie les
+  // compteurs de comptes mis à jour / créés / sautés.
+  syncEloFromProd: () =>
+    request<{ updated: number; created: number; skipped: string[] }>(
+      '/admin/seasons/sync-elo-from-prod',
+      { method: 'POST' },
+    ),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: { opponentLogin: string } & MatchResultInput) =>

@@ -39,6 +39,14 @@ services:
       - PORT=3000
       # Active la staging-gate du backend : API réservée aux superadmins.
       - APP_ENV=staging
+      # Synchro ELO/stats prod → staging (GOD › Saisons, superadmin only).
+      # Valeur dans .env (env_file ci-dessus) — surtout NE PAS la redéclarer ici,
+      # un override vide casserait la lecture. URL d'un rôle Postgres LECTURE SEULE
+      # sur la prod, p.ex. :
+      #   PROD_READONLY_URL=postgresql://league_ro:<pwd>@league-postgres:5432/league?schema=public
+      # Prérequis réseau : le conteneur prod `league-postgres` doit être joignable
+      # d'ici → l'ajouter au réseau partagé `league_edge` (cf. docker-compose.prod.yml).
+      # Absente → le bouton renvoie 503, rien d'autre n'est impacté.
     depends_on:
       postgres:
         condition: service_healthy

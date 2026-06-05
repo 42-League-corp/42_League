@@ -593,6 +593,7 @@ enum AdminAction {
   DELETE_OPS
   DELETE_TOURNAMENT
   IMPERSONATE_TESTER
+  SYNC_ELO_FROM_PROD
 }
 
 model AdminAuditLog {

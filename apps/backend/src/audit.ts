@@ -27,6 +27,7 @@ const ACTION_EMOJI: Record<AdminAction, string> = {
   DELETE_OPS: '🗑️',
   DELETE_TOURNAMENT: '🗑️',
   IMPERSONATE_TESTER: '🧪',
+  SYNC_ELO_FROM_PROD: '♻️',
 };
 
 function extractIp(c: Context): string | null {

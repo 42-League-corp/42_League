@@ -326,6 +326,15 @@ export const dict: Record<Lang, Dict> = {
     'god.season.creating': 'Création…',
     'god.season.create': 'Créer la saison',
     'god.season.created': 'Saison créée ✓',
+    // Synchro ELO/stats depuis la prod (staging uniquement).
+    'god.season.syncTitle': 'Synchroniser depuis la prod',
+    'god.season.syncHint':
+      'Recopie l\'ELO et les stats (matchs joués, tournois gagnés) de la PROD vers staging, pour tester sur des données réelles. Lecture seule côté prod. N\'écrase QUE l\'ELO et les compteurs — jamais les rôles, permissions, League Coins, ni l\'historique. Les comptes de test staging (tester, test1…) ne sont pas touchés.',
+    'god.season.syncConfirm':
+      'Recopier l\'ELO et les stats de la PROD vers staging ? Les classements staging seront remplacés par l\'état actuel de la prod (rôles, coins et comptes de test préservés).',
+    'god.season.syncBtn': 'Synchroniser depuis la prod',
+    'god.season.syncing': 'Synchro…',
+    'god.season.syncDone': 'Synchro OK ✓ — {updated} mis à jour, {created} créés, {skipped} ignorés.',
     // Transition : ajouter une saison clôture instantanément la précédente.
     'god.season.nextTitle': 'Démarrer la saison suivante',
     'god.season.next': 'Démarrer la saison suivante',
@@ -762,6 +771,15 @@ export const dict: Record<Lang, Dict> = {
     'god.season.creating': 'Creating…',
     'god.season.create': 'Create the season',
     'god.season.created': 'Season created ✓',
+    // Sync ELO/stats from prod (staging only).
+    'god.season.syncTitle': 'Sync from prod',
+    'god.season.syncHint':
+      'Copies ELO and stats (matches played, tournaments won) from PROD into staging, to test on real data. Read-only on prod. Overwrites ONLY ELO and counters — never roles, permissions, League Coins, or history. Staging test accounts (tester, test1…) are left untouched.',
+    'god.season.syncConfirm':
+      'Copy ELO and stats from PROD into staging? Staging standings will be replaced with the current prod state (roles, coins and test accounts preserved).',
+    'god.season.syncBtn': 'Sync from prod',
+    'god.season.syncing': 'Syncing…',
+    'god.season.syncDone': 'Sync OK ✓ — {updated} updated, {created} created, {skipped} skipped.',
     'god.season.nextTitle': 'Start the next season',
     'god.season.next': 'Start the next season',
     'god.season.nextHint':
@@ -1194,6 +1212,15 @@ export const dict: Record<Lang, Dict> = {
     'god.season.creating': 'Creando…',
     'god.season.create': 'Crear la temporada',
     'god.season.created': 'Temporada creada ✓',
+    // Sincronización de ELO/estadísticas desde prod (solo staging).
+    'god.season.syncTitle': 'Sincronizar desde prod',
+    'god.season.syncHint':
+      'Copia el ELO y las estadísticas (partidas jugadas, torneos ganados) de PROD a staging, para probar con datos reales. Solo lectura en prod. Sobrescribe ÚNICAMENTE el ELO y los contadores — nunca los roles, permisos, League Coins ni el historial. Las cuentas de prueba de staging (tester, test1…) no se tocan.',
+    'god.season.syncConfirm':
+      '¿Copiar el ELO y las estadísticas de PROD a staging? Las clasificaciones de staging se reemplazarán por el estado actual de prod (roles, monedas y cuentas de prueba preservados).',
+    'god.season.syncBtn': 'Sincronizar desde prod',
+    'god.season.syncing': 'Sincronizando…',
+    'god.season.syncDone': 'Sincronización OK ✓ — {updated} actualizados, {created} creados, {skipped} omitidos.',
     'god.season.nextTitle': 'Iniciar la siguiente temporada',
     'god.season.next': 'Iniciar la siguiente temporada',
     'god.season.nextHint':

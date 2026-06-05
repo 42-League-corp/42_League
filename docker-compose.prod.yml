@@ -16,6 +16,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    # `default` : réseau interne de la stack prod (backend ↔ postgres, inchangé).
+    # `league_edge` : réseau partagé, pour que le backend STAGING puisse lire la prod
+    # EN LECTURE SEULE (rôle league_ro) lors de la synchro ELO/stats déclenchée
+    # depuis le GOD. Aucune écriture possible (rôle SELECT-only). L'accès reste
+    # interne aux conteneurs du VPS — la DB n'est jamais exposée à Internet.
+    networks:
+      - default
+      - league_edge
 
   backend:
     build:
@@ -58,6 +66,12 @@ services:
     depends_on:
       - backend
       - frontend
+
+networks:
+  # Réseau partagé inter-stacks (créé/possédé hors de cette compose). Permet au
+  # backend staging d'atteindre `league-postgres` en lecture seule (synchro ELO).
+  league_edge:
+    external: true
 
 volumes:
   league_pgdata:

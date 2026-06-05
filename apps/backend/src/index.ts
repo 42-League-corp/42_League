@@ -70,7 +70,7 @@ import { seedStaging } from './staging-seed.js';
 import type { Prisma } from '@prisma/client';
 // Valeur runtime (Prisma.DbNull) pour stocker un JSON NULL en base — distinct du
 // `import type` ci-dessus qui, lui, ne sert qu'aux annotations de type.
-import { Prisma as PrismaRuntime } from '@prisma/client';
+import { Prisma as PrismaRuntime, PrismaClient } from '@prisma/client';
 import {
   createAuthRouter,
   getAllowedWebOrigins,
@@ -1854,6 +1854,142 @@ app.post('/seasons/:id/activate', async (c) => {
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
   return c.json(season);
+});
+
+// =========================================================================
+// SYNC ELO/STATS DEPUIS LA PROD — staging uniquement
+// =========================================================================
+// Recopie l'état ELO + compteurs de stats de la DB de PROD vers staging, pour
+// tester sur des données réalistes (« repartir de l'état actuel de la prod »).
+// Garde-fous :
+//  - staging UNIQUEMENT (fail-secure sur APP_ENV — jamais exécutable en prod) ;
+//  - SUPERADMIN only ;
+//  - connexion à la prod en LECTURE SEULE via PROD_READONLY_URL (rôle Postgres
+//    SELECT-only) → aucune écriture vers la prod n'est mécaniquement possible.
+// Ne copie QUE l'ELO et les compteurs (matchesPlayed*, dodgeCount,
+// tournamentsWon*) par discipline. Jamais les rôles, permissions, leagueCoins,
+// flags staging, ni l'historique des matchs/saisons.
+// Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
+// Comptes présents en prod mais absents de staging → créés avec une identité
+// minimale (rôle USER) pour que le classement staging reflète la prod.
+const PROD_ELO_SELECT = {
+  login: true,
+  ftId: true,
+  firstName: true,
+  lastName: true,
+  campus: true,
+  imageUrl: true,
+  title: true,
+  games: true,
+  elo: true,
+  matchesPlayed: true,
+  dodgeCount: true,
+  tournamentsWon: true,
+  eloSmash: true,
+  matchesPlayedSmash: true,
+  tournamentsWonSmash: true,
+  eloChess: true,
+  matchesPlayedChess: true,
+  tournamentsWonChess: true,
+  eloSf: true,
+  matchesPlayedSf: true,
+  tournamentsWonSf: true,
+  eloFlechettes: true,
+  matchesPlayedFlechettes: true,
+  tournamentsWonFlechettes: true,
+} satisfies Prisma.UserSelect;
+
+app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
+  if (process.env.APP_ENV !== 'staging') {
+    throw new HTTPException(403, { message: 'staging only' });
+  }
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const prodUrl = process.env.PROD_READONLY_URL;
+  if (!prodUrl) {
+    throw new HTTPException(503, {
+      message: 'PROD_READONLY_URL non configurée sur ce serveur.',
+    });
+  }
+
+  // Client Prisma dédié pointé sur la prod (datasource « db » surchargée). On
+  // s'attend à une URL d'un rôle Postgres SELECT-only — défense en profondeur :
+  // même un bug ne peut rien écrire en prod.
+  const prod = new PrismaClient({ datasources: { db: { url: prodUrl } } });
+  let updated = 0;
+  let created = 0;
+  const skipped: string[] = [];
+  try {
+    const prodUsers = await prod.user.findMany({
+      where: VISIBLE_USER_WHERE,
+      select: PROD_ELO_SELECT,
+    });
+    for (const u of prodUsers) {
+      // Uniquement l'ELO + les compteurs — jamais rôle/permissions/coins.
+      const stats = {
+        elo: u.elo,
+        matchesPlayed: u.matchesPlayed,
+        dodgeCount: u.dodgeCount,
+        tournamentsWon: u.tournamentsWon,
+        eloSmash: u.eloSmash,
+        matchesPlayedSmash: u.matchesPlayedSmash,
+        tournamentsWonSmash: u.tournamentsWonSmash,
+        eloChess: u.eloChess,
+        matchesPlayedChess: u.matchesPlayedChess,
+        tournamentsWonChess: u.tournamentsWonChess,
+        eloSf: u.eloSf,
+        matchesPlayedSf: u.matchesPlayedSf,
+        tournamentsWonSf: u.tournamentsWonSf,
+        eloFlechettes: u.eloFlechettes,
+        matchesPlayedFlechettes: u.matchesPlayedFlechettes,
+        tournamentsWonFlechettes: u.tournamentsWonFlechettes,
+      };
+      try {
+        const existing = await prisma.user.findUnique({
+          where: { login: u.login },
+          select: { login: true },
+        });
+        if (existing) {
+          // MAJ : on ne touche QUE les stats. Identité/rôle/coins préservés.
+          await prisma.user.update({ where: { login: u.login }, data: stats });
+          updated++;
+        } else {
+          await prisma.user.create({
+            data: {
+              login: u.login,
+              ftId: u.ftId,
+              firstName: u.firstName,
+              lastName: u.lastName,
+              campus: u.campus,
+              imageUrl: u.imageUrl,
+              title: u.title,
+              games: u.games,
+              role: 'USER',
+              ...stats,
+            },
+          });
+          created++;
+        }
+      } catch {
+        // Collision (ftId déjà pris par un autre login en staging, etc.) → on
+        // saute ce joueur sans casser toute la synchro.
+        skipped.push(u.login);
+      }
+    }
+  } finally {
+    await prod.$disconnect();
+  }
+
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'SYNC_ELO_FROM_PROD',
+    target: 'prod',
+    payload: { updated, created, skipped: skipped.length },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ updated, created, skipped });
 });
 
 // Supprime une saison : retire le classement figé, les badges champion liés, et

@@ -8,6 +8,7 @@ import { useIsMobile } from '../hooks/useViewport';
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe';
 import { haptic } from '../mobile/feedback/useHaptic';
 import { useT } from '../lib/i18n';
+import { IS_STAGING } from '../lib/config';
 import { SortableTh, useTableSort, sortRows } from '../components/SortableTh';
 import {
   api,
@@ -1897,7 +1898,7 @@ function InlineModeration({ login, onClose }: { login: string; onClose: () => vo
 
 const AUDIT_ACTIONS: AdminAuditAction[] = [
   'SET_ROLE', 'BAN_USER', 'UNBAN_USER', 'EDIT_STATS', 'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES', 'RESET_DATABASE',
-  'DELETE_CHALLENGE', 'DELETE_PENDING_MATCH', 'DELETE_REJECTED_MATCH', 'DELETE_OPS', 'IMPERSONATE_TESTER',
+  'DELETE_CHALLENGE', 'DELETE_PENDING_MATCH', 'DELETE_REJECTED_MATCH', 'DELETE_OPS', 'IMPERSONATE_TESTER', 'SYNC_ELO_FROM_PROD',
 ];
 
 const ACTION_COLOR: Record<AdminAuditAction, string> = {
@@ -1916,6 +1917,7 @@ const ACTION_COLOR: Record<AdminAuditAction, string> = {
   DELETE_OPS: 'text-red-400',
   DELETE_TOURNAMENT: 'text-red-400',
   IMPERSONATE_TESTER: 'text-teal-400',
+  SYNC_ELO_FROM_PROD: 'text-teal-400',
 };
 
 type AuditSortKey = 'date' | 'actor' | 'role' | 'action' | 'target' | 'ip';
@@ -2813,6 +2815,8 @@ function SeasonsTab() {
   const [deleting, setDeleting] = useState<Season | null>(null);
   const [openSeason, setOpenSeason] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const { requestConfirm, confirmNode } = useConfirmDialog();
   const t = useT();
 
   const load = useCallback(async () => {
@@ -2854,6 +2858,35 @@ function SeasonsTab() {
     else void createFirst();
   };
 
+  // Synchro ELO/stats depuis la prod (staging only). Lecture seule côté prod,
+  // n'écrase QUE l'ELO + compteurs ; rôles/permissions/coins/comptes de test
+  // staging préservés. Action lourde mais non destructive (réversible via une
+  // nouvelle synchro), donc simple confirmation.
+  const onSyncFromProd = async () => {
+    if (
+      !(await requestConfirm(t('god.season.syncConfirm'), {
+        confirmLabel: t('god.season.syncBtn'),
+      }))
+    )
+      return;
+    setSyncing(true);
+    setMsg('');
+    try {
+      const r = await api.syncEloFromProd();
+      setMsg(
+        t('god.season.syncDone')
+          .replace('{updated}', String(r.updated))
+          .replace('{created}', String(r.created))
+          .replace('{skipped}', String(r.skipped.length)),
+      );
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Basculement de vue : remet une saison clôturée comme active (sans reset d'ELO).
   const onActivate = async (s: Season) => {
     setActivatingId(s.id);
@@ -2871,6 +2904,7 @@ function SeasonsTab() {
 
   return (
     <div className="p-4">
+      {confirmNode}
       {confirming && active && (
         <TransitionSeasonModal
           activeName={active.name}
@@ -2957,6 +2991,20 @@ function SeasonsTab() {
           {seasons.length === 0 && <div className="text-zinc-600 text-xs">{t('god.season.none')}</div>}
         </div>
       </Section>
+
+      {IS_STAGING && (
+        <Section title={t('god.season.syncTitle')}>
+          <p className="text-[11px] text-zinc-500 leading-relaxed mb-2">{t('god.season.syncHint')}</p>
+          <Btn
+            variant="ghost"
+            onClick={() => void onSyncFromProd()}
+            disabled={syncing}
+            className="border border-teal-600/50 text-teal-400"
+          >
+            {syncing ? t('god.season.syncing') : t('god.season.syncBtn')}
+          </Btn>
+        </Section>
+      )}
     </div>
   );
 }
