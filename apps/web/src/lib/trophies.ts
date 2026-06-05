@@ -583,8 +583,9 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
     }
   }
 
-  // Victoires totales + disciplines jouées (depuis l'historique tous jeux).
+  // Victoires totales + matchs joués + disciplines jouées (historique tous jeux).
   const wins = new Map<string, number>();
+  const played = new Map<string, number>();
   const gamesPlayed = new Map<string, Set<string>>();
   for (const m of matches) {
     const g = m.game ?? 'babyfoot';
@@ -593,6 +594,7 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
       wins.set(winner, (wins.get(winner) ?? 0) + 1);
     }
     for (const login of [m.playerALogin, m.playerBLogin]) {
+      played.set(login, (played.get(login) ?? 0) + 1);
       const s = gamesPlayed.get(login) ?? new Set<string>();
       s.add(g);
       gamesPlayed.set(login, s);
@@ -614,6 +616,17 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
       trophyGames.set(login, set);
       trophyCount.set(login, (trophyCount.get(login) ?? 0) + 1);
     }
+  }
+
+  // Nombre de disciplines classées (non vides) + #1 de chaque classement.
+  const top1Count = new Map<string, number>();
+  let activeGameCount = 0;
+  for (const g of MIX_GAMES) {
+    const board = boards[g];
+    if (!board || board.length === 0) continue;
+    activeGameCount++;
+    const leaderLogin = board[0]?.login;
+    if (leaderLogin) top1Count.set(leaderLogin, (top1Count.get(leaderLogin) ?? 0) + 1);
   }
 
   const av = (login: string) => ({ login, imageUrl: avatar.get(login) ?? null });
@@ -696,6 +709,45 @@ export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): 
       value: (l) => gamesPlayed.get(l)?.size ?? 0,
       format: (v) => `${v} jeux joués`,
       min: 2,
+    }),
+    leader({
+      emoji: '🌍',
+      title: 'Marathonien Universel',
+      subtitle: 'Le plus de matchs joués, toutes disciplines confondues',
+      color: 'cyan',
+      value: (l) => played.get(l) ?? 0,
+      format: (v) => `${v} matchs`,
+      min: 10,
+    }),
+    leader({
+      emoji: '🧠',
+      title: 'Le Surdoué',
+      subtitle: 'Meilleur ratio de victoires tous jeux (min. 10 matchs)',
+      color: 'magenta',
+      value: (l) => {
+        const p = played.get(l) ?? 0;
+        return p >= 10 ? Math.round(((wins.get(l) ?? 0) / p) * 100) : 0;
+      },
+      format: (v) => `${v}% WR`,
+      min: 50,
+    }),
+    leader({
+      emoji: '🏛️',
+      title: 'Pilier de la Ligue',
+      subtitle: 'En tête du classement dans le plus de disciplines',
+      color: 'gold',
+      value: (l) => top1Count.get(l) ?? 0,
+      format: (v) => `${v}× n°1`,
+      min: 2,
+    }),
+    leader({
+      emoji: '🏅',
+      title: 'Grand Chelem',
+      subtitle: 'Détient un trophée dans CHAQUE discipline classée',
+      color: 'bronze',
+      value: (l) => trophyGames.get(l)?.size ?? 0,
+      format: (v) => `${v} disciplines`,
+      min: Math.max(activeGameCount, 2),
     }),
   ];
 }

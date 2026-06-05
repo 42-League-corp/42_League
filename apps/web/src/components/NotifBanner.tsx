@@ -3,7 +3,7 @@ import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useOpsStatus } from '../hooks/useOpsStatus';
-import { api, type Challenge, type PendingMatch } from '../lib/api';
+import { api, type Challenge, type Game, type PendingMatch } from '../lib/api';
 import { ContestModal } from './ContestModal';
 import { gameColor, GAME_EMOJI } from '../lib/gameVisuals';
 
@@ -34,10 +34,13 @@ const C = {
   border: '#243044',
 };
 
-const KEYFRAMES = `
-@keyframes l42nb-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes l42nb-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,183,27,0.4); } 50% { box-shadow: 0 0 0 6px rgba(255,183,27,0); } }
-`;
+/** hex #rrggbb → rgba(r,g,b,a) (pour teinter bordure/halo au mode de jeu). */
+function rgba(hex: string, a: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 export function NotifBanner() {
   const { me, pending, challenges, refresh } = useLeagueData();
@@ -71,6 +74,23 @@ export function NotifBanner() {
   );
 
   const total = duels.length + scores.length;
+
+  // Mode de jeu dominant des notifs visibles : si elles portent TOUTES sur la même
+  // discipline, on teinte tout le cadre du popup (bordure + halo + header + pulse)
+  // à sa couleur ; sinon (modes mêlés) on garde le doré neutre — le liseré par
+  // ligne suffit alors à distinguer chaque discipline.
+  const { accent, soleGame } = useMemo(() => {
+    const games = new Set<Game>();
+    for (const c of duels) games.add(c.game ?? 'babyfoot');
+    for (const p of scores) games.add(p.game ?? 'babyfoot');
+    const sole = games.size === 1 ? [...games][0]! : null;
+    return { accent: sole ? gameColor(sole) : C.amber, soleGame: sole };
+  }, [duels, scores]);
+
+  const keyframes = `
+@keyframes l42nb-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes l42nb-pulse { 0%,100% { box-shadow: 0 0 0 0 ${rgba(accent, 0.4)}; } 50% { box-shadow: 0 0 0 6px ${rgba(accent, 0)}; } }
+`;
 
   const setBusyId = useCallback((id: string, on: boolean) => {
     setBusy((prev) => {
@@ -229,7 +249,7 @@ export function NotifBanner() {
 
   return (
     <>
-      <style>{KEYFRAMES}</style>
+      <style>{keyframes}</style>
       <div
         style={{
           position: 'fixed',
@@ -239,9 +259,9 @@ export function NotifBanner() {
           width: 320,
           maxWidth: 'calc(100vw - 32px)',
           background: C.bg,
-          border: `1px solid rgba(255,183,27,0.5)`,
+          border: `1px solid ${rgba(accent, 0.5)}`,
           borderRadius: 8,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(255,183,27,0.15)',
+          boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 24px ${rgba(accent, 0.15)}`,
           fontFamily: "'Inter', system-ui, sans-serif",
           animation: 'l42nb-in 220ms ease-out, l42nb-pulse 2s ease-in-out 500ms 3',
           overflow: 'hidden',
@@ -254,10 +274,10 @@ export function NotifBanner() {
             alignItems: 'center',
             gap: 8,
             padding: '10px 12px 8px',
-            borderBottom: '1px solid rgba(255,183,27,0.2)',
+            borderBottom: `1px solid ${rgba(accent, 0.2)}`,
           }}
         >
-          <span style={{ fontSize: 14 }}>⚡</span>
+          <span style={{ fontSize: 14 }}>{soleGame ? GAME_EMOJI[soleGame] : '⚡'}</span>
           <span
             style={{
               flex: 1,
@@ -265,7 +285,7 @@ export function NotifBanner() {
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.15em',
-              color: C.amber,
+              color: accent,
             }}
           >
             {total} notification{total > 1 ? 's' : ''}

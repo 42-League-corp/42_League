@@ -112,6 +112,16 @@ const TITLE_TO_CATEGORY: Record<string, TrophyCategoryKey> = {
   'Le Noctambule':     'activite',
   'Bourreau de travail':'activite',
   'Rivalité':          'activite',
+  // Inter-jeux (mix)
+  'Touche-à-tout':       'perfs',
+  'Légende universelle': 'perfs',
+  'Roi multi-jeux':      'perfs',
+  'Machine de guerre':   'perfs',
+  'Le Polyvalent':       'activite',
+  'Marathonien Universel':'activite',
+  'Le Surdoué':          'perfs',
+  'Pilier de la Ligue':  'perfs',
+  'Grand Chelem':        'perfs',
 };
 
 function categoryOf(title: string): TrophyCategoryKey {
@@ -275,7 +285,6 @@ interface TrophiesSectionProps {
 export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const { leaderboard, matches } = useLeagueData();
   const { game } = useGameMode();
-  const [sortMode, setSortMode] = useState<SortMode>('category');
   const [view, setView] = useState<'mode' | 'mix' | 'teams' | 'ffa'>('mode');
   const trophies = useMemo(
     () => computeTrophies(leaderboard, matches, game),
@@ -328,36 +337,6 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
       for (const e of boards[g] ?? []) if (!seen.has(e.login)) seen.set(e.login, e);
     return [...seen.values()];
   }, [boards, leaderboard]);
-
-  // Trophées par détenteur (vue "par joueur").
-  const holders = useMemo<TrophyHolder[]>(() => {
-    const byLogin = new Map<string, TrophyHolder>();
-    for (const t of trophies) {
-      if (!t.winner) continue;
-      let h = byLogin.get(t.winner.login);
-      if (!h) {
-        h = { login: t.winner.login, imageUrl: t.winner.imageUrl, trophies: [] };
-        byLogin.set(t.winner.login, h);
-      }
-      h.trophies.push(t);
-    }
-    return [...byLogin.values()].sort(
-      (a, b) => b.trophies.length - a.trophies.length || a.login.localeCompare(b.login),
-    );
-  }, [trophies]);
-
-  const unattributed = useMemo(() => trophies.filter((t) => !t.winner), [trophies]);
-
-  // Trophées regroupés par catégorie (vue "par catégorie").
-  const byCategory = useMemo(() => {
-    const map = new Map<TrophyCategoryKey, TrophyResult[]>();
-    for (const cat of TROPHY_CATEGORIES) map.set(cat.key, []);
-    for (const t of trophies) {
-      const key = categoryOf(t.title);
-      map.get(key)?.push(t);
-    }
-    return map;
-  }, [trophies]);
 
   if (trophies.length === 0) {
     return (
@@ -441,59 +420,105 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
         ) : (
           <>
             <p className="text-[11px] text-muted-2 mb-4 leading-relaxed">
-              Trophées combinant les performances sur plusieurs disciplines (babyfoot, smash, échecs).
+              Trophées combinant les performances sur plusieurs disciplines (babyfoot, smash, échecs, Street Fighter).
             </p>
-            <TrophyGrid trophies={mixTrophies} leaderboard={mergedBoard} />
+            <TrophyHallView trophies={mixTrophies} leaderboard={mergedBoard} />
           </>
         )
       ) : (
-        <>
-          {/* Classement des plus titrés */}
-          {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
-
-          {/* Sélecteur de tri */}
-          <div className="flex items-center gap-2 mb-5">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-2 font-bold">Affichage</span>
-            <SortToggle mode={sortMode} onChange={setSortMode} />
-          </div>
-
-          {sortMode === 'category' ? (
-            /* ── Vue par catégorie : sections toujours ouvertes ── */
-            <div>
-              {TROPHY_CATEGORIES.map((cat, i) => (
-                <CategorySection
-                  key={cat.key}
-                  category={cat}
-                  trophies={byCategory.get(cat.key) ?? []}
-                  leaderboard={leaderboard}
-                  isFirst={i === 0}
-                />
-              ))}
-            </div>
-          ) : (
-            /* ── Vue par joueur ── */
-            <div className="space-y-6">
-              {holders.map((h, i) => (
-                <div key={h.login}>
-                  <PlayerGroupHeader holder={h} rank={i + 1} leaderboard={leaderboard} />
-                  <TrophyGrid trophies={h.trophies} leaderboard={leaderboard} />
-                </div>
-              ))}
-              {unattributed.length > 0 && (
-                <div>
-                  <div className="font-gaming text-[10px] uppercase tracking-[0.16em] text-muted-2 font-extrabold mb-3 flex items-center gap-2">
-                    <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-muted to-muted/40 rounded-sm" />
-                    Non attribués
-                    <span className="font-mono normal-case text-muted-2">· {unattributed.length}</span>
-                  </div>
-                  <TrophyGrid trophies={unattributed} leaderboard={leaderboard} />
-                </div>
-              )}
-            </div>
-          )}
-        </>
+        <TrophyHallView trophies={trophies} leaderboard={leaderboard} />
       )}
     </section>
+  );
+}
+
+// ─── Vue « hall of fame » réutilisable (Ce mode + Mix inter-jeux) ────────────
+//
+// Même structure pour les deux onglets (→ même hauteur / même langage) : podium
+// des plus titrés, sélecteur de tri (par catégorie / par joueur), puis grille.
+
+function TrophyHallView({
+  trophies,
+  leaderboard,
+}: {
+  trophies: TrophyResult[];
+  leaderboard: LeaderboardEntry[];
+}) {
+  const [sortMode, setSortMode] = useState<SortMode>('category');
+
+  // Trophées par détenteur (vue "par joueur" + podium des plus titrés).
+  const holders = useMemo<TrophyHolder[]>(() => {
+    const byLogin = new Map<string, TrophyHolder>();
+    for (const t of trophies) {
+      if (!t.winner) continue;
+      let h = byLogin.get(t.winner.login);
+      if (!h) {
+        h = { login: t.winner.login, imageUrl: t.winner.imageUrl, trophies: [] };
+        byLogin.set(t.winner.login, h);
+      }
+      h.trophies.push(t);
+    }
+    return [...byLogin.values()].sort(
+      (a, b) => b.trophies.length - a.trophies.length || a.login.localeCompare(b.login),
+    );
+  }, [trophies]);
+
+  const unattributed = useMemo(() => trophies.filter((t) => !t.winner), [trophies]);
+
+  // Trophées regroupés par catégorie (vue "par catégorie").
+  const byCategory = useMemo(() => {
+    const map = new Map<TrophyCategoryKey, TrophyResult[]>();
+    for (const cat of TROPHY_CATEGORIES) map.set(cat.key, []);
+    for (const t of trophies) map.get(categoryOf(t.title))?.push(t);
+    return map;
+  }, [trophies]);
+
+  return (
+    <>
+      {/* Classement des plus titrés */}
+      {holders.length > 0 && <MostTitled holders={holders} leaderboard={leaderboard} />}
+
+      {/* Sélecteur de tri */}
+      <div className="flex items-center gap-2 mb-5">
+        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-2 font-bold">Affichage</span>
+        <SortToggle mode={sortMode} onChange={setSortMode} />
+      </div>
+
+      {sortMode === 'category' ? (
+        /* ── Vue par catégorie : sections toujours ouvertes ── */
+        <div>
+          {TROPHY_CATEGORIES.map((cat, i) => (
+            <CategorySection
+              key={cat.key}
+              category={cat}
+              trophies={byCategory.get(cat.key) ?? []}
+              leaderboard={leaderboard}
+              isFirst={i === 0}
+            />
+          ))}
+        </div>
+      ) : (
+        /* ── Vue par joueur ── */
+        <div className="space-y-6">
+          {holders.map((h, i) => (
+            <div key={h.login}>
+              <PlayerGroupHeader holder={h} rank={i + 1} leaderboard={leaderboard} />
+              <TrophyGrid trophies={h.trophies} leaderboard={leaderboard} />
+            </div>
+          ))}
+          {unattributed.length > 0 && (
+            <div>
+              <div className="font-gaming text-[10px] uppercase tracking-[0.16em] text-muted-2 font-extrabold mb-3 flex items-center gap-2">
+                <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-muted to-muted/40 rounded-sm" />
+                Non attribués
+                <span className="font-mono normal-case text-muted-2">· {unattributed.length}</span>
+              </div>
+              <TrophyGrid trophies={unattributed} leaderboard={leaderboard} />
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
