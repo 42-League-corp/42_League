@@ -86,6 +86,7 @@ import {
 } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
+import { bodyLimit } from 'hono/body-limit';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
 import { issueStreamToken, issueToken, verifyStreamToken, verifyToken } from './tokens.js';
 import { logAdminAction } from './audit.js';
@@ -108,7 +109,15 @@ const isTesterLogin = (login: string) =>
 // n'importe quel utilisateur SANS OAuth. Il est donc STRICTEMENT réservé au dev
 // local et n'est honoré que si ALLOW_DEV_LOGIN=true est explicitement positionné.
 // Fail-secure : par défaut (prod) le flag est absent → le header est ignoré.
-const ALLOW_DEV_LOGIN = process.env.ALLOW_DEV_LOGIN === 'true';
+// DURCISSEMENT : même si un .env de dev (ALLOW_DEV_LOGIN=true) était copié par
+// erreur sur le serveur, la backdoor reste DÉSACTIVÉE en production — la garde
+// `NODE_ENV !== 'production'` est codée en dur, indépendante du flag.
+const ALLOW_DEV_LOGIN =
+  process.env.ALLOW_DEV_LOGIN === 'true' && process.env.NODE_ENV !== 'production';
+
+// En-têtes CORS autorisés. `x-dev-login` n'est annoncé QUE si la backdoor dev est
+// réellement active (donc jamais en prod) — on n'invite pas à l'usurpation.
+const ALLOW_HEADERS = `Authorization, Content-Type${ALLOW_DEV_LOGIN ? ', x-dev-login' : ''}`;
 
 // =========================================================================
 // CONSENTEMENT RGPD — preuve + version (CGU API 42, Art. 4.2 et Art. 3.1)
@@ -159,6 +168,43 @@ async function getUserRole(login: string): Promise<'USER' | 'MODERATOR' | 'ADMIN
   if (SUPERADMINS.has(login.toLowerCase())) return 'SUPERADMIN';
   const u = await prisma.user.findUnique({ where: { login }, select: { role: true } });
   return (u?.role as 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPERADMIN') ?? 'USER';
+}
+
+// ── Détection des comptes admin (cache court, 30 s) ──────────────────────────
+// Partagé par le rate-limit, le body-limit et le flux SSE : les admins sont
+// EXEMPTÉS des garde-fous anti-abus pour pouvoir tester librement le site
+// (multi-onglets, scripts, gros payloads, nombreuses connexions temps réel).
+let adminLoginCache: Set<string> | null = null;
+let adminCacheExpiry = 0;
+async function getAdminLogins(): Promise<Set<string>> {
+  const now = Date.now();
+  if (adminLoginCache && now < adminCacheExpiry) return adminLoginCache;
+  const rows = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+    select: { login: true },
+  });
+  const set = new Set(rows.map((r) => r.login.toLowerCase()));
+  for (const s of SUPERADMINS) set.add(s.toLowerCase());
+  adminLoginCache = set;
+  adminCacheExpiry = now + 30_000;
+  return set;
+}
+
+/** Vrai si ce login est admin/superadmin (via le cache court). */
+async function isAdminLogin(login: string): Promise<boolean> {
+  if (SUPERADMINS.has(login.toLowerCase())) return true;
+  return (await getAdminLogins()).has(login.toLowerCase());
+}
+
+/** Vrai si la requête porte un Bearer SIGNÉ d'un admin (exemption anti-abus). */
+async function isAdminRequest(c: Context): Promise<boolean> {
+  const auth = c.req.header('authorization');
+  if (!auth?.startsWith('Bearer ')) return false;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return false;
+  const login = verifyToken(auth.slice(7), secret);
+  if (!login) return false;
+  return isAdminLogin(login);
 }
 
 async function requireSuperAdmin(login: string): Promise<void> {
@@ -281,6 +327,35 @@ const VISIBLE_USER_WHERE = {
   anonymizedAt: null,
   deletionScheduledAt: null,
 } as const;
+
+// Borne dure des listes publiques (anti-DoS : pas de findMany non borné). Très
+// large pour une ligue mono-campus → aucun impact sur l'usage normal.
+const MAX_PUBLIC_LIST = 1000;
+
+// Champs SENSIBLES jamais exposés sur les routes PUBLIQUES (/users, /users/:login,
+// /leaderboard). Réservés aux routes /admin/* (GOD panel, qui lit l'objet complet)
+// et à /me (données de l'appelant lui-même). On retire : l'identifiant pivot intra
+// 42 (ftId), la carte des permissions de modération, le flag d'accès staging et
+// les horodatages RGPD internes. `role` reste exposé (badge admin/couronne au front).
+const PUBLIC_USER_OMIT = [
+  'ftId',
+  'moderatorPermissions',
+  'stagingAllowed',
+  'bannedAt',
+  'anonymizedAt',
+  'deletionScheduledAt',
+  'termsAcceptedAt',
+  'termsVersion',
+] as const;
+
+/** Retire les champs sensibles d'un objet User avant sérialisation publique. */
+function toPublicUser<T extends Record<string, unknown>>(
+  user: T,
+): Omit<T, (typeof PUBLIC_USER_OMIT)[number]> {
+  const clone = { ...user };
+  for (const k of PUBLIC_USER_OMIT) delete (clone as Record<string, unknown>)[k];
+  return clone as Omit<T, (typeof PUBLIC_USER_OMIT)[number]>;
+}
 
 // ── Notifications in-app ──────────────────────────────────────────────────
 // Crée une notification et pousse un signal SSE 'notification' pour rafraîchir
@@ -592,8 +667,11 @@ app.use('*', async (c, next) => {
   const allowedOrigin = isAllowed ? reqOrigin : 'https://profile.intra.42.fr';
 
   c.header('Access-Control-Allow-Origin', allowedOrigin);
+  // L'ACAO est calculé dynamiquement selon l'Origin → `Vary: Origin` pour qu'aucun
+  // cache intermédiaire ne serve une réponse avec l'ACAO d'une AUTRE origine.
+  c.header('Vary', 'Origin');
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
+  c.header('Access-Control-Allow-Headers', ALLOW_HEADERS);
   c.header('Access-Control-Allow-Private-Network', 'true');
 
   if (c.req.method === 'OPTIONS') {
@@ -603,6 +681,24 @@ app.use('*', async (c, next) => {
 
   await next();
 });
+
+// =========================================================================
+// LIMITE DE TAILLE DE CORPS — anti-DoS mémoire
+// =========================================================================
+// Hono ne borne pas le corps par défaut : un POST de plusieurs centaines de Mo
+// serait entièrement bufferisé en mémoire (c.req.json()) AVANT tout contrôle, au
+// risque de faire saturer/OOM le process. On plafonne à 1 Mo (très large pour des
+// bodies JSON). Désactivé sous NODE_ENV=test ; les admins sont exemptés.
+if (process.env.NODE_ENV !== 'test') {
+  const limiter = bodyLimit({
+    maxSize: 1024 * 1024, // 1 Mo
+    onError: (c) => c.json({ message: 'payload too large' }, 413),
+  });
+  app.use('*', async (c, next) => {
+    if (await isAdminRequest(c)) return next();
+    return limiter(c, next);
+  });
+}
 
 // =========================================================================
 // RATE-LIMITING — garde-fou anti-abus pour la bêta
@@ -616,37 +712,9 @@ if (process.env.NODE_ENV !== 'test') {
   const isMutation = (c: Context) =>
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method);
 
-  // Les admins (rôle ADMIN ou SUPERADMIN) contournent le rate-limit : leur IP
-  // peut légitimement générer beaucoup de requêtes (onglets dev, SSE, modération,
-  // reconnexions…). On vérifie la signature du token pour ne pas ouvrir un trou
-  // de sécurité, puis le rôle. Les rôles ADMIN vivant en DB, on met en cache les
-  // logins admin (TTL 30 s) pour ne pas taper la base à chaque requête.
-  let adminLoginCache: Set<string> | null = null;
-  let adminCacheExpiry = 0;
-  const getAdminLogins = async (): Promise<Set<string>> => {
-    const now = Date.now();
-    if (adminLoginCache && now < adminCacheExpiry) return adminLoginCache;
-    const rows = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
-      select: { login: true },
-    });
-    const set = new Set(rows.map((r) => r.login.toLowerCase()));
-    for (const s of SUPERADMINS) set.add(s.toLowerCase());
-    adminLoginCache = set;
-    adminCacheExpiry = now + 30_000;
-    return set;
-  };
-  const isAdminRequest = async (c: Context): Promise<boolean> => {
-    const auth = c.req.header('authorization');
-    if (!auth?.startsWith('Bearer ')) return false;
-    const secret = process.env.SESSION_SECRET;
-    if (!secret) return false;
-    const login = verifyToken(auth.slice(7), secret);
-    if (!login) return false;
-    if (SUPERADMINS.has(login.toLowerCase())) return true;
-    return (await getAdminLogins()).has(login.toLowerCase());
-  };
-  // Combine l'exemption admin avec une condition de skip de base (ex. non-mutation).
+  // Les admins (Bearer SIGNÉ d'un rôle ADMIN/SUPERADMIN) contournent le rate-limit :
+  // ils doivent pouvoir générer beaucoup de requêtes (onglets dev, SSE, modération,
+  // scripts de test). Détection via isAdminRequest (module-scope, cache 30 s).
   const orAdmin = (base?: (c: Context) => boolean) => async (c: Context) =>
     (await isAdminRequest(c)) || (base ? base(c) : false);
 
@@ -821,8 +889,9 @@ app.onError((err, c) => {
       : 'https://profile.intra.42.fr';
 
   c.header('Access-Control-Allow-Origin', allowedOrigin);
+  c.header('Vary', 'Origin');
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-dev-login');
+  c.header('Access-Control-Allow-Headers', ALLOW_HEADERS);
   c.header('Access-Control-Allow-Private-Network', 'true');
 
   const status = err instanceof HTTPException ? err.status : 500;
@@ -1205,8 +1274,11 @@ app.get('/events', async (c) => {
   // un token éphémère de scope 'sse' en query param (?token=...), en plus de la
   // session/cookie habituels. Voir GET /auth/stream-token.
   const me = await getStreamLogin(c);
+  // Admins non plafonnés (tests multi-onglets / outils) ; users normaux bornés à
+  // MAX_SSE_PER_LOGIN flux simultanés (cf. sse.ts) — anti-DoS connexions.
+  const unlimited = await isAdminLogin(me).catch(() => false);
   return streamSSE(c, async (stream) => {
-    const cleanup = registerSse(me, stream);
+    const cleanup = registerSse(me, stream, { unlimited });
     let alive = true;
     stream.onAbort(() => {
       alive = false;
@@ -1231,9 +1303,14 @@ app.get('/events', async (c) => {
 app.get('/users', async (c) => {
   await getCurrentLogin(c);
   // Comptes hors-jeu (bannis / désactivés / anonymisés) masqués des vues publiques.
-  return c.json(
-    await prisma.user.findMany({ where: VISIBLE_USER_WHERE, orderBy: { elo: 'desc' } }),
-  );
+  const users = await prisma.user.findMany({
+    where: VISIBLE_USER_WHERE,
+    orderBy: { elo: 'desc' },
+    take: MAX_PUBLIC_LIST,
+  });
+  // Allow-list publique : pas d'exposition de ftId / permissions de modération /
+  // flag staging / horodatages RGPD à un simple utilisateur connecté.
+  return c.json(users.map(toPublicUser));
 });
 
 // Photos de l'équipe (page About / Team) — résolues depuis l'API 42 PAR LOGIN, avec
@@ -1274,6 +1351,11 @@ app.get('/users/:login', async (c) => {
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user || user.deletionScheduledAt) {
     // Compte inexistant ou en cours de suppression → traité comme absent.
+    throw new HTTPException(404, { message: 'user not found' });
+  }
+  // Compte banni / anonymisé : masqué comme partout ailleurs (RGPD), SAUF pour un
+  // admin (qui peut légitimement consulter la fiche via le panel de modération).
+  if ((user.bannedAt || user.anonymizedAt) && !(await isAdminLogin(me))) {
     throw new HTTPException(404, { message: 'user not found' });
   }
   if (!user.imageUrl) {
@@ -1325,7 +1407,7 @@ app.get('/users/:login', async (c) => {
   const palmares = await palmaresFor(login);
   const cosmetics = await equippedCosmetics(login);
   return c.json({
-    user,
+    user: toPublicUser(user),
     rank: rank || null,
     wins,
     losses,
@@ -1365,8 +1447,9 @@ app.get('/leaderboard', async (c) => {
   const users = await prisma.user.findMany({
     where: { ...VISIBLE_USER_WHERE, games: { has: game } },
     orderBy: eloOrderBy(game),
+    take: MAX_PUBLIC_LIST,
   });
-  return c.json(users.map((u, i) => ({ rank: i + 1, ...u, ...projectStats(u, game) })));
+  return c.json(users.map((u, i) => ({ rank: i + 1, ...toPublicUser(u), ...projectStats(u, game) })));
 });
 
 // ── Classement des équipes Babyfoot 2v2 ───────────────────────────────────────
@@ -1375,6 +1458,7 @@ app.get('/leaderboard', async (c) => {
 app.get('/teams/leaderboard', async (c) => {
   await getCurrentLogin(c);
   const teams = await prisma.babyfootTeam.findMany({
+    take: MAX_PUBLIC_LIST,
     include: {
       player1: { select: { imageUrl: true } },
       player2: { select: { imageUrl: true } },
@@ -1850,7 +1934,9 @@ app.patch('/follows/:login', async (c) => {
 
 app.get('/matches', async (c) => {
   await getCurrentLogin(c);
-  return c.json(await prisma.playedMatch.findMany({ orderBy: { playedAt: 'desc' } }));
+  return c.json(
+    await prisma.playedMatch.findMany({ orderBy: { playedAt: 'desc' }, take: MAX_PUBLIC_LIST }),
+  );
 });
 
 app.get('/matches/pending', async (c) => {
@@ -2051,6 +2137,8 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
     select: { playedAt: true, countedForElo: true },
   });
   const countsForElo = shouldCountForElo(priors, p.declaredAt);
+  // Dégressivité anti-farming (même duo, même jour) appliquée aux coins/quêtes.
+  const decayFactor = farmingDecayFactor(sameDayPriorCount(priors, p.declaredAt));
 
   let dA1 = 0, dA2 = 0, dB1 = 0, dB2 = 0;
   if (countsForElo) {
@@ -2099,6 +2187,7 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
         { login: b2, won: winner === 'B' },
       ],
       p.declaredAt,
+      { coinFactor: decayFactor, countForQuests: decayFactor >= 1 },
     );
   }
   return created;
@@ -2134,6 +2223,10 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
     select: { playedAt: true, countedForElo: true },
   });
   const countsForElo = shouldCountForElo(priors, p.declaredAt);
+  // Dégressivité anti-farming du jour (même paire) — appliquée à l'ELO ET aux
+  // coins/quêtes (cf. awardMatchEconomyTx), pour neutraliser le farming de coins
+  // par rematch collusoire en boucle.
+  const decayFactor = farmingDecayFactor(sameDayPriorCount(priors, p.declaredAt));
 
   const [userA, userB] = await Promise.all([
     tx.user.findUniqueOrThrow({ where: { login: a } }),
@@ -2155,9 +2248,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
     });
     // Dégressivité anti-farming : chaque rematch du jour contre le même adversaire
     // vaut 1/4 de moins (×0.75ⁿ). S'applique au match entier — gain ET perte.
-    const factor = farmingDecayFactor(sameDayPriorCount(priors, p.declaredAt));
-    deltaA = applyFarmingDecay(update.deltaA, factor);
-    deltaB = applyFarmingDecay(update.deltaB, factor);
+    deltaA = applyFarmingDecay(update.deltaA, decayFactor);
+    deltaB = applyFarmingDecay(update.deltaB, decayFactor);
     await tx.user.update({ where: { login: a }, data: ratingUpdate(game, ratingA + deltaA) });
     await tx.user.update({ where: { login: b }, data: ratingUpdate(game, ratingB + deltaB) });
   }
@@ -2199,6 +2291,8 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
         { login: b, won: winner === 'B' },
       ],
       p.declaredAt,
+      // Coins dégressés comme l'ELO ; quêtes non créditées sur un rematch dégressé.
+      { coinFactor: decayFactor, countForQuests: decayFactor >= 1 },
     );
   }
   return created;
@@ -4389,6 +4483,9 @@ app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
         recordedAt: new Date(),
         winnerLogin: null,
         confirmedAt: null,
+        // Ferme définitivement les paris dès la 1re saisie (le score est exposé).
+        // Posé une seule fois → un reject/mismatch ultérieur ne rouvre pas le marché.
+        betsLockedAt: m.betsLockedAt ?? new Date(),
       },
     });
   });
@@ -6302,10 +6399,21 @@ async function awardMatchEconomyTx(
   game: string,
   participants: { login: string; won: boolean }[],
   playedAt: Date,
+  opts: { coinFactor?: number; countForQuests?: boolean } = {},
 ): Promise<void> {
+  // coinFactor : dégressivité anti-farming appliquée AUX COINS (1 = plein tarif).
+  // countForQuests : false sur un rematch dégressé → pas de progression de quête à
+  // coût nul. Défauts (1 / true) = comportement inchangé pour les autres appelants.
+  const coinFactor = opts.coinFactor ?? 1;
+  const countForQuests = opts.countForQuests ?? true;
   const weekKey = isoWeekKey(playedAt);
   for (const p of participants) {
-    await grantCoinsTx(tx, p.login, p.won ? COINS_PER_MATCH_WON : COINS_PER_MATCH_PLAYED);
+    const base = p.won ? COINS_PER_MATCH_WON : COINS_PER_MATCH_PLAYED;
+    const coins = Math.max(0, Math.round(base * coinFactor));
+    if (coins > 0) await grantCoinsTx(tx, p.login, coins);
+    // Les rematchs dégressés ne font pas avancer les quêtes hebdo (sinon farmables
+    // en boucle à coût nul). Le 1er match du jour contre un adversaire compte plein.
+    if (!countForQuests) continue;
     // Recompose l'ensemble des disciplines jouées (sans doublon) avant l'upsert.
     const existing = await tx.weeklyQuestProgress.findUnique({
       where: { login_weekKey: { login: p.login, weekKey } },
@@ -6501,6 +6609,8 @@ app.get('/bets', async (c) => {
       where: {
         confirmedAt: null,
         recordedByLogin: null,
+        // Un match dont un score a DÉJÀ été saisi puis annulé reste fermé aux paris.
+        betsLockedAt: null,
         playerALogin: { not: null },
         playerBLogin: { not: null },
         tournament: { status: 'in_progress' },
@@ -6569,6 +6679,11 @@ app.post('/bets', async (c) => {
     }
 
     if (targetType === 'tournament') {
+      // Symétrique du garde-fou des paris de match : un participant ne peut pas
+      // parier sur le tournoi auquel il joue (il en arrange/contrôle les scores).
+      if (tour.entries.some((e) => e.login === me)) {
+        throw new HTTPException(403, { message: 'tu ne peux pas parier sur un tournoi auquel tu participes' });
+      }
       if (!tour.entries.some((e) => e.login === choiceLogin)) {
         throw new HTTPException(400, { message: 'le pronostic doit être un participant du tournoi' });
       }
@@ -6578,7 +6693,7 @@ app.post('/bets', async (c) => {
       if (!m || m.tournamentId !== tournamentId) {
         throw new HTTPException(404, { message: 'match introuvable' });
       }
-      if (m.confirmedAt || m.recordedByLogin) {
+      if (m.confirmedAt || m.recordedByLogin || m.betsLockedAt) {
         throw new HTTPException(409, { message: 'les paris sont fermés sur ce match' });
       }
       if (!m.playerALogin || !m.playerBLogin) {

@@ -13,7 +13,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: league
-      POSTGRES_PASSWORD: league
+      # Secret injecté via .env ; défaut `league` conservé (volume existant).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-league}
       POSTGRES_DB: league
     volumes:
       - league_stg_pgdata:/var/lib/postgresql/data
@@ -34,7 +35,7 @@ services:
     environment:
       # `postgres` résout vers le Postgres DE CETTE stack (réseau default),
       # jamais celui de la prod. La DB prod est donc inatteignable d'ici.
-      - DATABASE_URL=postgresql://league:league@postgres:5432/league?schema=public
+      - DATABASE_URL=postgresql://league:${POSTGRES_PASSWORD:-league}@postgres:5432/league?schema=public
       - PORT=3000
       # Active la staging-gate du backend : API réservée aux superadmins.
       - APP_ENV=staging

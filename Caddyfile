@@ -12,6 +12,11 @@ www.42league.fr {
         Referrer-Policy "strict-origin-when-cross-origin"
         # Isole le top-level window (audit Lighthouse "origin isolation with COOP").
         Cross-Origin-Opener-Policy "same-origin"
+        # CSP : limite la surface d'exfiltration en cas de XSS. `connect-src 'self'`
+        # bloque fetch/XHR/EventSource/beacon vers un domaine externe → un token volé
+        # ne peut pas être exfiltré par requête. `script-src 'unsafe-inline'` reste
+        # requis (script inline + onload= dans index.html) ; Google Fonts autorisé.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.intra.42.fr; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
         -Server
     }
 
@@ -21,6 +26,11 @@ www.42league.fr {
             # Flush immédiat : indispensable pour le flux SSE (/api/events),
             # sinon Caddy bufferise et les events n'arrivent qu'à la fermeture.
             flush_interval -1
+            # Anti-spoof : on écrase X-Forwarded-For avec l'IP réelle du client
+            # (Caddy est l'edge). Sans ça, un client pouvait fournir un XFF arbitraire
+            # et contourner le rate-limit / l'anti-brute-force keyés par IP.
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
         }
     }
     handle {
@@ -41,6 +51,7 @@ staging.42league.fr {
         Cross-Origin-Opener-Policy "same-origin"
         # Empêche l'indexation du staging par les moteurs de recherche.
         X-Robots-Tag "noindex, nofollow"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.intra.42.fr; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
         -Server
     }
 
@@ -53,6 +64,8 @@ staging.42league.fr {
         uri strip_prefix /api
         reverse_proxy league-stg-backend:3000 {
             flush_interval -1
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
         }
     }
     handle {

@@ -27,6 +27,14 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/backend ./apps/backend
 
+# Durcissement : ne pas tourner en root. Le user `node` (présent dans l'image)
+# exécute l'app et les migrations ; le cache npm/npx est redirigé vers /tmp
+# (writable). En cas de RCE applicative, l'attaquant n'est pas root dans le
+# conteneur — défense en profondeur.
+ENV NPM_CONFIG_CACHE=/tmp/.npm
+RUN chown -R node:node /app
+USER node
+
 WORKDIR /app/apps/backend
 EXPOSE 3000
 
