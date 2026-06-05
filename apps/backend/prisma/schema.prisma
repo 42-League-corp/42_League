@@ -253,6 +253,10 @@ model Tournament {
   createdAt      DateTime  @default(now()) @map("created_at")
   startedAt      DateTime? @map("started_at")
   finishedAt     DateTime? @map("finished_at")
+  // Match « en cours » désigné par l'organisateur (« match suivant ») : déclenche
+  // l'écran VERSUS chez tous les spectateurs et met le duel en avant dans l'arbre.
+  // Sans objet pour les échecs (matchs en parallèle). Effacé à la confirmation.
+  activeMatchId  String?   @map("active_match_id")
 
   // Récompense du vainqueur (tournois officiels) : 'none' | 'coins' | 'cosmetic'.
   // 'cosmetic' référence un ShopItem (existant, ou créé inline en active:false →

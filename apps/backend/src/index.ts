@@ -3997,7 +3997,7 @@ async function launchTournamentMatches(
 async function settleConfirmedTournamentMatch(
   tx: Prisma.TransactionClient,
   id: string,
-  m: { stage: string; round: number; slot: number; winnerLogin: string },
+  m: { id: string; stage: string; round: number; slot: number; winnerLogin: string },
 ): Promise<{
   winnerLogin: string;
   finished: boolean;
@@ -4006,6 +4006,12 @@ async function settleConfirmedTournamentMatch(
   betWinners: string[];
 }> {
   const winnerLogin = m.winnerLogin;
+  // Le duel désigné « match suivant » est terminé → on efface le pointeur
+  // (sinon l'arbre garderait le badge « EN COURS » sur un match déjà joué).
+  await tx.tournament.updateMany({
+    where: { id, activeMatchId: m.id },
+    data: { activeMatchId: null },
+  });
   // Règlement des paris placés sur CE match (cote fixe ×2). `betWinners`
   // accumule les parieurs crédités (match + plus bas la finale) pour un emit
   // après commit.
@@ -4703,6 +4709,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
     });
     // Propagation partagée avec /force-result (paris, bracket, finale, récompense).
     return settleConfirmedTournamentMatch(tx, id, {
+      id: m.id,
       stage: m.stage,
       round: m.round,
       slot: m.slot,
@@ -4846,6 +4853,51 @@ app.post('/tournaments/:id/matches/:matchId/advantage', async (c) => {
     return tx.tournamentMatch.update({
       where: { id: matchId },
       data: { advantagePick: pick },
+    });
+  });
+  return c.json(updated);
+});
+
+// « Match suivant » : l'organisateur (ou un admin) désigne le duel à jouer
+// maintenant. On le mémorise sur le tournoi (activeMatchId) → l'écran VERSUS se
+// déclenche chez tous les spectateurs et le match passe « EN COURS » dans
+// l'arbre. Sans objet aux échecs (matchs en parallèle, pas de tour imposé).
+app.post('/tournaments/:id/matches/:matchId/announce', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  const updated = await prisma.$transaction(async (tx) => {
+    const tour = await tx.tournament.findUnique({
+      where: { id },
+      select: { createdByLogin: true, status: true, game: true },
+    });
+    if (!tour) throw new HTTPException(404, { message: 'tournament not found' });
+    if (tour.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: 'only the organizer can announce a match' });
+    }
+    if (tour.status !== 'in_progress') {
+      throw new HTTPException(409, { message: `tournament is ${tour.status}` });
+    }
+    if (tour.game === 'chess') {
+      throw new HTTPException(409, { message: 'les échecs se jouent en parallèle (pas de match suivant)' });
+    }
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id) {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (m.stage !== 'bracket') {
+      throw new HTTPException(409, { message: 'on ne peut désigner qu’un match de bracket' });
+    }
+    if (!m.playerALogin || !m.playerBLogin) {
+      throw new HTTPException(409, { message: 'match has no players yet (previous round pending)' });
+    }
+    if (m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match already confirmed' });
+    }
+    return tx.tournament.update({
+      where: { id },
+      data: { activeMatchId: matchId },
+      select: { id: true, activeMatchId: true },
     });
   });
   return c.json(updated);
@@ -5829,6 +5881,7 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
     });
     // Propagation partagée avec la route /confirm (comportement IDENTIQUE).
     return settleConfirmedTournamentMatch(tx, id, {
+      id: m.id,
       stage: m.stage,
       round: m.round,
       slot: m.slot,
