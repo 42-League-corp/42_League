@@ -1924,6 +1924,37 @@ const TEAM: Member[] = [
     },
   },
   {
+    login: 'sbonneau',
+    roleKey: 'about.role.sbonneau',
+    accent: 'violet',
+    blurb: {
+      fr: (
+        <>
+          Le <span className="text-text font-semibold">poil à gratter</span> du projet : il{' '}
+          <span className="text-[#c97bff] font-semibold">malmène l'app</span> dans tous les sens,
+          déclenche les cas tordus et les abus auxquels personne n'avait pensé{' '}
+          <span className="text-text font-semibold">avant que les joueurs ne tombent dessus</span>.
+        </>
+      ),
+      en: (
+        <>
+          The project's <span className="text-text font-semibold">stress-tester</span>: he{' '}
+          <span className="text-[#c97bff] font-semibold">hammers the app</span> every which way,
+          triggering the edge cases and abuses nobody thought of{' '}
+          <span className="text-text font-semibold">before players ever hit them</span>.
+        </>
+      ),
+      es: (
+        <>
+          El <span className="text-text font-semibold">probador a destajo</span> del proyecto:{' '}
+          <span className="text-[#c97bff] font-semibold">maltrata la app</span> de todas las formas,
+          provocando los casos límite y los abusos en los que nadie pensó{' '}
+          <span className="text-text font-semibold">antes de que los jugadores los encuentren</span>.
+        </>
+      ),
+    },
+  },
+  {
     login: 'rbardet-',
     roleKey: 'about.role.rbardet',
     accent: 'red',
