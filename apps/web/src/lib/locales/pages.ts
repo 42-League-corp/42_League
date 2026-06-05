@@ -393,6 +393,23 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.col.winner': 'Vainqueur',
     'god.tourn.col.created': 'Créé',
     'god.tourn.col.action': 'Action',
+
+    // ── Cérémonie de lancement de tournoi ──
+    'tourn.launch.title': 'Que le tournoi commence !',
+    'tourn.launch.subtitle': '{n} chevaliers entrent dans l’arène',
+    'tourn.launch.skip': 'Passer',
+    'tourn.launch.revealBracket': 'Voir le tableau',
+    // ── Duel : pile-ou-face + avantage ──
+    'tourn.duel.toss': 'Pile ou face',
+    'tourn.duel.tossing': 'La pièce tourne…',
+    'tourn.duel.tossWinner': '{name} gagne le tirage',
+    'tourn.duel.yourPick': 'À toi de choisir',
+    'tourn.duel.waitingPick': '{name} choisit son avantage…',
+    'tourn.duel.youGet': 'Tu prends : {label}',
+    'tourn.duel.opponentGets': '{name} prend : {label}',
+    'tourn.duel.startMatch': 'Lancer le duel',
+    'tourn.duel.heads': 'Pile',
+    'tourn.duel.tails': 'Face',
   },
   en: {
     'goat.help.aria': 'How is the G.O.A.T Score computed?',
@@ -756,6 +773,23 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.col.winner': 'Winner',
     'god.tourn.col.created': 'Created',
     'god.tourn.col.action': 'Action',
+
+    // ── Tournament launch ceremony ──
+    'tourn.launch.title': 'Let the tournament begin!',
+    'tourn.launch.subtitle': '{n} knights enter the arena',
+    'tourn.launch.skip': 'Skip',
+    'tourn.launch.revealBracket': 'See the bracket',
+    // ── Duel: coin toss + advantage ──
+    'tourn.duel.toss': 'Heads or tails',
+    'tourn.duel.tossing': 'The coin is spinning…',
+    'tourn.duel.tossWinner': '{name} wins the toss',
+    'tourn.duel.yourPick': 'Your pick',
+    'tourn.duel.waitingPick': '{name} is choosing their advantage…',
+    'tourn.duel.youGet': 'You get: {label}',
+    'tourn.duel.opponentGets': '{name} gets: {label}',
+    'tourn.duel.startMatch': 'Start the duel',
+    'tourn.duel.heads': 'Heads',
+    'tourn.duel.tails': 'Tails',
   },
   es: {
     'goat.help.aria': '¿Cómo se calcula la Puntuación G.O.A.T?',
@@ -1119,5 +1153,22 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.col.winner': 'Ganador',
     'god.tourn.col.created': 'Creado',
     'god.tourn.col.action': 'Acción',
+
+    // ── Ceremonia de inicio del torneo ──
+    'tourn.launch.title': '¡Que comience el torneo!',
+    'tourn.launch.subtitle': '{n} caballeros entran en la arena',
+    'tourn.launch.skip': 'Saltar',
+    'tourn.launch.revealBracket': 'Ver el cuadro',
+    // ── Duelo: cara o cruz + ventaja ──
+    'tourn.duel.toss': 'Cara o cruz',
+    'tourn.duel.tossing': 'La moneda gira…',
+    'tourn.duel.tossWinner': '{name} gana el sorteo',
+    'tourn.duel.yourPick': 'Te toca elegir',
+    'tourn.duel.waitingPick': '{name} elige su ventaja…',
+    'tourn.duel.youGet': 'Tú eliges: {label}',
+    'tourn.duel.opponentGets': '{name} elige: {label}',
+    'tourn.duel.startMatch': 'Empezar el duelo',
+    'tourn.duel.heads': 'Cara',
+    'tourn.duel.tails': 'Cruz',
   },
 };

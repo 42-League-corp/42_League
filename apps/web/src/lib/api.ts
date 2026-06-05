@@ -597,6 +597,11 @@ export interface TournamentMatch {
   recordedByLogin: string | null;
   recordedAt: string | null;
   confirmedAt: string | null;
+  // Pile-ou-face + avantage du duel (cérémonie de tournoi).
+  tossWinnerLogin?: string | null;
+  tossSide?: 'heads' | 'tails' | null;
+  advantagePick?: string | null;
+  tossAt?: string | null;
 }
 
 export interface TournamentEntry {
@@ -1098,6 +1103,16 @@ export const api = {
     request<{ id: string; winnerLogin: string; finished: boolean }>(
       `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/confirm`,
       { method: 'POST', body: JSON.stringify({ scoreA, scoreB }) },
+    ),
+  tossTournamentMatch: (tournamentId: string, matchId: string) =>
+    request<TournamentMatch>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/toss`,
+      { method: 'POST' },
+    ),
+  pickTournamentAdvantage: (tournamentId: string, matchId: string, pick: string) =>
+    request<TournamentMatch>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/advantage`,
+      { method: 'POST', body: JSON.stringify({ pick }) },
     ),
   rejectTournamentMatch: (tournamentId: string, matchId: string) =>
     request<{ id: string; rejected: true }>(

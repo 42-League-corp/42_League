@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { getGameAdvantage } from '@42-league/shared';
 import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -9,11 +10,27 @@ import { AbacusSlider } from '../components/AbacusSlider';
 import { OutcomeButton } from '../components/OutcomeButton';
 import { api, type Game, type Tournament, type TournamentMatch, type TournamentInvite, type LeaderboardEntry } from '../lib/api';
 import { PlayerSearch } from './defis/shared/PlayerSearch';
+import BracketTree from '../components/tournois/BracketTree';
+import CoinFlip from '../components/tournois/CoinFlip';
+import AdvantagePicker from '../components/tournois/AdvantagePicker';
+import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
+
+// Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
+const GAME_ACCENT: Record<Game, string> = {
+  babyfoot: '#ffc94a',
+  smash: '#ff4d5c',
+  chess: '#56c46e',
+  streetfighter: '#ff7a18',
+  flechettes: '#14b8a6',
+};
+function gameAccent(game: Game | null | undefined): string {
+  return (game && GAME_ACCENT[game]) || '#ffc94a';
+}
 
 const STATUS_KEY: Record<Tournament['status'], string> = {
   registration: 'tournois.status.registration',
@@ -25,14 +42,6 @@ const STATUS_KEY: Record<Tournament['status'], string> = {
 const WINNING_SCORE = 10;
 const LOSER_SCORE_MIN = -10;
 const LOSER_SCORE_MAX = WINNING_SCORE - 1;
-
-function roundLabel(t: (key: string) => string, round: number, totalRounds: number): string {
-  const fromEnd = totalRounds - round;
-  if (fromEnd === 0) return t('tournois.bracket.final');
-  if (fromEnd === 1) return t('tournois.bracket.semis');
-  if (fromEnd === 2) return t('tournois.bracket.quarters');
-  return t('tournois.bracket.round').replace('{n}', String(round));
-}
 
 export function TournoiDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
@@ -46,11 +55,20 @@ export function TournoiDetailPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [invitee, setInvitee] = useState<LeaderboardEntry | null>(null);
+  // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
+  const [showCeremony, setShowCeremony] = useState(false);
+  const prevStatusRef = useRef<Tournament['status'] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setTournament(await api.tournament(id));
+      const fresh = await api.tournament(id);
+      // Détecte la transition registration → in_progress pendant qu'on est sur la page.
+      if (prevStatusRef.current === 'registration' && fresh.status === 'in_progress') {
+        setShowCeremony(true);
+      }
+      prevStatusRef.current = fresh.status;
+      setTournament(fresh);
     } catch {
       setTournament(null);
     } finally {
@@ -176,6 +194,20 @@ export function TournoiDetailPage() {
   return (
     <Panel title={tournament.name} sub={sub}>
       <BackLink />
+
+      {/* Cérémonie médiévale au lancement (registration → in_progress). */}
+      {showCeremony && (
+        <TournamentLaunchCeremony
+          tournamentName={tournament.name}
+          participants={(tournament.entries ?? []).map((e) => ({
+            login: e.login,
+            imageUrl: e.user?.imageUrl ?? null,
+          }))}
+          accent={gameAccent(tournament.game)}
+          onDone={() => setShowCeremony(false)}
+          t={t}
+        />
+      )}
 
       {/* Récompense (tournois officiels) — visible à tous, indique l'enjeu. */}
       {tournament.kind === 'official' && !!tournament.prizeKind && tournament.prizeKind !== 'none' && (
@@ -433,7 +465,8 @@ function PoolsAndBracket({
   onChange: () => Promise<void>;
 }) {
   const t = useT();
-  const { poolGroups, bracketRounds, totalBracketRounds, poolsComplete } = useMemo(() => {
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const { poolGroups, bracketRounds, bracketMatchesFlat, totalBracketRounds, poolsComplete } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
     const bracketMatches = all.filter((m) => (m.stage ?? 'bracket') === 'bracket');
@@ -457,17 +490,10 @@ function PoolsAndBracket({
 
     // Bracket : nombre de rounds = round max réel (byes/poules font diverger la capacité).
     const total = bracketMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
-    const byRound = new Map<number, TournamentMatch[]>();
-    for (const m of bracketMatches) {
-      const arr = byRound.get(m.round) ?? [];
-      arr.push(m);
-      byRound.set(m.round, arr);
-    }
-    for (const arr of byRound.values()) arr.sort((a, b) => a.slot - b.slot);
 
     return {
       poolGroups: groups,
-      bracketRounds: byRound,
+      bracketMatchesFlat: bracketMatches,
       totalBracketRounds: total,
       poolsComplete: complete,
     };
@@ -475,6 +501,11 @@ function PoolsAndBracket({
 
   const hasPools = poolGroups.length > 0;
   const hasBracket = totalBracketRounds > 0;
+  // Match sélectionné dans l'arbre (détail + duel/saisie en dessous).
+  const selectedMatch = useMemo(
+    () => bracketMatchesFlat.find((m) => m.id === selectedMatchId) ?? null,
+    [bracketMatchesFlat, selectedMatchId],
+  );
 
   return (
     <div className="space-y-6">
@@ -514,29 +545,30 @@ function PoolsAndBracket({
               {t('tournois.bracket.finalPhase')}
             </div>
           )}
-          <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2">
-            {Array.from({ length: totalBracketRounds }, (_, i) => i + 1).map((round) => {
-              const matches = bracketRounds.get(round) ?? [];
-              return (
-                <div key={round} className="min-w-[240px] flex flex-col gap-3 justify-around">
-                  <div className="text-[10px] uppercase tracking-wider text-muted font-semibold text-center">
-                    {roundLabel(t, round, totalBracketRounds)}
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {matches.map((m) => (
-                      <BracketMatch
-                        key={m.id}
-                        tournament={tournament}
-                        match={m}
-                        myLogin={myLogin}
-                        onChange={onChange}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+
+          {/* Arbre visuel (vue d'ensemble cliquable). */}
+          <BracketTree
+            matches={bracketMatchesFlat}
+            rounds={totalBracketRounds}
+            entries={tournament.entries ?? []}
+            onSelectMatch={(m) => setSelectedMatchId((cur) => (cur === m.id ? null : m.id))}
+            selectedMatchId={selectedMatchId}
+          />
+
+          {/* Détail du match sélectionné : duel (toss → avantage) puis saisie du score. */}
+          {selectedMatch && (
+            <div className="mt-4 max-w-md mx-auto">
+              {/* key={id} : remonte le composant à chaque match sélectionné pour
+                  que l'état local (flipping du pile-ou-face) ne fuite pas d'un match à l'autre. */}
+              <BracketMatch
+                key={selectedMatch.id}
+                tournament={tournament}
+                match={selectedMatch}
+                myLogin={myLogin}
+                onChange={onChange}
+              />
+            </div>
+          )}
         </section>
       ) : (
         !hasPools && (
@@ -645,6 +677,8 @@ function BracketMatch({
   const confirm = useConfirm();
   const t = useT();
   const [recording, setRecording] = useState(false);
+  // Pile-ou-face : true entre le clic et l'arrivée du résultat (via reload SSE).
+  const [flipping, setFlipping] = useState(false);
 
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
   const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
@@ -658,6 +692,45 @@ function BracketMatch({
     !!match.playerALogin &&
     !!match.playerBLogin &&
     !match.confirmedAt;
+
+  // ── Duel (toss → avantage) : uniquement pour les matchs de bracket prêts ──────
+  const isBracket = (match.stage ?? 'bracket') === 'bracket';
+  const tossDone = match.tossWinnerLogin != null;
+  const advantageDone = match.advantagePick != null;
+  // Le duel précède la saisie : on l'affiche tant que le toss/avantage n'est pas réglé.
+  const duelPending = isBracket && canRecord && !recorded && !advantageDone;
+  const iAmTossWinner = !!(myLogin && match.tossWinnerLogin === myLogin);
+  const opponentLogin =
+    myLogin === match.playerALogin ? match.playerBLogin : match.playerALogin;
+  const advantage = getGameAdvantage(tournament.game ?? 'babyfoot');
+  const tossWinnerName = match.tossWinnerLogin ?? '';
+
+  // Une fois le résultat du tirage arrivé, on coupe l'animation de la pièce.
+  useEffect(() => {
+    if (tossDone) setFlipping(false);
+  }, [tossDone]);
+
+  const handleToss = async () => {
+    setFlipping(true);
+    try {
+      await api.tossTournamentMatch(tournament.id, match.id);
+      // Le résultat partagé arrive via le reload (SSE tournament:update) ;
+      // on rafraîchit aussi explicitement pour l'initiateur.
+      await onChange();
+    } catch (err) {
+      setFlipping(false);
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
+  const handlePickAdvantage = async (pick: string) => {
+    try {
+      await api.pickTournamentAdvantage(tournament.id, match.id, pick);
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
 
   const handleRecordSubmit = async (scoreA: number, scoreB: number) => {
     try {
@@ -713,7 +786,54 @@ function BracketMatch({
       <PlayerRow login={match.playerALogin} score={match.scoreA} winner={winnerA} />
       <PlayerRow login={match.playerBLogin} score={match.scoreB} winner={winnerB} />
 
-      {canRecord && !recorded && !recording && (
+      {/* ── Duel : pile-ou-face partagé, puis choix de l'avantage ── */}
+      {duelPending && (
+        <div className="mt-2 pt-2 border-t border-border/40">
+          {!tossDone ? (
+            <CoinFlip
+              side={match.tossSide ?? null}
+              flipping={flipping}
+              winnerName={tossWinnerName || undefined}
+              onFlip={handleToss}
+              t={t}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <CoinFlip
+                side={match.tossSide ?? null}
+                flipping={false}
+                winnerName={tossWinnerName}
+                onFlip={undefined}
+                t={t}
+              />
+              <AdvantagePicker
+                advantage={advantage}
+                isWinner={iAmTossWinner}
+                pick={match.advantagePick ?? null}
+                opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
+                onPick={handlePickAdvantage}
+                t={t}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Récap de l'avantage choisi, juste avant la saisie du score. */}
+      {isBracket && advantageDone && canRecord && !recorded && (
+        <div className="mt-2 pt-2 border-t border-border/40">
+          <AdvantagePicker
+            advantage={advantage}
+            isWinner={iAmTossWinner}
+            pick={match.advantagePick ?? null}
+            opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
+            onPick={handlePickAdvantage}
+            t={t}
+          />
+        </div>
+      )}
+
+      {canRecord && !duelPending && !recorded && !recording && (
         // Clignote / pulse quelques fois à l'arrivée sur la page pour attirer
         // l'attention sur la saisie du résultat, puis se stabilise.
         <motion.div
