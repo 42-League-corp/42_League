@@ -7099,9 +7099,11 @@ app.get('/bets', async (c) => {
       orderBy: { createdAt: 'desc' },
       include: { tournament: { select: { name: true, game: true } } },
     }),
-    // Tournois ouverts aux paris : inscription ou en cours, vainqueur inconnu.
+    // Tournois ouverts aux paris : UNIQUEMENT en cours (plus pendant l'inscription),
+    // vainqueur inconnu. On parie sur le tournoi courant et le pari est verrouillé
+    // dès qu'il est posé (aucune modification possible — cf. garde anti-doublon).
     prisma.tournament.findMany({
-      where: { status: { in: ['registration', 'in_progress'] }, winnerLogin: null },
+      where: { status: 'in_progress', winnerLogin: null },
       orderBy: { createdAt: 'desc' },
       include: { entries: { select: { login: true } } },
     }),
@@ -7176,7 +7178,9 @@ app.post('/bets', async (c) => {
       include: { entries: { select: { login: true } } },
     });
     if (!tour) throw new HTTPException(404, { message: 'tournoi introuvable' });
-    if (tour.status !== 'registration' && tour.status !== 'in_progress') {
+    // Paris ouverts uniquement quand le tournoi est EN COURS : pas pendant
+    // l'inscription (bracket pas encore figé), pas après (vainqueur connu).
+    if (tour.status !== 'in_progress') {
       throw new HTTPException(409, { message: 'les paris sont fermés sur ce tournoi' });
     }
 
