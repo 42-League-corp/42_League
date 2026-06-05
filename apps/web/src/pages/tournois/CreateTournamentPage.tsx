@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/Button';
+import {
+  TournamentPrizePicker,
+  buildPrizePayload,
+  EMPTY_PRIZE,
+  type PrizeFormState,
+} from '../../components/tournois/TournamentPrizePicker';
 import { api } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -14,11 +20,14 @@ type Capacity = 8 | 16;
 export function CreateTournamentPage() {
   const navigate = useNavigate();
   const flash = useFlash();
-  const { refresh } = useLeagueData();
+  const { refresh, me } = useLeagueData();
   const t = useT();
+  const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState<Capacity>(8);
+  const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
+  const [prize, setPrize] = useState<PrizeFormState>(EMPTY_PRIZE);
   const [busy, setBusy] = useState(false);
 
   const canSubmit = name.trim().length > 0;
@@ -28,7 +37,11 @@ export function CreateTournamentPage() {
     if (!n) { haptic('error'); return; }
     setBusy(true);
     try {
-      const tNew = await api.createTournament({ name: n, capacity, kind: 'friendly' });
+      // Les non-admins ne créent que des amicaux ; la récompense n'est envoyée
+      // que pour un officiel (sinon le backend 400).
+      const effKind = isAdmin ? kind : 'friendly';
+      const prizePayload = effKind === 'official' ? buildPrizePayload(prize) : { kind: 'none' as const };
+      const tNew = await api.createTournament({ name: n, capacity, kind: effKind, prize: prizePayload });
       haptic('success');
       await refresh();
       navigate(`/tournaments/${encodeURIComponent(tNew.id)}`, { replace: true });
@@ -199,6 +212,52 @@ export function CreateTournamentPage() {
             })}
           </div>
         </motion.div>
+
+        {/* Type (admins) : amical / officiel */}
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.17 }}
+          >
+            <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
+              {t('tournois.field.type')}
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {(['friendly', 'official'] as const).map((k) => {
+                const active = kind === k;
+                return (
+                  <motion.button
+                    key={k}
+                    type="button"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => { haptic('selection'); setKind(k); }}
+                    className={`py-3 rounded-2xl border-2 text-[12px] font-extrabold uppercase tracking-wide tap-transparent transition-all ${
+                      active ? 'border-teal bg-teal/[0.08] text-teal' : 'border-border/60 bg-bg-1/50 text-muted-2'
+                    }`}
+                  >
+                    {k === 'friendly' ? t('tournois.type.friendly') : t('tournois.type.official')}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Récompense (officiel) */}
+        {isAdmin && kind === 'official' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.2 }}
+          >
+            <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-1">
+              {t('tournois.field.prize')}
+            </label>
+            <p className="text-[10px] text-muted-2 mb-3">{t('tournois.field.prize.hint')}</p>
+            <TournamentPrizePicker value={prize} onChange={setPrize} />
+          </motion.div>
+        )}
 
         {/* CTA */}
         <motion.div

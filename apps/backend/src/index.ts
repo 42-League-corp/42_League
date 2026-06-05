@@ -11,6 +11,7 @@ import {
   CreateChallengeSchema,
   RecordResultSchema,
   CreateTournamentSchema,
+  ShopItemCreateSchema,
   TournamentRecordSchema,
   SetTitleSchema,
   DeclareOpsSchema,
@@ -29,6 +30,9 @@ import {
   calculateBabyfootElo,
   calculateFfaElo,
   shouldCountForElo,
+  sameDayPriorCount,
+  farmingDecayFactor,
+  applyFarmingDecay,
   estimatedEloLoss,
   OPS_DURATION_MS,
   OPS_FORCED_MATCHES,
@@ -2011,10 +2015,13 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
       bestOf: p.bestOf,
       winnerStocks,
     });
-    deltaA = update.deltaA;
-    deltaB = update.deltaB;
-    await tx.user.update({ where: { login: a }, data: ratingUpdate(game, update.newA) });
-    await tx.user.update({ where: { login: b }, data: ratingUpdate(game, update.newB) });
+    // Dégressivité anti-farming : chaque rematch du jour contre le même adversaire
+    // vaut 1/4 de moins (×0.75ⁿ). S'applique au match entier — gain ET perte.
+    const factor = farmingDecayFactor(sameDayPriorCount(priors, p.declaredAt));
+    deltaA = applyFarmingDecay(update.deltaA, factor);
+    deltaB = applyFarmingDecay(update.deltaB, factor);
+    await tx.user.update({ where: { login: a }, data: ratingUpdate(game, ratingA + deltaA) });
+    await tx.user.update({ where: { login: b }, data: ratingUpdate(game, ratingB + deltaB) });
   }
 
   await tx.pendingMatch.delete({ where: { id: p.id } });
@@ -2824,13 +2831,23 @@ app.post('/admin/matches/force-result', async (c) => {
     const userB = a === pA ? uB : uA;
     const update = calculateBabyfootElo(userA.elo, userB.elo, winner, scoreA, scoreB);
 
+    // Même dégressivité anti-farming que les matchs normaux (rematch du jour).
+    const playedAt = new Date();
+    const priors = await tx.playedMatch.findMany({
+      where: { playerALogin: a, playerBLogin: b, game: 'babyfoot', mode: null },
+      select: { playedAt: true, countedForElo: true },
+    });
+    const factor = farmingDecayFactor(sameDayPriorCount(priors, playedAt));
+    const deltaA = applyFarmingDecay(update.deltaA, factor);
+    const deltaB = applyFarmingDecay(update.deltaB, factor);
+
     await tx.user.update({
       where: { login: a },
-      data: { elo: update.newA, matchesPlayed: { increment: 1 } },
+      data: { elo: userA.elo + deltaA, matchesPlayed: { increment: 1 } },
     });
     await tx.user.update({
       where: { login: b },
-      data: { elo: update.newB, matchesPlayed: { increment: 1 } },
+      data: { elo: userB.elo + deltaB, matchesPlayed: { increment: 1 } },
     });
 
     return tx.playedMatch.create({
@@ -2841,10 +2858,10 @@ app.post('/admin/matches/force-result', async (c) => {
         scoreA,
         scoreB,
         winner,
-        playedAt: new Date(),
+        playedAt,
         countedForElo: true,
-        deltaA: update.deltaA,
-        deltaB: update.deltaB,
+        deltaA,
+        deltaB,
       },
     });
   });
@@ -3301,6 +3318,8 @@ app.get('/tournaments/:id', async (c) => {
         orderBy: [{ round: 'asc' }, { slot: 'asc' }],
       },
       winner: { select: { login: true, imageUrl: true } },
+      // Cosmétique de récompense (officiels) — pour l'afficher sur la fiche.
+      prizeItem: true,
       // Invitations : l'organisateur voit toutes les invitations en attente ;
       // un joueur invité voit uniquement la sienne.
       invites: {
@@ -3351,27 +3370,69 @@ app.post('/tournaments', async (c) => {
   if (!parsed.success) {
     throw new HTTPException(400, { message: parsed.error.message });
   }
-  if (parsed.data.kind === 'official' && !isAdmin(me)) {
+  const d = parsed.data;
+  if (d.kind === 'official' && !isAdmin(me)) {
     throw new HTTPException(403, {
       message: 'only admins can create official tournaments',
     });
   }
+  // Récompense : réservée aux admins (le schéma impose déjà le tournoi officiel).
+  if (d.prize.kind !== 'none' && !isAdmin(me)) {
+    throw new HTTPException(403, { message: 'only admins can attach a prize' });
+  }
   await getOrCreateUser(me);
-  const tournament = await prisma.tournament.create({
-    data: {
-      id: randomUUID(),
-      name: parsed.data.name,
-      kind: parsed.data.kind,
-      isPrivate: parsed.data.private,
-      imageUrl: parsed.data.imageUrl ?? null,
-      capacity: parsed.data.capacity,
-      format: parsed.data.format,
-      game: parsed.data.game,
-      status: 'registration',
-      createdByLogin: me,
-      entries: { create: { login: me } },
-    },
-    include: { entries: { select: { login: true } } },
+  // Transaction : un éventuel cosmétique custom est créé en même temps que le
+  // tournoi (atomicité), et masqué de la boutique (active:false).
+  const tournament = await prisma.$transaction(async (tx) => {
+    let prizeKind = 'none';
+    let prizeCoins: number | null = null;
+    let prizeItemId: string | null = null;
+    const prize = d.prize;
+    if (prize.kind === 'coins') {
+      prizeKind = 'coins';
+      prizeCoins = prize.coins;
+    } else if (prize.kind === 'existingItem') {
+      const item = await tx.shopItem.findUnique({ where: { id: prize.itemId }, select: { id: true } });
+      if (!item) throw new HTTPException(404, { message: 'cosmétique de récompense introuvable' });
+      prizeKind = 'cosmetic';
+      prizeItemId = item.id;
+    } else if (prize.kind === 'newCosmetic') {
+      const ck = prize.cosmetic;
+      const created = await tx.shopItem.create({
+        data: {
+          name: ck.name,
+          description: ck.description ?? null,
+          category: ck.category,
+          color: ck.color ?? null,
+          price: ck.price,
+          payload: (ck.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull,
+          active: false, // exclusif au tournoi → jamais en boutique
+          ...(ck.sortOrder !== undefined ? { sortOrder: ck.sortOrder } : {}),
+        },
+        select: { id: true },
+      });
+      prizeKind = 'cosmetic';
+      prizeItemId = created.id;
+    }
+    return tx.tournament.create({
+      data: {
+        id: randomUUID(),
+        name: d.name,
+        kind: d.kind,
+        isPrivate: d.private,
+        imageUrl: d.imageUrl ?? null,
+        capacity: d.capacity,
+        format: d.format,
+        game: d.game,
+        status: 'registration',
+        createdByLogin: me,
+        prizeKind,
+        prizeCoins,
+        prizeItemId,
+        entries: { create: { login: me } },
+      },
+      include: { entries: { select: { login: true } }, prizeItem: true },
+    });
   });
   return c.json(tournament, 201);
 });
@@ -3722,6 +3783,7 @@ app.post('/tournaments/:id/cancel', async (c) => {
     if (t.status === 'finished') {
       throw new HTTPException(409, { message: 'tournament is finished' });
     }
+    await cleanupOrphanPrizeTx(tx, t);
     await tx.tournament.delete({ where: { id } });
   });
   return c.json({ id, cancelled: true, deleted: true });
@@ -3847,7 +3909,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
         await generateBracket(id, qualifiers, { preSeeded: true });
         bracketGenerated = true;
       }
-      return { winnerLogin, finished: false, bracketGenerated };
+      return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated };
     }
 
     // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
@@ -3859,6 +3921,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
     const totalBracketRounds = agg._max.round ?? 1;
     const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
     let finished = false;
+    let prizeAwarded = false;
     if (adv.isFinal) {
       const tour = await tx.tournament.update({
         where: { id },
@@ -3867,17 +3930,30 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
           finishedAt: new Date(),
           winnerLogin,
         },
-        select: { game: true },
+        select: { game: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
       });
       // Crédite le bon compteur de titres selon la discipline du tournoi.
       await tx.user.update({
         where: { login: winnerLogin },
         data: tournamentsWonDelta(parseGameId(tour.game), 1),
       });
+      // Récompense du vainqueur (tournois officiels uniquement) — une seule fois,
+      // ici, dans la transaction. Cosmétique → inventaire SANS auto-équipement.
+      if (tour.kind === 'official' && tour.prizeKind === 'coins' && tour.prizeCoins) {
+        await grantCoinsTx(tx, winnerLogin, tour.prizeCoins);
+        prizeAwarded = true;
+      } else if (tour.kind === 'official' && tour.prizeKind === 'cosmetic' && tour.prizeItemId) {
+        await grantItemTx(tx, winnerLogin, tour.prizeItemId, false);
+        prizeAwarded = true;
+      }
       finished = true;
     }
-    return { winnerLogin, finished, bracketGenerated: false };
+    return { winnerLogin, finished, prizeAwarded, bracketGenerated: false };
   });
+  // Push live au vainqueur APRÈS commit (jamais d'emit dans la transaction).
+  if (result.finished && result.prizeAwarded) {
+    emit([result.winnerLogin], { type: 'panel:update', payload: {} });
+  }
   if (result.bracketGenerated) {
     const players = await prisma.tournamentEntry.findMany({
       where: { tournamentId: id },
@@ -4616,10 +4692,12 @@ app.patch('/admin/matches/:id', async (c) => {
           }
         : { scoreA, scoreB };
       const update = applyGameElo(game, ratingA, ratingB, winner, outcome);
-      deltaA = update.deltaA;
-      deltaB = update.deltaB;
-      await tx.user.update({ where: { login: nextA }, data: ratingUpdate(game, update.newA) });
-      await tx.user.update({ where: { login: nextB }, data: ratingUpdate(game, update.newB) });
+      // Même dégressivité anti-farming qu'à la confirmation (rematch du jour).
+      const factor = farmingDecayFactor(sameDayPriorCount(priors, match.playedAt));
+      deltaA = applyFarmingDecay(update.deltaA, factor);
+      deltaB = applyFarmingDecay(update.deltaB, factor);
+      await tx.user.update({ where: { login: nextA }, data: ratingUpdate(game, ratingA + deltaA) });
+      await tx.user.update({ where: { login: nextB }, data: ratingUpdate(game, ratingB + deltaB) });
     }
 
     return tx.playedMatch.update({
@@ -4752,6 +4830,7 @@ app.delete('/admin/tournaments/:id', async (c) => {
         data: tournamentsWonDelta(parseGameId(row.game), -1),
       });
     }
+    await cleanupOrphanPrizeTx(tx, row);
     await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs
   });
   broadcast({ type: 'tournament:update', payload: {} });
@@ -5267,40 +5346,8 @@ app.post('/me/inventory/:id/equip', async (c) => {
 });
 
 // ── Boutique : administration du catalogue ──────────────────────────────────
-// Cap d'octets sur l'image data-URL d'une bannière (~700 Ko) : évite de gonfler
-// la table et les réponses /shop. La validation de DIMENSIONS exacte est côté client.
-const MAX_BANNER_DATAURL_LEN = 700_000;
-const ShopItemCreateSchema = z
-  .object({
-    name: z.string().trim().min(1),
-    description: z.string().nullish(),
-    category: z.enum(['title', 'banner', 'badge', 'cosmetic']),
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
-      .nullish(),
-    price: z.number().int().min(0),
-    payload: z.record(z.any()).nullish(),
-    active: z.boolean().optional(),
-    sortOrder: z.number().int().optional(),
-  })
-  .superRefine((d, ctx) => {
-    if (d.category === 'banner') {
-      const img = d.payload && typeof d.payload.image === 'string' ? d.payload.image : '';
-      if (!img.startsWith('data:image/')) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
-      } else if (img.length > MAX_BANNER_DATAURL_LEN) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
-      }
-    }
-    if (d.category === 'badge') {
-      const code = d.payload && typeof d.payload.code === 'string' ? d.payload.code : '';
-      const label = d.payload && typeof d.payload.label === 'string' ? d.payload.label : '';
-      if (!code || !label) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
-      }
-    }
-  });
+// `ShopItemCreateSchema` + `MAX_BANNER_DATAURL_LEN` sont désormais partagés
+// (@42-league/shared) car réutilisés par la récompense de tournoi officiel.
 // `.partial()` n'existe pas sur un ZodEffects → on repart de l'objet de base.
 const ShopItemUpdateSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -5429,6 +5476,85 @@ app.delete('/admin/shop/items/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Cœur des grants (réutilisable hors HTTP) ────────────────────────────────
+// Versions tx-aware, sans effet de bord HTTP/emit : appelées par les endpoints
+// admin ET par le settlement des récompenses de tournoi (dans la transaction de
+// finale). Ne PAS appeler emit ici — le faire après commit côté appelant.
+
+/** Crédite/débite des League Coins. Retourne le nouveau solde, ou null si joueur absent. */
+async function grantCoinsTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  amount: number,
+): Promise<number | null> {
+  const target = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
+  if (!target) return null;
+  const next = Math.max(0, target.leagueCoins + amount);
+  await tx.user.update({ where: { login }, data: { leagueCoins: next } });
+  return next;
+}
+
+/** Donne un cosmétique (inventaire, sans doublon), avec équipement optionnel. No-op si l'objet n'existe pas. */
+async function grantItemTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  itemId: string,
+  equip: boolean,
+): Promise<void> {
+  const item = await tx.shopItem.findUnique({ where: { id: itemId } });
+  if (!item) return;
+  await tx.shopInventory.upsert({
+    where: { userLogin_itemId: { userLogin: login, itemId } },
+    update: {},
+    create: { userLogin: login, itemId },
+  });
+  if (equip) {
+    // Un seul équipé par catégorie : on déséquipe les autres de la même catégorie.
+    await tx.shopInventory.updateMany({
+      where: { userLogin: login, equipped: true, item: { category: item.category } },
+      data: { equipped: false },
+    });
+    await tx.shopInventory.update({
+      where: { userLogin_itemId: { userLogin: login, itemId } },
+      data: { equipped: true },
+    });
+    const titleStr =
+      item.category === 'title' && item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+        ? typeof (item.payload as Record<string, unknown>).title === 'string'
+          ? ((item.payload as Record<string, unknown>).title as string)
+          : null
+        : null;
+    if (item.category === 'title' && titleStr) {
+      await tx.user.update({ where: { login }, data: { title: titleStr } });
+    }
+  }
+}
+
+/**
+ * Supprime un cosmétique de récompense devenu orphelin lors de l'annulation /
+ * suppression d'un tournoi : uniquement s'il a été créé inline (active:false),
+ * n'est possédé par personne et n'est référencé par aucun autre tournoi. Un
+ * cosmétique de boutique (existant, actif) ou déjà gagné n'est jamais touché.
+ */
+async function cleanupOrphanPrizeTx(
+  tx: Prisma.TransactionClient,
+  t: { id: string; prizeKind: string; prizeItemId: string | null },
+): Promise<void> {
+  if (t.prizeKind !== 'cosmetic' || !t.prizeItemId) return;
+  const item = await tx.shopItem.findUnique({
+    where: { id: t.prizeItemId },
+    select: { id: true, active: true },
+  });
+  if (!item || item.active) return;
+  const [owned, otherRefs] = await Promise.all([
+    tx.shopInventory.count({ where: { itemId: item.id } }),
+    tx.tournament.count({ where: { prizeItemId: item.id, id: { not: t.id } } }),
+  ]);
+  if (owned === 0 && otherRefs === 0) {
+    await tx.shopItem.delete({ where: { id: item.id } });
+  }
+}
+
 // POST /admin/shop/grant — crédite (ou débite) des League Coins à un joueur.
 // `amount` peut être négatif ; le solde résultant est borné à >= 0.
 const ShopGrantSchema = z.object({
@@ -5444,13 +5570,8 @@ app.post('/admin/shop/grant', async (c) => {
     throw new HTTPException(400, { message: parsed.error.message });
   }
   const { login, amount } = parsed.data;
-  const target = await prisma.user.findUnique({
-    where: { login },
-    select: { leagueCoins: true },
-  });
-  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
-  const next = Math.max(0, target.leagueCoins + amount);
-  await prisma.user.update({ where: { login }, data: { leagueCoins: next } });
+  const next = await prisma.$transaction((tx) => grantCoinsTx(tx, login, amount));
+  if (next === null) throw new HTTPException(404, { message: 'utilisateur introuvable' });
   emit([login], { type: 'panel:update', payload: {} });
   return c.json({ ok: true, login, coins: next });
 });
@@ -5478,36 +5599,7 @@ app.post('/admin/shop/grant-item', async (c) => {
   if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
   if (!item) throw new HTTPException(404, { message: 'objet introuvable' });
 
-  // Titre éventuel à refléter sur user.title si on auto-équipe.
-  const titleStr =
-    item.category === 'title' && item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
-      ? typeof (item.payload as Record<string, unknown>).title === 'string'
-        ? ((item.payload as Record<string, unknown>).title as string)
-        : null
-      : null;
-
-  await prisma.$transaction(async (tx) => {
-    // Insère dans l'inventaire (sans doublon).
-    await tx.shopInventory.upsert({
-      where: { userLogin_itemId: { userLogin: login, itemId } },
-      update: {},
-      create: { userLogin: login, itemId },
-    });
-    if (equip) {
-      // Un seul équipé par catégorie : on déséquipe les autres de la même catégorie.
-      await tx.shopInventory.updateMany({
-        where: { userLogin: login, equipped: true, item: { category: item.category } },
-        data: { equipped: false },
-      });
-      await tx.shopInventory.update({
-        where: { userLogin_itemId: { userLogin: login, itemId } },
-        data: { equipped: true },
-      });
-      if (item.category === 'title' && titleStr) {
-        await tx.user.update({ where: { login }, data: { title: titleStr } });
-      }
-    }
-  });
+  await prisma.$transaction((tx) => grantItemTx(tx, login, itemId, !!equip));
 
   emit([login], { type: 'panel:update', payload: {} });
   return c.json({ ok: true, login, itemId, equipped: !!equip });

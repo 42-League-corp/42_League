@@ -5,6 +5,12 @@ import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { Pills } from '../../components/Pills';
 import { PlayerCountPicker } from '../../components/PlayerCountPicker';
+import {
+  TournamentPrizePicker,
+  buildPrizePayload,
+  EMPTY_PRIZE,
+  type PrizeFormState,
+} from '../../components/tournois/TournamentPrizePicker';
 import { Trophy, Lock, X, Swords, Users, Info } from 'lucide-react';
 import { api, type Tournament } from '../../lib/api';
 import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
@@ -321,6 +327,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
   const [imageUrl, setImageUrl] = useState('');
+  const [prize, setPrize] = useState<PrizeFormState>(EMPTY_PRIZE);
   const [busy, setBusy] = useState(false);
 
   const poolsAllowed = capacity >= POOLS_MIN;
@@ -333,9 +340,12 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
     setBusy(true);
     try {
       const img = imageUrl.trim();
+      // La récompense n'est envoyée que pour un officiel (sinon le backend 400).
+      const prizePayload = kind === 'official' ? buildPrizePayload(prize) : { kind: 'none' as const };
       const tNew = await api.createTournament({
         name: n, capacity, kind, format: effectiveFormat, game,
         private: visibility === 'private',
+        prize: prizePayload,
         ...(img ? { imageUrl: img } : {}),
       });
       flash.show(t('tournois.flash.created').replace('{name}', tNew.name));
@@ -442,6 +452,11 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               placeholder="https://…" inputMode="url"
               className="w-full px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors" />
           </Field>
+          {isAdmin && kind === 'official' && (
+            <Field label={t('tournois.field.prize')} hint={t('tournois.field.prize.hint')}>
+              <TournamentPrizePicker value={prize} onChange={setPrize} />
+            </Field>
+          )}
           <div className="flex gap-2 pt-1">
             <Button variant="ghost" onClick={onClose} className="flex-1">{t('tournois.modal.cancel')}</Button>
             <Button loading={busy} onClick={submit} className="flex-[2]">{t('tournois.modal.submit')}</Button>

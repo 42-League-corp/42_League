@@ -177,6 +177,35 @@ export function TournoiDetailPage() {
     <Panel title={tournament.name} sub={sub}>
       <BackLink />
 
+      {/* Récompense (tournois officiels) — visible à tous, indique l'enjeu. */}
+      {tournament.kind === 'official' && !!tournament.prizeKind && tournament.prizeKind !== 'none' && (
+        <div className="mb-4 flex items-center gap-3 p-3 rounded-xl border border-gold/30 bg-gold/[0.06]">
+          <span className="text-2xl leading-none">🎁</span>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold">
+              {t(tournament.status === 'finished' ? 'tournois.detail.prize.won' : 'tournois.detail.prize.label')}
+            </div>
+            <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
+              {tournament.prizeKind === 'coins' ? (
+                <>
+                  <img src="/42coin.png" alt="" className="w-4 h-4" />
+                  {t('tournois.detail.prize.coins').replace('{n}', String(tournament.prizeCoins ?? 0))}
+                </>
+              ) : tournament.prizeItem ? (
+                <>
+                  {tournament.prizeItem.name}
+                  <span className="text-[10px] uppercase tracking-wider text-muted-2 font-bold">
+                    ({tournament.prizeItem.category})
+                  </span>
+                </>
+              ) : (
+                t('tournois.field.prize')
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {tournament.status === 'registration' && (
         <>
           {tournament.isPrivate && !iAmIn && !isOrganizer && !isAdmin && (

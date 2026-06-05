@@ -610,7 +610,19 @@ export interface Tournament {
   matches?: TournamentMatch[];
   winner?: { login: string; imageUrl: string | null } | null;
   invites?: TournamentInvite[];
+  // Récompense du vainqueur (tournois officiels). 'cosmetic' → `prizeItem` résolu.
+  prizeKind?: 'none' | 'coins' | 'cosmetic';
+  prizeCoins?: number | null;
+  prizeItemId?: string | null;
+  prizeItem?: ShopItemData | null;
 }
+
+/** Récompense passée à la création d'un tournoi officiel (cf. backend). */
+export type TournamentPrize =
+  | { kind: 'none' }
+  | { kind: 'coins'; coins: number }
+  | { kind: 'existingItem'; itemId: string }
+  | { kind: 'newCosmetic'; cosmetic: ShopItemInput };
 
 export type AllHistoryEventType = 'challenge' | 'pending_match' | 'played_match' | 'rejected_match' | 'ops';
 
@@ -905,6 +917,7 @@ export const api = {
     game?: Game;
     private?: boolean;
     imageUrl?: string;
+    prize?: TournamentPrize;
   }) =>
     request<Tournament>('/tournaments', {
       method: 'POST',

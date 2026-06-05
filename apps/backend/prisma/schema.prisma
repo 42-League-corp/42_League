@@ -242,8 +242,16 @@ model Tournament {
   startedAt      DateTime? @map("started_at")
   finishedAt     DateTime? @map("finished_at")
 
+  // Récompense du vainqueur (tournois officiels) : 'none' | 'coins' | 'cosmetic'.
+  // 'cosmetic' référence un ShopItem (existant, ou créé inline en active:false →
+  // masqué de la boutique). Versée une seule fois au settlement de la finale.
+  prizeKind   String  @default("none") @map("prize_kind")
+  prizeCoins  Int?    @map("prize_coins")
+  prizeItemId String? @map("prize_item_id")
+
   createdBy User               @relation("tournamentCreator", fields: [createdByLogin], references: [login])
   winner    User?              @relation("tournamentWinner", fields: [winnerLogin], references: [login])
+  prizeItem ShopItem?          @relation("tournamentPrize", fields: [prizeItemId], references: [id], onDelete: SetNull)
   entries   TournamentEntry[]
   matches   TournamentMatch[]
   invites   TournamentInvite[]
@@ -592,6 +600,7 @@ model ShopItem {
   sortOrder   Int             @default(0) @map("sort_order")
   createdAt   DateTime        @default(now()) @map("created_at")
   inventory   ShopInventory[]
+  prizeFor    Tournament[]    @relation("tournamentPrize")
 
   @@map("shop_items")
 }

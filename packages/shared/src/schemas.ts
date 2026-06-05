@@ -17,6 +17,9 @@ export type Game = z.infer<typeof GameSchema>;
 export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
 export const SmashStockSchema = z.number().int().min(1).max(3);
+// Perso d'un match : soit un id simple ("mario"), soit un détail PAR MANCHE encodé
+// ("mario>luigi>mario"). On relâche donc la longueur max (un Bo5 = jusqu'à 5 ids).
+export const MatchCharSchema = z.string().trim().min(1).max(300);
 
 // Personnages favoris (« mains ») configurables par le joueur, par jeu de combat.
 // Liste libre (illimitée côté produit) ; cap de sécurité + dédup faits côté route.
@@ -39,8 +42,8 @@ const matchScoreShape = {
   // échecs) envoient `bestOf: null` → on l'accepte et on le ramène à `undefined`
   // (sinon Zod rejette `null` contre le union de littéraux → 400 à la confirmation).
   bestOf: SmashBestOfSchema.nullish().transform((v) => v ?? undefined),
-  charSelf: SmashCharSchema.optional(),
-  charOpponent: SmashCharSchema.optional(),
+  charSelf: MatchCharSchema.optional(),
+  charOpponent: MatchCharSchema.optional(),
   // Vies (stocks) restantes du gagnant au game décisif.
   stocks: SmashStockSchema.optional(),
 };
@@ -140,6 +143,55 @@ export const RecordResultSchema = z
 
 export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 
+// ─── Boutique : création d'un cosmétique ─────────────────────────────────────
+// Partagé entre l'admin Shop GOD (POST /admin/shop/items) et la récompense de
+// tournoi officiel (cosmétique custom créé inline). Cap d'octets sur la data-URL
+// de bannière (~700 Ko) : évite de gonfler la table et les réponses.
+export const MAX_BANNER_DATAURL_LEN = 700_000;
+export const ShopItemCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    description: z.string().nullish(),
+    category: z.enum(['title', 'banner', 'badge', 'cosmetic']),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
+      .nullish(),
+    price: z.number().int().min(0),
+    payload: z.record(z.any()).nullish(),
+    active: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.category === 'banner') {
+      const img = d.payload && typeof d.payload.image === 'string' ? d.payload.image : '';
+      if (!img.startsWith('data:image/')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
+      } else if (img.length > MAX_BANNER_DATAURL_LEN) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+      }
+    }
+    if (d.category === 'badge') {
+      const code = d.payload && typeof d.payload.code === 'string' ? d.payload.code : '';
+      const label = d.payload && typeof d.payload.label === 'string' ? d.payload.label : '';
+      if (!code || !label) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
+      }
+    }
+  });
+export type ShopItemCreateInput = z.infer<typeof ShopItemCreateSchema>;
+
+// ─── Récompense de tournoi officiel ──────────────────────────────────────────
+// Une seule récompense au choix : aucune | coins | cosmétique existant |
+// cosmétique custom créé à la volée (même validation que Shop GOD).
+export const TournamentPrizeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
+  z.object({ kind: z.literal('coins'), coins: z.number().int().min(1).max(1_000_000) }),
+  z.object({ kind: z.literal('existingItem'), itemId: z.string().min(1) }),
+  z.object({ kind: z.literal('newCosmetic'), cosmetic: ShopItemCreateSchema }),
+]);
+export type TournamentPrizeInput = z.infer<typeof TournamentPrizeSchema>;
+
 export const CreateTournamentSchema = z
   .object({
     name: z.string().min(2).max(60),
@@ -170,10 +222,16 @@ export const CreateTournamentSchema = z
         }
       }, "l'URL doit commencer par http:// ou https://")
       .optional(),
+    // Récompense du vainqueur — réservée aux tournois officiels (cf. refine).
+    prize: TournamentPrizeSchema.optional().default({ kind: 'none' }),
   })
   .refine((d) => d.format !== 'pools' || d.capacity >= 12, {
     message: 'les poules nécessitent au moins 12 joueurs',
     path: ['format'],
+  })
+  .refine((d) => d.prize.kind === 'none' || d.kind === 'official', {
+    message: 'une récompense ne peut être attachée qu\'à un tournoi officiel',
+    path: ['prize'],
   });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
