@@ -363,6 +363,10 @@ export const dict: Record<Lang, Dict> = {
     'god.season.col.elo': 'ELO',
     'god.season.col.wl': 'V-D',
     'god.season.noStandings': 'Aucun classement figé pour ce mode.',
+    'god.season.active': 'active',
+    'god.season.activate': 'Activer',
+    'god.season.activating': 'Activation…',
+    'god.season.activated': '« {name} » activée ✓',
 
     // Tournaments tab
     'god.tourn.status.registration': 'INSCRIPTIONS',
@@ -744,6 +748,10 @@ export const dict: Record<Lang, Dict> = {
     'god.season.col.elo': 'ELO',
     'god.season.col.wl': 'W-L',
     'god.season.noStandings': 'No frozen standings for this mode.',
+    'god.season.active': 'active',
+    'god.season.activate': 'Activate',
+    'god.season.activating': 'Activating…',
+    'god.season.activated': '“{name}” activated ✓',
 
     'god.tourn.status.registration': 'REGISTRATION',
     'god.tourn.status.in_progress': 'IN PROGRESS',
@@ -1124,6 +1132,10 @@ export const dict: Record<Lang, Dict> = {
     'god.season.col.elo': 'ELO',
     'god.season.col.wl': 'V-D',
     'god.season.noStandings': 'Ninguna clasificación congelada para este modo.',
+    'god.season.active': 'activa',
+    'god.season.activate': 'Activar',
+    'god.season.activating': 'Activando…',
+    'god.season.activated': '«{name}» activada ✓',
 
     'god.tourn.status.registration': 'INSCRIPCIONES',
     'god.tourn.status.in_progress': 'EN CURSO',

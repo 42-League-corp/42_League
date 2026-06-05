@@ -862,6 +862,9 @@ export const api = {
       '/seasons',
       { method: 'POST', body: JSON.stringify({ name }) },
     ),
+  // Réactive / bascule la saison active (basculement de vue, sans reset d'ELO).
+  activateSeason: (id: string) =>
+    request<Season>(`/seasons/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   deleteSeason: (id: string) =>
     request<{ deleted: true }>(`/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),

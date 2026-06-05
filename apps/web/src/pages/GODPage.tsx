@@ -2810,6 +2810,7 @@ function SeasonsTab() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState<Season | null>(null);
   const [openSeason, setOpenSeason] = useState<string | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
   const t = useT();
 
   const load = useCallback(async () => {
@@ -2849,6 +2850,21 @@ function SeasonsTab() {
     if (!name.trim()) return;
     if (active) setConfirming(true);
     else void createFirst();
+  };
+
+  // Basculement de vue : remet une saison clôturée comme active (sans reset d'ELO).
+  const onActivate = async (s: Season) => {
+    setActivatingId(s.id);
+    setMsg('');
+    try {
+      await api.activateSeason(s.id);
+      setMsg(t('god.season.activated').replace('{name}', s.name));
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActivatingId(null);
+    }
   };
 
   return (
@@ -2910,6 +2926,20 @@ function SeasonsTab() {
                     {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : t('god.season.standings')}</span>}
                   </span>
                 </button>
+                {s.isActive ? (
+                  <span className="shrink-0 text-[10px] uppercase tracking-wide font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5">
+                    {t('god.season.active')}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void onActivate(s)}
+                    disabled={activatingId !== null}
+                    className="shrink-0 text-[11px] text-emerald-400/80 hover:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/20 hover:border-emerald-500/40 transition-colors disabled:opacity-50"
+                  >
+                    {activatingId === s.id ? t('god.season.activating') : t('god.season.activate')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDeleting(s)}
