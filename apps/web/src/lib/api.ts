@@ -597,6 +597,8 @@ export interface TournamentMatch {
   recordedByLogin: string | null;
   recordedAt: string | null;
   confirmedAt: string | null;
+  /** Paris fermés depuis cette date (posée au 1er score saisi, jamais remise à null). */
+  betsLockedAt?: string | null;
   // Pile-ou-face + avantage du duel (cérémonie de tournoi).
   tossWinnerLogin?: string | null;
   tossSide?: 'heads' | 'tails' | null;

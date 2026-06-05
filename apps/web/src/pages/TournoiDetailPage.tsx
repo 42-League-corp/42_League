@@ -14,6 +14,8 @@ import BracketTree from '../components/tournois/BracketTree';
 import CoinFlip from '../components/tournois/CoinFlip';
 import AdvantagePicker from '../components/tournois/AdvantagePicker';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
+import { TournamentBets } from '../components/tournois/TournamentBets';
+import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
@@ -57,6 +59,8 @@ export function TournoiDetailPage() {
   const [invitee, setInvitee] = useState<LeaderboardEntry | null>(null);
   // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
   const [showCeremony, setShowCeremony] = useState(false);
+  // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
+  const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const prevStatusRef = useRef<Tournament['status'] | null>(null);
 
   const load = useCallback(async () => {
@@ -386,15 +390,35 @@ export function TournoiDetailPage() {
             </div>
           )}
 
-          <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
-
-          {tournament.status === 'in_progress' && (isOrganizer || isAdmin) && (
-            <div className="mt-6 pt-4 border-t border-border/40 flex justify-end">
-              <Button size="sm" variant="danger" onClick={handleCancel}>
-                {t('tournois.detail.deleteTournament')}
-              </Button>
+          {/* Onglets (tournoi en cours) : suivre le bracket ou parier. */}
+          {tournament.status === 'in_progress' && (
+            <div className="mb-5 max-w-xs">
+              <RankingScopeToggle<'bracket' | 'bets'>
+                value={detailTab}
+                onChange={setDetailTab}
+                choices={[
+                  { value: 'bracket', label: t('tournois.tab.bracket') },
+                  { value: 'bets', label: t('tournois.tab.bets') },
+                ]}
+              />
             </div>
           )}
+
+          {tournament.status === 'in_progress' && detailTab === 'bets' ? (
+            <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
+          ) : (
+            <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={load} />
+          )}
+
+          {tournament.status === 'in_progress' &&
+            detailTab === 'bracket' &&
+            (isOrganizer || isAdmin) && (
+              <div className="mt-6 pt-4 border-t border-border/40 flex justify-end">
+                <Button size="sm" variant="danger" onClick={handleCancel}>
+                  {t('tournois.detail.deleteTournament')}
+                </Button>
+              </div>
+            )}
         </>
       )}
     </Panel>
