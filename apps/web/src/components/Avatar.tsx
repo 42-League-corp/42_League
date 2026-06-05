@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 
 interface AvatarProps {
   login: string;
   imageUrl: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
+  /** Ref posée sur la photo elle-même (ex: pour la faire tourner). */
+  imgRef?: Ref<HTMLImageElement>;
 }
 
 const SIZE = {
@@ -18,7 +20,7 @@ const SIZE = {
 /**
  * Avatar rond — design friendly et coloré.
  */
-export function Avatar({ login, imageUrl, size = 'md', className = '' }: AvatarProps) {
+export function Avatar({ login, imageUrl, size = 'md', className = '', imgRef }: AvatarProps) {
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
   const initial = (login[0] ?? '?').toUpperCase();
@@ -34,6 +36,7 @@ export function Avatar({ login, imageUrl, size = 'md', className = '' }: AvatarP
     >
       {showImg ? (
         <img
+          ref={imgRef}
           src={imageUrl}
           alt={login}
           className="w-full h-full object-cover block"

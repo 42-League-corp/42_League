@@ -5,6 +5,7 @@ import type { LeaderboardEntry } from '../../lib/api';
 import { Avatar } from '../../components/Avatar';
 import { RankedBadge } from '../../components/RankedBadge';
 import { useT } from '../../lib/i18n';
+import { useFlickSpin } from '../../hooks/useFlickSpin';
 
 interface DesktopPodiumProps {
   top3: LeaderboardEntry[];
@@ -130,6 +131,7 @@ function PodiumColumn({
   const navigate = useNavigate();
   const t = useT();
   const isFirst = rank === 1;
+  const spinRef = useFlickSpin<HTMLImageElement>();
 
   return (
     <motion.button
@@ -171,6 +173,7 @@ function PodiumColumn({
         <Avatar
           login={entry.login}
           imageUrl={entry.imageUrl}
+          imgRef={spinRef}
           size={isFirst ? 'xl' : 'lg'}
           className={`ring-[3px] ring-offset-2 ring-offset-bg-1 transition-transform duration-300 group-hover:scale-105 ${RING[color]}`}
         />

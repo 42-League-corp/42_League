@@ -4,6 +4,7 @@ import { Crown } from 'lucide-react';
 import type { LeaderboardEntry } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
+import { useFlickSpin } from '../../../hooks/useFlickSpin';
 
 interface PodiumProps {
   top3: LeaderboardEntry[];
@@ -131,6 +132,7 @@ const COLOR_RANK: Record<PodiumColor, string> = {
 };
 
 function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: PodiumSlotProps) {
+  const spinRef = useFlickSpin<HTMLImageElement>();
   return (
     <motion.button
       type="button"
@@ -169,7 +171,7 @@ function PodiumSlot({ rank, entry, stats, onClick, height, color, delay }: Podiu
           className={`relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-offset-2 ring-offset-bg-0 ${COLOR_RING[color]}`}
         >
           {entry.imageUrl ? (
-            <img src={entry.imageUrl} alt={entry.login} className="w-full h-full object-cover" />
+            <img ref={spinRef} src={entry.imageUrl} alt={entry.login} className="w-full h-full object-cover" />
           ) : (
             <div className={`w-full h-full bg-bg-2 flex items-center justify-center text-lg font-extrabold ${COLOR_TEXT[color]}`}>
               {entry.login[0]?.toUpperCase()}

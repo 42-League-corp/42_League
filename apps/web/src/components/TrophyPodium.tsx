@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Trophy } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { PlayerLink } from './PlayerLink';
+import { useFlickSpin } from '../hooks/useFlickSpin';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TrophyPodium — podium des « plus titrés » de la section Trophées.
@@ -116,6 +117,7 @@ function TrophyPodiumColumn({
   const { rank } = entry;
   const tier = TIER_BY_RANK[rank] ?? 'third';
   const isFirst = rank === 1;
+  const spinRef = useFlickSpin<HTMLImageElement>();
 
   return (
     <motion.div
@@ -163,6 +165,7 @@ function TrophyPodiumColumn({
             <Avatar
               login={entry.login}
               imageUrl={entry.imageUrl}
+              imgRef={spinRef}
               size={isFirst ? 'lg' : 'md'}
               className={`ring-[3px] ring-offset-2 ring-offset-bg-1 transition-transform duration-300 group-hover:scale-105 ${RING[tier]}`}
             />
