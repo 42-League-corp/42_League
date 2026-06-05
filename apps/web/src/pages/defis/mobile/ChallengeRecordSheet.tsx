@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomSheet } from '../../../mobile/primitives/BottomSheet';
 import { AbacusSlider } from '../../../components/AbacusSlider';
@@ -13,6 +13,7 @@ import { useT } from '../../../lib/i18n';
 import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { mostPlayedChars } from '../../../lib/chars';
 import { CharPicker, PerGameCharsEditor, type PerGameChars } from '../shared/CharPicker';
 
 const WINNING_SCORE = 10;
@@ -56,7 +57,7 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
   challenge: Challenge; myLogin: string | undefined; onClose: () => void; onDone: () => Promise<void>;
 }) {
   const t = useT();
-  const { refresh, me } = useLeagueData();
+  const { refresh, me, matches } = useLeagueData();
   const flash = useFlash();
 
   const game = challenge.game ?? 'babyfoot';
@@ -69,6 +70,15 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
   const myFavorites = (isSf ? me?.user?.favSf : me?.user?.favSmash) ?? [];
   const isChess = game === 'chess';
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
+  // Persos les plus joués (moi / adversaire) — remontés en tête de la grille.
+  const myMostPlayed = useMemo(
+    () => (isSetGame ? mostPlayedChars(matches, myLogin, isSf ? 'streetfighter' : 'smash') : []),
+    [isSetGame, matches, myLogin, isSf],
+  );
+  const oppMostPlayed = useMemo(
+    () => (isSetGame ? mostPlayedChars(matches, opponent, isSf ? 'streetfighter' : 'smash') : []),
+    [isSetGame, matches, opponent, isSf],
+  );
 
   const [iWon, setIWon] = useState<boolean | null>(null);
   const [loserScore, setLoserScore] = useState(0);
@@ -227,8 +237,8 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
                 </div>
               </div>
             )}
-            <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} favorites={myFavorites} favoritesLabel={t('favorites.label')} />
-            <CharPicker label={`${t('defis.charOf')} ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} />
+            <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} favorites={myFavorites} favoritesLabel={t('favorites.label')} mostPlayed={myMostPlayed} />
+            <CharPicker label={`${t('defis.charOf')} ${opponent}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} mostPlayed={oppMostPlayed} />
             <PerGameCharsEditor
               totalGames={totalGames}
               defaultSelf={charSelf}
@@ -236,6 +246,8 @@ function RecordForm({ challenge, myLogin, onClose, onDone }: {
               roster={charRoster}
               Icon={CharIcon}
               myFavorites={myFavorites}
+              myMostPlayed={myMostPlayed}
+              oppMostPlayed={oppMostPlayed}
               oppLabel={opponent}
               onChange={setPerGameChars}
             />

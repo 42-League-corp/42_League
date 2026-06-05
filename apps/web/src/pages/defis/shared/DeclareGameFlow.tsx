@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
@@ -14,6 +14,7 @@ import { SMASH_ROSTER } from '../../../lib/smash';
 import { SF_ROSTER } from '../../../lib/sf';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { PlayerSearch } from './PlayerSearch';
+import { mostPlayedChars } from '../../../lib/chars';
 import { CharPicker, PerGameCharsEditor, type PerGameChars } from './CharPicker';
 
 export const WINNING_SCORE = 10;
@@ -60,7 +61,7 @@ export function DeclareGameFlow({
 }: DeclareGameFlowProps) {
   const flash = useFlash();
   const t = useT();
-  const { me } = useLeagueData();
+  const { me, matches } = useLeagueData();
   const { game: globalGame } = useGameMode();
   const game = gameOverride ?? globalGame;
   const isSmash = game === 'smash';
@@ -88,6 +89,16 @@ export function DeclareGameFlow({
   const [loserGames, setLoserGames] = useState(0);
   const [charSelf, setCharSelf] = useState<string | null>(null);
   const [charOpp, setCharOpp] = useState<string | null>(null);
+  // Persos les plus joués (moi / adversaire) dans ce jeu de combat — remontés en
+  // tête de la grille, en plus des favoris épinglés.
+  const myMostPlayed = useMemo(
+    () => (isSetGame ? mostPlayedChars(matches, myLogin, isSf ? 'streetfighter' : 'smash') : []),
+    [isSetGame, matches, myLogin, isSf],
+  );
+  const oppMostPlayed = useMemo(
+    () => (isSetGame ? mostPlayedChars(matches, opponent?.login, isSf ? 'streetfighter' : 'smash') : []),
+    [isSetGame, matches, opponent?.login, isSf],
+  );
   const [winnerStocks, setWinnerStocks] = useState(3);
   // Persos par manche (optionnel) : null = un seul perso pour tout le set.
   const [perGameChars, setPerGameChars] = useState<PerGameChars | null>(null);
@@ -418,6 +429,7 @@ export function DeclareGameFlow({
             Icon={CharIcon}
             favorites={myFavorites}
             favoritesLabel={t('favorites.label')}
+            mostPlayed={myMostPlayed}
           />
           <CharPicker
             label={`${t('defis.charOf')} ${opponent.login}`}
@@ -427,6 +439,7 @@ export function DeclareGameFlow({
             Icon={CharIcon}
             favorites={favOf(opponent)}
             favoritesLabel={t('favorites.label')}
+            mostPlayed={oppMostPlayed}
           />
 
           {/* Persos par manche (optionnel) — un seul perso par défaut. */}
@@ -438,6 +451,8 @@ export function DeclareGameFlow({
             Icon={CharIcon}
             myFavorites={myFavorites}
             oppFavorites={favOf(opponent)}
+            myMostPlayed={myMostPlayed}
+            oppMostPlayed={oppMostPlayed}
             oppLabel={opponent.login}
             onChange={setPerGameChars}
           />

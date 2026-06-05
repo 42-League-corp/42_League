@@ -22,6 +22,7 @@ export function CharPicker({
   Icon,
   favorites = [],
   favoritesLabel,
+  mostPlayed = [],
 }: {
   label: string;
   value: string | null;
@@ -31,10 +32,19 @@ export function CharPicker({
   /** Ids épinglés en haut (mes favoris / ceux de l'adversaire). */
   favorites?: string[];
   favoritesLabel?: string;
+  /** Ids triés du plus joué au moins joué : remontés en tête de la grille. */
+  mostPlayed?: string[];
 }) {
   const t = useT();
   const [query, setQuery] = useState('');
-  const shown = filterRoster(roster, query);
+  // Ordre de la grille : les persos les plus joués d'abord (en haut à gauche),
+  // puis le reste du roster dans son ordre d'origine. Le tri est stable, donc
+  // les ex æquo gardent l'ordre du roster.
+  const playedRank = new Map(mostPlayed.map((id, i) => [id, i]));
+  const shown = [...filterRoster(roster, query)].sort(
+    (a, b) =>
+      (playedRank.get(a.id) ?? Infinity) - (playedRank.get(b.id) ?? Infinity),
+  );
   const cell = (c: { id: string; name: string }) => (
     <button
       key={c.id}
@@ -144,6 +154,8 @@ export function PerGameCharsEditor({
   Icon,
   myFavorites = [],
   oppFavorites = [],
+  myMostPlayed = [],
+  oppMostPlayed = [],
   oppLabel,
   onChange,
 }: {
@@ -154,6 +166,8 @@ export function PerGameCharsEditor({
   Icon: typeof SmashCharIcon;
   myFavorites?: string[];
   oppFavorites?: string[];
+  myMostPlayed?: string[];
+  oppMostPlayed?: string[];
   oppLabel: string;
   onChange: (chars: PerGameChars | null) => void;
 }) {
@@ -243,6 +257,7 @@ export function PerGameCharsEditor({
                 Icon={Icon}
                 favorites={editSlot.side === 'self' ? myFavorites : oppFavorites}
                 favoritesLabel={t('favorites.label')}
+                mostPlayed={editSlot.side === 'self' ? myMostPlayed : oppMostPlayed}
               />
             </div>
           )}

@@ -4,7 +4,7 @@ import { SfCharIcon } from '../components/SfCharIcon';
 import { SMASH_ROSTER, smashCharName } from './smash';
 import { SF_ROSTER, sfCharName } from './sf';
 import type { Game } from './gameMode';
-import type { MeResponse } from './api';
+import type { MeResponse, PlayedMatch } from './api';
 
 /**
  * Jeux « de combat » : se jouent avec un personnage (roster), donc seuls éligibles
@@ -47,6 +47,29 @@ export function filterRoster<T extends { id: string; name: string }>(roster: T[]
   const q = normalizeSearch(query);
   if (!q) return roster;
   return roster.filter((c) => normalizeSearch(c.name).includes(q) || normalizeSearch(c.id).includes(q));
+}
+
+/**
+ * Persos les plus joués par un login dans un jeu de combat, triés du plus joué au
+ * moins joué. Sert à remonter ces persos en tête de la grille de sélection (en
+ * plus des favoris épinglés). Compte chaque manche (champ perso décodé), donc
+ * une game Bo3 où l'on a joué Mario × 2 compte Mario deux fois.
+ */
+export function mostPlayedChars(
+  matches: Pick<PlayedMatch, 'game' | 'playerALogin' | 'playerBLogin' | 'charA' | 'charB'>[],
+  login: string | null | undefined,
+  game: FightingGame,
+): string[] {
+  if (!login) return [];
+  const counts = new Map<string, number>();
+  for (const m of matches) {
+    if ((m.game ?? 'babyfoot') !== game) continue;
+    const field =
+      m.playerALogin === login ? m.charA : m.playerBLogin === login ? m.charB : undefined;
+    if (field === undefined) continue;
+    for (const id of decodeChars(field)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
 // ─── Persos PAR MANCHE (encodage dans le champ perso unique) ──────────────────
