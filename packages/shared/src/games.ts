@@ -25,7 +25,8 @@ export type GameId = Game;
 export type ScoringKind =
   | 'goals' // babyfoot : buts, un camp atteint 10
   | 'sets' // smash : games d'un set Bo3/Bo5
-  | 'binary'; // échecs : victoire / défaite (/ nulle)
+  | 'binary' // échecs : victoire / défaite (/ nulle)
+  | 'darts'; // fléchettes : 301/501 multijoueur, classement par points restants
 
 /**
  * Résultat brut d'un match, champs communs à toutes les disciplines. Les champs
@@ -104,6 +105,18 @@ export const GAMES: Record<GameId, GameDef> = {
     formatScore: (a, b) => `${a}-${b}`,
     outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
   },
+  // Fléchettes : discipline MULTIJOUEUR (2..8, 301/501). L'Elo réel est calculé
+  // par `calculateDartsElo` sur le chemin de règlement dédié (cf. settle darts),
+  // pas via ce `elo()` 2-joueurs — qui n'est ici qu'un repli binaire inutilisé.
+  flechettes: {
+    id: 'flechettes',
+    label: 'Fléchettes',
+    scoring: 'darts',
+    hasDraw: false,
+    elo: (a, b, w) => calculateChessElo(a, b, w),
+    formatScore: (a, b) => `${a}-${b}`,
+    outcomeLabel: (p) => (p === 'win' ? 'Victoire' : p === 'loss' ? 'Défaite' : 'Nul'),
+  },
 };
 
 /** Toutes les disciplines, dans l'ordre d'affichage. */
@@ -114,7 +127,12 @@ export const DEFAULT_GAME: GameId = 'babyfoot';
 
 /** Normalise une valeur quelconque en GameId (babyfoot par défaut). */
 export function parseGameId(value: unknown): GameId {
-  return value === 'smash' || value === 'chess' || value === 'streetfighter' ? value : 'babyfoot';
+  return value === 'smash' ||
+    value === 'chess' ||
+    value === 'streetfighter' ||
+    value === 'flechettes'
+    ? value
+    : 'babyfoot';
 }
 
 /** Récupère la définition d'une discipline (retombe sur babyfoot si inconnue). */
@@ -161,5 +179,8 @@ export function validateTournamentScore(
       // Smash : vainqueur 1 à 3 games gagnés, perdant strictement moins.
       if (lo < 0) return 'score de set invalide';
       return hi >= 1 && hi <= 3 ? null : 'score de set invalide (1 à 3 games gagnés)';
+    case 'darts':
+      // Fléchettes : multijoueur, pas de format tournoi.
+      return 'les fléchettes ne se jouent pas en tournoi';
   }
 }

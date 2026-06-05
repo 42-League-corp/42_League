@@ -55,6 +55,7 @@ function GameModeBadges({ user }: { user: AdminUser }) {
     { id: 'smash', label: 'S', cls: 'bg-red-400/15 text-red-400', elo: user.eloSmash ?? 1000 },
     { id: 'chess', label: 'É', cls: 'bg-emerald-400/15 text-emerald-400', elo: user.eloChess ?? 1000 },
     { id: 'streetfighter', label: 'SF', cls: 'bg-orange-400/15 text-orange-400', elo: user.eloSf ?? 1000 },
+    { id: 'flechettes', label: '🎯', cls: 'bg-teal-400/15 text-teal-300', elo: (user as { eloFlechettes?: number }).eloFlechettes ?? 1000 },
   ];
   return (
     <span className="inline-flex gap-1">
@@ -331,14 +332,18 @@ function StatsEditModal({
   const [eloSf, setEloSf] = useState(String(user.eloSf ?? 1000));
   const [matchesSf, setMatchesSf] = useState(String(user.matchesPlayedSf ?? 0));
   const [trophiesSf, setTrophiesSf] = useState(String(user.tournamentsWonSf ?? 0));
-  const [games, setGames] = useState<Set<'babyfoot' | 'smash' | 'chess' | 'streetfighter'>>(
-    new Set((user.games as ('babyfoot' | 'smash' | 'chess' | 'streetfighter')[] | undefined) ?? ['babyfoot']),
+  const fl = user as { eloFlechettes?: number; matchesPlayedFlechettes?: number; tournamentsWonFlechettes?: number };
+  const [eloFl, setEloFl] = useState(String(fl.eloFlechettes ?? 1000));
+  const [matchesFl, setMatchesFl] = useState(String(fl.matchesPlayedFlechettes ?? 0));
+  const [trophiesFl, setTrophiesFl] = useState(String(fl.tournamentsWonFlechettes ?? 0));
+  const [games, setGames] = useState<Set<'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes'>>(
+    new Set((user.games as ('babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes')[] | undefined) ?? ['babyfoot']),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const t = useT();
 
-  const toggleGame = (g: 'babyfoot' | 'smash' | 'chess' | 'streetfighter') =>
+  const toggleGame = (g: 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes') =>
     setGames((prev) => {
       const next = new Set(prev);
       if (next.has(g)) next.delete(g);
@@ -368,8 +373,11 @@ function StatsEditModal({
         eloSf: Number(eloSf),
         matchesPlayedSf: Number(matchesSf),
         tournamentsWonSf: Number(trophiesSf),
+        eloFlechettes: Number(eloFl),
+        matchesPlayedFlechettes: Number(matchesFl),
+        tournamentsWonFlechettes: Number(trophiesFl),
         games: [...games],
-      });
+      } as Parameters<typeof api.adminSetStats>[1]);
       onSave();
       onClose();
     } catch (e) {
@@ -416,6 +424,15 @@ function StatsEditModal({
         { label: t('god.stats.tournamentsWon'), value: trophiesSf, set: setTrophiesSf },
       ],
     },
+    {
+      title: t('god.game.flechettes'),
+      accent: 'text-teal-300',
+      rows: [
+        { label: t('god.stats.elo'), value: eloFl, set: setEloFl },
+        { label: t('god.stats.matches'), value: matchesFl, set: setMatchesFl },
+        { label: t('god.stats.tournamentsWon'), value: trophiesFl, set: setTrophiesFl },
+      ],
+    },
   ];
 
   return (
@@ -432,7 +449,7 @@ function StatsEditModal({
         <div className="mb-4">
           <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">{t('god.stats.activeModes')}</div>
           <div className="flex gap-2">
-            {(['babyfoot', 'smash', 'chess', 'streetfighter'] as const).map((g) => (
+            {(['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'] as const).map((g) => (
               <button
                 key={g}
                 type="button"
@@ -3078,12 +3095,12 @@ export function GODPage() {
 
       {/* Tab bar */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/30">
-        <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0">
+        <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN').map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 ${
+              className={`px-4 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 whitespace-nowrap shrink-0 ${
                 activeTab === tab.id
                   ? 'text-zinc-100 border-zinc-400'
                   : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-700'

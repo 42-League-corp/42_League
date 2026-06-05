@@ -92,6 +92,8 @@ const TITLE_TO_CATEGORY: Record<string, TrophyCategoryKey> = {
   'En feu':            'perfs',
   'Combo King':        'perfs',
   'Série gagnante':    'perfs',
+  'Maître des fléchettes': 'perfs',
+  'Main chaude':       'perfs',
   'Chasseur de primes':'perfs',
   'Némésis':           'perfs',
   // Exploits
@@ -268,8 +270,11 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
       api.leaderboard('babyfoot'),
       api.leaderboard('smash'),
       api.leaderboard('chess'),
+      api.leaderboard('flechettes'),
     ])
-      .then(([babyfoot, smash, chess]) => setBoards({ babyfoot, smash, chess }))
+      .then(([babyfoot, smash, chess, flechettes]) =>
+        setBoards({ babyfoot, smash, chess, flechettes }),
+      )
       .catch(() => setBoards({ babyfoot: leaderboard }));
   }, [view, boards, leaderboard]);
 
@@ -280,7 +285,7 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   const mergedBoard = useMemo<LeaderboardEntry[]>(() => {
     if (!boards) return leaderboard;
     const seen = new Map<string, LeaderboardEntry>();
-    for (const g of ['babyfoot', 'smash', 'chess'] as const)
+    for (const g of ['babyfoot', 'smash', 'chess', 'flechettes'] as const)
       for (const e of boards[g] ?? []) if (!seen.has(e.login)) seen.set(e.login, e);
     return [...seen.values()];
   }, [boards, leaderboard]);

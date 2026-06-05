@@ -41,6 +41,10 @@ model User {
   eloSf               Int       @default(1000) @map("elo_sf")
   matchesPlayedSf     Int       @default(0) @map("matches_played_sf")
   tournamentsWonSf    Int       @default(0) @map("tournaments_won_sf")
+  // Classement Fléchettes (5e discipline — multijoueur 301/501, pas de tournoi).
+  eloFlechettes            Int  @default(1000) @map("elo_flechettes")
+  matchesPlayedFlechettes  Int  @default(0) @map("matches_played_flechettes")
+  tournamentsWonFlechettes Int  @default(0) @map("tournaments_won_flechettes")
   // Porte-monnaie « League Coin » — solde dépensable dans la boutique (cf. ShopItem).
   leagueCoins         Int       @default(0) @map("league_coins")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
@@ -435,6 +439,8 @@ model PendingFfa {
   id            String   @id @default(uuid())
   declarerLogin String   @map("declarer_login")
   game          String   @default("smash")
+  // Fléchettes uniquement : score de départ (301 ou 501). null pour le Smash FFA.
+  startScore    Int?     @map("start_score")
   declaredAt    DateTime @default(now()) @map("declared_at")
 
   declarer     User                    @relation("ffaDeclarer", fields: [declarerLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
@@ -449,7 +455,10 @@ model PendingFfaParticipant {
   pendingId String  @map("pending_id")
   login     String
   position  Int // 1 = 1er, N = dernier (proposé par le déclarant)
-  confirmed Boolean @default(false) // le joueur a validé SA position
+  // Fléchettes uniquement : points RESTANTS du joueur (0 = vainqueur). La position
+  // en découle. null pour le Smash FFA (classement par rang seul).
+  remaining Int?
+  confirmed Boolean @default(false) // le joueur a validé SA position / son reste
 
   pending PendingFfa @relation(fields: [pendingId], references: [id], onDelete: Cascade)
   user    User       @relation("ffaPendingParticipant", fields: [login], references: [login], onDelete: Cascade, onUpdate: Cascade)
@@ -463,6 +472,8 @@ model PendingFfaParticipant {
 model PlayedFfa {
   id            String   @id
   game          String   @default("smash")
+  // Fléchettes uniquement : score de départ (301/501). null pour le Smash FFA.
+  startScore    Int?     @map("start_score")
   playedAt      DateTime @map("played_at")
   seasonId      String?  @map("season_id")
   countedForElo Boolean  @default(true) @map("counted_for_elo")
@@ -479,6 +490,8 @@ model PlayedFfaParticipant {
   playedId     String @map("played_id")
   login        String
   position     Int
+  // Fléchettes uniquement : points restants à la fin (0 = vainqueur). null pour Smash.
+  remaining    Int?
   ratingBefore Int    @map("rating_before")
   delta        Int
   ratingAfter  Int    @map("rating_after")

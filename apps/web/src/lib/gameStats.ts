@@ -18,6 +18,9 @@ export interface RatingSource {
   eloSf?: number;
   matchesPlayedSf?: number;
   tournamentsWonSf?: number;
+  eloFlechettes?: number;
+  matchesPlayedFlechettes?: number;
+  tournamentsWonFlechettes?: number;
 }
 
 /** Rating + compteurs du joueur pour une discipline donnée. */
@@ -44,6 +47,13 @@ export function pickRating(
       elo: user.eloSf ?? 1000,
       matchesPlayed: user.matchesPlayedSf ?? 0,
       tournamentsWon: user.tournamentsWonSf ?? 0,
+    };
+  }
+  if (game === 'flechettes') {
+    return {
+      elo: user.eloFlechettes ?? 1000,
+      matchesPlayed: user.matchesPlayedFlechettes ?? 0,
+      tournamentsWon: user.tournamentsWonFlechettes ?? 0,
     };
   }
   return {

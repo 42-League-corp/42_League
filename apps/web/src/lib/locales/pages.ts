@@ -83,6 +83,7 @@ export const dict: Record<Lang, Dict> = {
     'god.game.smash': '🎮 Smash',
     'god.game.chess': '♟️ Échecs',
     'god.game.streetfighter': '🥊 Street Fighter',
+    'god.game.flechettes': '🎯 Fléchettes',
 
     // Reset DB
     'god.reset.done': '✓ Ligue réinitialisée',
@@ -366,6 +367,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.game.babyfoot': '⚽ Babyfoot',
     'god.tourn.game.smash': '🎮 Smash',
     'god.tourn.game.chess': '♟️ Échecs',
+    'god.tourn.game.flechettes': '🎯 Fléchettes',
     'god.tourn.confirmDelete': 'Supprimer le tournoi « {name} » ({kind}, {status}) ?\nCette action est irréversible — entries et matchs seront effacés.',
     'god.tourn.filter': 'Filtrer (nom, organisateur, vainqueur)…',
     'god.tourn.all': 'Tous',
@@ -455,6 +457,7 @@ export const dict: Record<Lang, Dict> = {
     'god.game.smash': '🎮 Smash',
     'god.game.chess': '♟️ Chess',
     'god.game.streetfighter': '🥊 Street Fighter',
+    'god.game.flechettes': '🎯 Darts',
 
     'god.reset.done': '✓ League reset',
     'god.reset.resetUsers': 'player(s) reset (ELO 1000).',
@@ -722,6 +725,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.game.babyfoot': '⚽ Foosball',
     'god.tourn.game.smash': '🎮 Smash',
     'god.tourn.game.chess': '♟️ Chess',
+    'god.tourn.game.flechettes': '🎯 Darts',
     'god.tourn.confirmDelete': 'Delete tournament “{name}” ({kind}, {status})?\nThis action is irreversible — entries and matches will be erased.',
     'god.tourn.filter': 'Filter (name, organizer, winner)…',
     'god.tourn.all': 'All',
@@ -811,6 +815,7 @@ export const dict: Record<Lang, Dict> = {
     'god.game.smash': '🎮 Smash',
     'god.game.chess': '♟️ Ajedrez',
     'god.game.streetfighter': '🥊 Street Fighter',
+    'god.game.flechettes': '🎯 Dardos',
 
     'god.reset.done': '✓ Liga reiniciada',
     'god.reset.resetUsers': 'jugador(es) reiniciado(s) (ELO 1000).',
@@ -1078,6 +1083,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tourn.game.babyfoot': '⚽ Futbolín',
     'god.tourn.game.smash': '🎮 Smash',
     'god.tourn.game.chess': '♟️ Ajedrez',
+    'god.tourn.game.flechettes': '🎯 Dardos',
     'god.tourn.confirmDelete': '¿Eliminar el torneo «{name}» ({kind}, {status})?\nEsta acción es irreversible — entradas y partidos se borrarán.',
     'god.tourn.filter': 'Filtrar (nombre, organizador, ganador)…',
     'god.tourn.all': 'Todos',

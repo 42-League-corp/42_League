@@ -253,7 +253,9 @@ export function computeTrophies(
         ? { emoji: '🥊', title: 'World Warrior' }
         : game === 'chess'
           ? { emoji: '♛', title: 'Maître du jeu' }
-          : { emoji: '🏆', title: 'G.O.A.T' };
+          : game === 'flechettes'
+            ? { emoji: '🎯', title: 'Maître des fléchettes' }
+            : { emoji: '🏆', title: 'G.O.A.T' };
   const streakFlavor =
     game === 'smash'
       ? { emoji: '🔥', title: 'Combo King' }
@@ -261,7 +263,9 @@ export function computeTrophies(
         ? { emoji: '🔥', title: 'Perfect' }
         : game === 'chess'
           ? { emoji: '♟️', title: 'Série gagnante' }
-          : { emoji: '🔥', title: 'En feu' };
+          : game === 'flechettes'
+            ? { emoji: '🔥', title: 'Main chaude' }
+            : { emoji: '🔥', title: 'En feu' };
 
   // ─── Classement / ELO ──────────────────────────────────────────────
   const champion = leaderboard[0];
@@ -570,7 +574,7 @@ export function computeTrophies(
 
 export type GameBoards = Partial<Record<Game, LeaderboardEntry[]>>;
 
-const MIX_GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
+const MIX_GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
 
 export function computeMixTrophies(boards: GameBoards, matches: PlayedMatch[]): TrophyResult[] {
   // Avatars + ELO cumulé depuis les 3 classements.

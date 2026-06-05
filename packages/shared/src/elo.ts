@@ -186,6 +186,56 @@ export function calculateFfaElo(ratings: number[]): number[] {
   return sum.map((s) => Math.round(s / (n - 1)));
 }
 
+// ─── FLÉCHETTES (301 / 501, N>=2) ────────────────────────────────────────────
+
+/**
+ * Variation d'Elo pour une manche de fléchettes à N joueurs (2..8), modèle
+ * round-robin SENSIBLE À LA MARGE (points réalisés) ET au rating.
+ *
+ * `ratings[i]` = Elo du joueur i avant la manche. `scored[i]` = points réalisés
+ * par i = `startScore − reste` (le vainqueur a tout réalisé → score max). Les
+ * deux tableaux sont alignés (même joueur au même index), ordre quelconque.
+ *
+ * Pour chaque paire (i, j) :
+ *   - attendu  E = 1 / (1 + 10^((R_j − R_i)/400))  (proba "i fait mieux que j") ;
+ *   - réel     a = scored_i / (scored_i + scored_j)  ∈ [0,1] (0.5 si égalité,
+ *              ~1 si écrasement) → deux joueurs PROCHES ⇒ a ≈ 0.5 ⇒ petit échange ;
+ *   - delta_i += K · (a − E), et symétriquement pour j.
+ * On MOYENNE sur les (N−1) adversaires pour garder l'amplitude d'un match unique.
+ *
+ * Propriétés (cf. règles produit) : la moitié haute gagne de l'Elo, la moitié
+ * basse en perd, et — à scores/ratings équilibrés — le joueur du milieu (N impair)
+ * reste à ~0. Le 2ᵉ qui finit JUSTE derrière le 1er ne perd presque rien. Borné
+ * par MAX_DELTA_PER_MATCH. Marche aussi à N=2 (un seul duel).
+ *
+ * Retourne les deltas alignés sur `ratings` (`deltas[i]` ↔ `ratings[i]`).
+ */
+export function calculateDartsElo(ratings: number[], scored: number[]): number[] {
+  const n = ratings.length;
+  if (n < 2 || scored.length !== n) return ratings.map(() => 0);
+  const sum = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const ri = ratings[i]!;
+      const rj = ratings[j]!;
+      const si = Math.max(0, scored[i]!);
+      const sj = Math.max(0, scored[j]!);
+      const eI = 1 / (1 + Math.pow(10, (rj - ri) / 400)); // proba i > j
+      const total = si + sj;
+      const aI = total > 0 ? si / total : 0.5; // performance relative (marge)
+      const dI = K * (aI - eI);
+      sum[i]! += dI;
+      sum[j]! -= dI; // a_j − E_j = (1−a_i) − (1−E_i) = −(a_i − E_i)
+    }
+  }
+  // Moyenne sur les adversaires + plafond (arrondi une seule fois).
+  return sum.map((s) => {
+    const avg = s / (n - 1);
+    const capped = Math.max(-MAX_DELTA_PER_MATCH, Math.min(MAX_DELTA_PER_MATCH, avg));
+    return Math.round(capped);
+  });
+}
+
 // ─── ÉCHECS ─────────────────────────────────────────────────────────────────
 
 /**

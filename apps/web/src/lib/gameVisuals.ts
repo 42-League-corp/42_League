@@ -9,6 +9,7 @@ export const GAME_COLOR: Record<Game, string> = {
   smash: '#ff3d50',
   chess: '#56c46e',
   streetfighter: '#ff7a18',
+  flechettes: '#14b8a6',
 };
 
 export function gameColor(g: Game): string {
@@ -21,6 +22,7 @@ export const GAME_EMOJI: Record<Game, string> = {
   smash: '🎮',
   chess: '♟',
   streetfighter: '🥊',
+  flechettes: '🎯',
 };
 
 /** Logos PNG (uniquement smash & streetfighter en possèdent). */

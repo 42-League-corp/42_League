@@ -11,8 +11,8 @@ export const LoginSchema = z
 // gagnant n'atteigne 10. Borne supérieure 10 = victoire stricte d'un seul camp.
 export const MatchScoreSchema = z.number().int().min(-10).max(10);
 
-// ─── Multi-jeu (babyfoot | smash | chess | streetfighter) ────────────────────
-export const GameSchema = z.enum(['babyfoot', 'smash', 'chess', 'streetfighter']);
+// ─── Multi-jeu (babyfoot | smash | chess | streetfighter | flechettes) ───────
+export const GameSchema = z.enum(['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes']);
 export type Game = z.infer<typeof GameSchema>;
 export const SmashBestOfSchema = z.union([z.literal(3), z.literal(5)]);
 export const SmashCharSchema = z.string().trim().min(1).max(40);
@@ -395,3 +395,64 @@ export const ContestFfaSchema = z.object({
 });
 
 export type ContestFfaInput = z.infer<typeof ContestFfaSchema>;
+
+// ─── Fléchettes (301 / 501, 2 à 8 joueurs) ───────────────────────────────────
+// EXCLUSIF aux fléchettes. Chaque joueur part de `startScore` (301 ou 501) et
+// descend ; le vainqueur atteint 0. Le déclarant saisit, pour chaque joueur, ses
+// POINTS RESTANTS à la fin (vainqueur = 0). Le classement est DÉRIVÉ du reste
+// (croissant : 0 = 1er). L'Elo est pondéré par les points réalisés (cf.
+// calculateDartsElo dans elo.ts) : finir proche du vainqueur → faible perte.
+// Comme le FFA, chaque AUTRE participant confirme ENSUITE son propre reste ; une
+// contestation annule toute la manche.
+
+export const DARTS_MIN_PLAYERS = 2;
+export const DARTS_MAX_PLAYERS = 8;
+/** Scores de départ autorisés aux fléchettes. */
+export const DartsStartScoreSchema = z.union([z.literal(301), z.literal(501)]);
+export type DartsStartScore = z.infer<typeof DartsStartScoreSchema>;
+
+const DartsParticipantSchema = z.object({
+  login: LoginSchema,
+  // Points RESTANTS à la fin (0 = a fini = vainqueur).
+  remaining: z.number().int().min(0).max(501),
+});
+
+export const DeclareDartsSchema = z
+  .object({
+    game: z.literal('flechettes').default('flechettes'),
+    startScore: DartsStartScoreSchema,
+    participants: z.array(DartsParticipantSchema).min(DARTS_MIN_PLAYERS).max(DARTS_MAX_PLAYERS),
+  })
+  .superRefine((m, ctx) => {
+    const logins = m.participants.map((p) => p.login);
+    if (new Set(logins).size !== logins.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'tous les participants doivent être différents', path: ['participants'] });
+    }
+    // Points restants bornés par le score de départ.
+    if (m.participants.some((p) => p.remaining > m.startScore)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'le reste ne peut pas dépasser le score de départ', path: ['participants'] });
+    }
+    // Exactement UN vainqueur (reste 0), les autres strictement positifs.
+    const winners = m.participants.filter((p) => p.remaining === 0);
+    if (winners.length !== 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'un seul joueur doit finir à 0 (le vainqueur)', path: ['participants'] });
+    }
+  });
+
+export type DeclareDartsInput = z.infer<typeof DeclareDartsSchema>;
+
+// Confirmation de SON propre reste : on renvoie le reste attendu pour détecter
+// une dérive (si la saisie a changé entre l'affichage et le clic → mismatch).
+export const ConfirmDartsSchema = z.object({
+  remaining: z.number().int().min(0).max(501),
+});
+
+export type ConfirmDartsInput = z.infer<typeof ConfirmDartsSchema>;
+
+// Contestation : le joueur indique son reste RÉEL revendiqué → annule la manche.
+export const ContestDartsSchema = z.object({
+  claimedRemaining: z.number().int().min(0).max(501),
+  message: z.string().trim().max(500).optional(),
+});
+
+export type ContestDartsInput = z.infer<typeof ContestDartsSchema>;

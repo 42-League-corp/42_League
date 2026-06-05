@@ -9,6 +9,7 @@ const GAMES: { id: Game; accent: string }[] = [
   { id: 'smash', accent: '#ff4d5c' },
   { id: 'chess', accent: '#56c46e' },
   { id: 'streetfighter', accent: '#ff7a18' },
+  { id: 'flechettes', accent: '#14b8a6' },
 ];
 
 /**

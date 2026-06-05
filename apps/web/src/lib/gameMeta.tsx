@@ -5,7 +5,7 @@
  */
 import type { Game } from './gameMode';
 
-export const GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
+export const GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
 
 export interface GameMeta {
   label: string;
@@ -73,6 +73,23 @@ export const GAME_META: Record<Game, GameMeta> = {
     glowColor: 'rgba(255,122,24,0.45)',
     icon: (sel) => (
       <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
+    ),
+  },
+  flechettes: {
+    label: 'Fléchettes',
+    shortLabel: 'Fléch.',
+    color: '#14b8a6',
+    borderColor: 'rgba(20,184,166,0.6)',
+    bgColor: 'rgba(20,184,166,0.10)',
+    glowColor: 'rgba(20,184,166,0.45)',
+    // Cible de fléchettes — anneaux concentriques + bull, en currentColor.
+    icon: () => (
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.55" />
+        <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.8" />
+        <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+        <path d="M12 1.5 v3 M12 19.5 v3 M1.5 12 h3 M19.5 12 h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.5" />
+      </svg>
     ),
   },
 };

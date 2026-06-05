@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { api, type Game } from '../lib/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { setGame as setActiveGame } from '../lib/gameMode';
@@ -16,6 +17,7 @@ const GAMES: { id: Game; name: string; tagline: string }[] = [
   { id: 'smash', name: 'Smash Bros', tagline: '1 contre 1 · Bo3/Bo5 · stocks' },
   { id: 'chess', name: 'Échecs', tagline: '1 contre 1 · victoire / défaite' },
   { id: 'streetfighter', name: 'Street Fighter', tagline: '1 contre 1 · Bo3/Bo5 · persos' },
+  { id: 'flechettes', name: 'Fléchettes', tagline: '2 à 8 joueurs · 301/501 · points' },
 ];
 
 function GameTrophy({ game, accent, className }: { game: Game; accent: string; className?: string }) {
@@ -24,7 +26,7 @@ function GameTrophy({ game, accent, className }: { game: Game; accent: string; c
   return <TournamentCup accent={accent} className={className} />;
 }
 
-const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e', streetfighter: '#ff7a18' };
+const ACCENT: Record<Game, string> = { babyfoot: '#ffc94a', smash: '#ff4d5c', chess: '#56c46e', streetfighter: '#ff7a18', flechettes: '#14b8a6' };
 
 /** Grosse croix rouge en haut à droite de la modale : skip pour qui s'en fiche. */
 function CloseX({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
@@ -89,7 +91,7 @@ export function GameOnboarding() {
     try {
       await api.setGames(games);
       // Bascule sur le 1er mode choisi (ordre babyfoot → smash → échecs).
-      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
+      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
       const first = order.find((g) => sel.has(g));
       if (first) setActiveGame(first);
       if (fightingGames.length > 0) {
@@ -112,7 +114,7 @@ export function GameOnboarding() {
     try {
       const games: Game[] = sel.size > 0 ? [...sel] : ['babyfoot'];
       await api.setGames(games);
-      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter'];
+      const order: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
       const first = order.find((g) => games.includes(g)) ?? 'babyfoot';
       setActiveGame(first);
       await refresh();

@@ -27,8 +27,12 @@ import {
   DeclareFfaSchema,
   ConfirmFfaPositionSchema,
   ContestFfaSchema,
+  DeclareDartsSchema,
+  ConfirmDartsSchema,
+  ContestDartsSchema,
   calculateBabyfootElo,
   calculateFfaElo,
+  calculateDartsElo,
   shouldCountForElo,
   sameDayPriorCount,
   farmingDecayFactor,
@@ -474,12 +478,12 @@ async function palmaresFor(login: string): Promise<
 async function ownedTitlesFor(
   login: string,
   role: string,
-  user: { tournamentsWon: number; tournamentsWonSmash: number; tournamentsWonChess: number; tournamentsWonSf: number; games: string[] } | null,
+  user: { tournamentsWon: number; tournamentsWonSmash: number; tournamentsWonChess: number; tournamentsWonSf: number; tournamentsWonFlechettes: number; games: string[] } | null,
 ): Promise<{ key: string; label: string }[]> {
   if (!user) return [];
   const badges = await badgesFor(login, role);
   const tournamentsWon =
-    user.tournamentsWon + user.tournamentsWonSmash + user.tournamentsWonChess + user.tournamentsWonSf;
+    user.tournamentsWon + user.tournamentsWonSmash + user.tournamentsWonChess + user.tournamentsWonSf + user.tournamentsWonFlechettes;
   // Rang dans la discipline principale (1er mode adhéré, défaut babyfoot).
   const primaryGame = parseGameId(user.games?.[0]);
   const ranked = await prisma.user.findMany({
@@ -1027,7 +1031,7 @@ app.patch('/me/games', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const raw = Array.isArray(body.games) ? body.games : [];
   const games = [
-    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess' || g === 'streetfighter')),
+    ...new Set(raw.filter((g: unknown) => g === 'babyfoot' || g === 'smash' || g === 'chess' || g === 'streetfighter' || g === 'flechettes')),
   ] as string[];
   if (games.length === 0) {
     throw new HTTPException(400, { message: 'choisis au moins un mode de jeu' });
@@ -1693,6 +1697,8 @@ app.post('/seasons', async (c) => {
             matchesPlayedChess: 0,
             eloSf: rankFloor(u.eloSf),
             matchesPlayedSf: 0,
+            eloFlechettes: rankFloor(u.eloFlechettes),
+            matchesPlayedFlechettes: 0,
           },
         });
       }
@@ -2698,6 +2704,301 @@ app.post('/matches/ffa/:id/cancel', async (c) => {
   if (others.length > 0) {
     emit(others, { type: 'ffa:cancelled', payload: { id, cancelledBy: me } });
     // Le déclarant annule → les « score à valider » des participants sont soldés.
+    void markNotifsReadByRef(others, id);
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
+// =========================================================================
+// FLÉCHETTES (301 / 501, 2 à 8 joueurs)
+// =========================================================================
+// Multijoueur, réutilise les tables FFA (game='flechettes', startScore + remaining
+// par participant). Le déclarant saisit le reste de chaque joueur (vainqueur = 0) ;
+// la position en découle (reste croissant). Chaque AUTRE joueur confirme SON reste.
+// Au complet, l'ELO Fléchettes de chacun bouge selon la marge (calculateDartsElo)
+// et `matchesPlayedFlechettes` +1. Une contestation annule la manche.
+
+type PendingDartsForSettle = {
+  id: string;
+  declaredAt: Date;
+  startScore: number | null;
+  participants: { login: string; position: number; remaining: number | null }[];
+};
+
+// Règle une manche de fléchettes confirmée : ELO pondéré par les points réalisés,
+// supprime le pending, crée le PlayedFfa (game='flechettes') + ses participants.
+async function settleDartsAsPlayed(tx: Prisma.TransactionClient, p: PendingDartsForSettle) {
+  const startScore = p.startScore ?? 501;
+  // Classement : reste croissant (0 = vainqueur = 1er).
+  const ordered = [...p.participants].sort((a, b) => (a.remaining ?? startScore) - (b.remaining ?? startScore));
+  const users = await Promise.all(
+    ordered.map((pp) => tx.user.findUniqueOrThrow({ where: { login: pp.login } })),
+  );
+  const ratings = users.map((u) => readElo(u, 'flechettes'));
+  const scored = ordered.map((pp) => startScore - (pp.remaining ?? startScore));
+  const deltas = calculateDartsElo(ratings, scored);
+
+  for (let i = 0; i < ordered.length; i++) {
+    await tx.user.update({
+      where: { login: ordered[i]!.login },
+      data: ratingUpdate('flechettes', ratings[i]! + deltas[i]!),
+    });
+  }
+
+  await tx.pendingFfa.delete({ where: { id: p.id } });
+  const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
+
+  return tx.playedFfa.create({
+    data: {
+      id: p.id,
+      game: 'flechettes',
+      startScore,
+      playedAt: p.declaredAt,
+      seasonId: activeSeason?.id ?? null,
+      countedForElo: true,
+      participants: {
+        create: ordered.map((pp, i) => ({
+          id: randomUUID(),
+          login: pp.login,
+          position: i + 1,
+          remaining: pp.remaining ?? null,
+          ratingBefore: ratings[i]!,
+          delta: deltas[i]!,
+          ratingAfter: ratings[i]! + deltas[i]!,
+        })),
+      },
+    },
+    include: { participants: true },
+  });
+}
+
+app.get('/matches/darts/pending', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(
+    await prisma.pendingFfa.findMany({
+      where: { game: 'flechettes' },
+      orderBy: { declaredAt: 'desc' },
+      include: { participants: true },
+    }),
+  );
+});
+
+app.get('/matches/darts', async (c) => {
+  await getCurrentLogin(c);
+  return c.json(
+    await prisma.playedFfa.findMany({
+      where: { game: 'flechettes' },
+      orderBy: { playedAt: 'desc' },
+      include: { participants: true },
+    }),
+  );
+});
+
+// Déclaration d'une manche de fléchettes : `participants` = {login, remaining}.
+// La position est dérivée du reste (croissant). Le déclarant est auto-confirmé.
+app.post('/matches/darts', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = DeclareDartsSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { startScore, participants } = parsed.data;
+  const logins = participants.map((p) => p.login);
+  if (!logins.includes(me)) {
+    throw new HTTPException(400, { message: 'tu dois faire partie de la manche' });
+  }
+  await assertNotBanned(me);
+  await getOrCreateUser(me);
+  for (const login of logins) {
+    if (login === me) continue;
+    const u = await prisma.user.findUnique({ where: { login } });
+    if (!u) throw new HTTPException(404, { message: `${login} must login first before being declared` });
+    if (!u.ftId) throw new HTTPException(403, { message: `${login} must be a real 42 user` });
+    if (u.bannedAt || u.anonymizedAt || u.deletionScheduledAt)
+      throw new HTTPException(403, { message: `${login} n'est plus disponible` });
+  }
+
+  // Position dérivée du reste (croissant) ; ordre d'origine départage les égalités.
+  const ordered = [...participants]
+    .map((p, i) => ({ ...p, srcIndex: i }))
+    .sort((a, b) => a.remaining - b.remaining || a.srcIndex - b.srcIndex);
+
+  const pending = await prisma.pendingFfa.create({
+    data: {
+      id: randomUUID(),
+      declarerLogin: me,
+      game: 'flechettes',
+      startScore,
+      participants: {
+        create: ordered.map((p, i) => ({
+          id: randomUUID(),
+          login: p.login,
+          position: i + 1,
+          remaining: p.remaining,
+          confirmed: p.login === me,
+        })),
+      },
+    },
+    include: { participants: true },
+  });
+
+  const others = logins.filter((l) => l !== me);
+  emit(others, { type: 'darts:pending', payload: { id: pending.id, declarerLogin: me } });
+  await notifyMany(others, {
+    type: 'darts_pending',
+    title: `@${me} t'a ajouté à une manche de fléchettes`,
+    body: 'Confirme tes points restants.',
+    link: '/challenges?game=flechettes',
+    game: 'flechettes',
+    refId: pending.id,
+  });
+  return c.json({ id: pending.id, status: 'pending' }, 201);
+});
+
+// Confirmation de SON propre reste. Au complet, la manche est réglée dans la foulée.
+app.post('/matches/darts/:id/confirm', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ConfirmDartsSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { remaining } = parsed.data;
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT 1 FROM pending_ffas WHERE id = ${id} FOR UPDATE`;
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending || pending.game !== 'flechettes') {
+      throw new HTTPException(404, { message: 'manche introuvable (déjà réglée ou annulée)' });
+    }
+    const mine = pending.participants.find((pp) => pp.login === me);
+    if (!mine) {
+      throw new HTTPException(403, { message: 'tu ne fais pas partie de cette manche' });
+    }
+    if (mine.remaining !== remaining) {
+      throw new HTTPException(409, {
+        message: 'le score a changé — recharge la manche avant de confirmer ton reste',
+      });
+    }
+    if (!mine.confirmed) {
+      await tx.pendingFfaParticipant.update({ where: { id: mine.id }, data: { confirmed: true } });
+    }
+    const confirmedCount = pending.participants.filter((pp) => pp.confirmed || pp.login === me).length;
+    const total = pending.participants.length;
+    if (confirmedCount < total) {
+      return { settled: false as const, id, confirmed: confirmedCount, total, recipients: pending.participants.map((pp) => pp.login) };
+    }
+
+    const unavailable = await tx.user.findMany({
+      where: {
+        login: { in: pending.participants.map((pp) => pp.login) },
+        OR: [{ bannedAt: { not: null } }, { anonymizedAt: { not: null } }, { deletionScheduledAt: { not: null } }],
+      },
+      select: { login: true },
+    });
+    if (unavailable.length > 0) {
+      await tx.pendingFfa.delete({ where: { id } });
+      return { settled: false as const, aborted: true as const, id, recipients: pending.participants.map((pp) => pp.login), unavailable: unavailable.map((u) => u.login) };
+    }
+
+    const played = await settleDartsAsPlayed(tx, pending);
+    return { settled: true as const, played };
+  });
+
+  if (result.settled) {
+    const played = result.played;
+    const playLogins = played.participants.map((pp) => pp.login);
+    emit(playLogins, { type: 'darts:confirmed', payload: played });
+    void markNotifsReadByRef(playLogins, played.id);
+    for (const pp of played.participants) {
+      void notify(pp.login, {
+        type: 'darts_result',
+        title: `Fléchettes — ${pp.position}${pp.position === 1 ? 'er' : 'e'}`,
+        body: `ELO ${pp.delta >= 0 ? '+' : ''}${pp.delta}`,
+        link: '/challenges?game=flechettes',
+        game: 'flechettes',
+        refId: `${played.id}:result`,
+      });
+    }
+    broadcast({ type: 'leaderboard:update', payload: {} });
+    for (const pp of played.participants) void maybeNotifyTop3(pp.login, pp.delta);
+    return c.json(played);
+  }
+  if ('aborted' in result && result.aborted) {
+    emit(result.recipients, { type: 'darts:cancelled', payload: { id: result.id, reason: 'unavailable' } });
+    throw new HTTPException(409, { message: 'un participant n\'est plus disponible — manche annulée, à redéclarer' });
+  }
+  emit(result.recipients, { type: 'darts:progress', payload: { id: result.id, confirmed: result.confirmed, total: result.total } });
+  return c.json({ id: result.id, status: 'pending', confirmed: result.confirmed, total: result.total });
+});
+
+// Contestation de SON reste → annule toute la manche (le déclarant est notifié).
+app.post('/matches/darts/:id/contest', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ContestDartsSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { claimedRemaining, message } = parsed.data;
+
+  let info: { declarerLogin: string; others: string[]; proposedRemaining: number | null } | undefined;
+  await prisma.$transaction(async (tx) => {
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending || pending.game !== 'flechettes') throw new HTTPException(404, { message: 'manche introuvable' });
+    const mine = pending.participants.find((pp) => pp.login === me);
+    if (!mine) throw new HTTPException(403, { message: 'tu ne fais pas partie de cette manche' });
+    if (me === pending.declarerLogin) {
+      throw new HTTPException(400, { message: 'le déclarant annule sa manche, il ne la conteste pas' });
+    }
+    info = {
+      declarerLogin: pending.declarerLogin,
+      others: pending.participants.map((pp) => pp.login).filter((l) => l !== me),
+      proposedRemaining: mine.remaining,
+    };
+    await tx.pendingFfa.delete({ where: { id } });
+  });
+
+  if (info) {
+    emit([info.declarerLogin], {
+      type: 'darts:contested',
+      payload: { id, contestedBy: me, claimedRemaining, proposedRemaining: info.proposedRemaining },
+    });
+    await notify(info.declarerLogin, {
+      type: 'darts_contested',
+      title: `@${me} conteste la manche de fléchettes`,
+      body: `Reste revendiqué : ${claimedRemaining}${message ? ` — « ${message} »` : ''}. Manche annulée.`,
+      link: '/challenges?game=flechettes',
+      game: 'flechettes',
+      refId: id,
+    });
+    emit(info.others.filter((l) => l !== info!.declarerLogin), { type: 'darts:cancelled', payload: { id, cancelledBy: me, reason: 'contested' } });
+    void markNotifsReadByRef([me, ...info.others], id);
+  }
+  return c.json({ id, status: 'cancelled' });
+});
+
+// Annulation par le déclarant lui-même.
+app.post('/matches/darts/:id/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+
+  let others: string[] = [];
+  await prisma.$transaction(async (tx) => {
+    const pending = await tx.pendingFfa.findUnique({ where: { id }, include: { participants: true } });
+    if (!pending || pending.game !== 'flechettes') throw new HTTPException(404, { message: 'manche introuvable' });
+    if (pending.declarerLogin !== me) {
+      throw new HTTPException(403, { message: 'seul le déclarant peut annuler cette manche' });
+    }
+    others = pending.participants.map((pp) => pp.login).filter((l) => l !== me);
+    await tx.pendingFfa.delete({ where: { id } });
+  });
+
+  if (others.length > 0) {
+    emit(others, { type: 'darts:cancelled', payload: { id, cancelledBy: me } });
     void markNotifsReadByRef(others, id);
   }
   return c.json({ id, status: 'cancelled' });
@@ -4622,8 +4923,11 @@ app.patch('/admin/users/:login/stats', async (c) => {
     eloSf: z.number().int().min(0).optional(),
     matchesPlayedSf: z.number().int().min(0).optional(),
     tournamentsWonSf: z.number().int().min(0).optional(),
+    eloFlechettes: z.number().int().min(0).optional(),
+    matchesPlayedFlechettes: z.number().int().min(0).optional(),
+    tournamentsWonFlechettes: z.number().int().min(0).optional(),
     // Modes auxquels le joueur adhère.
-    games: z.array(z.enum(['babyfoot', 'smash', 'chess', 'streetfighter'])).min(1).optional(),
+    games: z.array(z.enum(['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'])).min(1).optional(),
   });
   const parsed = schema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -4643,6 +4947,9 @@ app.patch('/admin/users/:login/stats', async (c) => {
       eloSf: true,
       matchesPlayedSf: true,
       tournamentsWonSf: true,
+      eloFlechettes: true,
+      matchesPlayedFlechettes: true,
+      tournamentsWonFlechettes: true,
       games: true,
     },
   });

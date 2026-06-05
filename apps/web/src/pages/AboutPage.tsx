@@ -293,6 +293,57 @@ const RULES_FR: Record<Game, GameRules> = {
       ],
     },
   },
+  flechettes: {
+    label: 'fléchettes (301 / 501)',
+    terrain: {
+      intro: (
+        <>
+          Conventions de manche pour que le décompte soit clair et le résultat incontestable :
+        </>
+      ),
+      bullets: [
+        <>
+          Manche en <span className="text-gold font-semibold">301 ou 501</span> : chaque joueur part de son
+          score de départ et <span className="text-text font-semibold">descend</span> à mesure qu'il marque.
+        </>,
+        <>
+          Le premier à atteindre <span className="text-gold font-semibold">exactement 0</span> remporte la manche.
+        </>,
+        <>
+          De <span className="text-gold font-semibold">2 à 8 joueurs</span> peuvent disputer la même manche,
+          chacun avec son <span className="text-text font-semibold">propre reste</span>.
+        </>,
+        <>
+          Pas de <span className="text-text font-semibold">personnages</span> ni d'équipes — c'est un
+          affrontement <span className="text-text font-semibold">individuel</span>.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League classe ici les <span className="text-text font-semibold">fléchettes (301 / 501)</span>.
+          Chaque joueur inscrit peut défier n'importe quel autre membre de sa league.
+        </>
+      ),
+      bullets: [
+        <>Manche de <span className="text-gold font-semibold">2 à 8 joueurs</span>, format <span className="text-text font-semibold">301 ou 501</span>.</>,
+        <>
+          Le déclarant saisit, pour chaque joueur, ses <span className="text-gold font-semibold">points restants</span> à la fin
+          (le <span className="text-text font-semibold">vainqueur = 0</span>). Le classement se déduit du reste :
+          0 = 1er, puis du plus petit reste au plus grand.
+        </>,
+        <>
+          Chaque autre joueur <span className="text-text font-semibold">confirme son propre reste</span> ; une{' '}
+          <span className="text-text font-semibold">contestation annule la manche</span>.
+        </>,
+        <>
+          L'<span className="text-text font-semibold">ELO est propre à la discipline</span> : ton rating fléchettes est distinct des autres jeux.
+          Pas de tournoi fléchettes ni de 2v2.
+        </>,
+      ],
+    },
+  },
 };
 
 const RULES_EN: Record<Game, GameRules> = {
@@ -467,6 +518,57 @@ const RULES_EN: Record<Game, GameRules> = {
         <>The winner is whoever takes the <span className="text-text font-semibold">majority of games</span>.</>,
         <>Your <span className="text-text font-semibold">ELO is per discipline</span>: your Street Fighter rating is separate from the other games.</>,
         <>Both players report their result independently. If they disagree, the match is voided.</>,
+      ],
+    },
+  },
+  flechettes: {
+    label: 'darts (301 / 501)',
+    terrain: {
+      intro: (
+        <>
+          Round conventions so the count is clear and the result beyond dispute:
+        </>
+      ),
+      bullets: [
+        <>
+          A round in <span className="text-gold font-semibold">301 or 501</span>: each player starts from their
+          starting score and <span className="text-text font-semibold">counts down</span> as they score.
+        </>,
+        <>
+          The first to reach <span className="text-gold font-semibold">exactly 0</span> wins the round.
+        </>,
+        <>
+          From <span className="text-gold font-semibold">2 to 8 players</span> can play the same round, each with
+          their <span className="text-text font-semibold">own remaining score</span>.
+        </>,
+        <>
+          No <span className="text-text font-semibold">characters</span> and no teams — it's an
+          <span className="text-text font-semibold"> individual</span> contest.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League ranks <span className="text-text font-semibold">darts (301 / 501)</span> here.
+          Every registered player can challenge any other member of their league.
+        </>
+      ),
+      bullets: [
+        <>Round of <span className="text-gold font-semibold">2 to 8 players</span>, <span className="text-text font-semibold">301 or 501</span> format.</>,
+        <>
+          The reporter enters, for each player, their <span className="text-gold font-semibold">remaining points</span> at the end
+          (the <span className="text-text font-semibold">winner = 0</span>). The ranking is derived from the remainder:
+          0 = 1st, then from the smallest remainder to the largest.
+        </>,
+        <>
+          Each other player <span className="text-text font-semibold">confirms their own remainder</span>; a{' '}
+          <span className="text-text font-semibold">dispute voids the round</span>.
+        </>,
+        <>
+          Your <span className="text-text font-semibold">ELO is per discipline</span>: your darts rating is separate from the other games.
+          No darts tournament and no 2v2.
+        </>,
       ],
     },
   },
@@ -645,6 +747,57 @@ const RULES_ES: Record<Game, GameRules> = {
         <>El vencedor es quien gana la <span className="text-text font-semibold">mayoría de las mangas</span>.</>,
         <>El <span className="text-text font-semibold">ELO es propio de la disciplina</span>: tu rating de Street Fighter es distinto del de los demás juegos.</>,
         <>Ambos jugadores declaran su resultado de forma independiente. En caso de desacuerdo, el partido se anula.</>,
+      ],
+    },
+  },
+  flechettes: {
+    label: 'dardos (301 / 501)',
+    terrain: {
+      intro: (
+        <>
+          Convenciones de manga para que el recuento sea claro y el resultado incontestable:
+        </>
+      ),
+      bullets: [
+        <>
+          Manga a <span className="text-gold font-semibold">301 o 501</span>: cada jugador parte de su
+          marcador inicial y <span className="text-text font-semibold">va descontando</span> a medida que anota.
+        </>,
+        <>
+          El primero en llegar a <span className="text-gold font-semibold">exactamente 0</span> gana la manga.
+        </>,
+        <>
+          De <span className="text-gold font-semibold">2 a 8 jugadores</span> pueden disputar la misma manga, cada uno
+          con su <span className="text-text font-semibold">propio resto</span>.
+        </>,
+        <>
+          Sin <span className="text-text font-semibold">personajes</span> ni equipos — es un enfrentamiento
+          <span className="text-text font-semibold"> individual</span>.
+        </>,
+      ],
+    },
+    format: {
+      intro: (
+        <>
+          42 League clasifica aquí los <span className="text-text font-semibold">dardos (301 / 501)</span>.
+          Cada jugador inscrito puede desafiar a cualquier otro miembro de su league.
+        </>
+      ),
+      bullets: [
+        <>Manga de <span className="text-gold font-semibold">2 a 8 jugadores</span>, formato <span className="text-text font-semibold">301 o 501</span>.</>,
+        <>
+          El declarante introduce, para cada jugador, sus <span className="text-gold font-semibold">puntos restantes</span> al final
+          (el <span className="text-text font-semibold">vencedor = 0</span>). La clasificación se deduce del resto:
+          0 = 1.º, luego del resto más pequeño al más grande.
+        </>,
+        <>
+          Cada uno de los demás jugadores <span className="text-text font-semibold">confirma su propio resto</span>; una{' '}
+          <span className="text-text font-semibold">contestación anula la manga</span>.
+        </>,
+        <>
+          El <span className="text-text font-semibold">ELO es propio de la disciplina</span>: tu rating de dardos es distinto del de los demás juegos.
+          Sin torneo de dardos ni 2v2.
+        </>,
       ],
     },
   },
@@ -1797,40 +1950,6 @@ const TEAM: Member[] = [
           de los sitios de ranked pesaron mucho: es él quien aportó el{' '}
           <span className="text-text font-semibold">análisis UX/UI</span> para hacer la app nítida y
           legible.
-        </>
-      ),
-    },
-  },
-  {
-    login: 'sbonneau',
-    roleKey: 'about.role.sbonneau',
-    accent: 'red',
-    blurb: {
-      fr: (
-        <>
-          Le <span className="text-text font-semibold">pen tester</span> de service : il cherche la
-          faille, <span className="text-text font-semibold">abuse</span> de chaque fonctionnalité pour
-          la pousser dans ses retranchements — et{' '}
-          <span className="text-[#ff5366] font-semibold">casse ce qui doit l'être</span> avant les
-          autres.
-        </>
-      ),
-      en: (
-        <>
-          The resident <span className="text-text font-semibold">pen tester</span>: he looks for the
-          flaw, <span className="text-text font-semibold">abuses</span> every feature to push it to
-          its limits — and{' '}
-          <span className="text-[#ff5366] font-semibold">breaks what needs breaking</span> before
-          everyone else.
-        </>
-      ),
-      es: (
-        <>
-          El <span className="text-text font-semibold">pen tester</span> de turno: busca el
-          fallo, <span className="text-text font-semibold">abusa</span> de cada función para
-          llevarla al límite — y{' '}
-          <span className="text-[#ff5366] font-semibold">rompe lo que hay que romper</span> antes que
-          los demás.
         </>
       ),
     },

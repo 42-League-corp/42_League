@@ -117,14 +117,18 @@ export interface FfaParticipant {
   login: string;
   /** 1 = 1er … N = dernier (classement proposé par le déclarant). */
   position: number;
-  /** Le joueur a validé SA position. */
+  /** Le joueur a validé SA position / son reste. */
   confirmed: boolean;
+  /** Fléchettes uniquement : points restants (0 = vainqueur). null pour le Smash FFA. */
+  remaining?: number | null;
 }
 
 export interface PendingFfa {
   id: string;
   declarerLogin: string;
   game: Game;
+  /** Fléchettes uniquement : score de départ (301/501). null pour le Smash FFA. */
+  startScore?: number | null;
   declaredAt: string;
   participants: FfaParticipant[];
 }
@@ -132,6 +136,8 @@ export interface PendingFfa {
 export interface PlayedFfaParticipant {
   login: string;
   position: number;
+  /** Fléchettes uniquement : points restants à la fin (0 = vainqueur). */
+  remaining?: number | null;
   ratingBefore: number;
   delta: number;
   ratingAfter: number;
@@ -140,10 +146,19 @@ export interface PlayedFfaParticipant {
 export interface PlayedFfa {
   id: string;
   game: Game;
+  startScore?: number | null;
   playedAt: string;
   seasonId: string | null;
   countedForElo: boolean;
   participants: PlayedFfaParticipant[];
+}
+
+// ─── Fléchettes (301/501, 2-8 joueurs) ───────────────────────────────────────
+// Réutilise le modèle FFA (PendingFfa/PlayedFfa avec game='flechettes',
+// startScore + remaining). Un participant darts = {login, remaining}.
+export interface DartsDeclareParticipant {
+  login: string;
+  remaining: number;
 }
 
 // ─── Babyfoot 2v2 ─────────────────────────────────────────────────────────────
@@ -300,6 +315,9 @@ export interface MeResponse {
     eloSf?: number;
     matchesPlayedSf?: number;
     tournamentsWonSf?: number;
+    eloFlechettes?: number;
+    matchesPlayedFlechettes?: number;
+    tournamentsWonFlechettes?: number;
     games?: Game[];
     favSmash?: string[];
     favSf?: string[];
@@ -350,6 +368,9 @@ export interface AdminUser {
   eloSf?: number;
   matchesPlayedSf?: number;
   tournamentsWonSf?: number;
+  eloFlechettes?: number;
+  matchesPlayedFlechettes?: number;
+  tournamentsWonFlechettes?: number;
   games?: Game[];
   favSmash?: string[];
   favSf?: string[];
@@ -488,6 +509,9 @@ export interface UserProfile {
     eloSf?: number;
     matchesPlayedSf?: number;
     tournamentsWonSf?: number;
+    eloFlechettes?: number;
+    matchesPlayedFlechettes?: number;
+    tournamentsWonFlechettes?: number;
     /** Disciplines auxquelles le joueur a adhéré (badges cross-jeux de la carte héro). */
     games?: Game[];
     favSmash?: string[];
@@ -847,6 +871,32 @@ export const api = {
       `/matches/ffa/${encodeURIComponent(id)}/cancel`,
       { method: 'POST' },
     ),
+
+  // ── Fléchettes (301/501, 2-8 joueurs) ──
+  pendingDarts: () => request<PendingFfa[]>('/matches/darts/pending'),
+  playedDarts: () => request<PlayedFfa[]>('/matches/darts'),
+  /** `participants` = {login, remaining} ; le vainqueur a remaining=0. */
+  declareDarts: (startScore: 301 | 501, participants: DartsDeclareParticipant[]) =>
+    request<{ id: string; status: 'pending' }>('/matches/darts', {
+      method: 'POST',
+      body: JSON.stringify({ game: 'flechettes', startScore, participants }),
+    }),
+  confirmDarts: (id: string, remaining: number) =>
+    request<PlayedFfa | { id: string; status: 'pending'; confirmed: number; total: number }>(
+      `/matches/darts/${encodeURIComponent(id)}/confirm`,
+      { method: 'POST', body: JSON.stringify({ remaining }) },
+    ),
+  contestDarts: (id: string, claimedRemaining: number, message?: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/darts/${encodeURIComponent(id)}/contest`,
+      { method: 'POST', body: JSON.stringify({ claimedRemaining, message }) },
+    ),
+  cancelDarts: (id: string) =>
+    request<{ id: string; status: 'cancelled' }>(
+      `/matches/darts/${encodeURIComponent(id)}/cancel`,
+      { method: 'POST' },
+    ),
+
   challenges: () => request<Challenge[]>('/challenges'),
   createChallenge: (input: { opponentLogin: string; scheduledAt: string; game?: Game }) =>
     request<Challenge>('/challenges', {
@@ -1035,6 +1085,9 @@ export const api = {
       eloSf?: number;
       matchesPlayedSf?: number;
       tournamentsWonSf?: number;
+      eloFlechettes?: number;
+      matchesPlayedFlechettes?: number;
+      tournamentsWonFlechettes?: number;
       games?: Game[];
     },
   ) =>
