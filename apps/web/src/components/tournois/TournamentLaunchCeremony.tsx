@@ -17,9 +17,18 @@ import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface Knight {
+  login: string;
+  imageUrl?: string | null;
+}
+
 export interface LaunchCeremonyProps {
   tournamentName: string;
-  participants: { login: string; imageUrl?: string | null }[];
+  participants: Knight[];
+  // Affrontements du 1er tour (tirage au sort) : si fournis, on joue l'animation
+  // de « tirage » qui place chaque duel A ⚔ B à sa place, sinon simple défilé.
+  // Un côté null = exempt (bye).
+  pairings?: { a: Knight | null; b: Knight | null }[];
   accent: string;
   onDone: () => void;
   t: (k: string) => string;
@@ -52,6 +61,88 @@ function ParadeAvatar({
   );
 }
 
+// ─── Tirage au sort (placement des duels du 1er tour) ───────────────────────────
+
+function DrawAvatar({
+  knight, accent, from,
+}: { knight: Knight | null; accent: string; from: 'left' | 'right' }) {
+  const dir = from === 'left' ? -1 : 1;
+  const size = 44;
+  if (!knight) {
+    // Exempt (bye) : place vide.
+    return (
+      <div
+        className="rounded-full border border-dashed flex items-center justify-center text-[10px] text-muted-2 flex-shrink-0"
+        style={{ width: size, height: size, borderColor: `${accent}66` }}
+      >
+        bye
+      </div>
+    );
+  }
+  return (
+    <motion.div
+      initial={{ x: dir * 40, opacity: 0, scale: 0.5 }}
+      animate={{ x: 0, opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+      className="flex flex-col items-center gap-1 flex-shrink-0"
+      style={{ width: 64 }}
+    >
+      <div
+        className="rounded-full flex items-center justify-center font-display font-black text-[#0a0a0a] overflow-hidden"
+        style={{
+          width: size, height: size, fontSize: size * 0.4,
+          border: `2px solid ${accent}`,
+          boxShadow: `0 0 16px ${accent}55`,
+          background: knight.imageUrl ? undefined : accent,
+        }}
+      >
+        {knight.imageUrl
+          ? <img src={knight.imageUrl} alt={knight.login} className="w-full h-full object-cover" />
+          : knight.login[0]?.toUpperCase()}
+      </div>
+      <span className="text-[9px] font-bold text-text-strong/90 max-w-[64px] truncate">
+        {knight.login}
+      </span>
+    </motion.div>
+  );
+}
+
+function DrawReveal({
+  pairings, accent, t,
+}: { pairings: { a: Knight | null; b: Knight | null }[]; accent: string; t: (k: string) => string }) {
+  return (
+    <div className="w-full flex flex-col items-center gap-2.5 max-h-[46vh] overflow-y-auto no-scrollbar px-1 py-1">
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.3em]" style={{ color: accent }}>
+        {t('tourn.launch.draw')}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+        {pairings.map((p, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 18, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: 0.6 + i * 0.85, type: 'spring', stiffness: 240, damping: 22 }}
+            className="flex items-center justify-center gap-2 rounded-xl border bg-bg-1/40 px-3 py-2"
+            style={{ borderColor: `${accent}40` }}
+          >
+            <DrawAvatar knight={p.a} accent={accent} from="left" />
+            <motion.span
+              initial={{ scale: 0, rotate: -30, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              transition={{ delay: 0.6 + i * 0.85 + 0.15, type: 'spring', stiffness: 300, damping: 16 }}
+              className="text-base font-black shrink-0"
+              style={{ color: accent }}
+            >
+              ⚔
+            </motion.span>
+            <DrawAvatar knight={p.b} accent={accent} from="right" />
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Particules (étincelles) ─────────────────────────────────────────────────────
 
 const PARTICLES = Array.from({ length: 14 }, (_, i) => {
@@ -69,9 +160,10 @@ const PARTICLES = Array.from({ length: 14 }, (_, i) => {
 // ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function TournamentLaunchCeremony({
-  tournamentName, participants, accent, onDone, t,
+  tournamentName, participants, pairings, accent, onDone, t,
 }: LaunchCeremonyProps) {
   const [dismissed, setDismissed] = useState(false);
+  const hasDraw = !!pairings && pairings.length > 0;
 
   const handleDone = () => {
     if (dismissed) return;
@@ -84,9 +176,11 @@ export default function TournamentLaunchCeremony({
   useEscapeKey(!dismissed, handleDone);
 
   // Auto-enchaînement temporisé : si l'utilisateur ne fait rien, on révèle le
-  // bracket après un délai (onDone reste atteignable manuellement avant).
+  // bracket après un délai (onDone reste atteignable manuellement avant). Le
+  // tirage est plus long (chaque duel se place tour à tour).
   useEffect(() => {
-    const id = setTimeout(handleDone, 9000);
+    const ms = hasDraw ? Math.min(15000, 4500 + pairings!.length * 850) : 9000;
+    const id = setTimeout(handleDone, ms);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -181,30 +275,34 @@ export default function TournamentLaunchCeremony({
               </motion.div>
             </motion.div>
 
-            {/* Défilé des inscrits */}
-            <div className="w-full overflow-x-auto no-scrollbar">
-              <div className="flex items-start justify-center gap-4 sm:gap-5 px-2 py-3 min-w-max mx-auto">
-                {participants.map((p, i) => (
-                  <motion.div
-                    key={`${p.login}-${i}`}
-                    initial={{ opacity: 0, y: 28, scale: 0.5 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{
-                      delay: 0.6 + i * 0.08,
-                      type: 'spring',
-                      stiffness: 320,
-                      damping: 22,
-                    }}
-                  >
-                    <ParadeAvatar
-                      login={p.login}
-                      imageUrl={p.imageUrl}
-                      accent={accent}
-                    />
-                  </motion.div>
-                ))}
+            {/* Tirage au sort (placement des duels) si dispo, sinon défilé. */}
+            {hasDraw ? (
+              <DrawReveal pairings={pairings!} accent={accent} t={t} />
+            ) : (
+              <div className="w-full overflow-x-auto no-scrollbar">
+                <div className="flex items-start justify-center gap-4 sm:gap-5 px-2 py-3 min-w-max mx-auto">
+                  {participants.map((p, i) => (
+                    <motion.div
+                      key={`${p.login}-${i}`}
+                      initial={{ opacity: 0, y: 28, scale: 0.5 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{
+                        delay: 0.6 + i * 0.08,
+                        type: 'spring',
+                        stiffness: 320,
+                        damping: 22,
+                      }}
+                    >
+                      <ParadeAvatar
+                        login={p.login}
+                        imageUrl={p.imageUrl}
+                        accent={accent}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Bouton final */}
             <motion.button

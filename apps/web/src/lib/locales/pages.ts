@@ -430,6 +430,9 @@ export const dict: Record<Lang, Dict> = {
     'tourn.launch.subtitle': '{n} chevaliers entrent dans l’arène',
     'tourn.launch.skip': 'Passer',
     'tourn.launch.revealBracket': 'Voir le tableau',
+    'tourn.launch.draw': 'Tirage au sort',
+    // ── Écran VERSUS (« match suivant ») ──
+    'tourn.versus.nowPlaying': 'Match en cours',
     // ── Duel : pile-ou-face + avantage ──
     'tourn.duel.toss': 'Pile ou face',
     'tourn.duel.tossing': 'La pièce tourne…',
@@ -860,6 +863,8 @@ export const dict: Record<Lang, Dict> = {
     'tourn.launch.subtitle': '{n} knights enter the arena',
     'tourn.launch.skip': 'Skip',
     'tourn.launch.revealBracket': 'See the bracket',
+    'tourn.launch.draw': 'Draw',
+    'tourn.versus.nowPlaying': 'Now playing',
     // ── Duel: coin toss + advantage ──
     'tourn.duel.toss': 'Heads or tails',
     'tourn.duel.tossing': 'The coin is spinning…',
@@ -1290,6 +1295,8 @@ export const dict: Record<Lang, Dict> = {
     'tourn.launch.subtitle': '{n} caballeros entran en la arena',
     'tourn.launch.skip': 'Saltar',
     'tourn.launch.revealBracket': 'Ver el cuadro',
+    'tourn.launch.draw': 'Sorteo',
+    'tourn.versus.nowPlaying': 'Partido en curso',
     // ── Duelo: cara o cruz + ventaja ──
     'tourn.duel.toss': 'Cara o cruz',
     'tourn.duel.tossing': 'La moneda gira…',

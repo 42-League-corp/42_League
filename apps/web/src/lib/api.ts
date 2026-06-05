@@ -638,6 +638,9 @@ export interface Tournament {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  // Match désigné « en cours » par l'organisateur (« match suivant ») : déclenche
+  // l'écran VERSUS et le badge « EN COURS » dans l'arbre. null aux échecs.
+  activeMatchId?: string | null;
   entries?: TournamentEntry[];
   matches?: TournamentMatch[];
   winner?: { login: string; imageUrl: string | null } | null;
@@ -1132,6 +1135,13 @@ export const api = {
   rejectTournamentMatch: (tournamentId: string, matchId: string) =>
     request<{ id: string; rejected: true }>(
       `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/reject`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  // « Match suivant » : l'organisateur désigne le duel en cours → écran VERSUS
+  // chez tous les spectateurs + badge « EN COURS » dans l'arbre.
+  announceTournamentMatch: (tournamentId: string, matchId: string) =>
+    request<{ id: string; activeMatchId: string | null }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/announce`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
   locations: () => request<Record<string, string>>('/locations'),

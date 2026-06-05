@@ -13,6 +13,7 @@ import { PlayerSearch } from './defis/shared/PlayerSearch';
 import BracketTree from '../components/tournois/BracketTree';
 import CoinFlip from '../components/tournois/CoinFlip';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
+import { VersusOverlay, type VersusFighter } from '../components/tournois/VersusOverlay';
 import AdvantagePicker from '../components/tournois/AdvantagePicker';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
@@ -63,6 +64,10 @@ export function TournoiDetailPage() {
   // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
   const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const prevStatusRef = useRef<Tournament['status'] | null>(null);
+  // Écran VERSUS : on l'ouvre pour le match dont l'id vient d'être désigné
+  // « match suivant » (activeMatchId). Détecté par diff dans load().
+  const [versusMatchId, setVersusMatchId] = useState<string | null>(null);
+  const prevActiveMatchRef = useRef<string | null | undefined>(undefined);
 
   // `silent` : refresh en arrière-plan (SSE / retour de focus) qui swap les données
   // SANS repasser par l'écran de chargement plein écran — sinon la page entière
@@ -77,6 +82,15 @@ export function TournoiDetailPage() {
         setShowCeremony(true);
       }
       prevStatusRef.current = fresh.status;
+      // Match suivant désigné : si activeMatchId vient de changer vers un match,
+      // on déclenche l'écran VERSUS (une fois). undefined au 1er chargement → on
+      // ne joue pas l'animation pour un match déjà désigné avant l'arrivée.
+      const prevActive = prevActiveMatchRef.current;
+      const nextActive = fresh.activeMatchId ?? null;
+      if (prevActive !== undefined && nextActive && nextActive !== prevActive) {
+        setVersusMatchId(nextActive);
+      }
+      prevActiveMatchRef.current = nextActive;
       setTournament(fresh);
     } catch {
       if (!silent) setTournament(null);
@@ -121,6 +135,34 @@ export function TournoiDetailPage() {
   const isAdmin = !!me?.isAdmin;
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
+
+  // Combattants de l'écran VERSUS (résolus depuis le match désigné + les avatars
+  // des inscrits). Null si le match désigné n'existe plus (déjà confirmé).
+  const versusMatch =
+    versusMatchId != null
+      ? (tournament.matches ?? []).find((m) => m.id === versusMatchId) ?? null
+      : null;
+  const versusFighter = (login: string | null): VersusFighter | null => {
+    if (!login) return null;
+    const e = (tournament.entries ?? []).find((en) => en.login === login);
+    return { login, imageUrl: e?.user?.imageUrl ?? null };
+  };
+
+  // Tirage au sort pour la cérémonie : duels du 1er tour du bracket (round min).
+  // Vide si le bracket n'existe pas encore (format poules au lancement) → la
+  // cérémonie retombe sur le simple défilé des inscrits.
+  const bracketMatchesForDraw = (tournament.matches ?? []).filter(
+    (m) => (m.stage ?? 'bracket') === 'bracket',
+  );
+  const drawPairings = bracketMatchesForDraw.length
+    ? (() => {
+        const minRound = bracketMatchesForDraw.reduce((mn, m) => Math.min(mn, m.round), Infinity);
+        return bracketMatchesForDraw
+          .filter((m) => m.round === minRound)
+          .sort((a, b) => a.slot - b.slot)
+          .map((m) => ({ a: versusFighter(m.playerALogin), b: versusFighter(m.playerBLogin) }));
+      })()
+    : undefined;
   const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
       await action();
@@ -218,11 +260,22 @@ export function TournoiDetailPage() {
             login: e.login,
             imageUrl: e.user?.imageUrl ?? null,
           }))}
+          pairings={drawPairings}
           accent={gameAccent(tournament.game)}
           onDone={() => setShowCeremony(false)}
           t={t}
         />
       )}
+
+      {/* Écran VERSUS au lancement d'un duel (« match suivant »). */}
+      <VersusOverlay
+        open={!!versusMatch}
+        a={versusMatch ? versusFighter(versusMatch.playerALogin) : null}
+        b={versusMatch ? versusFighter(versusMatch.playerBLogin) : null}
+        accent={gameAccent(tournament.game)}
+        onDone={() => setVersusMatchId(null)}
+        t={t}
+      />
 
       {/* Récompense (tournois officiels) — visible à tous, indique l'enjeu. */}
       {tournament.kind === 'official' && !!tournament.prizeKind && tournament.prizeKind !== 'none' && (
@@ -418,7 +471,12 @@ export function TournoiDetailPage() {
           {tournament.status === 'in_progress' && detailTab === 'bets' ? (
             <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
           ) : (
-            <PoolsAndBracket tournament={tournament} myLogin={myLogin ?? null} onChange={refreshSilent} />
+            <PoolsAndBracket
+              tournament={tournament}
+              myLogin={myLogin ?? null}
+              canManage={isOrganizer || isAdmin}
+              onChange={refreshSilent}
+            />
           )}
 
           {tournament.status === 'in_progress' &&
@@ -493,14 +551,18 @@ const QUALIFY_PER_POOL = 2;
 function PoolsAndBracket({
   tournament,
   myLogin,
+  canManage,
   onChange,
 }: {
   tournament: Tournament;
   myLogin: string | null;
+  canManage: boolean;
   onChange: () => Promise<void>;
 }) {
   const t = useT();
+  const flash = useFlash();
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [announcing, setAnnouncing] = useState(false);
   const { poolGroups, bracketMatchesFlat, totalBracketRounds, poolsComplete } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
@@ -542,6 +604,36 @@ function PoolsAndBracket({
     [bracketMatchesFlat, selectedMatchId],
   );
 
+  // « Match suivant » (organisateur/admin, hors échecs) : matchs jouables, triés
+  // par tour puis position. La cible = le match sélectionné s'il est jouable,
+  // sinon le prochain match prêt (en sautant celui déjà désigné « en cours »).
+  const isChess = (tournament.game ?? 'babyfoot') === 'chess';
+  const readyMatches = useMemo(
+    () =>
+      bracketMatchesFlat
+        .filter((m) => m.playerALogin && m.playerBLogin && !m.confirmedAt)
+        .sort((a, b) => a.round - b.round || a.slot - b.slot),
+    [bracketMatchesFlat],
+  );
+  const announceTarget =
+    selectedMatch && readyMatches.some((m) => m.id === selectedMatch.id)
+      ? selectedMatch
+      : readyMatches.find((m) => m.id !== tournament.activeMatchId) ?? readyMatches[0] ?? null;
+  const handleAnnounce = async () => {
+    if (!announceTarget) return;
+    setAnnouncing(true);
+    try {
+      await api.announceTournamentMatch(tournament.id, announceTarget.id);
+      setSelectedMatchId(announceTarget.id);
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setAnnouncing(false);
+    }
+  };
+  const showAnnounce = canManage && !isChess && hasBracket && !!announceTarget;
+
   return (
     <div className="space-y-6">
       {hasPools && (
@@ -574,18 +666,34 @@ function PoolsAndBracket({
 
       {hasBracket ? (
         <section>
-          {hasPools && (
-            <div className="text-[10px] uppercase tracking-[0.16em] text-teal font-extrabold mb-3 flex items-center gap-2">
-              <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-teal to-teal rounded-sm" />
-              {t('tournois.bracket.finalPhase')}
-            </div>
-          )}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            {hasPools ? (
+              <div className="text-[10px] uppercase tracking-[0.16em] text-teal font-extrabold flex items-center gap-2">
+                <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-teal to-teal rounded-sm" />
+                {t('tournois.bracket.finalPhase')}
+              </div>
+            ) : (
+              <span />
+            )}
+
+            {/* « Match suivant » : l'organisateur lance le duel en cours
+                (écran VERSUS partagé). Désigne le match sélectionné s'il est
+                jouable, sinon le prochain match prêt. */}
+            {showAnnounce && (
+              <Button size="sm" loading={announcing} onClick={handleAnnounce}>
+                {announceTarget && announceTarget.id === selectedMatchId
+                  ? t('tournois.bracket.announceThis')
+                  : t('tournois.bracket.nextMatch')}
+              </Button>
+            )}
+          </div>
 
           {/* Arbre visuel (vue d'ensemble cliquable). */}
           <BracketTree
             matches={bracketMatchesFlat}
             rounds={totalBracketRounds}
             entries={tournament.entries ?? []}
+            activeMatchId={tournament.activeMatchId ?? null}
             onSelectMatch={(m) => setSelectedMatchId((cur) => (cur === m.id ? null : m.id))}
             selectedMatchId={selectedMatchId}
           />
