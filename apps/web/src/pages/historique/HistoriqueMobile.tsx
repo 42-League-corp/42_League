@@ -5,11 +5,14 @@ import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
 import { useHistoriqueLogic } from './shared/useHistoriqueLogic';
 import { HistoriqueList, type HistoTab } from './shared/HistoriqueList';
+import { useGameMode } from '../../hooks/useGameMode';
+import { GAME_META } from '../../lib/gameMeta';
 
 export function HistoriqueMobile() {
   const t = useT();
   const { lang } = useI18n();
   const data = useHistoriqueLogic();
+  const { game } = useGameMode();
   const { leaderboard } = useLeagueData();
   const [tab, setTab] = useState<HistoTab>('global');
 
@@ -19,7 +22,7 @@ export function HistoriqueMobile() {
   );
 
   const choices: SegmentChoice<HistoTab>[] = [
-    { value: 'global', label: t('history.tab.global'), badge: data.global.length },
+    { value: 'global', label: GAME_META[game].label, badge: data.global.length },
     { value: 'mine', label: t('history.tab.mine'), badge: data.mine.length },
   ];
 

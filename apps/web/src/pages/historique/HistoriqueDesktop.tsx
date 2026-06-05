@@ -6,6 +6,8 @@ import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
 import { useHistoriqueLogic } from './shared/useHistoriqueLogic';
 import { GlobalMatchCard, MyMatchCard, GlobalFfaCard, MyFfaCard } from './shared/MatchCards';
+import { useGameMode } from '../../hooks/useGameMode';
+import { GAME_META } from '../../lib/gameMeta';
 
 /**
  * Vue desktop de l'Historique — pensée « dashboard esport » : on n'enferme plus
@@ -20,6 +22,7 @@ export function HistoriqueDesktop() {
   const t = useT();
   const { lang } = useI18n();
   const data = useHistoriqueLogic();
+  const { game } = useGameMode();
   const { leaderboard } = useLeagueData();
 
   const imgByLogin = useMemo(
@@ -56,7 +59,7 @@ export function HistoriqueDesktop() {
         {/* ─── Colonne GLOBALE ─────────────────────────────────────────── */}
         <HistoColumn
           Icon={Globe2}
-          title={t('history.tab.global')}
+          title={`Tous les matchs de ${GAME_META[game].label.toLowerCase()}`}
           count={data.global.length}
         >
           {data.global.length === 0 ? (
