@@ -197,9 +197,9 @@ export function GameTransitionOverlay() {
               className="absolute"
               style={{ filter: `blur(28px)`, opacity: 0.55 }}
             >
-              {u.symbol(220)}
+              {u.symbol(500)}
             </div>
-            {u.symbol(220)}
+            {u.symbol(500)}
 
             {/* Nom de l'univers */}
             <motion.span
