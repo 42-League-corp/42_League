@@ -2037,7 +2037,7 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
   await tx.pendingMatch.delete({ where: { id: p.id } });
   const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
 
-  return tx.playedMatch.create({
+  const created = await tx.playedMatch.create({
     data: {
       id: p.id,
       playerALogin: a1,
@@ -2060,6 +2060,21 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
       mode: '2v2',
     },
   });
+  // Coins + quêtes pour les 4 joueurs — uniquement si le match compte (classé).
+  if (countsForElo) {
+    await awardMatchEconomyTx(
+      tx,
+      'babyfoot',
+      [
+        { login: a1, won: winner === 'A' },
+        { login: a2, won: winner === 'A' },
+        { login: b1, won: winner === 'B' },
+        { login: b2, won: winner === 'B' },
+      ],
+      p.declaredAt,
+    );
+  }
+  return created;
 }
 
 async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingForSettle) {
@@ -2124,7 +2139,7 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
 
   const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
 
-  return tx.playedMatch.create({
+  const created = await tx.playedMatch.create({
     data: {
       id: p.id,
       playerALogin: a,
@@ -2145,6 +2160,21 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
       stocksB,
     },
   });
+  // Gains de coins + progression des quêtes — seulement si le match est CLASSÉ
+  // (pas de coins sur un rematch non-compté / dodge / match forcé). Une nulle
+  // (échecs) ne crédite la victoire d'aucun des deux camps.
+  if (countsForElo) {
+    await awardMatchEconomyTx(
+      tx,
+      game,
+      [
+        { login: a, won: winner === 'A' },
+        { login: b, won: winner === 'B' },
+      ],
+      p.declaredAt,
+    );
+  }
+  return created;
 }
 
 app.post('/matches/:id/confirm', async (c) => {
@@ -2450,7 +2480,7 @@ async function settleFfaAsPlayed(tx: Prisma.TransactionClient, p: PendingFfaForS
   await tx.pendingFfa.delete({ where: { id: p.id } });
   const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
 
-  return tx.playedFfa.create({
+  const created = await tx.playedFfa.create({
     data: {
       id: p.id,
       game: 'smash',
@@ -2470,6 +2500,15 @@ async function settleFfaAsPlayed(tx: Prisma.TransactionClient, p: PendingFfaForS
     },
     include: { participants: true },
   });
+  // Coins + quêtes : le 1er (position 1) touche la prime de victoire, les autres
+  // la prime de participation. Un FFA compte toujours pour l'Elo.
+  await awardMatchEconomyTx(
+    tx,
+    'smash',
+    ordered.map((pp) => ({ login: pp.login, won: pp.position === 1 })),
+    p.declaredAt,
+  );
+  return created;
 }
 
 app.get('/matches/ffa/pending', async (c) => {
@@ -2751,7 +2790,7 @@ async function settleDartsAsPlayed(tx: Prisma.TransactionClient, p: PendingDarts
   await tx.pendingFfa.delete({ where: { id: p.id } });
   const activeSeason = await tx.season.findFirst({ where: { isActive: true }, select: { id: true } });
 
-  return tx.playedFfa.create({
+  const created = await tx.playedFfa.create({
     data: {
       id: p.id,
       game: 'flechettes',
@@ -2773,6 +2812,15 @@ async function settleDartsAsPlayed(tx: Prisma.TransactionClient, p: PendingDarts
     },
     include: { participants: true },
   });
+  // Coins + quêtes : le vainqueur (reste le plus bas = 1er du classement) touche
+  // la prime de victoire, les autres la participation. Une manche compte toujours.
+  await awardMatchEconomyTx(
+    tx,
+    'flechettes',
+    ordered.map((pp, i) => ({ login: pp.login, won: i === 0 })),
+    p.declaredAt,
+  );
+  return created;
 }
 
 app.get('/matches/darts/pending', async (c) => {
@@ -4241,7 +4289,7 @@ app.post('/tournaments/:id/start', async (c) => {
 app.post('/tournaments/:id/cancel', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
-  await prisma.$transaction(async (tx) => {
+  const refunded = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
     if (t.createdByLogin !== me && !isAdmin(me)) {
@@ -4252,9 +4300,15 @@ app.post('/tournaments/:id/cancel', async (c) => {
     if (t.status === 'finished') {
       throw new HTTPException(409, { message: 'tournament is finished' });
     }
+    // Rembourse les paris ouverts AVANT la suppression (sinon le cascade les
+    // efface et la mise est perdue).
+    const r = await refundOpenBetsForTournamentTx(tx, id);
     await cleanupOrphanPrizeTx(tx, t);
     await tx.tournament.delete({ where: { id } });
+    return r;
   });
+  // Parieurs remboursés notifiés (solde mis à jour) après commit.
+  if (refunded.length) emit(refunded, { type: 'panel:update', payload: {} });
   return c.json({ id, cancelled: true, deleted: true });
 });
 
@@ -4355,6 +4409,11 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       data: { winnerLogin, confirmedAt: new Date() },
     });
 
+    // Règlement des paris placés sur CE match (cote fixe ×2). `betWinners`
+    // accumule les parieurs crédités (match + plus bas la finale) pour un emit
+    // après commit.
+    const betWinners = await settleMatchBetsTx(tx, matchId, winnerLogin);
+
     // Match de poule : pas de propagation. Quand toutes les poules sont terminées,
     // on génère le bracket des qualifiés (top 2 par poule, seeding croisé).
     if (m.stage === 'pool') {
@@ -4378,7 +4437,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
         await generateBracket(id, qualifiers, { preSeeded: true });
         bracketGenerated = true;
       }
-      return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated };
+      return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
     }
 
     // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
@@ -4415,13 +4474,19 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
         await grantItemTx(tx, winnerLogin, tour.prizeItemId, false);
         prizeAwarded = true;
       }
+      // Règlement des paris sur le VAINQUEUR du tournoi (cote fixe ×2).
+      betWinners.push(...(await settleTournamentBetsTx(tx, id, winnerLogin)));
       finished = true;
     }
-    return { winnerLogin, finished, prizeAwarded, bracketGenerated: false };
+    return { winnerLogin, finished, prizeAwarded, bracketGenerated: false, betWinners };
   });
   // Push live au vainqueur APRÈS commit (jamais d'emit dans la transaction).
   if (result.finished && result.prizeAwarded) {
     emit([result.winnerLogin], { type: 'panel:update', payload: {} });
+  }
+  // Parieurs gagnants notifiés du crédit (solde mis à jour).
+  if (result.betWinners.length) {
+    emit(result.betWinners, { type: 'panel:update', payload: {} });
   }
   if (result.bracketGenerated) {
     const players = await prisma.tournamentEntry.findMany({
@@ -5298,16 +5363,21 @@ app.delete('/admin/tournaments/:id', async (c) => {
   const { id } = c.req.param();
   const row = await prisma.tournament.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'tournament not found' });
-  await prisma.$transaction(async (tx) => {
+  const refunded = await prisma.$transaction(async (tx) => {
     if (row.status === 'finished' && row.winnerLogin) {
       await tx.user.update({
         where: { login: row.winnerLogin },
         data: tournamentsWonDelta(parseGameId(row.game), -1),
       });
     }
+    // Rembourse les paris encore ouverts (no-op sur un tournoi terminé : ses
+    // paris sont déjà réglés) avant le cascade de suppression.
+    const r = await refundOpenBetsForTournamentTx(tx, id);
     await cleanupOrphanPrizeTx(tx, row);
     await tx.tournament.delete({ where: { id } }); // cascade → entries + matchs
+    return r;
   });
+  if (refunded.length) emit(refunded, { type: 'panel:update', payload: {} });
   broadcast({ type: 'tournament:update', payload: {} });
   void logAdminAction(c, {
     actor: me,
@@ -6029,6 +6099,386 @@ async function cleanupOrphanPrizeTx(
     await tx.shopItem.delete({ where: { id: item.id } });
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Économie de coins : gains de match (volet A), quêtes hebdo (volet B), paris (volet C)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Un seul porte-monnaie (User.leagueCoins) alimenté par trois sources, toutes
+// créditées/débitées via grantCoinsTx DANS une transaction (jamais de solde
+// négatif : grantCoinsTx borne à 0, et les débits vérifient le solde en amont).
+
+/** Prime de participation versée à chaque joueur d'un match classé. */
+const COINS_PER_MATCH_PLAYED = 20;
+/** Prime totale du vainqueur d'un match classé (remplace la participation). */
+const COINS_PER_MATCH_WON = 50;
+/** Cote fixe des paris : un pari gagnant rapporte 2× la mise (gain net = mise). */
+const BET_PAYOUT_MULTIPLIER = 2;
+
+/**
+ * Clé de semaine ISO 8601 (« 2026-W23 ») d'une date, en UTC. Sert de partition
+ * aux quêtes hebdo : changer de semaine = nouvelle ligne WeeklyQuestProgress,
+ * donc reset implicite des compteurs ET des réclamations.
+ */
+function isoWeekKey(d: Date): string {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  // Décale sur le jeudi de la semaine (l'année ISO suit le jeudi).
+  const dayNum = (date.getUTCDay() + 6) % 7; // lundi=0 … dimanche=6
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  const week = 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// ─── Quêtes hebdomadaires (source de vérité serveur) ─────────────────────────
+//
+// Chaque quête est évaluée à la volée depuis les compteurs de la ligne de la
+// semaine. `two_modes`/`all_modes` = objectifs de découverte ; `play_5`/`win_3`
+// = objectifs de fidélisation. `all_modes` cible toutes les disciplines.
+type QuestMetric = 'distinctGames' | 'matchesPlayed' | 'wins';
+interface QuestDef {
+  id: string;
+  reward: number;
+  target: number;
+  metric: QuestMetric;
+}
+const WEEKLY_QUESTS: QuestDef[] = [
+  { id: 'two_modes', reward: 200, target: 2, metric: 'distinctGames' },
+  { id: 'all_modes', reward: 300, target: GAME_IDS.length, metric: 'distinctGames' },
+  { id: 'play_5', reward: 150, target: 5, metric: 'matchesPlayed' },
+  { id: 'win_3', reward: 200, target: 3, metric: 'wins' },
+];
+
+type QuestProgressRow = { matchesPlayed: number; wins: number; gamesPlayed: string[] };
+
+function questProgressValue(q: QuestDef, row: QuestProgressRow): number {
+  switch (q.metric) {
+    case 'distinctGames':
+      return row.gamesPlayed.length;
+    case 'matchesPlayed':
+      return row.matchesPlayed;
+    case 'wins':
+      return row.wins;
+  }
+}
+
+/**
+ * Volet A + B — au règlement d'un match CLASSÉ : crédite les coins (participation
+ * ou victoire) et met à jour la progression des quêtes hebdo de chaque joueur
+ * (matchs joués, victoires, disciplines distinctes). À n'appeler que lorsque le
+ * match compte pour l'Elo (jamais sur dodge / match forcé / non-classé).
+ */
+async function awardMatchEconomyTx(
+  tx: Prisma.TransactionClient,
+  game: string,
+  participants: { login: string; won: boolean }[],
+  playedAt: Date,
+): Promise<void> {
+  const weekKey = isoWeekKey(playedAt);
+  for (const p of participants) {
+    await grantCoinsTx(tx, p.login, p.won ? COINS_PER_MATCH_WON : COINS_PER_MATCH_PLAYED);
+    // Recompose l'ensemble des disciplines jouées (sans doublon) avant l'upsert.
+    const existing = await tx.weeklyQuestProgress.findUnique({
+      where: { login_weekKey: { login: p.login, weekKey } },
+      select: { gamesPlayed: true },
+    });
+    const gamesPlayed = existing
+      ? existing.gamesPlayed.includes(game)
+        ? existing.gamesPlayed
+        : [...existing.gamesPlayed, game]
+      : [game];
+    await tx.weeklyQuestProgress.upsert({
+      where: { login_weekKey: { login: p.login, weekKey } },
+      create: {
+        login: p.login,
+        weekKey,
+        matchesPlayed: 1,
+        wins: p.won ? 1 : 0,
+        gamesPlayed,
+      },
+      update: {
+        matchesPlayed: { increment: 1 },
+        wins: p.won ? { increment: 1 } : undefined,
+        gamesPlayed: { set: gamesPlayed },
+      },
+    });
+  }
+}
+
+// ─── Paris : règlement / remboursement (volet C) ─────────────────────────────
+
+/**
+ * Règle les paris OUVERTS correspondant à `where` selon le vainqueur connu :
+ * cote fixe ×2 aux bons pronostics, perdu sinon. Renvoie les logins crédités
+ * (pour un emit après commit).
+ */
+async function settleBetsTx(
+  tx: Prisma.TransactionClient,
+  where: Prisma.BetWhereInput,
+  winnerLogin: string,
+): Promise<string[]> {
+  const open = await tx.bet.findMany({ where: { ...where, status: 'open' } });
+  const credited: string[] = [];
+  const now = new Date();
+  for (const b of open) {
+    const won = b.choiceLogin === winnerLogin;
+    const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : 0;
+    if (payout > 0) {
+      await grantCoinsTx(tx, b.bettorLogin, payout);
+      credited.push(b.bettorLogin);
+    }
+    await tx.bet.update({
+      where: { id: b.id },
+      data: { status: won ? 'won' : 'lost', payout, settledAt: now },
+    });
+  }
+  return credited;
+}
+
+/** Règle les paris sur un match de bracket précis. */
+function settleMatchBetsTx(tx: Prisma.TransactionClient, matchId: string, winnerLogin: string) {
+  return settleBetsTx(tx, { targetType: 'match', matchId }, winnerLogin);
+}
+
+/** Règle les paris sur le vainqueur d'un tournoi. */
+function settleTournamentBetsTx(tx: Prisma.TransactionClient, tournamentId: string, winnerLogin: string) {
+  return settleBetsTx(tx, { targetType: 'tournament', tournamentId }, winnerLogin);
+}
+
+/**
+ * Rembourse intégralement tous les paris encore ouverts d'un tournoi (paris sur
+ * le tournoi ET sur ses matchs) — à appeler AVANT toute suppression de tournoi,
+ * sinon le cascade efface les paris et la mise est perdue. Renvoie les logins
+ * remboursés.
+ */
+async function refundOpenBetsForTournamentTx(
+  tx: Prisma.TransactionClient,
+  tournamentId: string,
+): Promise<string[]> {
+  const open = await tx.bet.findMany({ where: { tournamentId, status: 'open' } });
+  const refunded: string[] = [];
+  const now = new Date();
+  for (const b of open) {
+    await grantCoinsTx(tx, b.bettorLogin, b.stake);
+    await tx.bet.update({
+      where: { id: b.id },
+      data: { status: 'refunded', payout: b.stake, settledAt: now },
+    });
+    refunded.push(b.bettorLogin);
+  }
+  return refunded;
+}
+
+// ─── Endpoints : quêtes hebdomadaires (volet B) ──────────────────────────────
+
+app.get('/quests', async (c) => {
+  const me = await getCurrentLogin(c);
+  const weekKey = isoWeekKey(new Date());
+  const [row, user] = await Promise.all([
+    prisma.weeklyQuestProgress.findUnique({ where: { login_weekKey: { login: me, weekKey } } }),
+    prisma.user.findUnique({ where: { login: me }, select: { leagueCoins: true } }),
+  ]);
+  const base: QuestProgressRow = {
+    matchesPlayed: row?.matchesPlayed ?? 0,
+    wins: row?.wins ?? 0,
+    gamesPlayed: row?.gamesPlayed ?? [],
+  };
+  const claimed = row?.claimed ?? [];
+  const quests = WEEKLY_QUESTS.map((q) => {
+    const progress = questProgressValue(q, base);
+    const isClaimed = claimed.includes(q.id);
+    return {
+      id: q.id,
+      reward: q.reward,
+      target: q.target,
+      progress: Math.min(progress, q.target),
+      claimed: isClaimed,
+      claimable: !isClaimed && progress >= q.target,
+    };
+  });
+  return c.json({ weekKey, coins: user?.leagueCoins ?? 0, quests });
+});
+
+app.post('/quests/:id/claim', async (c) => {
+  const me = await getCurrentLogin(c);
+  const questId = c.req.param('id');
+  const quest = WEEKLY_QUESTS.find((q) => q.id === questId);
+  if (!quest) throw new HTTPException(404, { message: 'quête inconnue' });
+  const weekKey = isoWeekKey(new Date());
+  const result = await prisma.$transaction(async (tx) => {
+    // Verrou de ligne : sérialise les réclamations concurrentes (anti double-claim).
+    await tx.$executeRaw`SELECT 1 FROM weekly_quest_progress WHERE login = ${me} AND week_key = ${weekKey} FOR UPDATE`;
+    const row = await tx.weeklyQuestProgress.findUnique({
+      where: { login_weekKey: { login: me, weekKey } },
+    });
+    const base: QuestProgressRow = {
+      matchesPlayed: row?.matchesPlayed ?? 0,
+      wins: row?.wins ?? 0,
+      gamesPlayed: row?.gamesPlayed ?? [],
+    };
+    if (questProgressValue(quest, base) < quest.target) {
+      throw new HTTPException(409, { message: 'quête non terminée' });
+    }
+    if ((row?.claimed ?? []).includes(quest.id)) {
+      throw new HTTPException(409, { message: 'récompense déjà réclamée' });
+    }
+    await tx.weeklyQuestProgress.upsert({
+      where: { login_weekKey: { login: me, weekKey } },
+      create: { login: me, weekKey, claimed: [quest.id] },
+      update: { claimed: { push: quest.id } },
+    });
+    const coins = await grantCoinsTx(tx, me, quest.reward);
+    return { coins: coins ?? 0 };
+  });
+  emit([me], { type: 'panel:update', payload: {} });
+  return c.json({ id: quest.id, reward: quest.reward, coins: result.coins });
+});
+
+// ─── Endpoints : paris (volet C) ─────────────────────────────────────────────
+
+app.get('/bets', async (c) => {
+  const me = await getCurrentLogin(c);
+  const [user, myBetsRaw, openTours, openMatchesRaw] = await Promise.all([
+    prisma.user.findUnique({ where: { login: me }, select: { leagueCoins: true } }),
+    prisma.bet.findMany({
+      where: { bettorLogin: me },
+      orderBy: { createdAt: 'desc' },
+      include: { tournament: { select: { name: true, game: true } } },
+    }),
+    // Tournois ouverts aux paris : inscription ou en cours, vainqueur inconnu.
+    prisma.tournament.findMany({
+      where: { status: { in: ['registration', 'in_progress'] }, winnerLogin: null },
+      orderBy: { createdAt: 'desc' },
+      include: { entries: { select: { login: true } } },
+    }),
+    // Matchs ouverts aux paris : 2 joueurs connus, aucun score encore saisi
+    // (dès qu'un score est saisi, l'issue est connue du rapporteur → fermé).
+    prisma.tournamentMatch.findMany({
+      where: {
+        confirmedAt: null,
+        recordedByLogin: null,
+        playerALogin: { not: null },
+        playerBLogin: { not: null },
+        tournament: { status: 'in_progress' },
+      },
+      orderBy: [{ round: 'asc' }, { slot: 'asc' }],
+      include: { tournament: { select: { id: true, name: true, game: true } } },
+    }),
+  ]);
+  return c.json({
+    coins: user?.leagueCoins ?? 0,
+    myBets: myBetsRaw.map((b) => ({
+      id: b.id,
+      targetType: b.targetType,
+      tournamentId: b.tournamentId,
+      tournamentName: b.tournament?.name ?? null,
+      game: b.tournament?.game ?? null,
+      matchId: b.matchId,
+      choiceLogin: b.choiceLogin,
+      stake: b.stake,
+      status: b.status,
+      payout: b.payout,
+      createdAt: b.createdAt,
+      settledAt: b.settledAt,
+    })),
+    openTournaments: openTours.map((t) => ({
+      id: t.id,
+      name: t.name,
+      game: t.game,
+      status: t.status,
+      entrants: t.entries.map((e) => e.login),
+    })),
+    openMatches: openMatchesRaw.map((m) => ({
+      id: m.id,
+      tournamentId: m.tournamentId,
+      tournamentName: m.tournament.name,
+      game: m.tournament.game,
+      round: m.round,
+      playerALogin: m.playerALogin,
+      playerBLogin: m.playerBLogin,
+    })),
+  });
+});
+
+const PlaceBetSchema = z.object({
+  targetType: z.enum(['tournament', 'match']),
+  tournamentId: z.string().min(1),
+  matchId: z.string().min(1).optional(),
+  choiceLogin: z.string().min(1),
+  stake: z.number().int().positive(),
+});
+
+app.post('/bets', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = PlaceBetSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { targetType, tournamentId, matchId, choiceLogin, stake } = parsed.data;
+  const result = await prisma.$transaction(async (tx) => {
+    const tour = await tx.tournament.findUnique({
+      where: { id: tournamentId },
+      include: { entries: { select: { login: true } } },
+    });
+    if (!tour) throw new HTTPException(404, { message: 'tournoi introuvable' });
+    if (tour.status !== 'registration' && tour.status !== 'in_progress') {
+      throw new HTTPException(409, { message: 'les paris sont fermés sur ce tournoi' });
+    }
+
+    if (targetType === 'tournament') {
+      if (!tour.entries.some((e) => e.login === choiceLogin)) {
+        throw new HTTPException(400, { message: 'le pronostic doit être un participant du tournoi' });
+      }
+    } else {
+      if (!matchId) throw new HTTPException(400, { message: 'matchId requis pour un pari de match' });
+      const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+      if (!m || m.tournamentId !== tournamentId) {
+        throw new HTTPException(404, { message: 'match introuvable' });
+      }
+      if (m.confirmedAt || m.recordedByLogin) {
+        throw new HTTPException(409, { message: 'les paris sont fermés sur ce match' });
+      }
+      if (!m.playerALogin || !m.playerBLogin) {
+        throw new HTTPException(409, { message: 'match sans joueurs définis' });
+      }
+      if (m.playerALogin === me || m.playerBLogin === me) {
+        throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre match' });
+      }
+      if (choiceLogin !== m.playerALogin && choiceLogin !== m.playerBLogin) {
+        throw new HTTPException(400, { message: 'le pronostic doit être un joueur du match' });
+      }
+    }
+
+    // Un seul pari ouvert par cible (tournoi global, ou match précis).
+    const dup = await tx.bet.findFirst({
+      where: { bettorLogin: me, status: 'open', tournamentId, matchId: matchId ?? null },
+    });
+    if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur cette cible' });
+
+    // Débit de la mise : vérifie le solde AVANT (grantCoinsTx borne à 0 — on ne
+    // veut pas qu'un solde insuffisant soit silencieusement ramené à 0).
+    const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
+    if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+    if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
+    await grantCoinsTx(tx, me, -stake);
+
+    const bet = await tx.bet.create({
+      data: {
+        id: randomUUID(),
+        bettorLogin: me,
+        targetType,
+        tournamentId,
+        matchId: targetType === 'match' ? matchId! : null,
+        choiceLogin,
+        stake,
+      },
+    });
+    return { bet, balance: u.leagueCoins - stake };
+  });
+  emit([me], { type: 'panel:update', payload: {} });
+  return c.json({ bet: result.bet, coins: result.balance }, 201);
+});
 
 // POST /admin/shop/grant — crédite (ou débite) des League Coins à un joueur.
 // `amount` peut être négatif ; le solde résultant est borné à >= 0.

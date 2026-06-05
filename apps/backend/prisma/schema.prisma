@@ -108,6 +108,9 @@ model User {
   ffaDeclared               PendingFfa[]            @relation("ffaDeclarer")
   ffaPendingParticipant     PendingFfaParticipant[] @relation("ffaPendingParticipant")
   ffaPlayedParticipant      PlayedFfaParticipant[]  @relation("ffaPlayedParticipant")
+  // Économie de coins — progression des quêtes hebdo + paris placés.
+  weeklyQuests              WeeklyQuestProgress[]   @relation("userQuests")
+  bets                      Bet[]                   @relation("userBets")
 
   @@map("users")
 }
@@ -264,6 +267,7 @@ model Tournament {
   entries   TournamentEntry[]
   matches   TournamentMatch[]
   invites   TournamentInvite[]
+  bets      Bet[]              @relation("tournamentBets")
 
   @@index([status])
   @@map("tournaments")
@@ -653,4 +657,57 @@ model MatchmakingQueue {
   // (une recherche « match aléatoire » indépendante par univers).
   @@id([login, game])
   @@map("matchmaking_queue")
+}
+
+// ─── Économie de coins : quêtes hebdomadaires ────────────────────────────────
+//
+// Une ligne par (joueur, semaine ISO). Les compteurs sont accumulés au règlement
+// de chaque match classé (cf. awardMatchEconomyTx). Les quêtes elles-mêmes sont
+// définies côté serveur (WEEKLY_QUESTS dans index.ts) et évaluées à la volée à
+// partir de ces compteurs ; `claimed` mémorise les ids déjà réclamés (anti
+// double-claim). La semaine ISO sert de reset implicite : une nouvelle semaine =
+// une nouvelle ligne, donc des compteurs et des réclamations remis à zéro.
+model WeeklyQuestProgress {
+  login         String
+  weekKey       String   @map("week_key") // ex. "2026-W23" (année-semaine ISO 8601)
+  matchesPlayed Int      @default(0) @map("matches_played")
+  wins          Int      @default(0)
+  gamesPlayed   String[] @default([]) @map("games_played") // disciplines distinctes jouées en classé
+  claimed       String[] @default([]) // ids de quêtes déjà réclamées cette semaine
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation("userQuests", fields: [login], references: [login], onDelete: Cascade)
+
+  @@id([login, weekKey])
+  @@index([login])
+  @@map("weekly_quest_progress")
+}
+
+// ─── Économie de coins : paris ───────────────────────────────────────────────
+//
+// Pari à cote fixe ×2 : la mise est débitée à la prise (jamais de solde négatif) ;
+// au règlement, un pari gagnant crédite 2× la mise (gain net = mise), un perdant
+// ne crédite rien. Cible = vainqueur d'un tournoi ('tournament') OU d'un match de
+// bracket précis ('match'). Le règlement a lieu à la confirmation du match de
+// tournoi / de la finale ; l'annulation d'un tournoi rembourse les paris ouverts.
+model Bet {
+  id           String    @id @default(uuid())
+  bettorLogin  String    @map("bettor_login")
+  targetType   String    @map("target_type") // 'tournament' | 'match'
+  tournamentId String    @map("tournament_id") // toujours renseigné (pari match → son tournoi)
+  matchId      String?   @map("match_id") // TournamentMatch.id quand targetType='match'
+  choiceLogin  String    @map("choice_login") // vainqueur pronostiqué
+  stake        Int // mise débitée à la prise
+  status       String    @default("open") // 'open' | 'won' | 'lost' | 'refunded'
+  payout       Int       @default(0) // coins crédités au règlement (0 si perdu)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  settledAt    DateTime? @map("settled_at")
+
+  bettor     User       @relation("userBets", fields: [bettorLogin], references: [login], onDelete: Cascade)
+  tournament Tournament @relation("tournamentBets", fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([bettorLogin])
+  @@index([tournamentId, status])
+  @@index([matchId, status])
+  @@map("bets")
 }
