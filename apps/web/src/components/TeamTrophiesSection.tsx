@@ -311,7 +311,9 @@ function MostTitledDuos({
         <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-red to-red/40 rounded-sm" />
         Les duos les plus titrés
       </div>
-      <div className="rounded-xl bg-white/[0.025] px-4 py-4">
+      {/* Plein cadre (overflow-hidden, sans padding) : le halo et le balayage de
+          brillance atteignent les bords — pas de cadre mort autour du podium. */}
+      <div className="rounded-xl bg-white/[0.025] overflow-hidden">
         <TeamTrophyPodium
           podium={podium.map(({ holder, rank }) => ({
             team: holder.team,

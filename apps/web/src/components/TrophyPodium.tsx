@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { Trophy } from 'lucide-react';
-import type { LeaderboardEntry } from '../lib/api';
 import { Avatar } from './Avatar';
 import { PlayerLink } from './PlayerLink';
 
@@ -27,10 +26,9 @@ export interface TrophyPodiumEntry {
 interface TrophyPodiumProps {
   /** Déjà en ordre d'affichage : [2e, 1er, 3e]. */
   podium: TrophyPodiumEntry[];
-  leaderboard: LeaderboardEntry[];
 }
 
-export function TrophyPodium({ podium, leaderboard }: TrophyPodiumProps) {
+export function TrophyPodium({ podium }: TrophyPodiumProps) {
   return (
     <div className="relative overflow-hidden rounded-xl pt-8 pb-0">
       {/* Halo radial doré (centré sur le n°1) avec un voile violet sur les bords */}
@@ -56,7 +54,7 @@ export function TrophyPodium({ podium, leaderboard }: TrophyPodiumProps) {
         style={{ perspective: '1100px' }}
       >
         {podium.map((e, i) => (
-          <TrophyPodiumColumn key={e.login} entry={e} leaderboard={leaderboard} delay={i * 0.11} />
+          <TrophyPodiumColumn key={e.login} entry={e} delay={i * 0.11} />
         ))}
       </div>
     </div>
@@ -110,21 +108,14 @@ const TROPHY_ICON: Record<PodiumTier, string> = {
 
 function TrophyPodiumColumn({
   entry,
-  leaderboard,
   delay,
 }: {
   entry: TrophyPodiumEntry;
-  leaderboard: LeaderboardEntry[];
   delay: number;
 }) {
   const { rank } = entry;
   const tier = TIER_BY_RANK[rank] ?? 'third';
   const isFirst = rank === 1;
-  const lbEntry = leaderboard.find((u) => u.login === entry.login);
-  const name =
-    lbEntry?.firstName && lbEntry?.lastName
-      ? `${lbEntry.firstName} ${lbEntry.lastName}`
-      : entry.login;
 
   return (
     <motion.div
@@ -193,7 +184,7 @@ function TrophyPodiumColumn({
               isFirst ? 'text-sm' : 'text-xs'
             }`}
           >
-            {name}
+            {entry.login}
           </div>
           <div
             className={`font-display font-black tabular-nums leading-tight ${TXT[tier]}`}

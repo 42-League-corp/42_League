@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { PlayerLink } from './PlayerLink';
 import { Avatar, UserBadge } from './Avatar';
+import { TiltCard } from './TiltCard';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
 import {
@@ -48,16 +49,17 @@ const COLOR_TEXT: Record<TrophyColor, string> = {
   sapphire: 'text-[#7aa8ff]',
 };
 
-const COLOR_GLOW: Record<TrophyColor, string> = {
-  gold: 'rgba(255,201,74,0.12)',
-  red: 'rgba(255,83,102,0.1)',
-  cyan: 'rgba(245,185,66,0.1)',
-  violet: 'rgba(162,89,255,0.1)',
-  magenta: 'rgba(255,59,217,0.1)',
-  bronze: 'rgba(205,127,50,0.1)',
-  crimson: 'rgba(220,20,60,0.1)',
-  green: 'rgba(16,185,129,0.1)',
-  sapphire: 'rgba(59,130,246,0.1)',
+// Couleur (hex) du halo de brillance TiltCard, par couleur de trophée.
+const COLOR_HEX: Record<TrophyColor, string> = {
+  gold: '#ffc94a',
+  red: '#ff5366',
+  cyan: '#f5b942',
+  violet: '#a259ff',
+  magenta: '#ff3bd9',
+  bronze: '#cd7f32',
+  crimson: '#dc143c',
+  green: '#10b981',
+  sapphire: '#3b82f6',
 };
 
 // ─── Catégories de trophées (progressive disclosure) ─────────────────────────
@@ -128,59 +130,6 @@ function categoryOf(title: string): TrophyCategoryKey {
   return TITLE_TO_CATEGORY[title] ?? 'activite';
 }
 
-// ─── Tilt card wrapper ────────────────────────────────────────────────────────
-
-function TiltCard({
-  children,
-  className,
-  color,
-}: {
-  children: ReactNode;
-  className: string;
-  color: TrophyColor;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [transform, setTransform] = useState('perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)');
-  const [shine, setShine] = useState({ x: 50, y: 50, opacity: 0 });
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const tX = (y - 0.5) * -10;
-    const tY = (x - 0.5) * 10;
-    setTransform(`perspective(600px) rotateX(${tX}deg) rotateY(${tY}deg) scale(1.025)`);
-    setShine({ x: x * 100, y: y * 100, opacity: 1 });
-  };
-
-  const handleMouseLeave = () => {
-    setTransform('perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)');
-    setShine((s) => ({ ...s, opacity: 0 }));
-  };
-
-  return (
-    <div
-      ref={ref}
-      className={`relative ${className}`}
-      style={{ transform, transition: 'transform 0.12s ease-out', transformStyle: 'preserve-3d' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {children}
-      {/* Shine overlay */}
-      <div
-        className="absolute inset-0 rounded-xl pointer-events-none"
-        style={{
-          background: `radial-gradient(circle at ${shine.x}% ${shine.y}%, ${COLOR_GLOW[color].replace('0.12', '0.22')} 0%, transparent 65%)`,
-          opacity: shine.opacity,
-          transition: 'opacity 0.25s ease',
-        }}
-      />
-    </div>
-  );
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
@@ -190,18 +139,16 @@ function renderRivalryOrValue(value: string, leaderboard: LeaderboardEntry[]) {
     const u1 = leaderboard.find((u) => u.login === login1);
     const u2 = leaderboard.find((u) => u.login === login2);
     if (u1 && u2) {
-      const name1 = u1.firstName && u1.lastName ? `${u1.firstName} ${u1.lastName}` : u1.login;
-      const name2 = u2.firstName && u2.lastName ? `${u2.firstName} ${u2.lastName}` : u2.login;
       return (
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <PlayerLink login={u1.login} className="!gap-1.5">
             <Avatar login={u1.login} imageUrl={u1.imageUrl} size="sm" />
-            <span className="font-semibold text-sm text-text-strong">{name1}</span>
+            <span className="font-semibold text-sm text-text-strong">{u1.login}</span>
           </PlayerLink>
           <span className="text-muted-2 text-[10px] font-black uppercase tracking-wider">VS</span>
           <PlayerLink login={u2.login} className="!gap-1.5">
             <Avatar login={u2.login} imageUrl={u2.imageUrl} size="sm" />
-            <span className="font-semibold text-sm text-text-strong">{name2}</span>
+            <span className="font-semibold text-sm text-text-strong">{u2.login}</span>
           </PlayerLink>
           <span className="text-muted-2 text-xs ml-1">{rest}</span>
         </div>
@@ -502,7 +449,7 @@ function TrophyHallView({
         <div className="space-y-6">
           {holders.map((h, i) => (
             <div key={h.login}>
-              <PlayerGroupHeader holder={h} rank={i + 1} leaderboard={leaderboard} />
+              <PlayerGroupHeader holder={h} rank={i + 1} />
               <TrophyGrid trophies={h.trophies} leaderboard={leaderboard} />
             </div>
           ))}
@@ -534,11 +481,10 @@ function TrophyGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
       {trophies.map((t) => {
-        const winnerEntry = t.winner ? leaderboard.find((u) => u.login === t.winner?.login) : null;
         return (
           <TiltCard
             key={t.title}
-            color={t.color}
+            glowHex={COLOR_HEX[t.color]}
             className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-3.5 flex flex-col gap-2 ${
               t.earned ? '' : 'opacity-60'
             }`}
@@ -560,8 +506,7 @@ function TrophyGrid({
                 <UserBadge
                   login={t.winner.login}
                   imageUrl={t.winner.imageUrl}
-                  firstName={winnerEntry?.firstName}
-                  lastName={winnerEntry?.lastName}
+                  showUsername
                   size="sm"
                 />
               </PlayerLink>
@@ -609,21 +554,16 @@ function SortToggle({ mode, onChange }: { mode: SortMode; onChange: (m: SortMode
 function PlayerGroupHeader({
   holder,
   rank,
-  leaderboard,
 }: {
   holder: TrophyHolder;
   rank: number;
-  leaderboard: LeaderboardEntry[];
 }) {
-  const entry = leaderboard.find((u) => u.login === holder.login);
-  const name =
-    entry?.firstName && entry?.lastName ? `${entry.firstName} ${entry.lastName}` : holder.login;
   return (
     <div className="flex items-center gap-2.5 mb-3">
       <span className="font-mono text-xs text-muted-2 font-bold w-6 text-right">#{rank}</span>
       <PlayerLink login={holder.login} className="!gap-2">
         <Avatar login={holder.login} imageUrl={holder.imageUrl} size="sm" />
-        <span className="font-extrabold text-text-strong text-sm">{name}</span>
+        <span className="font-extrabold text-text-strong text-sm">{holder.login}</span>
       </PlayerLink>
       <span className="text-[11px] font-extrabold text-gold bg-gold/10 border border-gold/20 rounded-full px-2 py-0.5">
         {holder.trophies.length} 🏆
@@ -672,8 +612,10 @@ function MostTitled({
         Les plus titrés
       </div>
 
-      {/* Fond très subtil sans border (évite card-hud dans card-hud) */}
-      <div className="rounded-xl bg-white/[0.025] px-4 py-4">
+      {/* Fond très subtil sans border (évite card-hud dans card-hud).
+          overflow-hidden + sans padding : le podium est plein cadre, le halo et
+          le balayage de brillance vont jusqu'aux bords (pas de cadre mort autour). */}
+      <div className="rounded-xl bg-white/[0.025] overflow-hidden">
         <TrophyPodium
           podium={podium.map(({ holder, rank }) => ({
             login: holder.login,
@@ -681,14 +623,13 @@ function MostTitled({
             trophyCount: holder.trophies.length,
             rank,
           }))}
-          leaderboard={leaderboard}
         />
 
       {rest.length > 0 && (
-        <>
+        <div className="px-4 pb-4 pt-3">
           <button
             onClick={() => setShowAll((s) => !s)}
-            className="mt-4 mx-auto flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2 hover:text-gold transition-colors"
+            className="mx-auto flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2 hover:text-gold transition-colors"
           >
             {showAll ? 'Masquer' : `Voir + (${rest.length})`}
             <ChevronDown
@@ -699,28 +640,21 @@ function MostTitled({
 
           {showAll && (
             <ul className="mt-3 space-y-1 border-t border-border/30 pt-3">
-              {rest.map((h, i) => {
-                const entry = leaderboard.find((u) => u.login === h.login);
-                const name =
-                  entry?.firstName && entry?.lastName
-                    ? `${entry.firstName} ${entry.lastName}`
-                    : h.login;
-                return (
-                  <li key={h.login} className="flex items-center gap-2.5 py-1">
-                    <span className="font-mono text-xs text-muted-2 w-7 text-right">#{i + 4}</span>
-                    <PlayerLink login={h.login} className="!gap-2 min-w-0 flex-1">
-                      <Avatar login={h.login} imageUrl={h.imageUrl} size="xs" />
-                      <span className="text-sm font-semibold text-text truncate">{name}</span>
-                    </PlayerLink>
-                    <span className="text-sm font-extrabold text-gold tabular-nums">
-                      {h.trophies.length} 🏆
-                    </span>
-                  </li>
-                );
-              })}
+              {rest.map((h, i) => (
+                <li key={h.login} className="flex items-center gap-2.5 py-1">
+                  <span className="font-mono text-xs text-muted-2 w-7 text-right">#{i + 4}</span>
+                  <PlayerLink login={h.login} className="!gap-2 min-w-0 flex-1">
+                    <Avatar login={h.login} imageUrl={h.imageUrl} size="xs" />
+                    <span className="text-sm font-semibold text-text truncate">{h.login}</span>
+                  </PlayerLink>
+                  <span className="text-sm font-extrabold text-gold tabular-nums">
+                    {h.trophies.length} 🏆
+                  </span>
+                </li>
+              ))}
             </ul>
           )}
-        </>
+        </div>
       )}
       </div>
     </div>

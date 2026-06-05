@@ -8,6 +8,7 @@
 
 import { motion } from 'framer-motion';
 import { Tooltip } from './Tooltip';
+import { TiltCard } from './TiltCard';
 import type { TeamTrophyResult, TeamTrophyWinner } from '../lib/trophies2v2';
 import { teamDisplayName } from '../lib/trophies2v2';
 import { useNavigate } from 'react-router-dom';
@@ -151,7 +152,8 @@ export function TeamTrophyBadge({ trophy, size = 'sm', showWinner = false }: Tea
 
 /**
  * Carte premium style holographique pour le Hall of Fame des équipes 2v2.
- * Reprend le style TiltCard existant (tilt 3D au hover).
+ * Utilise le TiltCard partagé (tilt 3D + brillance au hover) — même logique
+ * d'animation que les cartes de trophées solo, mix et FFA.
  */
 export function TeamTrophyCard({ trophy }: { trophy: TeamTrophyResult }) {
   const navigate = useNavigate();
@@ -160,8 +162,9 @@ export function TeamTrophyCard({ trophy }: { trophy: TeamTrophyResult }) {
   const borderCls = COLOR_BORDER[trophy.color] ?? 'border-gold/40';
 
   return (
-    <div
-      className={`relative card-hud overflow-hidden rounded-xl p-3.5 flex flex-col gap-2.5 border ${borderCls} ${
+    <TiltCard
+      glowHex={color}
+      className={`card-hud overflow-hidden rounded-xl p-3.5 flex flex-col gap-2.5 border ${borderCls} ${
         trophy.earned ? 'hover-glow cursor-pointer' : 'opacity-60'
       }`}
       onClick={() => trophy.earned && trophy.winner && navigate(`/team/${trophy.winner.id}`)}
@@ -230,7 +233,7 @@ export function TeamTrophyCard({ trophy }: { trophy: TeamTrophyResult }) {
           </span>
         </Tooltip>
       </div>
-    </div>
+    </TiltCard>
   );
 }
 
