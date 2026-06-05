@@ -54,7 +54,7 @@ const COLOR_BORDER: Record<string, string> = {
 
 const GOLD_GRAD = 'linear-gradient(135deg, #d4a04a 0%, #8a5e10 50%, #c79122 100%)';
 
-function DuoAvatar({ winner, size = 24 }: { winner: TeamTrophyWinner; size?: number }) {
+export function DuoAvatar({ winner, size = 24 }: { winner: TeamTrophyWinner; size?: number }) {
   const cls = `rounded-full overflow-hidden border border-gold/40 flex-shrink-0 flex items-center justify-center font-display font-black text-[#1a1100]`;
   const style = { width: size, height: size, fontSize: size * 0.38 };
   return (
@@ -162,7 +162,7 @@ export function TeamTrophyCard({ trophy }: { trophy: TeamTrophyResult }) {
   return (
     <div
       className={`relative card-hud overflow-hidden rounded-xl p-3.5 flex flex-col gap-2.5 border ${borderCls} ${
-        trophy.earned ? 'hover-glow cursor-pointer' : 'opacity-40 grayscale'
+        trophy.earned ? 'hover-glow cursor-pointer' : 'opacity-60'
       }`}
       onClick={() => trophy.earned && trophy.winner && navigate(`/team/${trophy.winner.id}`)}
       style={trophy.earned ? { boxShadow: `0 0 0 1px ${color}22, 0 8px 20px -8px ${color}40` } : undefined}

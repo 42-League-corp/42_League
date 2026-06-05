@@ -33,24 +33,14 @@ interface TrophyPodiumProps {
 export function TrophyPodium({ podium, leaderboard }: TrophyPodiumProps) {
   return (
     <div className="relative overflow-hidden rounded-xl pt-8 pb-0">
-      {/* Halo radial violet → or (distinct du halo doré du classement) */}
+      {/* Halo radial doré (centré sur le n°1) avec un voile violet sur les bords */}
       <div
         className="absolute inset-x-0 top-0 h-44 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 60% 80% at 50% 0%, rgba(180,120,255,0.20), rgba(255,201,74,0.12) 42%, transparent 68%)',
+            'radial-gradient(ellipse 60% 80% at 50% 0%, rgba(255,201,74,0.20), rgba(180,120,255,0.10) 46%, transparent 70%)',
         }}
       />
-      {/* Rayons de lumière en éventail qui tournent — bicolores violet/or */}
-      <div className="absolute inset-x-0 top-0 h-52 pointer-events-none overflow-hidden opacity-35 [mask-image:radial-gradient(ellipse_70%_100%_at_50%_0%,black,transparent_72%)]">
-        <div
-          className="absolute left-1/2 top-0 aspect-square w-[1100px] max-w-none animate-spin-sun"
-          style={{
-            background:
-              'repeating-conic-gradient(rgba(190,140,255,0.14) 0deg 5deg, transparent 5deg 11deg, rgba(255,201,74,0.12) 11deg 16deg, transparent 16deg 22deg)',
-          }}
-        />
-      </div>
 
       {/* Balayage holographique qui traverse périodiquement le podium */}
       <motion.div
@@ -83,7 +73,7 @@ const STEP_H: Record<number, string> = {
 
 // Palette « hall of fame » — or / violet / cyan (≠ or-argent-bronze du classement).
 const STEP: Record<PodiumTier, string> = {
-  first: 'from-[#2a1f3d] via-[#1a1330] to-[#0d0a18] border-[#e0b34a]/50',
+  first: 'from-[#3a2e10] via-[#241c08] to-[#0f0c04] border-[#e0b34a]/55',
   second: 'from-[#241a3a] via-[#160f28] to-[#0b0816] border-[#a259ff]/40',
   third: 'from-[#10262b] via-[#0a1a1e] to-[#060f11] border-[#22d3d3]/35',
 };

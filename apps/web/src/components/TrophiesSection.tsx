@@ -540,7 +540,7 @@ function TrophyGrid({
             key={t.title}
             color={t.color}
             className={`card-hud overflow-hidden hover-glow ${COLOR_BORDER[t.color]} rounded-xl p-3.5 flex flex-col gap-2 ${
-              t.earned ? '' : 'opacity-40 grayscale'
+              t.earned ? '' : 'opacity-60'
             }`}
           >
             <div className="flex items-center gap-3">
@@ -643,7 +643,21 @@ function MostTitled({
   leaderboard: LeaderboardEntry[];
 }) {
   const [showAll, setShowAll] = useState(false);
-  const top3 = holders.slice(0, 3);
+
+  // Podium toujours à 3 colonnes : on complète avec les meilleurs joueurs du
+  // classement (par ELO) quand il y a moins de 3 détenteurs de trophées — utile
+  // notamment en inter-jeux où un seul joueur peut rafler la plupart des trophées.
+  const ranked: TrophyHolder[] = [...holders];
+  if (ranked.length < 3) {
+    const have = new Set(ranked.map((h) => h.login));
+    for (const u of [...leaderboard].sort((a, b) => b.elo - a.elo)) {
+      if (ranked.length >= 3) break;
+      if (have.has(u.login)) continue;
+      have.add(u.login);
+      ranked.push({ login: u.login, imageUrl: u.imageUrl, trophies: [] });
+    }
+  }
+  const top3 = ranked.slice(0, 3);
   const rest = holders.slice(3);
   const podium = [
     top3[1] ? { holder: top3[1], rank: 2 } : null,
@@ -652,22 +666,23 @@ function MostTitled({
   ].filter(Boolean) as { holder: TrophyHolder; rank: number }[];
 
   return (
-    /* Fond très subtil sans border (évite card-hud dans card-hud) */
-    <div className="rounded-xl bg-white/[0.025] px-4 py-4 mb-5">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-4 flex items-center gap-2">
+    <div className="mb-5">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-3 flex items-center gap-2">
         <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
         Les plus titrés
       </div>
 
-      <TrophyPodium
-        podium={podium.map(({ holder, rank }) => ({
-          login: holder.login,
-          imageUrl: holder.imageUrl,
-          trophyCount: holder.trophies.length,
-          rank,
-        }))}
-        leaderboard={leaderboard}
-      />
+      {/* Fond très subtil sans border (évite card-hud dans card-hud) */}
+      <div className="rounded-xl bg-white/[0.025] px-4 py-4">
+        <TrophyPodium
+          podium={podium.map(({ holder, rank }) => ({
+            login: holder.login,
+            imageUrl: holder.imageUrl,
+            trophyCount: holder.trophies.length,
+            rank,
+          }))}
+          leaderboard={leaderboard}
+        />
 
       {rest.length > 0 && (
         <>
@@ -707,6 +722,7 @@ function MostTitled({
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
