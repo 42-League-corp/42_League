@@ -2743,7 +2743,7 @@ function DeleteSeasonModal({
 
 // Classements figés d'une saison, par discipline (granularité par mode).
 function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
-  const [game, setGame] = useState<'babyfoot' | 'smash' | 'chess'>('babyfoot');
+  const [game, setGame] = useState<'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes'>('babyfoot');
   const [rows, setRows] = useState<import('../lib/api').SeasonStanding[] | null>(null);
   const t = useT();
 
@@ -2759,7 +2759,7 @@ function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
   return (
     <div className="border-t border-zinc-800 px-3 py-2.5">
       <div className="flex gap-1 mb-2">
-        {(['babyfoot', 'smash', 'chess'] as const).map((g) => (
+        {(['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'] as const).map((g) => (
           <button
             key={g}
             type="button"
@@ -2768,7 +2768,7 @@ function SeasonStandingsBlock({ seasonId }: { seasonId: string }) {
               game === g ? 'bg-zinc-100/10 border-zinc-400 text-zinc-100' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            {t(`god.tourn.game.${g}`)}
+            {t(`god.game.${g}`)}
           </button>
         ))}
       </div>
