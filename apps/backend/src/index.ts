@@ -1739,6 +1739,25 @@ app.post('/seasons', async (c) => {
   return c.json({ ...result.season, previous: result.closed }, 201);
 });
 
+// Réactive / bascule la saison active (outil admin/staging). Simple basculement
+// de VUE : on cible cette saison (isActive=true, endedAt=null) et on désactive
+// toute autre saison active, dans la même transaction. AUCUN reset d'ELO ni
+// snapshot — on ne fait que choisir quelle saison est « la courante ». Admin only.
+app.post('/seasons/:id/activate', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  const season = await prisma.$transaction(async (tx) => {
+    const target = await tx.season.findUnique({ where: { id } });
+    if (!target) throw new HTTPException(404, { message: 'Saison introuvable.' });
+    await tx.season.updateMany({ where: { isActive: true, id: { not: id } }, data: { isActive: false } });
+    return tx.season.update({ where: { id }, data: { isActive: true, endedAt: null } });
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json(season);
+});
+
 // Supprime une saison : retire le classement figé, les badges champion liés, et
 // détague les matchs (seasonId → null, les matchs eux-mêmes sont conservés).
 // IRRÉVERSIBLE — ne restaure pas les ELO déjà remis à zéro. Admin only.
