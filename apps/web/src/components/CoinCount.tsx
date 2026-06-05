@@ -23,11 +23,19 @@ export function CoinCount({
 }
 
 // ── SVG ∞ path ─────────────────────────────────────────────────────────────
-// Deux lobes elliptiques se croisant en (100, 50) dans un espace 200×100.
+// Lemniscate symétrique : deux lobes miroir autour du centre (100, 50) dans un
+// espace 200×100. Les points de contrôle gauche/droite sont l'exact miroir
+// (x → 200−x) pour une forme nette et équilibrée.
+// Lemniscate ENTRELACÉE : un seul tracé continu qui se croise au centre (100,50)
+// en formant un X, façon ruban — le « vrai » ∞, plein et symétrique (les lobes
+// gauche/droite sont l'exact miroir autour du centre).
 const INF_PATH =
-  'M 100 50 C 100 22 82 8 65 8 C 45 8 28 22 28 50 C 28 78 45 92 65 92 C 82 92 100 78 100 50 C 100 22 118 8 135 8 C 155 8 172 22 172 50 C 172 78 155 92 135 92 C 118 92 100 78 100 50 Z';
+  'M 20 50 C 20 20 70 20 100 50 C 130 80 180 80 180 50 C 180 20 130 20 100 50 C 70 80 20 80 20 50 Z';
 
-// Longueur estimée du tracé ≈ 2 × périmètre ellipse (36×42) ≈ 490 unités.
+// Longueur LOGIQUE imposée via l'attribut SVG `pathLength` : le navigateur
+// remappe tout le calcul de pointillés sur cette valeur, indépendamment de la
+// longueur géométrique réelle. dasharray (SEG+GAP) et l'offset animé (−L) sont
+// donc EXACTS → le motif boucle pile, sans couture ni saccade.
 const L = 490;
 
 // 24 teintes HSL espacées de 15° — arc-en-ciel continu et lisse.
@@ -65,9 +73,9 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
       title="Solde illimité — accès fondateur"
     >
       <svg
-        viewBox="20 3 161 94"
-        width="1.55em"
-        height="0.6em"
+        viewBox="10 12 180 76"
+        width="1.7em"
+        height="0.72em"
         aria-hidden
         style={{ overflow: 'visible' }}
       >
@@ -85,10 +93,12 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
             <path
               key={`g${i}`}
               d={INF_PATH}
+              pathLength={L}
               fill="none"
               stroke={`hsl(${s.hue} 100% 58%)`}
-              strokeWidth={16}
+              strokeWidth={19}
               strokeLinecap="round"
+              strokeLinejoin="round"
               strokeDasharray={`${SEG} ${GAP}`}
               style={{
                 animation: `rgb-path-travel ${DUR}s linear infinite`,
@@ -103,10 +113,12 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
           <path
             key={`m${i}`}
             d={INF_PATH}
+            pathLength={L}
             fill="none"
             stroke={`hsl(${s.hue} 100% 62%)`}
-            strokeWidth={9}
+            strokeWidth={12}
             strokeLinecap="round"
+            strokeLinejoin="round"
             strokeDasharray={`${SEG} ${GAP}`}
             style={{
               animation: `rgb-path-travel ${DUR}s linear infinite`,
@@ -119,8 +131,9 @@ function InfiniteGlyph({ className = '' }: { className?: string }) {
         <path
           d={INF_PATH}
           fill="none"
-          stroke="rgba(255,255,255,0.38)"
-          strokeWidth={2.5}
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth={3}
+          strokeLinejoin="round"
         />
       </svg>
 
