@@ -2518,9 +2518,70 @@ function PendingTab() {
 
 // `pending` (force-valider/annuler) est réservé au SUPERADMIN → filtré à l'affichage.
 // ── Saisons (SUPERADMIN) ────────────────────────────────────────────────────
-const CLOSE_CONFIRM_PHRASE = 'cloturer la saison';
 
-function CloseSeasonModal({
+// Démarrer une nouvelle saison clôture instantanément la précédente (snapshot +
+// champions) et remet tout le monde au plancher de son grade. Confirmation
+// rapide (un clic) — le « long message » de friction est réservé à la SUPPRESSION.
+function TransitionSeasonModal({
+  activeName,
+  newName,
+  onClose,
+  onDone,
+}: {
+  activeName: string;
+  newName: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ champion: string | null; players: number } | null>(null);
+  const t = useT();
+
+  async function go() {
+    setBusy(true);
+    try {
+      const r = await api.createSeason(newName);
+      setResult({ champion: r.previous?.champion ?? null, players: r.previous?.players ?? 0 });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
+      <div className="bg-zinc-900 border border-emerald-500/40 rounded-lg w-full max-w-md p-5 font-mono" onClick={(e) => e.stopPropagation()}>
+        {result ? (
+          <div className="space-y-3 text-sm text-zinc-200">
+            <div className="text-emerald-400 font-bold">{t('god.season.transitionDone').replace('{name}', newName)}</div>
+            <div>{result.players} {t('god.season.playersReset')}</div>
+            {result.champion && <div>{t('god.season.champion')} <span className="text-yellow-400 font-bold">{result.champion}</span></div>}
+            <Btn variant="default" onClick={() => { onDone(); onClose(); }} className="mt-2">{t('god.close')}</Btn>
+          </div>
+        ) : (
+          <>
+            <div className="text-sm font-bold text-emerald-400 uppercase tracking-widest mb-2">{t('god.season.transitionTitle').replace('{name}', newName)}</div>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              {t('god.season.transitionDesc.a').replace('{name}', activeName)} <span className="text-amber-300 font-bold">{t('god.season.transitionDesc.b')}</span>{t('god.season.transitionDesc.c')}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Btn variant="ghost" onClick={onClose}>{t('god.cancel')}</Btn>
+              <Btn variant="success" onClick={go} disabled={busy}>
+                {busy ? t('god.season.transitioning') : t('god.season.transitionBtn')}
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const DELETE_SEASON_PHRASE = 'supprimer la saison';
+
+// Suppression d'une saison : action destructive irréversible → longue
+// confirmation (énumération des conséquences + recopie de phrase).
+function DeleteSeasonModal({
   season,
   onClose,
   onDone,
@@ -2531,15 +2592,15 @@ function CloseSeasonModal({
 }) {
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ champion: string | null; players: number } | null>(null);
-  const ok = typed.trim() === CLOSE_CONFIRM_PHRASE;
+  const ok = typed.trim().toLowerCase() === DELETE_SEASON_PHRASE;
   const t = useT();
 
-  async function handleClose() {
+  async function go() {
     setBusy(true);
     try {
-      const r = await api.closeSeason();
-      setResult({ champion: r.champion, players: r.players });
+      await api.deleteSeason(season.id);
+      onDone();
+      onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -2549,30 +2610,23 @@ function CloseSeasonModal({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
       <div className="bg-zinc-900 border border-red-500/40 rounded-lg w-full max-w-md p-5 font-mono" onClick={(e) => e.stopPropagation()}>
-        {result ? (
-          <div className="space-y-3 text-sm text-zinc-200">
-            <div className="text-emerald-400 font-bold">{t('god.season.closed')}</div>
-            <div>{result.players} {t('god.season.playersReset')}</div>
-            {result.champion && <div>{t('god.season.champion')} <span className="text-yellow-400 font-bold">{result.champion}</span></div>}
-            <Btn variant="default" onClick={() => { onDone(); onClose(); }} className="mt-2">{t('god.close')}</Btn>
-          </div>
-        ) : (
-          <>
-            <div className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">{t('god.season.closeTitle').replace('{name}', season.name)}</div>
-            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
-              {t('god.season.closeDesc.a')} <span className="text-red-400 font-bold">{t('god.season.closeDesc.b')}</span>{t('god.season.closeDesc.c')} <span className="text-red-400">{t('god.season.closeDesc.irr')}</span>
-            </p>
-            <p className="text-[11px] text-zinc-500 mb-1">{t('god.season.copyToConfirm')}</p>
-            <div className="text-yellow-400 text-xs mb-2 select-none">{CLOSE_CONFIRM_PHRASE}</div>
-            <Input value={typed} onChange={setTyped} placeholder={CLOSE_CONFIRM_PHRASE} className="w-full mb-3" />
-            <div className="flex gap-2 justify-end">
-              <Btn variant="ghost" onClick={onClose}>{t('god.cancel')}</Btn>
-              <Btn variant="danger" onClick={handleClose} disabled={!ok || busy}>
-                {busy ? t('god.season.closing') : t('god.season.closeBtn')}
-              </Btn>
-            </div>
-          </>
-        )}
+        <div className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">{t('god.season.deleteTitle').replace('{name}', season.name)}</div>
+        <p className="text-xs text-zinc-400 leading-relaxed mb-2">{t('god.season.deleteDesc.a')}</p>
+        <ul className="text-[11px] text-zinc-400 leading-relaxed mb-3 list-disc pl-4 space-y-0.5">
+          <li>{t('god.season.deleteDesc.li1')}</li>
+          <li>{t('god.season.deleteDesc.li2')}</li>
+          <li>{t('god.season.deleteDesc.li3')}</li>
+        </ul>
+        <p className="text-xs text-red-400 font-bold mb-3">{t('god.season.deleteDesc.irr')}</p>
+        <p className="text-[11px] text-zinc-500 mb-1">{t('god.season.copyToConfirm')}</p>
+        <div className="text-yellow-400 text-xs mb-2 select-none">{DELETE_SEASON_PHRASE}</div>
+        <Input value={typed} onChange={setTyped} placeholder={DELETE_SEASON_PHRASE} className="w-full mb-3" />
+        <div className="flex gap-2 justify-end">
+          <Btn variant="ghost" onClick={onClose}>{t('god.cancel')}</Btn>
+          <Btn variant="danger" onClick={go} disabled={!ok || busy}>
+            {busy ? t('god.season.deleting') : t('god.season.deleteBtn')}
+          </Btn>
+        </div>
       </div>
     </div>
   );
@@ -2644,7 +2698,8 @@ function SeasonsTab() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [closing, setClosing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState<Season | null>(null);
   const [openSeason, setOpenSeason] = useState<string | null>(null);
   const t = useT();
 
@@ -2661,7 +2716,8 @@ function SeasonsTab() {
 
   const active = seasons.find((s) => s.isActive) ?? null;
 
-  const create = async () => {
+  // Première saison (aucune active) : création directe, sans reset ni confirmation.
+  const createFirst = async () => {
     const n = name.trim();
     if (!n) return;
     setBusy(true);
@@ -2678,37 +2734,50 @@ function SeasonsTab() {
     }
   };
 
+  // Ajouter une saison alors qu'une est active = transition (clôture + reset) →
+  // on passe par la modale de confirmation.
+  const onAdd = () => {
+    if (!name.trim()) return;
+    if (active) setConfirming(true);
+    else void createFirst();
+  };
+
   return (
     <div className="p-4">
-      {closing && active && (
-        <CloseSeasonModal season={active} onClose={() => setClosing(false)} onDone={load} />
+      {confirming && active && (
+        <TransitionSeasonModal
+          activeName={active.name}
+          newName={name.trim()}
+          onClose={() => setConfirming(false)}
+          onDone={() => {
+            setName('');
+            void load();
+          }}
+        />
+      )}
+      {deleting && (
+        <DeleteSeasonModal season={deleting} onClose={() => setDeleting(null)} onDone={load} />
       )}
 
       <Section title={t('god.season.current')}>
         {active ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-800/50 border border-zinc-700 rounded p-3">
-            <div className="text-sm text-zinc-200">
-              <span className="text-emerald-400 font-bold">{active.name}</span>
-              <span className="text-zinc-500 text-xs ml-2">{t('god.season.since')} {fmtDate(active.startedAt)}</span>
-            </div>
-            <Btn variant="danger" onClick={() => setClosing(true)}>{t('god.season.closeCurrent')}</Btn>
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded p-3 text-sm text-zinc-200">
+            <span className="text-emerald-400 font-bold">{active.name}</span>
+            <span className="text-zinc-500 text-xs ml-2">{t('god.season.since')} {fmtDate(active.startedAt)}</span>
           </div>
         ) : (
           <div className="text-sm text-zinc-500">{t('god.season.noneActive')}</div>
         )}
       </Section>
 
-      <Section title={t('god.season.createTitle')}>
-        {active ? (
-          <div className="text-xs text-zinc-500">{t('god.season.closeFirst')}</div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Input value={name} onChange={setName} placeholder={t('god.season.namePlaceholder')} className="flex-1 min-w-[180px]" />
-            <Btn variant="success" onClick={create} disabled={busy || !name.trim()}>
-              {busy ? t('god.season.creating') : t('god.season.create')}
-            </Btn>
-          </div>
-        )}
+      <Section title={active ? t('god.season.nextTitle') : t('god.season.createTitle')}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={name} onChange={setName} placeholder={t('god.season.namePlaceholder')} className="flex-1 min-w-[180px]" />
+          <Btn variant="success" onClick={onAdd} disabled={busy || !name.trim()}>
+            {busy ? t('god.season.creating') : active ? t('god.season.next') : t('god.season.create')}
+          </Btn>
+        </div>
+        {active && <div className="text-[11px] text-zinc-500 mt-2 leading-relaxed">{t('god.season.nextHint')}</div>}
         {msg && <div className="text-xs text-zinc-400 mt-2">{msg}</div>}
       </Section>
 
@@ -2716,21 +2785,31 @@ function SeasonsTab() {
         <div className="space-y-1.5">
           {seasons.map((s) => (
             <div key={s.id} className="bg-zinc-800/30 border border-zinc-800 rounded">
-              <button
-                type="button"
-                onClick={() => setOpenSeason(openSeason === s.id ? null : s.id)}
-                className="w-full flex items-center justify-between gap-2 text-xs px-3 py-2 cursor-pointer hover:bg-zinc-800/40"
-              >
-                <span className="text-zinc-200 font-bold">{s.name}</span>
-                <span className="flex items-center gap-2 text-zinc-500">
-                  {s.isActive ? (
-                    <span className="text-emerald-400">{t('god.season.ongoing')}</span>
-                  ) : (
-                    `${t('god.season.closedOn')} ${s.endedAt ? fmtDate(s.endedAt) : ''}`
-                  )}
-                  {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : t('god.season.standings')}</span>}
-                </span>
-              </button>
+              <div className="w-full flex items-center justify-between gap-2 text-xs px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenSeason(openSeason === s.id ? null : s.id)}
+                  className="flex-1 flex items-center justify-between gap-2 cursor-pointer text-left hover:opacity-80"
+                >
+                  <span className="text-zinc-200 font-bold">{s.name}</span>
+                  <span className="flex items-center gap-2 text-zinc-500">
+                    {s.isActive ? (
+                      <span className="text-emerald-400">{t('god.season.ongoing')}</span>
+                    ) : (
+                      `${t('god.season.closedOn')} ${s.endedAt ? fmtDate(s.endedAt) : ''}`
+                    )}
+                    {!s.isActive && <span className="text-zinc-600">{openSeason === s.id ? '▲' : t('god.season.standings')}</span>}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting(s)}
+                  title={t('god.season.delete')}
+                  className="shrink-0 text-red-400/60 hover:text-red-400 px-1.5 py-0.5 rounded border border-transparent hover:border-red-500/30 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
               {openSeason === s.id && !s.isActive && <SeasonStandingsBlock seasonId={s.id} />}
             </div>
           ))}

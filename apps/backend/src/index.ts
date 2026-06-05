@@ -1597,132 +1597,149 @@ app.get('/seasons/:id/standings', async (c) => {
 
 const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
 
-// Crée une nouvelle saison active. Refuse s'il y a déjà une saison en cours.
+// Démarre une nouvelle saison. S'il y en a une active, elle est clôturée dans la
+// MÊME transaction : snapshot du classement final par discipline, badge champion
+// au n°1 de chaque mode, puis reset de TOUS les ELO au PLANCHER du grade courant
+// (rankFloor — on récompense la progression, on ne repart pas d'un plat 1000),
+// compteurs de matchs à 0. L'historique des matchs est conservé (taggé par
+// saison). Passage instantané à la saison suivante.
 app.post('/seasons', async (c) => {
   const me = await getCurrentLogin(c);
   await requireAdmin(me);
   const body = await c.req.json().catch(() => ({}));
   const parsed = CreateSeasonSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  const active = await prisma.season.findFirst({ where: { isActive: true } });
-  if (active) {
-    throw new HTTPException(409, { message: "Clôture la saison en cours avant d'en créer une nouvelle." });
-  }
-  const season = await prisma.season.create({
-    data: { id: randomUUID(), name: parsed.data.name, isActive: true },
-  });
-  broadcast({ type: 'data:update', payload: {} });
-  return c.json(season, 201);
-});
 
-// Clôture la saison active : snapshot du classement final, badge champion, reset
-// ELO/compteurs à 1000/0 pour tout le monde. L'historique des matchs est conservé
-// (taggé par saison). IRRÉVERSIBLE.
-app.post('/seasons/close', async (c) => {
-  const me = await getCurrentLogin(c);
-  await requireAdmin(me);
   const result = await prisma.$transaction(async (tx) => {
     const active = await tx.season.findFirst({ where: { isActive: true } });
-    if (!active) throw new HTTPException(409, { message: 'Aucune saison active à clôturer.' });
+    let closed: { seasonName: string; champion: string | null; players: number } | null = null;
 
-    const allUsers = await tx.user.findMany({ where: VISIBLE_USER_WHERE });
-    const matches = await tx.playedMatch.findMany({
-      where: { seasonId: active.id },
-      select: { playerALogin: true, playerBLogin: true, winner: true, game: true },
-    });
+    if (active) {
+      const allUsers = await tx.user.findMany({ where: VISIBLE_USER_WHERE });
+      const matches = await tx.playedMatch.findMany({
+        where: { seasonId: active.id },
+        select: { playerALogin: true, playerBLogin: true, winner: true, game: true },
+      });
 
-    // Snapshot par discipline : on fige un classement distinct pour chaque jeu
-    // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
-    // Map gameId → login du champion (pour badge avec discipline cloisonnée).
-    const champions = new Map<string, string>();
-    let totalPlayers = 0;
+      // Snapshot par discipline : on fige un classement distinct pour chaque jeu
+      // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
+      // Map gameId → login du champion (pour badge avec discipline cloisonnée).
+      const champions = new Map<string, string>();
+      let totalPlayers = 0;
 
-    for (const g of GAME_IDS) {
-      const users = allUsers
-        .filter((u) => (u.games ?? ['babyfoot']).includes(g))
-        .sort((a, b) => readElo(b, g) - readElo(a, g));
-      if (users.length === 0) continue;
-      totalPlayers += users.length;
-      const wl = new Map<string, { w: number; l: number }>();
-      for (const u of users) wl.set(u.login, { w: 0, l: 0 });
-      for (const m of matches) {
-        if ((m.game ?? 'babyfoot') !== g) continue;
-        for (const login of [m.playerALogin, m.playerBLogin]) {
-          const rec = wl.get(login);
-          if (!rec) continue;
-          const isA = m.playerALogin === login;
-          if (m.winner === 'draw') continue; // nulle : ni V ni D au classement de saison
-          const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
-          if (won) rec.w++;
-          else rec.l++;
+      for (const g of GAME_IDS) {
+        const users = allUsers
+          .filter((u) => (u.games ?? ['babyfoot']).includes(g))
+          .sort((a, b) => readElo(b, g) - readElo(a, g));
+        if (users.length === 0) continue;
+        totalPlayers += users.length;
+        const wl = new Map<string, { w: number; l: number }>();
+        for (const u of users) wl.set(u.login, { w: 0, l: 0 });
+        for (const m of matches) {
+          if ((m.game ?? 'babyfoot') !== g) continue;
+          for (const login of [m.playerALogin, m.playerBLogin]) {
+            const rec = wl.get(login);
+            if (!rec) continue;
+            const isA = m.playerALogin === login;
+            if (m.winner === 'draw') continue; // nulle : ni V ni D au classement de saison
+            const won = (isA && m.winner === 'A') || (!isA && m.winner === 'B');
+            if (won) rec.w++;
+            else rec.l++;
+          }
         }
+        let rank = 0;
+        for (const u of users) {
+          rank++;
+          const s = wl.get(u.login) ?? { w: 0, l: 0 };
+          await tx.seasonStanding.create({
+            data: {
+              id: randomUUID(),
+              seasonId: active.id,
+              game: g,
+              login: u.login,
+              rank,
+              elo: readElo(u, g),
+              wins: s.w,
+              losses: s.l,
+            },
+          });
+        }
+        const champ = users[0]?.login;
+        if (champ) champions.set(g, champ);
       }
-      let rank = 0;
-      for (const u of users) {
-        rank++;
-        const s = wl.get(u.login) ?? { w: 0, l: 0 };
-        await tx.seasonStanding.create({
+
+      // Badge champion pour le n°1 de chaque discipline — cloisonné par jeu.
+      for (const [game, champ] of champions) {
+        await tx.userBadge.upsert({
+          where: { userLogin_code_game: { userLogin: champ, code: 'season_champion', game } },
+          update: { seasonId: active.id },
+          create: { id: randomUUID(), userLogin: champ, code: 'season_champion', game, seasonId: active.id },
+        });
+      }
+
+      // Reset de toutes les disciplines pour la prochaine ère.
+      // On ne repart pas d'un plat 1000 : chaque ELO est ramené au PLANCHER de son
+      // grade courant (rankFloor) pour récompenser la progression de la saison.
+      // Les compteurs de matchs sont eux remis à zéro.
+      for (const u of allUsers) {
+        await tx.user.update({
+          where: { login: u.login },
           data: {
-            id: randomUUID(),
-            seasonId: active.id,
-            game: g,
-            login: u.login,
-            rank,
-            elo: readElo(u, g),
-            wins: s.w,
-            losses: s.l,
+            elo: rankFloor(u.elo),
+            matchesPlayed: 0,
+            eloSmash: rankFloor(u.eloSmash),
+            matchesPlayedSmash: 0,
+            eloChess: rankFloor(u.eloChess),
+            matchesPlayedChess: 0,
+            eloSf: rankFloor(u.eloSf),
+            matchesPlayedSf: 0,
           },
         });
       }
-      const champ = users[0]?.login;
-      if (champ) champions.set(g, champ);
+      await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
+      const babyfootChamp =
+        [...allUsers].filter((u) => (u.games ?? ['babyfoot']).includes('babyfoot')).sort((a, b) => b.elo - a.elo)[0]?.login ?? null;
+      closed = { seasonName: active.name, champion: babyfootChamp, players: totalPlayers };
     }
 
-    // Badge champion pour le n°1 de chaque discipline — cloisonné par jeu.
-    for (const [game, champ] of champions) {
-      await tx.userBadge.upsert({
-        where: { userLogin_code_game: { userLogin: champ, code: 'season_champion', game } },
-        update: { seasonId: active.id },
-        create: { id: randomUUID(), userLogin: champ, code: 'season_champion', game, seasonId: active.id },
-      });
-    }
-
-    // Reset de toutes les disciplines pour la prochaine ère.
-    // On ne repart pas d'un plat 1000 : chaque ELO est ramené au PLANCHER de son
-    // grade courant (rankFloor) pour récompenser la progression de la saison.
-    // Les compteurs de matchs sont eux remis à zéro.
-    for (const u of allUsers) {
-      await tx.user.update({
-        where: { login: u.login },
-        data: {
-          elo: rankFloor(u.elo),
-          matchesPlayed: 0,
-          eloSmash: rankFloor(u.eloSmash),
-          matchesPlayedSmash: 0,
-          eloChess: rankFloor(u.eloChess),
-          matchesPlayedChess: 0,
-          eloSf: rankFloor(u.eloSf),
-          matchesPlayedSf: 0,
-        },
-      });
-    }
-    await tx.season.update({ where: { id: active.id }, data: { isActive: false, endedAt: new Date() } });
-    const babyfootChamp =
-      [...allUsers].filter((u) => (u.games ?? ['babyfoot']).includes('babyfoot')).sort((a, b) => b.elo - a.elo)[0]?.login ?? null;
-    return { seasonId: active.id, seasonName: active.name, champion: babyfootChamp, players: totalPlayers };
+    const season = await tx.season.create({
+      data: { id: randomUUID(), name: parsed.data.name, isActive: true },
+    });
+    return { season, closed };
   });
-  if (result.champion) {
-    void notify(result.champion, {
+
+  if (result.closed?.champion) {
+    void notify(result.closed.champion, {
       type: 'badge',
       title: '🏆 Champion de saison !',
-      body: `Tu remportes ${result.seasonName} — badge débloqué.`,
+      body: `Tu remportes ${result.closed.seasonName} — badge débloqué.`,
       link: '/profile',
       game: 'babyfoot',
     });
   }
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
-  return c.json({ closed: true, ...result });
+  return c.json({ ...result.season, previous: result.closed }, 201);
+});
+
+// Supprime une saison : retire le classement figé, les badges champion liés, et
+// détague les matchs (seasonId → null, les matchs eux-mêmes sont conservés).
+// IRRÉVERSIBLE — ne restaure pas les ELO déjà remis à zéro. Admin only.
+app.delete('/seasons/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  await prisma.$transaction(async (tx) => {
+    const season = await tx.season.findUnique({ where: { id } });
+    if (!season) throw new HTTPException(404, { message: 'Saison introuvable.' });
+    await tx.seasonStanding.deleteMany({ where: { seasonId: id } });
+    await tx.userBadge.deleteMany({ where: { seasonId: id, code: 'season_champion' } });
+    await tx.playedMatch.updateMany({ where: { seasonId: id }, data: { seasonId: null } });
+    await tx.season.delete({ where: { id } });
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ deleted: true });
 });
 
 // ── Followers / Following ─────────────────────────────────────────────────

@@ -764,13 +764,15 @@ export const api = {
     request<SeasonStanding[]>(
       `/seasons/${encodeURIComponent(id)}/standings${game && game !== 'babyfoot' ? `?game=${game}` : ''}`,
     ),
+  // Démarre une nouvelle saison ; si une saison est active, elle est clôturée +
+  // reset au plancher de grade dans la même opération (`previous` la décrit).
   createSeason: (name: string) =>
-    request<Season>('/seasons', { method: 'POST', body: JSON.stringify({ name }) }),
-  closeSeason: () =>
-    request<{ closed: true; champion: string | null; players: number; seasonName: string }>(
-      '/seasons/close',
-      { method: 'POST', body: JSON.stringify({}) },
+    request<Season & { previous: { seasonName: string; champion: string | null; players: number } | null }>(
+      '/seasons',
+      { method: 'POST', body: JSON.stringify({ name }) },
     ),
+  deleteSeason: (id: string) =>
+    request<{ deleted: true }>(`/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: { opponentLogin: string } & MatchResultInput) =>
