@@ -5,6 +5,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useOpsStatus } from '../hooks/useOpsStatus';
 import { api, type Challenge, type PendingMatch } from '../lib/api';
 import { ContestModal } from './ContestModal';
+import { gameColor, GAME_EMOJI } from '../lib/gameVisuals';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bannière de notifications temps réel — reprend le design de l'extension
@@ -314,11 +315,15 @@ export function NotifBanner() {
         </div>
 
         <div style={{ maxHeight: 'min(70vh, 460px)', overflowY: 'auto' }}>
-        {/* Duels reçus */}
-        {duels.map((c) => (
-          <Row key={c.id}>
+        {/* Duels reçus — teintés à la couleur + emoji de leur discipline. */}
+        {duels.map((c) => {
+          const game = c.game ?? 'babyfoot';
+          const color = gameColor(game);
+          return (
+          <Row key={c.id} accent={color}>
             <Meta>
-              <span style={{ color: C.amber, fontWeight: 700 }}>{c.challengerLogin}</span>
+              <span style={{ fontSize: 14 }}>{GAME_EMOJI[game]}</span>
+              <span style={{ color, fontWeight: 700 }}>{c.challengerLogin}</span>
               {' te défie en duel ⚔️'}
             </Meta>
             <Actions>
@@ -330,13 +335,18 @@ export function NotifBanner() {
               </ContestBtn>
             </Actions>
           </Row>
-        ))}
+          );
+        })}
 
-        {/* Scores à valider */}
-        {scores.map((p) => (
-          <Row key={p.id}>
+        {/* Scores à valider — teintés à la couleur + emoji de leur discipline. */}
+        {scores.map((p) => {
+          const game = p.game ?? 'babyfoot';
+          const color = gameColor(game);
+          return (
+          <Row key={p.id} accent={color}>
             <Meta>
-              <span style={{ color: C.amber, fontWeight: 700 }}>{p.declarerLogin}</span>
+              <span style={{ fontSize: 14 }}>{GAME_EMOJI[game]}</span>
+              <span style={{ color, fontWeight: 700 }}>{p.declarerLogin}</span>
               {' a déclaré :'}
             </Meta>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '4px 0' }}>
@@ -364,7 +374,8 @@ export function NotifBanner() {
               </ContestBtn>
             </Actions>
           </Row>
-        ))}
+          );
+        })}
         </div>
       </div>
 
@@ -375,9 +386,21 @@ export function NotifBanner() {
 
 // ─── Sous-composants de présentation (styles identiques à l'extension) ─────────
 
-function Row({ children }: { children: React.ReactNode }) {
+function Row({ children, accent }: { children: React.ReactNode; accent?: string }) {
   return (
-    <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div
+      style={{
+        padding: '10px 12px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        // Liseré + voile teinté à la couleur de la discipline du défi/score.
+        ...(accent
+          ? {
+              borderLeft: `3px solid ${accent}`,
+              background: `linear-gradient(90deg, ${accent}1f 0%, transparent 55%)`,
+            }
+          : {}),
+      }}
+    >
       {children}
     </div>
   );
