@@ -11,7 +11,7 @@ import { WinRateBar } from '../../components/WinRateBar';
 import { RankBadge } from '../../components/RankBadge';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
-import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView } from './LeaderboardScatter';
 import { GoatView } from '../GoatPage';
 import { TeamLeaderboard } from './TeamLeaderboard';
 import { RankingScopeToggle } from './RankingScopeToggle';
@@ -353,11 +353,12 @@ export function LeaderboardDesktop() {
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <SeasonSelect seasons={seasons} value={seasonId} onChange={setSeasonId} currentLabel={t('lb.season.current')} />
-          <div className="flex items-center gap-2">
-            {!viewingPast && (
+          {!viewingPast && (
+            <div className="flex items-center gap-2">
               <RankingViewToggle view={viewMode} onChange={setViewMode} />
-            )}
-          </div>
+              <GradesNavButton />
+            </div>
+          )}
         </div>
         {viewingPast ? (
           <SnapshotTable standings={standings ?? []} />

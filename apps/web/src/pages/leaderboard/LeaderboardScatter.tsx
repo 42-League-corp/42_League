@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGesture } from '@use-gesture/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart, Crown } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, List, ScatterChart, Crown, Shield, ChevronRight } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import type { LeaderboardEntry } from '../../lib/api';
 import { useT } from '../../lib/i18n';
@@ -590,6 +590,27 @@ function ToggleBtn({
     >
       <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
       {children}
+    </button>
+  );
+}
+
+/**
+ * Bouton d'accès à la page Frise des grades (/grades) — pensé pour vivre dans
+ * la même barre d'outils que RankingViewToggle. Pastille dorée distincte (action
+ * de navigation, pas une bascule de vue) avec chevron pour le signaler.
+ */
+export function GradesNavButton({ className = '' }: { className?: string }) {
+  const navigate = useNavigate();
+  const t = useT();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/grades')}
+      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[0.12em] bg-gold/10 border border-gold/30 text-gold hover:bg-gold/15 hover:border-gold/50 transition-colors tap-transparent ${className}`}
+    >
+      <Shield className="w-3.5 h-3.5" strokeWidth={2.5} />
+      {t('lb.grades')}
+      <ChevronRight className="w-3 h-3 opacity-60 -mr-0.5" strokeWidth={2.5} />
     </button>
   );
 }

@@ -6,7 +6,7 @@ import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { RankingScopeToggle } from './RankingScopeToggle';
 import { Podium } from './mobile/Podium';
 import { PlayerRankCard } from './mobile/PlayerRankCard';
-import { LeaderboardScatter, RankingViewToggle, type RankingView } from './LeaderboardScatter';
+import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView } from './LeaderboardScatter';
 import { GoatView } from '../GoatPage';
 import { PlayerLink } from '../../components/PlayerLink';
 import { RankBadge } from '../../components/RankBadge';
@@ -226,9 +226,10 @@ export function LeaderboardMobile() {
           <Podium top3={top3} statsByLogin={podiumStats} />
         )}
 
-        {/* Bascule liste / nuage / G.O.A.T (en dessous du podium) */}
-        <div className="flex items-center justify-center gap-2">
+        {/* Barre d'outils : bascule liste / nuage / G.O.A.T + accès Paliers */}
+        <div className="flex items-center justify-center gap-2 flex-wrap">
           <RankingViewToggle view={viewMode} onChange={setViewMode} />
+          <GradesNavButton />
         </div>
 
         {viewMode === 'graph' ? (

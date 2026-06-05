@@ -35,6 +35,7 @@ export const dict: Record<Lang, Dict> = {
     // Bascule de vue
     'lb.view.list': 'Liste',
     'lb.view.graph': 'Nuage',
+    'lb.grades': 'Paliers',
     // Nuage de points — contrôles & légendes
     'lb.scatter.zoomIn': 'Zoomer',
     'lb.scatter.zoomOut': 'Dézoomer',
@@ -73,6 +74,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.search.empty': 'No player',
     'lb.view.list': 'List',
     'lb.view.graph': 'Scatter',
+    'lb.grades': 'Tiers',
     'lb.scatter.zoomIn': 'Zoom in',
     'lb.scatter.zoomOut': 'Zoom out',
     'lb.scatter.reset': 'Reset view',
@@ -108,6 +110,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.search.empty': 'Ningún jugador',
     'lb.view.list': 'Lista',
     'lb.view.graph': 'Nube',
+    'lb.grades': 'Niveles',
     'lb.scatter.zoomIn': 'Acercar',
     'lb.scatter.zoomOut': 'Alejar',
     'lb.scatter.reset': 'Restablecer vista',
