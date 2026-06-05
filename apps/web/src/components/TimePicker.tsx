@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { haptic } from '../mobile/feedback/useHaptic';
 import { fmtDayLabel } from '../lib/format';
 import type { Lang } from '../lib/i18n';
@@ -14,6 +15,9 @@ interface TimePickerProps {
   /** Pas des minutes (5 = 00,05,10…). */
   minuteStep?: number;
   lang?: Lang;
+  /** Fermer/annuler le picker (ex: clic extérieur, Échap). Si fourni, Échap
+   *  ferme le picker. */
+  onClose?: () => void;
 }
 
 const ITEM_H = 40; // hauteur d'une ligne de molette (px)
@@ -36,7 +40,11 @@ export function TimePicker({
   days = 7,
   minuteStep = 5,
   lang = 'fr',
+  onClose,
 }: TimePickerProps) {
+  // Échap ferme/annule le picker quand un handler de fermeture est fourni.
+  useEscapeKey(!!onClose, () => onClose?.());
+
   const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
   const minutes = useMemo(
     () => Array.from({ length: Math.floor(60 / minuteStep) }, (_, i) => i * minuteStep),

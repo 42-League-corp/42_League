@@ -62,6 +62,7 @@ export function BadgeChip({
         type="button"
         onClick={onClick}
         title={b.label}
+        aria-label={b.label}
         className={`inline-flex items-center justify-center rounded-full border shrink-0 ${boxCls}`}
         style={commonStyle}
         {...sheen}
@@ -83,6 +84,7 @@ export function BadgeChip({
       type="button"
       onClick={onClick}
       title={b.label}
+      aria-label={b.label}
       className={`inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`}
       style={commonStyle}
       {...sheen}
@@ -199,6 +201,9 @@ function BadgesModal({
   const total = codes.length + extra.length;
   return (
     <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Badges"
       className="fixed inset-0 z-[130] overflow-y-auto bg-black/60 backdrop-blur-sm"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -220,7 +225,7 @@ function BadgesModal({
           <button
             onClick={onClose}
             aria-label="Fermer"
-            className="w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-red hover:bg-red/10 transition-colors"
+            className="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-muted hover:text-red hover:bg-red/10 transition-colors"
           >
             <X className="w-4 h-4" strokeWidth={2.5} />
           </button>

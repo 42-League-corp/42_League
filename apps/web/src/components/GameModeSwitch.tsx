@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGameMode } from '../hooks/useGameMode';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useT } from '../lib/i18n';
 import type { Game } from '../lib/gameMode';
 import { GAMES, GAME_META as META } from '../lib/gameMeta';
@@ -33,6 +34,9 @@ export function GameModeSwitch() {
   const [open, setOpen] = useState(false);
   const m = META[game];
 
+  // Ferme le panneau au clavier (Échap), en plus du clic backdrop.
+  useEscapeKey(open, () => setOpen(false));
+
   const pick = (g: Game) => {
     setGame(g);
     window.setTimeout(() => setOpen(false), 180);
@@ -62,6 +66,9 @@ export function GameModeSwitch() {
           // ── Panneau (morph depuis le FAB, reste ancré dans le coin) ──
           <motion.div
             layoutId="gm-switch"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('settings.universe')}
             transition={{ layout: MORPH }}
             style={{ borderRadius: 22, background: '#14110b', border: `1.5px solid ${m.borderColor}` }}
             className="w-[248px] max-w-[calc(100vw-1.5rem)] overflow-hidden shadow-2xl backdrop-blur-md"
