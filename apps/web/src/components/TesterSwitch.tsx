@@ -94,7 +94,7 @@ export function TesterSwitch() {
     return (
       <button
         onClick={returnToSelf}
-        className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/60 bg-gold/15 glass-strong shadow-lg hover:bg-gold/25 transition-colors animate-pop"
+        className="fixed z-[80] bottom-44 sm:bottom-40 left-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/60 bg-gold/15 glass-strong shadow-lg hover:bg-gold/25 transition-colors animate-pop"
         title={`Revenir au compte ${impersonator}`}
       >
         <span className="text-base">🧪</span>
@@ -114,7 +114,7 @@ export function TesterSwitch() {
   if (!canSwitch || isMobile) return null;
 
   return (
-    <div className="fixed z-[80] bottom-36 sm:bottom-24 left-3 flex items-center gap-2">
+    <div className="fixed z-[80] bottom-44 sm:bottom-40 left-3 flex items-center gap-2">
       <button
         onClick={switchToTester}
         disabled={busy}
