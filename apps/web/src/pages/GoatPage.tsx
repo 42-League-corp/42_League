@@ -277,8 +277,8 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
             <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-1">
               🐐 {t('goat.sub')} {isMe && `· ${t('common.toi')}`}
             </div>
-            <PlayerLink login={entry.login} className="inline-block">
-              <span className="font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
+            <PlayerLink login={entry.login} className="block max-w-full">
+              <span className="block truncate font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
                 {displayName(entry)}
               </span>
             </PlayerLink>

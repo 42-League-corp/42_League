@@ -4,6 +4,7 @@ import { MobileHeader } from '../mobile/primitives/MobileHeader';
 import { MobileTabBar } from '../mobile/primitives/MobileTabBar';
 import { PageTransition } from '../mobile/motion/PageTransition';
 import { FABProvider } from '../mobile/primitives/FAB';
+import { useViewport } from '../hooks/useViewport';
 import { ScrollRootContext } from './scrollRoot';
 
 interface MobileShellProps {
@@ -25,6 +26,11 @@ interface MobileShellProps {
 export function MobileShell({ children }: MobileShellProps) {
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
+  // Hauteur visible RÉELLE (window.innerHeight, réactif au resize → suit la
+  // barre d'URL mobile qui s'ouvre/se ferme). On ne se fie plus à `100dvh` qui,
+  // sur certains navigateurs mobiles, sur-évalue la hauteur (≈ lvh) et laissait
+  // donc <main> scroller dans le vide sous le contenu.
+  const { height } = useViewport();
 
   // Au changement de page, on repart en haut de la nouvelle page (le <main> est
   // le seul conteneur scrollable). Les pages qui veulent un autre point d'ancrage
@@ -36,7 +42,10 @@ export function MobileShell({ children }: MobileShellProps) {
   return (
     <ScrollRootContext.Provider value={mainRef}>
       <FABProvider>
-        <div className="relative flex flex-col h-dvh overflow-hidden">
+        <div
+          className="relative flex flex-col h-dvh overflow-hidden"
+          style={height ? { height: `${height}px` } : undefined}
+        >
           {/* Vignette dorée subtile en arrière-plan (par-dessus le bg global du body). */}
           <div className="fixed inset-0 bg-gold-vignette pointer-events-none z-0" />
 

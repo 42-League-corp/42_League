@@ -79,7 +79,10 @@ export function HeroPlayerCard() {
       initial={{ opacity: 0, y: -8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden rounded-3xl no-select gpu"
+      // Sans `gpu` : même raison que ProfileHeroCard — une couche compositeur
+      // permanente sur une carte interactive décale le hit-testing des taps sous
+      // Firefox Android (APZ). Le contenu reste cliquable partout.
+      className="relative overflow-hidden rounded-3xl no-select"
       style={{
         background:
           'linear-gradient(180deg, #2a241c 0%, #1d1914 18%, #15120e 50%, #1d1914 82%, #2a241c 100%)',

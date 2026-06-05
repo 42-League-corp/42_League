@@ -1,5 +1,5 @@
 import { useMemo, useRef, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 
 interface PageTransitionProps {
@@ -62,26 +62,29 @@ export function PageTransition({ children }: PageTransitionProps) {
     return <>{children}</>;
   }
 
+  // Transition « entrée seule » : un seul écran monté à la fois.
+  // - Pas d'AnimatePresence/popLayout → on évite la mesure de layout forcée de la
+  //   page sortante (reflow synchrone coûteux sur une page mobile longue) et le
+  //   double-montage des deux pages pendant l'animation. C'était la cause du
+  //   micro-lag à chaque navigation.
+  // - Le `key` sur la pathname force le remount : l'ancienne page disparaît
+  //   instantanément, la nouvelle slide/fade en entrant.
   return (
-    // mode="popLayout" (Framer Motion 10+) :
-    // - L'élément sortant est mis en position:absolute (hors du flux normal)
-    //   → il n'affecte pas la hauteur du conteneur pendant l'exit animation
-    // - L'élément entrant prend sa place en flux normal, animation simultanée
-    // - Pas de blocage Suspense (pas de mode="wait" qui attend le commit React 18)
-    // Le wrapper relatif est requis par popLayout pour positionner l'élément sortant.
-    <div className="relative w-full">
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.div
-          key={location.pathname}
-          initial={{ opacity: 0, x: direction * 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: direction * -12 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-          className="w-full gpu"
-        >
-          {children}
-        </motion.div>
-      </AnimatePresence>
-    </div>
+    <motion.div
+      key={location.pathname}
+      initial={{ opacity: 0, x: direction * 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+      // PAS de `gpu` ici : `will-change: transform`/`translateZ(0)` permanent
+      // promeut tout le contenu scrollable en couche compositeur, et l'APZ de
+      // Firefox Android mappe alors les taps sur les coords NON-transformées de
+      // cette couche → dès qu'on a scrollé, les taps atterrissent décalés et
+      // « presque rien ne répond » (chart, titre, badges sous la ligne de
+      // flottaison). Chrome gère, pas FF. framer-motion composite déjà de lui-même
+      // le temps de l'anim d'entrée — inutile de figer la couche en permanence.
+      className="w-full"
+    >
+      {children}
+    </motion.div>
   );
 }

@@ -14,6 +14,20 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
+// Le tilt 3D + la brillance sont un effet SOURIS : sur tactile, `onMouseMove` ne
+// se déclenche jamais, donc la carte reste figée — mais le `transform:
+// perspective(...)` + `transformStyle: preserve-3d` permanent la promeut quand
+// même en couche compositeur. Or l'APZ de Firefox Android mappe les taps sur les
+// coords NON-transformées d'une telle couche → hit-testing décalé, les taps sur
+// le contenu de la carte (détails badge/trophée, 2v2…) n'aboutissent pas une fois
+// la page scrollée. Hors d'un appareil à survol fin, on rend donc une carte PLATE
+// (aucun transform, aucune couche) → taps OK partout, et zéro perte visuelle
+// puisque le tilt ne s'activait de toute façon jamais au doigt.
+const CAN_HOVER =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
 export function TiltCard({
   children,
   className = '',
@@ -49,6 +63,15 @@ export function TiltCard({
     setTransform('perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)');
     setShine((s) => ({ ...s, opacity: 0 }));
   };
+
+  // Tactile / pas de survol fin → carte plate, sans couche compositeur 3D.
+  if (!CAN_HOVER) {
+    return (
+      <div className={`relative ${className}`} style={style} onClick={onClick}>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div

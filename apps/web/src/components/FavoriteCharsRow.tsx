@@ -1,4 +1,3 @@
-import { Pencil } from 'lucide-react';
 import type { FightingGame } from '../lib/chars';
 import { gameColor, GAME_LOGO_SRC, GAME_EMOJI } from '../lib/gameVisuals';
 
@@ -49,17 +48,6 @@ export function FavoriteCharsRow({
         />
       ) : (
         <span style={{ fontSize: size * 0.5 }}>{GAME_EMOJI[game]}</span>
-      )}
-      {editable && (
-        <span
-          className="absolute bottom-0 right-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-bg-1"
-          style={{ boxShadow: `0 0 0 1.5px ${c}` }}
-        >
-          <Pencil
-            className="w-2.5 h-2.5 text-muted-2 transition-colors group-hover/fav:text-text"
-            strokeWidth={2.5}
-          />
-        </span>
       )}
     </span>
   );

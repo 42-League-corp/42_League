@@ -87,14 +87,14 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] sm:text-xs font-extrabold uppercase tracking-[0.1em] leading-tight transition-all duration-150 ${
+      className={`flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2 rounded-lg text-[11px] sm:text-xs font-extrabold uppercase tracking-tight sm:tracking-[0.1em] leading-tight transition-all duration-150 ${
         active
           ? 'bg-gold/10 border border-gold/30 text-gold shadow-[inset_0_1px_0_rgba(255,215,120,0.12)]'
           : 'text-muted-2 hover:text-text'
       }`}
     >
-      <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
-      {children}
+      <Icon className="w-3.5 h-3.5 shrink-0 hidden sm:inline-flex" strokeWidth={2.5} />
+      <span className="truncate">{children}</span>
     </button>
   );
 }

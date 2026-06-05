@@ -172,8 +172,15 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
       {open && (
         <div
           style={{ zIndex: 2147483645 }}
-          className={`absolute w-80 max-w-[calc(100vw-1.5rem)] rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60 ${
-            placement === 'up' ? 'bottom-0 left-full ml-2' : 'right-0 top-full mt-2'
+          className={`rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60 ${
+            placement === 'up'
+              ? // Desktop : ancré SUR la cloche, ouvre à droite, aligné en bas.
+                'absolute w-80 max-w-[calc(100vw-1.5rem)] bottom-0 left-full ml-2'
+              : // Mobile : la cloche n'est pas au bord droit (GOD + avatar à sa
+                // droite), donc on n'ancre PAS sur l'icône (le panneau partirait
+                // hors écran). On le fixe au viewport : collé au bord droit sous
+                // le header, largeur bornée pour ne jamais déborder.
+                'fixed right-3 top-[calc(env(safe-area-inset-top)+3.75rem)] w-[min(20rem,calc(100vw-1.5rem))]'
           }`}
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-gold/15 bg-bg-1">

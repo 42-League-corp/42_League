@@ -18,11 +18,11 @@ export function Toast() {
       >
         <span
           aria-hidden
-          className={`inline-block w-1.5 h-1.5 rounded-full ${
+          className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
             isError ? 'bg-red animate-pulse' : 'bg-gold animate-pulse'
           }`}
         />
-        {flash.message}
+        <span className="min-w-0 break-words">{flash.message}</span>
       </div>
     </div>
   );
