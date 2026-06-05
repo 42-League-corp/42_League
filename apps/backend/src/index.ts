@@ -41,7 +41,7 @@ import {
   OPS_DURATION_MS,
   OPS_FORCED_MATCHES,
   OPS_REFUSE_MULTIPLIER,
-  rankFloor,
+  seasonResetElo,
   ownedTitles,
 } from '@42-league/shared';
 import {
@@ -1604,8 +1604,9 @@ const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
 // Démarre une nouvelle saison. S'il y en a une active, elle est clôturée dans la
 // MÊME transaction : snapshot du classement final par discipline, badge champion
 // au n°1 de chaque mode, puis reset de TOUS les ELO au PLANCHER du grade courant
-// (rankFloor — on récompense la progression, on ne repart pas d'un plat 1000),
-// compteurs de matchs à 0. L'historique des matchs est conservé (taggé par
+// (seasonResetElo — on récompense la progression, on ne repart pas d'un plat 1000 ;
+// les Étains sont remontés au plancher Bronze), compteurs de matchs à 0.
+// L'historique des matchs est conservé (taggé par
 // saison). Passage instantané à la saison suivante.
 app.post('/seasons', async (c) => {
   const me = await getCurrentLogin(c);
@@ -1683,21 +1684,23 @@ app.post('/seasons', async (c) => {
 
       // Reset de toutes les disciplines pour la prochaine ère.
       // On ne repart pas d'un plat 1000 : chaque ELO est ramené au PLANCHER de son
-      // grade courant (rankFloor) pour récompenser la progression de la saison.
+      // grade courant (seasonResetElo) pour récompenser la progression de la saison.
+      // Exception : les Étains (< 1000) sont remontés au plancher Bronze — personne
+      // ne reste coincé sous le Bronze d'une saison à l'autre.
       // Les compteurs de matchs sont eux remis à zéro.
       for (const u of allUsers) {
         await tx.user.update({
           where: { login: u.login },
           data: {
-            elo: rankFloor(u.elo),
+            elo: seasonResetElo(u.elo),
             matchesPlayed: 0,
-            eloSmash: rankFloor(u.eloSmash),
+            eloSmash: seasonResetElo(u.eloSmash),
             matchesPlayedSmash: 0,
-            eloChess: rankFloor(u.eloChess),
+            eloChess: seasonResetElo(u.eloChess),
             matchesPlayedChess: 0,
-            eloSf: rankFloor(u.eloSf),
+            eloSf: seasonResetElo(u.eloSf),
             matchesPlayedSf: 0,
-            eloFlechettes: rankFloor(u.eloFlechettes),
+            eloFlechettes: seasonResetElo(u.eloFlechettes),
             matchesPlayedFlechettes: 0,
           },
         });

@@ -61,3 +61,20 @@ export function rankTier(elo: number): RankTier {
 export function rankFloor(elo: number): number {
   return rankTier(elo).floor;
 }
+
+/** Plancher du palier Bronze (cible de reset des Étains). */
+const BRONZE_FLOOR = RANK_TIERS.find((t) => t.key === 'bronze')?.floor ?? 1000;
+
+/**
+ * ELO cible après reset de fin de saison.
+ *
+ * Comme {@link rankFloor}, MAIS les Étains (< 1000) sont remontés au plancher
+ * Bronze : personne ne reste coincé sous le Bronze entre deux saisons, on
+ * repart au minimum au grade Bronze.
+ *   seasonResetElo(1500) === 1400  (Diamant → plancher Diamant)
+ *   seasonResetElo(1050) === 1000  (Bronze  → plancher Bronze)
+ *   seasonResetElo(950)  === 1000  (Étain   → plancher Bronze)
+ */
+export function seasonResetElo(elo: number): number {
+  return rankTier(elo).key === 'etain' ? BRONZE_FLOOR : rankFloor(elo);
+}

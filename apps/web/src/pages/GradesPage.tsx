@@ -270,6 +270,15 @@ export function GradesPage() {
           </h2>
         </header>
 
+        {/* Règle de fin de saison : reset au plancher du grade, sauf Étain → Bronze. */}
+        <p className="relative text-[11px] leading-relaxed text-muted-2 mb-4 -mt-1">
+          En fin de saison, chacun est remis au plancher de son grade. Les{' '}
+          <span className="font-extrabold" style={{ color: RANK_TIERS[0]?.color ?? '#9aa4ad' }}>Étain</span>{' '}
+          sont remontés en{' '}
+          <span className="font-extrabold" style={{ color: RANK_TIERS[1]?.color ?? '#cd7f32' }}>Bronze</span>{' '}
+          — personne ne reste coincé sous le Bronze d'une saison à l'autre.
+        </p>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {RANK_TIERS.map((tier, i) => (
             <TierCard
