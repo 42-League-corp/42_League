@@ -230,6 +230,13 @@ async function purgeUserFromTournaments(
   tx: Prisma.TransactionClient,
   login: string,
 ): Promise<boolean> {
+  // Rembourse les paris ouverts (d'autrui) sur les tournois de ce joueur AVANT
+  // le cascade delete — sinon la mise des parieurs serait perdue.
+  const createdTours = await tx.tournament.findMany({
+    where: { createdByLogin: login },
+    select: { id: true },
+  });
+  await refundOpenBetsForTournamentsTx(tx, createdTours.map((t) => t.id));
   const created = await tx.tournament.deleteMany({ where: { createdByLogin: login } });
   const freed = await tx.tournamentEntry.deleteMany({
     where: { login, tournament: { status: 'registration' } },
@@ -3201,6 +3208,12 @@ app.delete('/admin/users/:login', async (c) => {
     await tx.tournamentMatch.updateMany({ where: { playerALogin: login }, data: { playerALogin: null } });
     await tx.tournamentMatch.updateMany({ where: { playerBLogin: login }, data: { playerBLogin: null } });
     await tx.tournament.updateMany({ where: { winnerLogin: login }, data: { winnerLogin: null } });
+    // Rembourse les paris ouverts sur les tournois du joueur avant le cascade.
+    const createdTours = await tx.tournament.findMany({
+      where: { createdByLogin: login },
+      select: { id: true },
+    });
+    await refundOpenBetsForTournamentsTx(tx, createdTours.map((t) => t.id));
     await tx.tournament.deleteMany({ where: { createdByLogin: login } });
     await tx.user.delete({ where: { login } });
   });
@@ -3243,6 +3256,10 @@ app.post('/admin/reset-database', async (c) => {
     await tx.challenge.deleteMany({});
     await tx.ops.deleteMany({});
     await tx.rejectedMatch.deleteMany({});
+    // Rembourse toutes les mises encore ouvertes avant d'effacer les tournois :
+    // le reset ne touche pas `leagueCoins`, donc une mise non rendue serait
+    // définitivement perdue du solde des joueurs conservés.
+    await refundBetsTx(tx, {});
     await tx.tournament.deleteMany({}); // cascade → entries + tournament_matches
 
     // 2. Retirer définitivement les comptes désactivés / supprimés (joueurs partis),
@@ -6253,11 +6270,11 @@ function settleTournamentBetsTx(tx: Prisma.TransactionClient, tournamentId: stri
  * sinon le cascade efface les paris et la mise est perdue. Renvoie les logins
  * remboursés.
  */
-async function refundOpenBetsForTournamentTx(
+async function refundBetsTx(
   tx: Prisma.TransactionClient,
-  tournamentId: string,
+  where: Prisma.BetWhereInput,
 ): Promise<string[]> {
-  const open = await tx.bet.findMany({ where: { tournamentId, status: 'open' } });
+  const open = await tx.bet.findMany({ where: { ...where, status: 'open' } });
   const refunded: string[] = [];
   const now = new Date();
   for (const b of open) {
@@ -6269,6 +6286,21 @@ async function refundOpenBetsForTournamentTx(
     refunded.push(b.bettorLogin);
   }
   return refunded;
+}
+
+/** Rembourse les paris ouverts d'un tournoi (annulation/suppression unitaire). */
+function refundOpenBetsForTournamentTx(tx: Prisma.TransactionClient, tournamentId: string) {
+  return refundBetsTx(tx, { tournamentId });
+}
+
+/**
+ * Rembourse les paris ouverts d'un ENSEMBLE de tournois — à appeler avant une
+ * suppression en masse (purge d'un compte, suppression d'un faux joueur) qui
+ * effacerait les paris par cascade sans rendre la mise.
+ */
+function refundOpenBetsForTournamentsTx(tx: Prisma.TransactionClient, tournamentIds: string[]) {
+  if (tournamentIds.length === 0) return Promise.resolve<string[]>([]);
+  return refundBetsTx(tx, { tournamentId: { in: tournamentIds } });
 }
 
 // ─── Endpoints : quêtes hebdomadaires (volet B) ──────────────────────────────
