@@ -703,6 +703,11 @@ function BracketMatch({
   const [recording, setRecording] = useState(false);
   // Pile-ou-face : true entre le clic et l'arrivée du résultat (via reload SSE).
   const [flipping, setFlipping] = useState(false);
+  // Révélation différée de l'étape « avantage » : on laisse la pièce se poser et
+  // on garde le résultat du tirage à l'écran un instant avant d'enchaîner (sinon
+  // le passage à l'étape suivante est trop brutal). True d'emblée si le toss était
+  // déjà tranché au montage (revisite) → pas de délai artificiel.
+  const [revealAdvantage, setRevealAdvantage] = useState(() => match.tossWinnerLogin != null);
 
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
   const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
@@ -729,9 +734,14 @@ function BracketMatch({
   const advantage = getGameAdvantage(tournament.game ?? 'babyfoot');
   const tossWinnerName = match.tossWinnerLogin ?? '';
 
-  // Une fois le résultat du tirage arrivé, on coupe l'animation de la pièce.
+  // Une fois le résultat du tirage arrivé, on coupe l'animation de la pièce, on
+  // la laisse atterrir (~0.6 s) puis on souffle sur le résultat avant de dévoiler
+  // l'étape suivante (choix d'avantage).
   useEffect(() => {
-    if (tossDone) setFlipping(false);
+    if (!tossDone) return;
+    setFlipping(false);
+    const tm = setTimeout(() => setRevealAdvantage(true), 2000);
+    return () => clearTimeout(tm);
   }, [tossDone]);
 
   const handleToss = async () => {
@@ -830,14 +840,16 @@ function BracketMatch({
                 onFlip={undefined}
                 t={t}
               />
-              <AdvantagePicker
-                advantage={advantage}
-                isWinner={iAmTossWinner}
-                pick={match.advantagePick ?? null}
-                opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
-                onPick={handlePickAdvantage}
-                t={t}
-              />
+              {revealAdvantage && (
+                <AdvantagePicker
+                  advantage={advantage}
+                  isWinner={iAmTossWinner}
+                  pick={match.advantagePick ?? null}
+                  opponentName={(iAmTossWinner ? opponentLogin : match.tossWinnerLogin) ?? '?'}
+                  onPick={handlePickAdvantage}
+                  t={t}
+                />
+              )}
             </div>
           )}
         </div>
