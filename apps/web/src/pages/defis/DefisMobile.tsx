@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Plus, Swords, Users, X, Zap } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
-import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { HeroPlayerCard } from './mobile/HeroPlayerCard';
 import { DeclareGameSheet } from './mobile/DeclareGameSheet';
 import { DeclareFfaGameSheet } from './mobile/DeclareFfaGameSheet';
@@ -20,8 +19,6 @@ import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
 import type { Challenge, PendingFfa } from '../../lib/api';
-
-type Filter = 'received' | 'scheduled' | 'sent';
 
 export function DefisMobile() {
   const {
@@ -62,7 +59,6 @@ export function DefisMobile() {
   } | null>(null);
 
   const myElo = leaderboard.find((u) => u.login === myLogin)?.elo;
-  const [filter, setFilter] = useState<Filter>('received');
   const [recordChallenge, setRecordChallenge] = useState<Challenge | null>(null);
 
   // Ouvre le sheet d'enregistrement si ?record=<id> est dans l'URL.
@@ -75,26 +71,6 @@ export function DefisMobile() {
 
   // Map login → imageUrl pour les cartes de défis
   const imgByLogin = new Map(leaderboard.map((u) => [u.login, u.imageUrl] as const));
-
-  // Filtres : reçus / prévus / envoyés (pas d'onglet « tout » fourre-tout).
-  // On ne montre que les catégories non vides.
-  const filterChoices: SegmentChoice<Filter>[] = (
-    [
-      { value: 'received', label: t('defis.tab.received'), badge: incoming.length },
-      { value: 'scheduled', label: t('defis.tab.scheduled'), badge: accepted.length },
-      { value: 'sent', label: t('defis.tab.sent'), badge: outgoing.length },
-    ] as SegmentChoice<Filter>[]
-  ).filter((c) => (c.badge ?? 0) > 0);
-
-  // Onglet effectif : si le filtre courant n'a plus d'items, on retombe sur la
-  // 1re catégorie disponible.
-  const activeFilter: Filter = filterChoices.some((c) => c.value === filter)
-    ? filter
-    : (filterChoices[0]?.value ?? 'received');
-
-  const showIncoming = activeFilter === 'received';
-  const showAccepted = activeFilter === 'scheduled';
-  const showOutgoing = activeFilter === 'sent';
 
   const totalChallenges = incoming.length + accepted.length + outgoing.length;
 
@@ -261,61 +237,65 @@ export function DefisMobile() {
           </section>
         )}
 
-        {/* Défis — section avec segmented control */}
-        {totalChallenges > 0 && (
+        {/* Défis — reçus / prévus / envoyés empilés et tous visibles d'un coup
+            (comme sur desktop), plus de bascule par onglets. On ne montre que
+            les groupes non vides. */}
+        {incoming.length > 0 && (
           <section>
-            <SectionHeader title={t('nav.defis')} />
-            <div className="mb-3">
-              {filterChoices.length > 1 && (
-                <SegmentedControl<Filter>
-                  value={activeFilter}
-                  onChange={setFilter}
-                  choices={filterChoices}
+            <SectionHeader title={t('defis.tab.received')} badge={incoming.length} />
+            <div className="space-y-2.5">
+              {incoming.map((c) => (
+                <ChallengeMobileCard
+                  key={c.id}
+                  challenge={c}
+                  kind="incoming"
+                  myLogin={myLogin}
+                  imageUrl={imgByLogin.get(c.challengerLogin)}
+                  onAccept={() => handleAction(c.id, 'accept')}
+                  onDecline={() => handleAction(c.id, 'decline')}
                 />
-              )}
+              ))}
             </div>
-            <AnimatePresence mode="popLayout">
-              <div className="space-y-2.5">
-                {showIncoming &&
-                  incoming.map((c) => (
-                    <ChallengeMobileCard
-                      key={c.id}
-                      challenge={c}
-                      kind="incoming"
-                      myLogin={myLogin}
-                      imageUrl={imgByLogin.get(c.challengerLogin)}
-                      onAccept={() => handleAction(c.id, 'accept')}
-                      onDecline={() => handleAction(c.id, 'decline')}
-                    />
-                  ))}
-                {showAccepted &&
-                  accepted.map((c) => (
-                    <ChallengeMobileCard
-                      key={c.id}
-                      challenge={c}
-                      kind="accepted"
-                      myLogin={myLogin}
-                      imageUrl={imgByLogin.get(
-                        c.challengerLogin === myLogin ? c.opponentLogin : c.challengerLogin,
-                      )}
-                      onAccept={() => setRecordChallenge(c)}
-                      onDecline={() => handleAction(c.id, 'decline')}
-                    />
-                  ))}
-                {showOutgoing &&
-                  outgoing.map((c) => (
-                    <ChallengeMobileCard
-                      key={c.id}
-                      challenge={c}
-                      kind="outgoing"
-                      myLogin={myLogin}
-                      imageUrl={imgByLogin.get(c.opponentLogin)}
-                      onAccept={() => {}}
-                      onDecline={() => handleAction(c.id, 'decline')}
-                    />
-                  ))}
-              </div>
-            </AnimatePresence>
+          </section>
+        )}
+
+        {accepted.length > 0 && (
+          <section>
+            <SectionHeader title={t('defis.tab.scheduled')} badge={accepted.length} />
+            <div className="space-y-2.5">
+              {accepted.map((c) => (
+                <ChallengeMobileCard
+                  key={c.id}
+                  challenge={c}
+                  kind="accepted"
+                  myLogin={myLogin}
+                  imageUrl={imgByLogin.get(
+                    c.challengerLogin === myLogin ? c.opponentLogin : c.challengerLogin,
+                  )}
+                  onAccept={() => setRecordChallenge(c)}
+                  onDecline={() => handleAction(c.id, 'decline')}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {outgoing.length > 0 && (
+          <section>
+            <SectionHeader title={t('defis.tab.sent')} badge={outgoing.length} />
+            <div className="space-y-2.5">
+              {outgoing.map((c) => (
+                <ChallengeMobileCard
+                  key={c.id}
+                  challenge={c}
+                  kind="outgoing"
+                  myLogin={myLogin}
+                  imageUrl={imgByLogin.get(c.opponentLogin)}
+                  onAccept={() => {}}
+                  onDecline={() => handleAction(c.id, 'decline')}
+                />
+              ))}
+            </div>
           </section>
         )}
 
