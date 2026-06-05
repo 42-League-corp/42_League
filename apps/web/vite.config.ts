@@ -120,6 +120,16 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       sourcemap: true,
       outDir: 'dist',
+      rollupOptions: {
+        output: {
+          // Vendors lourds isolés dans leurs propres chunks : cache long (ne
+          // changent qu'aux bumps de version) et téléchargement parallèle.
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-motion': ['framer-motion'],
+          },
+        },
+      },
     },
   };
 });
