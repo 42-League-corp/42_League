@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Crown, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { PlayerLink } from './PlayerLink';
 import { Avatar, UserBadge } from './Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -14,6 +14,7 @@ import {
 import { computeFfaTrophies } from '../lib/trophiesFfa';
 import { api, type LeaderboardEntry, type PlayedFfa } from '../lib/api';
 import { TeamTrophiesHallOfFame } from './TeamTrophiesSection';
+import { TrophyPodium } from './TrophyPodium';
 
 interface TrophyHolder {
   login: string;
@@ -633,11 +634,15 @@ function MostTitled({
         Les plus titrés
       </div>
 
-      <div className="flex items-end justify-center gap-3 sm:gap-5">
-        {podium.map(({ holder, rank }) => (
-          <MostTitledSpot key={holder.login} holder={holder} rank={rank} leaderboard={leaderboard} />
-        ))}
-      </div>
+      <TrophyPodium
+        podium={podium.map(({ holder, rank }) => ({
+          login: holder.login,
+          imageUrl: holder.imageUrl,
+          trophyCount: holder.trophies.length,
+          rank,
+        }))}
+        leaderboard={leaderboard}
+      />
 
       {rest.length > 0 && (
         <>
@@ -681,66 +686,3 @@ function MostTitled({
   );
 }
 
-const SPOT_STEP_H: Record<number, string> = { 1: 'h-14', 2: 'h-10', 3: 'h-7' };
-const SPOT_BAR: Record<number, string> = {
-  1: 'from-[#3a2e10] to-[#0f0c04] border-gold/45',
-  2: 'from-[#2c2e33] to-[#0e0e10] border-[#c9cdd6]/30',
-  3: 'from-[#33220f] to-[#0e0905] border-[#cd7f32]/35',
-};
-const SPOT_RING: Record<number, string> = {
-  1: 'ring-gold',
-  2: 'ring-[#c9cdd6]',
-  3: 'ring-[#cd7f32]',
-};
-const SPOT_TXT: Record<number, string> = {
-  1: 'text-gold',
-  2: 'text-[#d6dae3]',
-  3: 'text-[#e0954c]',
-};
-
-function MostTitledSpot({
-  holder,
-  rank,
-  leaderboard,
-}: {
-  holder: TrophyHolder;
-  rank: number;
-  leaderboard: LeaderboardEntry[];
-}) {
-  const entry = leaderboard.find((u) => u.login === holder.login);
-  const isFirst = rank === 1;
-  const name =
-    entry?.firstName && entry?.lastName ? `${entry.firstName} ${entry.lastName}` : holder.login;
-
-  return (
-    <div className="group flex flex-col items-center w-20 sm:w-24">
-      <div className="flex flex-col items-center gap-1.5 mb-2 transition-transform duration-300 ease-out group-hover:-translate-y-1">
-        {isFirst && (
-          <Crown className="w-5 h-5 text-gold drop-shadow-[0_2px_6px_rgba(255,201,74,0.5)]" fill="currentColor" />
-        )}
-        <PlayerLink login={holder.login} className="flex-col !gap-1">
-          <Avatar
-            login={holder.login}
-            imageUrl={holder.imageUrl}
-            size={isFirst ? 'lg' : 'md'}
-            className={`ring-2 ring-offset-2 ring-offset-bg-1 ${SPOT_RING[rank]}`}
-          />
-          <span className={`text-[11px] font-extrabold truncate max-w-[76px] ${SPOT_TXT[rank]}`}>
-            {name}
-          </span>
-        </PlayerLink>
-        <div className="text-[11px] font-extrabold text-gold leading-none">
-          {holder.trophies.length} 🏆
-        </div>
-      </div>
-
-      <div
-        className={`w-full ${SPOT_STEP_H[rank]} rounded-t-lg border-t border-l border-r bg-gradient-to-b ${SPOT_BAR[rank]} flex items-start justify-center pt-1 transition-all duration-300 group-hover:brightness-110`}
-      >
-        <span className={`font-display font-black text-lg leading-none opacity-30 ${SPOT_TXT[rank]}`}>
-          {rank}
-        </span>
-      </div>
-    </div>
-  );
-}

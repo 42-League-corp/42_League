@@ -137,7 +137,7 @@ interface HistoColumnProps {
 
 function HistoColumn({ Icon, title, count, header, children }: HistoColumnProps) {
   return (
-    <div className="flex flex-col rounded-2xl border border-border bg-bg-1/30 overflow-hidden min-h-0 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-7rem)]">
+    <div className="flex flex-col rounded-2xl border border-border bg-bg-1/30 overflow-hidden min-h-0 lg:sticky lg:top-0 lg:h-[calc(100dvh-7rem)]">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-2/40">
         <Icon className="w-4 h-4 text-gold" strokeWidth={2.5} />
         <h3 className="font-gaming text-xs font-extrabold uppercase tracking-[0.16em] text-text-strong">
