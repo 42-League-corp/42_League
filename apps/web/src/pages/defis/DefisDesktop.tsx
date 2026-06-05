@@ -41,6 +41,12 @@ import { Challenge2v2Flow } from './shared/Challenge2v2Flow';
 import { Mode1v1Toggle, type DuelMode } from './shared/Mode1v1Toggle';
 import { DeclareFfaGameFlow } from './shared/DeclareFfaGameFlow';
 import { DeclareDartsGameFlow } from './shared/DeclareDartsGameFlow';
+import { CharPicker, PerGameCharsEditor, type PerGameChars } from './shared/CharPicker';
+import { SmashCharIcon } from '../../components/SmashCharIcon';
+import { SfCharIcon } from '../../components/SfCharIcon';
+import { SMASH_ROSTER } from '../../lib/smash';
+import { SF_ROSTER } from '../../lib/sf';
+import { mostPlayedChars } from '../../lib/chars';
 import { NewTeamCelebration } from '../../components/NewTeamCelebration';
 import type { Declare2v2Response } from '../../lib/api';
 
@@ -1392,12 +1398,7 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
     );
   }
   if (game === 'smash' || game === 'streetfighter') {
-    return (
-      <div className="mt-3 text-center space-y-2">
-        <p className="text-xs text-muted-2">{t('defis.setUseDeclare')} <span className="text-text font-semibold">{t('defis.declareAGame')}</span>.</p>
-        <Button size="sm" variant="ghost" onClick={onDone} className="w-full">{t('defis.ok')}</Button>
-      </div>
-    );
+    return <RecordSetResultForm challengeId={challengeId} game={game} oppLogin={oppLogin} onDone={onDone} />;
   }
 
   if (iWon === null) {
@@ -1439,6 +1440,153 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
             game: 'babyfoot',
           })}
           className="flex-1">{t('defis.send')}</Button>
+        <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">{t('defis.cancel')}</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Saisie d'un résultat de SET (Smash / Street Fighter) côté desktop ──────────
+// Auparavant la version desktop renvoyait vers « Déclarer une game ». Elle propose
+// désormais le même formulaire complet que la sheet mobile : format Bo3/Bo5, games
+// du perdant, vies du gagnant (Smash), et persos (favoris épinglés + plus joués).
+
+function RecordSetResultForm({ challengeId, game, oppLogin, onDone }: {
+  challengeId: string; game: 'smash' | 'streetfighter'; oppLogin: string; onDone: () => void;
+}) {
+  const t = useT();
+  const { refresh, me, matches } = useLeagueData();
+  const flash = useFlash();
+  const isSmash = game === 'smash';
+  const isSf = game === 'streetfighter';
+  const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
+  const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
+  const myLogin = me?.login;
+  const me_ = myLogin ?? t('defis.me');
+  const myFavorites = (isSf ? me?.user?.favSf : me?.user?.favSmash) ?? [];
+  const myMostPlayed = useMemo(() => mostPlayedChars(matches, myLogin, game), [matches, myLogin, game]);
+  const oppMostPlayed = useMemo(() => mostPlayedChars(matches, oppLogin, game), [matches, oppLogin, game]);
+
+  const [iWon, setIWon] = useState<boolean | null>(null);
+  const [bestOf, setBestOf] = useState<3 | 5>(3);
+  const [loserGames, setLoserGames] = useState(0);
+  const [charSelf, setCharSelf] = useState<string | null>(null);
+  const [charOpp, setCharOpp] = useState<string | null>(null);
+  const [winnerStocks, setWinnerStocks] = useState(3);
+  const [perGameChars, setPerGameChars] = useState<PerGameChars | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const target = Math.ceil(bestOf / 2);
+  const totalGames = target + loserGames;
+  const winnerLogin = iWon ? me_ : oppLogin;
+
+  const send = async () => {
+    if (iWon === null) return;
+    if (!charSelf || !charOpp) { flash.show(t('defis.chooseBothChars'), 'error'); return; }
+    setBusy(true);
+    try {
+      // Par défaut un seul perso pour tout le set ; sinon liste encodée par manche.
+      const finalSelf = perGameChars ? perGameChars.self || charSelf : charSelf;
+      const finalOpp = perGameChars ? perGameChars.opp || charOpp : charOpp;
+      await api.recordChallengeResult(challengeId, {
+        scoreSelf: iWon ? target : loserGames,
+        scoreOpponent: iWon ? loserGames : target,
+        game, bestOf, charSelf: finalSelf, charOpponent: finalOpp,
+        // Les vies (stocks) sont propres au Smash ; SF n'en a pas.
+        ...(isSmash ? { stocks: winnerStocks } : {}),
+      });
+      flash.show(t('defis.scoreSent'));
+      await refresh();
+      onDone();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+      setBusy(false);
+    }
+  };
+
+  if (iWon === null) {
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <OutcomeButton kind="win" onClick={() => setIWon(true)}>{t('defis.iWon')}</OutcomeButton>
+        <OutcomeButton kind="loss" onClick={() => setIWon(false)}>{t('defis.iLost')}</OutcomeButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-4">
+      <button type="button" onClick={() => setIWon(null)}
+        className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border transition-all ${iWon ? 'border-teal/40 bg-teal/10 text-teal' : 'border-red/40 bg-red/10 text-red'}`}>
+        <span className="text-sm font-extrabold">{iWon ? t('defis.iWon') : t('defis.iLost')}</span>
+        <span className="text-muted-2 text-lg">×</span>
+      </button>
+
+      {/* Format Bo3 / Bo5 */}
+      <div>
+        <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.format')}</label>
+        <div className="grid grid-cols-2 gap-2">
+          {([3, 5] as const).map((bo) => (
+            <button key={bo} type="button"
+              onClick={() => { setBestOf(bo); setLoserGames((g) => Math.min(g, Math.ceil(bo / 2) - 1)); }}
+              className={`py-2.5 rounded-xl border-2 text-sm font-extrabold uppercase transition-all ${bestOf === bo ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
+            >Bo{bo}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Games du perdant */}
+      <div>
+        <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
+          {t('defis.gamesOf')} {iWon ? oppLogin : me_} · {t('defis.winnerTarget')} {target}
+        </label>
+        <div className="flex gap-2">
+          {Array.from({ length: target }, (_, g) => (
+            <button key={g} type="button" onClick={() => setLoserGames(g)}
+              className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${loserGames === g ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
+            >{g}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Vies du gagnant (Smash uniquement) */}
+      {isSmash && (
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.winnerStocksShort')}</label>
+          <div className="flex gap-2">
+            {[1, 2, 3].map((s) => (
+              <button key={s} type="button" onClick={() => setWinnerStocks(s)}
+                className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${winnerStocks === s ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
+              >{'❤'.repeat(s)}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} favorites={myFavorites} favoritesLabel={t('favorites.label')} mostPlayed={myMostPlayed} />
+      <CharPicker label={`${t('defis.charOf')} ${oppLogin}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} mostPlayed={oppMostPlayed} />
+      <PerGameCharsEditor
+        totalGames={totalGames}
+        defaultSelf={charSelf}
+        defaultOpp={charOpp}
+        roster={charRoster}
+        Icon={CharIcon}
+        myFavorites={myFavorites}
+        myMostPlayed={myMostPlayed}
+        oppMostPlayed={oppMostPlayed}
+        oppLabel={oppLogin}
+        onChange={setPerGameChars}
+      />
+
+      <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
+        <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
+        {' '}{t('defis.winsShort')}{' '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>
+        <span className="text-muted mx-1.5 opacity-50">–</span>
+        <span className="font-extrabold text-text-strong font-mono tabular-nums">{loserGames}</span>
+        {' (Bo'}{bestOf}{')'}
+      </div>
+
+      <div className="flex gap-2">
+        <Button size="sm" loading={busy} disabled={!charSelf || !charOpp} onClick={send} className="flex-1">{t('defis.send')}</Button>
         <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">{t('defis.cancel')}</Button>
       </div>
     </div>
