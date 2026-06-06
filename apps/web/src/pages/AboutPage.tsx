@@ -1809,9 +1809,7 @@ const TEAM: Member[] = [
           Celui qui a transformé l'idée en vrai projet. La{' '}
           <span className="text-text font-semibold">vision d'origine</span> : un{' '}
           <span className="text-text font-semibold">classement ELO 1v1</span> du campus, juste et
-          vivant. C'est lui qui <span className="text-gold font-semibold">développe les features</span> —
-          étendre les jeux (babyfoot, Smash, échecs…), les{' '}
-          <span className="text-text font-semibold">tournois</span>, défis programmés, OPS et trophées.{' '}
+          vivant. Il <span className="text-gold font-semibold">développe des features</span>.{' '}
           Ensuite <span className="text-gold font-semibold">Adrien</span> les{' '}
           <span className="text-text font-semibold">peaufine pour la mise en prod</span>.
         </>
@@ -1820,10 +1818,8 @@ const TEAM: Member[] = [
         <>
           The one who turned the idea into a real project. The{' '}
           <span className="text-text font-semibold">original vision</span>: a fair, living{' '}
-          <span className="text-text font-semibold">1v1 ELO ranking</span> of the campus. He's the one who{' '}
-          <span className="text-gold font-semibold">builds the features</span> —
-          adding games (foosball, Smash, chess…), the{' '}
-          <span className="text-text font-semibold">tournaments</span>, scheduled challenges, OPS and trophies.{' '}
+          <span className="text-text font-semibold">1v1 ELO ranking</span> of the campus. He{' '}
+          <span className="text-gold font-semibold">builds features</span>.{' '}
           Then <span className="text-gold font-semibold">Adrien</span>{' '}
           <span className="text-text font-semibold">polishes them for production</span>.
         </>
@@ -1833,9 +1829,7 @@ const TEAM: Member[] = [
           El que convirtió la idea en un proyecto real. La{' '}
           <span className="text-text font-semibold">visión original</span>: una{' '}
           <span className="text-text font-semibold">clasificación ELO 1v1</span> del campus, justa y
-          viva. Es él quien <span className="text-gold font-semibold">desarrolla las features</span> —
-          ampliar los juegos (futbolín, Smash, ajedrez…), los{' '}
-          <span className="text-text font-semibold">torneos</span>, desafíos programados, OPS y trofeos.{' '}
+          viva. Él <span className="text-gold font-semibold">desarrolla features</span>.{' '}
           Luego <span className="text-gold font-semibold">Adrien</span> las{' '}
           <span className="text-text font-semibold">pule para la puesta en producción</span>.
         </>
