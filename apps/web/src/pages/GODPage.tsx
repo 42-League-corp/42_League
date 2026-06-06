@@ -31,9 +31,13 @@ import {
   type Tournament,
   type TournamentInvite,
   type TournamentMatch,
+  type StatsOverview,
+  type StatCount,
+  type DayPoint,
 } from '../lib/api';
+import type { Game } from '../lib/gameMode';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -3583,7 +3587,183 @@ function TournamentsTab() {
   );
 }
 
+// ── Tab: STATS (usage produit) ─────────────────────────────────────────────
+// Tableau de bord agrégé : inscrits vs actifs, par jeu & global, pages les plus
+// vues et actions les plus déclenchées. Alimenté par /admin/stats/overview, dont
+// les compteurs d'usage proviennent de la télémétrie (cf. lib/analytics).
+
+const STAT_GAMES: Game[] = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'];
+const STAT_PERIODS = [7, 30, 90] as const;
+
+/** Liste « top N » avec barre de proportion (pages vues / actions). */
+function StatBarList({ rows, empty }: { rows: StatCount[]; empty: string }) {
+  if (rows.length === 0) return <div className="text-zinc-600 text-xs font-mono py-2">{empty}</div>;
+  const max = Math.max(...rows.map((r) => r.count), 1);
+  return (
+    <div className="flex flex-col gap-1">
+      {rows.map((r) => (
+        <div key={r.name} className="relative flex items-center justify-between px-2 py-1 rounded overflow-hidden">
+          <div className="absolute inset-y-0 left-0 bg-zinc-700/30 rounded" style={{ width: `${(r.count / max) * 100}%` }} />
+          <span className="relative z-10 text-zinc-300 text-xs font-mono truncate pr-2">{r.name}</span>
+          <span className="relative z-10 text-zinc-400 text-xs font-mono tabular-nums">{r.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Mini histogramme journalier (sans dépendance graphique). */
+function Sparkbars({ data }: { data: DayPoint[] }) {
+  if (data.length === 0) return <div className="text-zinc-600 text-xs font-mono">—</div>;
+  const max = Math.max(...data.map((d) => d.count), 1);
+  return (
+    <div className="flex items-end gap-0.5 h-16">
+      {data.map((d) => (
+        <div
+          key={d.day}
+          title={`${d.day} · ${d.count}`}
+          className="flex-1 min-w-0 bg-zinc-600/60 hover:bg-zinc-400 rounded-sm transition-colors"
+          style={{ height: `${Math.max(2, (d.count / max) * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
+  return (
+    <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg px-4 py-3">
+      <div className="text-zinc-500 text-[11px] font-mono uppercase tracking-wider">{label}</div>
+      <div className="text-zinc-100 text-2xl font-bold font-mono mt-1 tabular-nums">{value}</div>
+      {sub && <div className="text-zinc-600 text-[11px] font-mono mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+function StatsTab() {
+  const t = useT();
+  const [data, setData] = useState<StatsOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [days, setDays] = useState<number>(30);
+  const [game, setGame] = useState<Game | 'all'>('all');
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const res = await api.adminStatsOverview({ days, game: game === 'all' ? undefined : game });
+      setData(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('god.error'));
+    } finally {
+      setLoading(false);
+    }
+  }, [days, game, t]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activityRate = data && data.totals.registered > 0
+    ? Math.round((data.totals.activeUsers / data.totals.registered) * 100)
+    : 0;
+
+  return (
+    <div className="p-4">
+      {/* Contrôles : fenêtre temporelle + discipline */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded p-0.5">
+          {STAT_PERIODS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setDays(p)}
+              className={`px-2.5 py-1 text-xs font-mono rounded cursor-pointer transition-colors ${
+                days === p ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {t('god.stats.days').replace('{n}', String(p))}
+            </button>
+          ))}
+        </div>
+        <select
+          value={game}
+          onChange={(e) => setGame(e.target.value as Game | 'all')}
+          className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono px-2 py-1.5 rounded cursor-pointer"
+        >
+          <option value="all">{t('god.stats.allGames')}</option>
+          {STAT_GAMES.map((g) => <option key={g} value={g}>{t(`game.${g}`)}</option>)}
+        </select>
+        <span className="text-zinc-500 text-xs font-mono ml-auto">{t('god.stats.window').replace('{n}', String(days))}</span>
+      </div>
+
+      {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
+      {loading && !data ? (
+        <div className="text-zinc-500 text-xs font-mono">{t('god.loading')}</div>
+      ) : data ? (
+        <div className="flex flex-col gap-5">
+          {/* KPI globaux */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label={t('god.stats.registered')} value={data.totals.registered} sub={t('god.stats.realAccounts').replace('{n}', String(data.totals.registeredReal))} />
+            <StatCard label={t('god.stats.active')} value={data.totals.activeUsers} sub={t('god.stats.activeSub')} />
+            <StatCard label={t('god.stats.activityRate')} value={`${activityRate}%`} sub={t('god.stats.activityRateSub')} />
+            <StatCard label={t('god.stats.totalMatches')} value={data.perGame.reduce((s, g) => s + g.matches, 0)} sub={t('god.stats.totalMatchesSub')} />
+          </div>
+
+          {/* Timelines */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-3">
+              <div className="text-zinc-400 text-xs font-mono uppercase tracking-wider mb-2">{t('god.stats.signups')}</div>
+              <Sparkbars data={data.signupTimeline} />
+            </div>
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-3">
+              <div className="text-zinc-400 text-xs font-mono uppercase tracking-wider mb-2">{t('god.stats.dailyActive')}</div>
+              <Sparkbars data={data.activityTimeline} />
+            </div>
+          </div>
+
+          {/* Par jeu */}
+          <div>
+            <div className="text-zinc-400 text-xs font-mono uppercase tracking-wider mb-2">{t('god.stats.perGame')}</div>
+            <table className="w-full text-xs font-mono border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
+                  <th className="text-left py-1.5 px-2">{t('god.stats.col.game')}</th>
+                  <th className="text-right py-1.5 px-2">{t('god.stats.col.registered')}</th>
+                  <th className="text-right py-1.5 px-2">{t('god.stats.col.activePlayers')}</th>
+                  <th className="text-right py-1.5 px-2">{t('god.stats.col.matches')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.perGame.map((g) => (
+                  <tr key={g.game} className="border-b border-zinc-900 hover:bg-zinc-900/30">
+                    <td className="py-2 px-2 text-zinc-200 font-medium">{t(`game.${g.game}`)}</td>
+                    <td className="py-2 px-2 text-right text-zinc-300 tabular-nums">{g.registered}</td>
+                    <td className="py-2 px-2 text-right text-zinc-300 tabular-nums">{g.activePlayers}</td>
+                    <td className="py-2 px-2 text-right text-zinc-300 tabular-nums">{g.matches}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Top pages / actions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-zinc-400 text-xs font-mono uppercase tracking-wider mb-2">{t('god.stats.topPages')}</div>
+              <StatBarList rows={data.topPages} empty={t('god.stats.noData')} />
+            </div>
+            <div>
+              <div className="text-zinc-400 text-xs font-mono uppercase tracking-wider mb-2">{t('god.stats.topEvents')}</div>
+              <StatBarList rows={data.topEvents} empty={t('god.stats.noData')} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
+  { id: 'stats' },
   { id: 'users' },
   { id: 'moderation' },
   { id: 'rejets' },
@@ -3729,6 +3909,7 @@ export function GODPage() {
           transition={{ duration: 0.18, ease: 'easeOut' }}
           className="max-w-screen-2xl mx-auto"
         >
+          {activeTab === 'stats' && <StatsTab />}
           {activeTab === 'users' && <UsersTab myRole={myRole} myLogin={myLogin} />}
           {activeTab === 'moderation' && <ModerationTab />}
           {activeTab === 'rejets' && <RejetsTab />}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
 import { api, type MyBet, type PlaceBetInput, type Tournament } from '../../lib/api';
+import { trackEvent } from '../../lib/analytics';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 import { BetForm, CoinAmount, GameTag, betStatusStyle } from '../bets/BetPrimitives';
@@ -60,6 +61,7 @@ export function TournamentBets({
       setFlash(null);
       try {
         await api.placeBet(input);
+        trackEvent('bet.place');
         setOpenForm(null);
         setFlash(t('bets.placed'));
         loadBets();

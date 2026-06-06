@@ -5,6 +5,7 @@ import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
 import { Button } from '../../../components/Button';
 import { api, type LeaderboardEntry, type Declare2v2Response } from '../../../lib/api';
+import { trackEvent } from '../../../lib/analytics';
 import { useFlash } from '../../../hooks/useFlash';
 import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
@@ -255,6 +256,7 @@ export function Declare2v2GameFlow({
         scoreSelf,
         scoreOpponent,
       });
+      trackEvent('match.declare.2v2', 'babyfoot');
       flash.show(t('defis.game2v2Declared'));
       haptic('success');
       await onSubmitted(result, partner.login);

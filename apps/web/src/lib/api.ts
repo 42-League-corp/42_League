@@ -801,6 +801,52 @@ export interface ContributorStat {
   net: number;
 }
 
+// ── Analytics : tableau de bord d'usage (onglet STATS du panneau GOD) ─────────
+
+/** Un événement à journaliser : page vue (chemin) ou interaction (id d'action). */
+export interface TrackEventInput {
+  type: 'pageview' | 'event';
+  name: string;
+  game?: Game | null;
+}
+/** Une entrée de classement (page ou action) avec son nombre d'occurrences. */
+export interface StatCount {
+  name: string;
+  count: number;
+}
+/** Métriques d'usage agrégées d'une discipline. */
+export interface PerGameStat {
+  game: Game;
+  /** Inscrits ayant opté pour cette discipline (games[]). */
+  registered: number;
+  /** Joueurs distincts ayant réellement joué sur la fenêtre. */
+  activePlayers: number;
+  /** Matchs joués (1v1/2v2 + FFA) sur la fenêtre. */
+  matches: number;
+}
+/** Un point de timeline journalière (jour ISO `YYYY-MM-DD` + valeur). */
+export interface DayPoint {
+  day: string;
+  count: number;
+}
+export interface StatsOverview {
+  days: number;
+  game: Game | null;
+  totals: {
+    /** Tous les comptes (faux joueurs inclus). */
+    registered: number;
+    /** Comptes 42 réels uniquement (ftId non nul). */
+    registeredReal: number;
+    /** Logins distincts actifs sur la fenêtre. */
+    activeUsers: number;
+  };
+  topPages: StatCount[];
+  topEvents: StatCount[];
+  perGame: PerGameStat[];
+  signupTimeline: DayPoint[];
+  activityTimeline: DayPoint[];
+}
+
 export const api = {
   me: () => request<MeResponse>('/me'),
   // Sélection de titre self-service : `null`/'' retire le titre. Le serveur
@@ -1474,4 +1520,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // ── Analytics : ingestion d'usage (best-effort) + vue d'ensemble GOD ────────
+  /** Envoie un lot d'événements d'usage. Best-effort : on ignore les erreurs. */
+  trackAnalytics: (events: TrackEventInput[]) =>
+    request<void>('/analytics/track', {
+      method: 'POST',
+      body: JSON.stringify({ events }),
+    }).catch(() => undefined),
+  adminStatsOverview: (params?: { days?: number; game?: Game }) => {
+    const qs = new URLSearchParams();
+    if (params?.days) qs.set('days', String(params.days));
+    if (params?.game) qs.set('game', params.game);
+    const q = qs.toString();
+    return request<StatsOverview>(`/admin/stats/overview${q ? `?${q}` : ''}`);
+  },
 };

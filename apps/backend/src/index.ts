@@ -775,6 +775,9 @@ if (process.env.NODE_ENV !== 'test') {
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
+  // Télémétrie d'usage : envois groupés et peu fréquents (cf. lib/analytics côté web),
+  // mais on borne quand même les abus. Les admins sont exemptés (tests).
+  app.use('/analytics/*', rateLimit({ name: 'analytics', windowMs: 60_000, max: 60, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
 }
 
 // =========================================================================
@@ -6750,6 +6753,140 @@ const AuditQuerySchema = z.object({
       'EDIT_TITLE', 'DELETE_MATCH', 'EDIT_MATCH', 'REFRESH_IMAGES',
     ])
     .optional(),
+});
+
+// =========================================================================
+// ANALYTICS — télémétrie d'usage produit (pages vues + interactions)
+// =========================================================================
+// Distinct de l'audit admin (AdminAuditLog) : ici on mesure l'usage réel de l'app
+// pour alimenter le tableau de bord GOD (pages les + vues, boutons les + cliqués,
+// actifs vs inscrits, par jeu & global). Ingestion best-effort : un échec ne doit
+// JAMAIS casser l'UX → on avale les erreurs et on répond 204 quoi qu'il arrive.
+
+const ANALYTICS_GAMES = ['babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'] as const;
+
+const TrackBatchSchema = z.object({
+  events: z
+    .array(
+      z.object({
+        type: z.enum(['pageview', 'event']),
+        name: z.string().min(1).max(200),
+        game: z.enum(ANALYTICS_GAMES).nullish(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+app.post('/analytics/track', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = TrackBatchSchema.safeParse(body);
+  // Payload invalide : on ne lève pas (télémétrie best-effort), on ignore.
+  if (!parsed.success) return c.body(null, 204);
+  try {
+    await prisma.analyticsEvent.createMany({
+      data: parsed.data.events.map((e) => ({
+        id: randomUUID(),
+        login: me,
+        type: e.type,
+        name: e.name,
+        game: e.game ?? null,
+      })),
+    });
+  } catch {
+    // FK manquante (login non persisté), DB indispo… : on n'échoue jamais ici.
+  }
+  return c.body(null, 204);
+});
+
+// Vue d'ensemble agrégée pour l'onglet STATS du panneau GOD.
+//   ?days=N   fenêtre glissante (défaut 30, borné 1..365)
+//   ?game=ID  restreint pages/events/actifs à une discipline (sinon global)
+app.get('/admin/stats/overview', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdminOrModerator(me);
+  const url = new URL(c.req.url);
+  const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days')) || 30));
+  const gameParam = url.searchParams.get('game');
+  const game = (ANALYTICS_GAMES as readonly string[]).includes(gameParam ?? '') ? gameParam! : null;
+  const since = new Date(Date.now() - days * 86_400_000);
+  const baseWhere = { createdAt: { gte: since }, ...(game ? { game } : {}) };
+
+  // Totaux inscrits : tous comptes, et comptes 42 réels (ftId non nul → hors faux joueurs).
+  const [registered, registeredReal, activeRows, pageRows, eventRows] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { ftId: { not: null } } }),
+    // Actifs = logins distincts ayant émis un événement sur la fenêtre.
+    prisma.analyticsEvent.findMany({ where: baseWhere, distinct: ['login'], select: { login: true } }),
+    prisma.analyticsEvent.groupBy({
+      by: ['name'],
+      where: { ...baseWhere, type: 'pageview' },
+      _count: { name: true },
+      orderBy: { _count: { name: 'desc' } },
+      take: 20,
+    }),
+    prisma.analyticsEvent.groupBy({
+      by: ['name'],
+      where: { ...baseWhere, type: 'event' },
+      _count: { name: true },
+      orderBy: { _count: { name: 'desc' } },
+      take: 20,
+    }),
+  ]);
+
+  // Par jeu : inscrits (opt-in via games[]), joueurs actifs (ont réellement joué sur
+  // la fenêtre) et nombre de matchs joués (1v1/2v2 + FFA Smash/Fléchettes).
+  const perGame = await Promise.all(
+    ANALYTICS_GAMES.map(async (g) => {
+      const [reg, mm, ffa] = await Promise.all([
+        prisma.user.count({ where: { games: { has: g } } }),
+        prisma.playedMatch.findMany({
+          where: { game: g, playedAt: { gte: since } },
+          select: { playerALogin: true, playerBLogin: true, playerA2Login: true, playerB2Login: true },
+        }),
+        prisma.playedFfa.findMany({
+          where: { game: g, playedAt: { gte: since } },
+          select: { participants: { select: { login: true } } },
+        }),
+      ]);
+      const players = new Set<string>();
+      for (const m of mm) {
+        players.add(m.playerALogin);
+        players.add(m.playerBLogin);
+        if (m.playerA2Login) players.add(m.playerA2Login);
+        if (m.playerB2Login) players.add(m.playerB2Login);
+      }
+      for (const f of ffa) for (const p of f.participants) players.add(p.login);
+      return { game: g, registered: reg, activePlayers: players.size, matches: mm.length + ffa.length };
+    }),
+  );
+
+  // Timelines journalières : nouvelles inscriptions & actifs distincts (date_trunc en UTC).
+  const gameFilter = game ? PrismaRuntime.sql`AND "game" = ${game}` : PrismaRuntime.empty;
+  const [signupRows, activityRows] = await Promise.all([
+    prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "created_at") AS day, COUNT(*)::bigint AS count
+      FROM "users" WHERE "created_at" >= ${since}
+      GROUP BY day ORDER BY day ASC`,
+    prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "created_at") AS day, COUNT(DISTINCT "login")::bigint AS count
+      FROM "analytics_events" WHERE "created_at" >= ${since} ${gameFilter}
+      GROUP BY day ORDER BY day ASC`,
+  ]);
+  const toDay = (rows: { day: Date; count: bigint }[]) =>
+    rows.map((r) => ({ day: r.day.toISOString().slice(0, 10), count: Number(r.count) }));
+
+  return c.json({
+    days,
+    game,
+    totals: { registered, registeredReal, activeUsers: activeRows.length },
+    topPages: pageRows.map((r) => ({ name: r.name, count: r._count.name })),
+    topEvents: eventRows.map((r) => ({ name: r.name, count: r._count.name })),
+    perGame,
+    signupTimeline: toDay(signupRows),
+    activityTimeline: toDay(activityRows),
+  });
 });
 
 app.get('/admin/audit-log', async (c) => {

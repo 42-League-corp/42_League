@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChevronUp, ChevronDown, X, Plus } from 'lucide-react';
 import { Button } from '../../../components/Button';
 import { api, type LeaderboardEntry } from '../../../lib/api';
+import { trackEvent } from '../../../lib/analytics';
 import { useFlash } from '../../../hooks/useFlash';
 import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
@@ -117,6 +118,7 @@ export function DeclareFfaGameFlow({
     setBusy(true);
     try {
       await api.declareFfa(order.map((e) => e.login));
+      trackEvent('match.declare', 'smash');
       flash.show(t('ffa.toast.declared'));
       haptic('success');
       await onSubmitted();

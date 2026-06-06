@@ -111,6 +111,7 @@ model User {
   // Économie de coins — progression des quêtes hebdo + paris placés.
   weeklyQuests              WeeklyQuestProgress[]   @relation("userQuests")
   bets                      Bet[]                   @relation("userBets")
+  analyticsEvents           AnalyticsEvent[]        @relation("userAnalytics")
 
   @@map("users")
 }
@@ -744,4 +745,27 @@ model Bet {
   @@index([tournamentId, status])
   @@index([matchId, status])
   @@map("bets")
+}
+
+// ─── Analytics : pages vues & événements d'usage (tableau de bord GOD) ────────
+//
+// Journal léger d'usage *produit* — à ne pas confondre avec AdminAuditLog (actions
+// admin). Chaque ligne est soit une page vue ('pageview', name = chemin de route),
+// soit une interaction ('event', name = id de bouton/fonctionnalité). `game` porte
+// la discipline en contexte quand elle s'applique (null = global). Lié au User en
+// cascade : la suppression RGPD d'un compte efface aussi son journal d'usage.
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  login     String
+  type      String // 'pageview' | 'event'
+  name      String // chemin de route (pageview) ou id d'action (event)
+  game      String? // 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes' | null
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation("userAnalytics", fields: [login], references: [login], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([type, name])
+  @@index([login, createdAt])
+  @@map("analytics_events")
 }

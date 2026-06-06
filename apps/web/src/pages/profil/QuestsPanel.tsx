@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { api, type QuestsResponse, type QuestView } from '../../lib/api';
+import { trackEvent } from '../../lib/analytics';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
 import { SectionHeader } from './shared/SectionHeader';
@@ -103,6 +104,7 @@ export function QuestsPanel() {
       setClaiming(id);
       try {
         await api.claimQuest(id);
+        trackEvent('quest.claim');
         // Recharge l'état serveur (solde + statut réclamé) et le porte-monnaie global.
         load();
         void refresh();

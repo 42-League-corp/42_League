@@ -6,6 +6,7 @@ import { Button } from '../../../components/Button';
 import { SmashCharIcon } from '../../../components/SmashCharIcon';
 import { SfCharIcon } from '../../../components/SfCharIcon';
 import { api, type LeaderboardEntry, type Game } from '../../../lib/api';
+import { trackEvent } from '../../../lib/analytics';
 import { useFlash } from '../../../hooks/useFlash';
 import { useGameMode } from '../../../hooks/useGameMode';
 import { useLeagueData } from '../../../hooks/useLeagueData';
@@ -173,6 +174,7 @@ export function DeclareGameFlow({
         const scoreOpponent = iWon ? loserScore : WINNING_SCORE;
         await api.declareMatch({ opponentLogin: opponent.login, scoreSelf, scoreOpponent });
       }
+      trackEvent('match.declare', isSf ? 'streetfighter' : isSmash ? 'smash' : isChess ? 'chess' : 'babyfoot');
       flash.show(`${t('defis.gameDeclared')} ${opponent.login} ${t('defis.mustConfirmShort')}`);
       haptic('success');
       await onSubmitted();

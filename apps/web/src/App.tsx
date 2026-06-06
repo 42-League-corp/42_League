@@ -17,6 +17,7 @@ import { ConsentGate } from './components/ConsentGate';
 import { StagingGate } from './components/StagingGate';
 import { IS_STAGING } from './lib/config';
 import { SplashScreen } from './components/SplashScreen';
+import { AnalyticsTracker } from './components/AnalyticsTracker';
 
 /**
  * Préchargement eager de tous les chunks de routes secondaires.
@@ -187,6 +188,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
   return (
     <AvatarRingProvider>
     <MatchmakingProvider>
+      <AnalyticsTracker />
       <AppShell>
         {error && (
           <div className="mb-4 p-3 border border-red/50 bg-red/10 rounded text-red text-sm">

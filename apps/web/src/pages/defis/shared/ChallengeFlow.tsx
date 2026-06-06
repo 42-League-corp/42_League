@@ -4,6 +4,7 @@ import { Swords } from 'lucide-react';
 import { Button } from '../../../components/Button';
 import { TimePicker } from '../../../components/TimePicker';
 import { api, type LeaderboardEntry } from '../../../lib/api';
+import { trackEvent } from '../../../lib/analytics';
 import { useFlash } from '../../../hooks/useFlash';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDayLabel, fmtTime } from '../../../lib/format';
@@ -62,6 +63,7 @@ export function ChallengeFlow({
         opponentLogin: opponent.login,
         scheduledAt: when.toISOString(),
       });
+      trackEvent('challenge.create');
       flash.show(`${t('defis.challengeSentTo')} @${opponent.login}`);
       haptic('success');
       await onSubmitted();
