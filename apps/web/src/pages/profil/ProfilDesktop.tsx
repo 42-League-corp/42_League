@@ -4,6 +4,7 @@ import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { OnlineBadge } from '../../components/OnlineBadge';
+import { IntraStatusPill } from '../../components/IntraStatusPill';
 import { StatCard } from '../../components/StatCard';
 import { RankBadge } from '../../components/RankBadge';
 import { BadgesRow } from '../../components/Badges';
@@ -205,7 +206,6 @@ export function ProfilDesktop() {
             </div>
             {realName && <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {myOnlineHost && <OnlineBadge host={myOnlineHost} />}
               <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
                 <MapPin className="w-3 h-3 text-gold/70" strokeWidth={2.5} />
                 {u.campus ?? '—'}
@@ -223,6 +223,8 @@ export function ProfilDesktop() {
                 </motion.span>
               )}
             </div>
+            {/* Statut intra 42 — disponible (connecté au cluster) / indisponible */}
+            <IntraStatusPill host={myOnlineHost} className="mt-2.5 w-fit" />
           </div>
 
           {/* Bloc ELO mis en valeur — libellé "ELO" centré au-dessus du nombre. */}
