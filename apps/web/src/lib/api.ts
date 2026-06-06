@@ -1195,6 +1195,11 @@ export const api = {
       `/tournaments/${encodeURIComponent(id)}/start`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  reshuffleTournament: (id: string) =>
+    request<{ id: string; reshuffled: true }>(
+      `/tournaments/${encodeURIComponent(id)}/reshuffle`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
   cancelTournament: (id: string) =>
     request<{ id: string; cancelled: true }>(
       `/tournaments/${encodeURIComponent(id)}/cancel`,

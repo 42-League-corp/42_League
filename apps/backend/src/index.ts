@@ -4953,6 +4953,47 @@ app.post('/tournaments/:id/start', async (c) => {
   return c.json({ id, started: result });
 });
 
+// Re-tirage du bracket — le créateur OU un admin relance le tirage au sort tant
+// que le premier match n'a pas démarré : aucun duel (2 joueurs) avec score saisi,
+// confirmé ou pile-ou-face entamé, et aucun match désigné « suivant » (activeMatchId).
+// Les byes du 1er tour (auto-confirmés à la génération) ne comptent pas. On efface
+// les matchs et on régénère depuis les inscrits avec un nouveau mélange aléatoire.
+// La diffusion `tournament:update` est assurée par le middleware sur /tournaments/*.
+app.post('/tournaments/:id/reshuffle', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const t = await prisma.tournament.findUnique({
+    where: { id },
+    include: { entries: { select: { login: true } } },
+  });
+  if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+  if (t.createdByLogin !== me && !isAdmin(me)) {
+    throw new HTTPException(403, { message: 'only the organizer or an admin can reshuffle' });
+  }
+  if (t.status !== 'in_progress') {
+    throw new HTTPException(409, { message: `tournament is ${t.status}` });
+  }
+  if (t.activeMatchId) {
+    throw new HTTPException(409, { message: 'le premier match a déjà été lancé' });
+  }
+  const started = await prisma.tournamentMatch.count({
+    where: {
+      tournamentId: id,
+      playerALogin: { not: null },
+      playerBLogin: { not: null },
+      OR: [{ confirmedAt: { not: null } }, { recordedAt: { not: null } }, { tossAt: { not: null } }],
+    },
+  });
+  if (started > 0) {
+    throw new HTTPException(409, { message: 'des matchs ont déjà commencé — re-tirage impossible' });
+  }
+  // generateBracket/generatePools écrivent via le client global → on supprime puis
+  // régénère hors transaction (même contrainte que /start). Action manuelle et rare.
+  await prisma.tournamentMatch.deleteMany({ where: { tournamentId: id } });
+  await launchTournamentMatches(id, t.format, t.entries.map((e) => e.login));
+  return c.json({ id, reshuffled: true });
+});
+
 // Annulation par l'organisateur (ou un admin) : le tournoi est supprimé pour de bon
 // et disparaît des listes (cascade → entries + matchs). Pas de statut « annulé ».
 app.post('/tournaments/:id/cancel', async (c) => {

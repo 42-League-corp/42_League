@@ -143,6 +143,16 @@ export function TournoiDetailPage() {
   // 2v2 : je suis inscrit si je suis capitaine OU coéquipier d'une entrée.
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin || e.partnerLogin === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
+  // Re-tirage possible tant que le 1er match n'a pas démarré : tournoi en cours,
+  // aucun match désigné/joué (les byes auto-confirmés ne comptent pas).
+  const anyMatchStarted = (tournament.matches ?? []).some(
+    (m) => m.playerALogin && m.playerBLogin && (m.confirmedAt || m.recordedAt || m.tossAt),
+  );
+  const canReshuffle =
+    tournament.status === 'in_progress' &&
+    (isOrganizer || isAdmin) &&
+    !tournament.activeMatchId &&
+    !anyMatchStarted;
   // Logins déjà engagés (capitaines + coéquipiers) → exclus des sélecteurs 2v2.
   const engagedLogins = new Set(
     (tournament.entries ?? []).flatMap((e) => (e.partnerLogin ? [e.login, e.partnerLogin] : [e.login])),
@@ -280,6 +290,20 @@ export function TournoiDetailPage() {
     } catch (err) {
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     }
+  };
+
+  // Re-tirage du bracket (créateur/admin, avant le 1er match) : relance le tirage
+  // puis rejoue la cérémonie avec les nouveaux affrontements.
+  const handleReshuffle = async () => {
+    const ok = await confirm({
+      title: t('tournois.confirm.reshuffle.title'),
+      message: t('tournois.confirm.reshuffle.message'),
+      confirmLabel: t('tournois.confirm.reshuffle.confirm'),
+      cancelLabel: t('tournois.confirm.reshuffle.cancel'),
+    });
+    if (!ok) return;
+    await runAction(() => api.reshuffleTournament(tournament.id), t('tournois.flash.reshuffled'));
+    setShowCeremony(true);
   };
 
   return (
@@ -609,7 +633,12 @@ export function TournoiDetailPage() {
           {tournament.status === 'in_progress' &&
             detailTab === 'bracket' &&
             (isOrganizer || isAdmin) && (
-              <div className="mt-6 pt-4 border-t border-border/40 flex justify-end">
+              <div className="mt-6 pt-4 border-t border-border/40 flex justify-end gap-2">
+                {canReshuffle && (
+                  <Button size="sm" variant="ghost" onClick={handleReshuffle}>
+                    {t('tournois.detail.reshuffle')}
+                  </Button>
+                )}
                 <Button size="sm" variant="danger" onClick={handleCancel}>
                   {t('tournois.detail.deleteTournament')}
                 </Button>

@@ -107,9 +107,97 @@ function DrawAvatar({
   );
 }
 
+/**
+ * Une « face » du tirage : tant que le duel n'est pas verrouillé, l'avatar défile
+ * en boucle parmi tous les inscrits (vrai mélange visuel, façon machine à sous),
+ * puis se fige sur le combattant réellement tiré avec un à-coup. Un côté `null`
+ * (exempt) ne défile pas.
+ */
+function ShuffleFace({
+  knight, pool, accent, locked,
+}: { knight: Knight | null; pool: Knight[]; accent: string; locked: boolean }) {
+  const [display, setDisplay] = useState<Knight | null>(knight);
+  useEffect(() => {
+    if (knight === null || locked || pool.length === 0) {
+      setDisplay(knight);
+      return;
+    }
+    const iv = setInterval(() => {
+      setDisplay(pool[Math.floor(Math.random() * pool.length)] ?? knight);
+    }, 65);
+    return () => clearInterval(iv);
+  }, [knight, pool, locked]);
+
+  if (knight === null) return <DrawAvatar knight={null} accent={accent} from="left" />;
+  const k = display ?? knight;
+  const size = 44;
+  return (
+    <div className="flex flex-col items-center gap-1 flex-shrink-0" style={{ width: 64 }}>
+      <motion.div
+        animate={locked ? { scale: [1.18, 1] } : {}}
+        transition={{ type: 'spring', stiffness: 320, damping: 14 }}
+        className="rounded-full flex items-center justify-center font-display font-black text-[#0a0a0a] overflow-hidden"
+        style={{
+          width: size, height: size, fontSize: size * 0.4,
+          border: `2px solid ${accent}`,
+          boxShadow: locked ? `0 0 18px ${accent}aa` : `0 0 8px ${accent}44`,
+          background: k.imageUrl ? undefined : accent,
+          filter: locked ? 'none' : 'blur(0.7px)',
+          opacity: locked ? 1 : 0.9,
+        }}
+      >
+        {k.imageUrl
+          ? <img src={k.imageUrl} alt={k.login} className="w-full h-full object-cover" />
+          : k.login[0]?.toUpperCase()}
+      </motion.div>
+      <span
+        className="text-[9px] font-bold text-text-strong/90 max-w-[64px] truncate"
+        style={{ opacity: locked ? 1 : 0.55 }}
+      >
+        {k.login}
+      </span>
+    </div>
+  );
+}
+
+/** Un duel du tirage : les deux faces défilent puis se verrouillent à `stopMs`. */
+function ShuffleDuel({
+  pair, pool, accent, stopMs,
+}: { pair: { a: Knight | null; b: Knight | null }; pool: Knight[]; accent: string; stopMs: number }) {
+  const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setLocked(true), stopMs);
+    return () => clearTimeout(id);
+  }, [stopMs]);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="flex items-center justify-center gap-2 rounded-xl border bg-bg-1/40 px-3 py-2"
+      style={{
+        borderColor: locked ? `${accent}99` : `${accent}33`,
+        boxShadow: locked ? `0 0 16px ${accent}3a` : 'none',
+        transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
+      }}
+    >
+      <ShuffleFace knight={pair.a} pool={pool} accent={accent} locked={locked} />
+      <motion.span
+        animate={locked ? { scale: [1, 1.45, 1], rotate: [0, -12, 0] } : { opacity: 0.5 }}
+        transition={{ duration: 0.45 }}
+        className="text-base font-black shrink-0"
+        style={{ color: accent }}
+      >
+        ⚔
+      </motion.span>
+      <ShuffleFace knight={pair.b} pool={pool} accent={accent} locked={locked} />
+    </motion.div>
+  );
+}
+
 function DrawReveal({
-  pairings, accent, t,
-}: { pairings: { a: Knight | null; b: Knight | null }[]; accent: string; t: (k: string) => string }) {
+  pairings, pool, accent, t,
+}: { pairings: { a: Knight | null; b: Knight | null }[]; pool: Knight[]; accent: string; t: (k: string) => string }) {
   return (
     <div className="w-full flex flex-col items-center gap-2.5 max-h-[46vh] overflow-y-auto no-scrollbar px-1 py-1">
       <div className="text-[10px] font-extrabold uppercase tracking-[0.3em]" style={{ color: accent }}>
@@ -117,26 +205,8 @@ function DrawReveal({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
         {pairings.map((p, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 18, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: 0.6 + i * 0.85, type: 'spring', stiffness: 240, damping: 22 }}
-            className="flex items-center justify-center gap-2 rounded-xl border bg-bg-1/40 px-3 py-2"
-            style={{ borderColor: `${accent}40` }}
-          >
-            <DrawAvatar knight={p.a} accent={accent} from="left" />
-            <motion.span
-              initial={{ scale: 0, rotate: -30, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, opacity: 1 }}
-              transition={{ delay: 0.6 + i * 0.85 + 0.15, type: 'spring', stiffness: 300, damping: 16 }}
-              className="text-base font-black shrink-0"
-              style={{ color: accent }}
-            >
-              ⚔
-            </motion.span>
-            <DrawAvatar knight={p.b} accent={accent} from="right" />
-          </motion.div>
+          // Verrouillage échelonné : les duels se figent un par un (effet « tirage »).
+          <ShuffleDuel key={i} pair={p} pool={pool} accent={accent} stopMs={700 + i * 420} />
         ))}
       </div>
     </div>
@@ -277,7 +347,7 @@ export default function TournamentLaunchCeremony({
 
             {/* Tirage au sort (placement des duels) si dispo, sinon défilé. */}
             {hasDraw ? (
-              <DrawReveal pairings={pairings!} accent={accent} t={t} />
+              <DrawReveal pairings={pairings!} pool={participants} accent={accent} t={t} />
             ) : (
               <div className="w-full overflow-x-auto no-scrollbar">
                 <div className="flex items-start justify-center gap-4 sm:gap-5 px-2 py-3 min-w-max mx-auto">
