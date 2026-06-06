@@ -30,17 +30,25 @@ export interface TitleContext {
  * Liste vide tant qu'aucun accomplissement n'est atteint. Dédupliqué par `key`.
  *
  * Règles (simples et extensibles — la future boutique enrichira cette liste) :
+ *  - login 'throbert'         → First Committer  (titre nominatif fondateur)
+ *  - login 'abidaux'          → Visionnaire      (titre nominatif fondateur)
  *  - badge 'season_champion'  → Champion
- *  - badge 'founder'          → Fondateur
  *  - tournamentsWon > 0       → Vainqueur de tournoi
  *  - rank === 1               → G.O.A.T
+ *
+ * NB : le badge 'founder' reste attribué aux fondateurs (cf. backend), mais ne
+ * donne plus de titre générique « Fondateur » — chaque fondateur a son titre propre.
  */
 export function ownedTitles(ctx: TitleContext): OwnedTitle[] {
   const badges = ctx.badges ?? [];
   const out: OwnedTitle[] = [];
+  const login = ctx.login.toLowerCase();
+
+  // Titres nominatifs des fondateurs.
+  if (login === 'throbert') out.push({ key: 'first_committer', label: 'First Committer' });
+  if (login === 'abidaux') out.push({ key: 'visionary', label: 'Visionnaire' });
 
   if (badges.includes('season_champion')) out.push({ key: 'champion', label: 'Champion' });
-  if (badges.includes('founder')) out.push({ key: 'founder', label: 'Fondateur' });
   if ((ctx.tournamentsWon ?? 0) > 0) out.push({ key: 'tournament_winner', label: 'Vainqueur de tournoi' });
   if (ctx.rank === 1) out.push({ key: 'goat', label: 'G.O.A.T' });
 
