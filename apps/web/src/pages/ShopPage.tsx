@@ -8,6 +8,7 @@ import {
   Swords,
   Target,
   Dices,
+  Gem,
   type LucideIcon,
 } from 'lucide-react';
 import { Panel } from '../components/Panel';
@@ -35,6 +36,34 @@ const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'badge'];
  *  catalogue réel est vide ou peu fourni. */
 const MIN_TILES = 6;
 const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'badge'];
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Système de rareté — déduit du prix, à la manière des boutiques de jeux
+ * (Fortnite / Valorant / LoL). Chaque palier porte sa couleur, son halo et
+ * son libellé : c'est lui qui apporte la richesse visuelle et la hiérarchie
+ * sans alourdir la palette globale (or = sommet de la rareté).
+ * ──────────────────────────────────────────────────────────────────────── */
+type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+interface RarityStyle {
+  hex: string;
+  /** Dégradé de la bordure (effet liseré premium). */
+  border: string;
+}
+
+const RARITY: Record<Rarity, RarityStyle> = {
+  common: { hex: '#9fb2c7', border: 'rgba(159,178,199,0.55)' },
+  rare: { hex: '#4aa8ff', border: 'rgba(74,168,255,0.65)' },
+  epic: { hex: '#b07bff', border: 'rgba(176,123,255,0.7)' },
+  legendary: { hex: '#ffc94a', border: 'rgba(255,201,74,0.85)' },
+};
+
+function rarityOf(price: number): Rarity {
+  if (price >= 900) return 'legendary';
+  if (price >= 400) return 'epic';
+  if (price >= 150) return 'rare';
+  return 'common';
+}
 
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
@@ -105,19 +134,21 @@ const EARN_METHODS: EarnMethod[] = [
 function EarnGuide() {
   const t = useT();
   return (
-    <section className="relative card-hud overflow-hidden rounded-2xl p-5 border border-gold/20">
+    <section className="relative overflow-hidden rounded-2xl p-5 border border-gold/25 bg-gradient-to-br from-bg-3/80 via-bg-2/70 to-bg-1/80">
       <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
+      {/* Lueur supérieure douce pour décoller du fond sombre */}
+      <div className="absolute -top-16 left-1/4 w-80 h-32 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
 
       {/* En-tête du guide */}
       <header className="relative flex items-center gap-3">
-        <div className="shrink-0 w-9 h-9 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center shadow-gold-glow">
+        <div className="shrink-0 w-9 h-9 rounded-xl bg-gold/15 border border-gold/40 flex items-center justify-center shadow-gold-glow">
           <Sparkles className="w-5 h-5 text-gold" strokeWidth={2.2} />
         </div>
         <div className="min-w-0">
           <h3 className="font-gaming text-sm font-extrabold uppercase tracking-[0.14em] text-text-strong leading-tight">
             {t('shop.howToEarn.title')}
           </h3>
-          <p className="text-[11px] text-muted font-medium tracking-wide">
+          <p className="text-[11px] text-muted-2 font-medium tracking-wide">
             {t('shop.howToEarn.subtitle')}
           </p>
         </div>
@@ -130,11 +161,11 @@ function EarnGuide() {
           return (
             <div
               key={m.key}
-              className={`group relative overflow-hidden rounded-2xl border bg-bg-1/60 p-4 flex flex-col gap-3 transition-colors ${m.ring}`}
+              className={`group relative overflow-hidden rounded-2xl border bg-bg-2/70 p-4 flex flex-col gap-3 transition-colors ${m.ring}`}
             >
               {/* Lueur de fond propre à la méthode */}
               <div
-                className={`absolute -inset-px bg-gradient-to-br ${m.glow} via-transparent to-transparent opacity-60 pointer-events-none`}
+                className={`absolute -inset-px bg-gradient-to-br ${m.glow} via-transparent to-transparent opacity-70 pointer-events-none`}
               />
               {/* Numéro d'étape */}
               <span className="absolute top-3 right-3 font-display text-2xl font-extrabold leading-none text-white/5 select-none">
@@ -158,13 +189,13 @@ function EarnGuide() {
                     {m.coin && <img src="/42coin.png" alt="" className="w-5 h-5" />}
                     {m.value}
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-2">
                     {t(`shop.earn.${m.key}.unit`)}
                   </span>
                 </div>
               </div>
 
-              <p className="relative text-[11.5px] text-muted leading-relaxed">
+              <p className="relative text-[11.5px] text-muted-2 leading-relaxed">
                 {t(`shop.earn.${m.key}.desc`)}
               </p>
             </div>
@@ -184,8 +215,8 @@ function payloadOf(item: ShopItemData): Record<string, unknown> {
 
 /** Aperçu visuel de ce qu'on achète, selon la catégorie (bannière = image,
  *  titre = texte coloré, badge = icône+label coloré).
- *  Hauteur fixe pour garder la grille de cartes alignée. */
-function ShopItemVisual({ item }: { item: ShopItemData }) {
+ *  Hauteur fixe, fond clair teinté par la rareté pour un rendu « vitrine ». */
+function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: string }) {
   const p = payloadOf(item);
   const color = item.color || '#ffc94a';
   const image = typeof p.image === 'string' ? p.image : null;
@@ -194,20 +225,31 @@ function ShopItemVisual({ item }: { item: ShopItemData }) {
   const Icon = badgeIcon(typeof p.icon === 'string' ? p.icon : null);
 
   return (
-    <div className="relative h-24 w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-gradient-to-br from-bg-1 to-bg-0 flex items-center justify-center px-3">
+    <div
+      className="relative h-28 w-full shrink-0 overflow-hidden rounded-xl border flex items-center justify-center px-3"
+      style={{
+        borderColor: `${rarityHex}3a`,
+        background: `linear-gradient(160deg, ${rarityHex}1f 0%, rgba(42,36,28,0.55) 45%, rgba(21,18,14,0.7) 100%)`,
+      }}
+    >
+      {/* Halo de rareté derrière l'aperçu */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(circle at 50% 35%, ${rarityHex}2e, transparent 70%)` }}
+      />
       <div className="absolute inset-0 hud-diag pointer-events-none opacity-20" />
 
       {item.category === 'banner' &&
         (image ? (
           <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
-          <ImageIcon className="relative w-6 h-6 text-muted-2" strokeWidth={1.8} />
+          <ImageIcon className="relative w-7 h-7 text-muted-2" strokeWidth={1.8} />
         ))}
 
       {item.category === 'title' && (
-        <span className="relative inline-flex items-center gap-1.5 text-center">
+        <span className="relative inline-flex items-center gap-1.5 text-center text-[15px]">
           <span style={{ color }} className="opacity-70 leading-none">❝</span>
-          <span style={{ color }} className="italic font-bold tracking-wide line-clamp-2">
+          <span style={{ color }} className="italic font-bold tracking-wide line-clamp-2 drop-shadow">
             {titleText}
           </span>
           <span style={{ color }} className="opacity-70 leading-none">❞</span>
@@ -216,7 +258,7 @@ function ShopItemVisual({ item }: { item: ShopItemData }) {
 
       {item.category === 'badge' && (
         <span
-          className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border"
+          className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border shadow-lg"
           style={{
             color,
             borderColor: `${color}55`,
@@ -235,7 +277,7 @@ function ShopItemVisual({ item }: { item: ShopItemData }) {
  *  mise en page tant qu'aucun cosmétique réel n'est en boutique. */
 function PlaceholderCard({ category, label, soon }: { category: ShopCategory; label: string; soon: string }) {
   return (
-    <div className="relative card-hud overflow-hidden rounded-2xl p-4 flex flex-col gap-3 opacity-60 select-none">
+    <div className="relative overflow-hidden rounded-2xl p-4 flex flex-col gap-3 opacity-55 select-none border border-border/50 bg-gradient-to-br from-bg-2/60 to-bg-1/70">
       <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
       <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1 space-y-2">
@@ -248,7 +290,7 @@ function PlaceholderCard({ category, label, soon }: { category: ShopCategory; la
         </span>
       </div>
       {/* Emplacement visuel (vide tant qu'aucun item réel) */}
-      <div className="relative h-24 w-full shrink-0 rounded-xl border border-border/40 bg-bg-1/40 flex items-center justify-center">
+      <div className="relative h-28 w-full shrink-0 rounded-xl border border-border/40 bg-bg-1/40 flex items-center justify-center">
         <ImageIcon className="w-6 h-6 text-muted/40" strokeWidth={1.8} />
       </div>
       <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
@@ -341,6 +383,7 @@ export function ShopPage() {
   );
 
   const catLabel = (c: ShopCategory) => t(`shop.cat.${c}`);
+  const rarityLabel = (r: Rarity) => t(`shop.rarity.${r}`);
 
   /** Catégories réellement présentes dans le catalogue, dans un ordre stable,
    *  pour ne proposer comme filtre que des onglets non vides. */
@@ -352,20 +395,23 @@ export function ShopPage() {
     <div className="space-y-5">
       {/* ── En-tête + carte solde ──────────────────────────────────────── */}
       <Panel title={t('shop.title')} sub={t('shop.sub')}>
-        <div className="relative card-hud overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-gradient-to-br from-violet-500/12 via-bg-1 to-bg-0 border border-violet-400/25">
-          <div className="absolute inset-0 hud-diag pointer-events-none opacity-40" />
-          {/* Lueur dorée derrière la pièce */}
-          <div className="absolute -left-6 -top-6 w-32 h-32 rounded-full bg-gold/10 blur-2xl pointer-events-none" />
-          <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-gold/25 to-violet-500/10 border border-gold/35 flex items-center justify-center shadow-gold-glow">
-            <img src="/42coin.png" alt="League Coin" className="w-10 h-10 drop-shadow" />
+        <div className="relative overflow-hidden rounded-2xl p-5 flex items-center gap-4 border border-gold/30 bg-gradient-to-br from-violet-500/20 via-bg-2 to-bg-1">
+          <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
+          {/* Lueurs colorées pour réchauffer et éclaircir le bandeau */}
+          <div className="absolute -left-8 -top-10 w-40 h-40 rounded-full bg-gold/18 blur-3xl pointer-events-none" />
+          <div className="absolute right-0 -bottom-12 w-44 h-44 rounded-full bg-violet-500/18 blur-3xl pointer-events-none" />
+          {/* Pièce avec reflet doré qui balaie */}
+          <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-gold/35 to-violet-500/15 border border-gold/45 flex items-center justify-center shadow-gold-glow overflow-hidden">
+            <img src="/42coin.png" alt="League Coin" className="relative w-10 h-10 drop-shadow" />
+            <div className="absolute inset-y-0 -left-1/2 w-1/2 bg-white/25 blur-md animate-gold-sweep pointer-events-none" />
           </div>
           <div className="relative min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-muted">
+            <div className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-muted-2">
               {t('shop.balance')}
             </div>
             <div className="font-display text-[2.1rem] font-extrabold text-text-strong tabular-nums leading-tight flex items-baseline gap-2">
               <CoinCount login={me?.login} value={coins} />
-              <span className="text-sm text-violet-300 font-bold tracking-wide">League Coin</span>
+              <span className="text-sm text-violet-200 font-bold tracking-wide">League Coin</span>
             </div>
           </div>
         </div>
@@ -384,10 +430,10 @@ export function ShopPage() {
                 key={c}
                 type="button"
                 onClick={() => setActiveCat(c)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
+                className={`px-3.5 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
                   active
-                    ? 'bg-gold/15 border-gold/40 text-gold shadow-gold-glow'
-                    : 'bg-bg-1 border-border/60 text-muted-2 hover:text-text'
+                    ? 'bg-gradient-to-r from-gold to-gold-dim border-gold/50 text-bg-0 shadow-gold-glow'
+                    : 'bg-bg-2 border-border/70 text-muted-2 hover:text-text hover:border-gold/30'
                 }`}
               >
                 {c === 'all' ? t('shop.cat.all') : catLabel(c)}
@@ -401,96 +447,126 @@ export function ShopPage() {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-44" />
+            <Skeleton key={i} className="h-52" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {filteredItems.map((item) => {
             const isOwned = owned.has(item.id);
             const canAfford = coins >= item.price;
             const isEquipped = equipped.has(item.id);
             const showEquip = isOwned && EQUIPPABLE.includes(item.category);
             const itemBusy = busy === item.id;
+            const rarity = rarityOf(item.price);
+            const rk = RARITY[rarity];
             return (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
-                className={`group relative card-hud hover-glow overflow-hidden rounded-2xl p-4 flex flex-col gap-3 ${
-                  isOwned ? 'border-gold/30' : ''
-                }`}
+                whileHover={{ y: -3 }}
+                className="group relative rounded-2xl p-px transition-shadow"
+                style={{
+                  background: `linear-gradient(150deg, ${rk.border} 0%, ${rk.hex}1f 38%, rgba(58,48,34,0.45) 100%)`,
+                }}
               >
-                <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
-                {isOwned && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-gold/8 via-transparent to-transparent pointer-events-none" />
-                )}
-                <div className="relative flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-gaming text-sm font-extrabold text-text-strong truncate">
-                      {item.name}
-                    </div>
-                    {item.description && (
-                      <p className="mt-1 text-xs text-muted leading-snug line-clamp-3">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 px-2 py-0.5 rounded-full bg-gold/10 border border-gold/25 text-[9px] font-extrabold uppercase tracking-[0.12em] text-gold">
-                    {catLabel(item.category)}
-                  </span>
-                </div>
-
-                {/* Aperçu visuel de l'item acheté */}
-                <ShopItemVisual item={item} />
-
-                <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
-                  <CoinAmount
-                    value={item.price}
-                    className="font-gaming text-base font-extrabold text-text-strong"
+                {/* Surface intérieure — nettement plus claire que le fond global */}
+                <div
+                  className="relative h-full overflow-hidden rounded-[15px] p-4 flex flex-col gap-3"
+                  style={{
+                    background: `linear-gradient(165deg, ${rk.hex}1c 0%, rgba(42,36,28,0.92) 42%, rgba(26,22,17,0.96) 100%)`,
+                  }}
+                >
+                  <div className="absolute inset-0 hud-diag pointer-events-none opacity-25" />
+                  {/* Liseré supérieur de rareté */}
+                  <div
+                    className="absolute top-0 inset-x-0 h-px pointer-events-none"
+                    style={{ background: `linear-gradient(90deg, transparent, ${rk.hex}, transparent)` }}
                   />
 
-                  {isOwned ? (
-                    showEquip ? (
+                  <div className="relative flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-gaming text-sm font-extrabold text-text-strong truncate">
+                        {item.name}
+                      </div>
+                      {/* Étiquette de rareté */}
+                      <span
+                        className="mt-1 inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-[0.14em]"
+                        style={{ color: rk.hex }}
+                      >
+                        <Gem className="w-3 h-3" strokeWidth={2.5} />
+                        {rarityLabel(rarity)}
+                      </span>
+                      {item.description && (
+                        <p className="mt-1 text-xs text-muted-2 leading-snug line-clamp-2">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className="shrink-0 px-2 py-0.5 rounded-full border text-[9px] font-extrabold uppercase tracking-[0.12em]"
+                      style={{
+                        color: rk.hex,
+                        borderColor: `${rk.hex}40`,
+                        background: `${rk.hex}14`,
+                      }}
+                    >
+                      {catLabel(item.category)}
+                    </span>
+                  </div>
+
+                  {/* Aperçu visuel de l'item acheté */}
+                  <ShopItemVisual item={item} rarityHex={rk.hex} />
+
+                  <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
+                    <CoinAmount
+                      value={item.price}
+                      className="font-gaming text-lg font-extrabold text-text-strong"
+                    />
+
+                    {isOwned ? (
+                      showEquip ? (
+                        <button
+                          type="button"
+                          disabled={itemBusy}
+                          onClick={() => void toggleEquip(item)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-colors disabled:opacity-60 ${
+                            isEquipped
+                              ? 'bg-gold/15 border border-gold/40 text-gold'
+                              : 'bg-bg-1 border border-border/60 text-muted-2 hover:text-text'
+                          }`}
+                        >
+                          {isEquipped && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+                          {isEquipped ? t('shop.equipped') : t('shop.equip')}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide bg-gold/10 border border-gold/30 text-gold">
+                          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                          {t('shop.owned')}
+                        </span>
+                      )
+                    ) : (
                       <button
                         type="button"
-                        disabled={itemBusy}
-                        onClick={() => void toggleEquip(item)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-colors disabled:opacity-60 ${
-                          isEquipped
-                            ? 'bg-gold/15 border border-gold/40 text-gold'
-                            : 'bg-bg-1 border border-border/60 text-muted-2 hover:text-text'
-                        }`}
+                        disabled={!canAfford || itemBusy}
+                        onClick={() => void buy(item)}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-all ${
+                          canAfford
+                            ? 'bg-gradient-to-r from-gold to-gold-dim text-bg-0 hover:shadow-gold-glow hover:brightness-110'
+                            : 'bg-bg-1 border border-border/60 text-muted cursor-not-allowed'
+                        } disabled:opacity-70`}
                       >
-                        {isEquipped && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
-                        {isEquipped ? t('shop.equipped') : t('shop.equip')}
+                        {!canAfford && <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />}
+                        {itemBusy
+                          ? t('shop.buying')
+                          : canAfford
+                            ? t('shop.buy')
+                            : t('shop.insufficient')}
                       </button>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide bg-gold/10 border border-gold/30 text-gold">
-                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                        {t('shop.owned')}
-                      </span>
-                    )
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={!canAfford || itemBusy}
-                      onClick={() => void buy(item)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-colors ${
-                        canAfford
-                          ? 'bg-gold text-bg-0 hover:bg-gold-dim shadow-gold-glow'
-                          : 'bg-bg-1 border border-border/60 text-muted cursor-not-allowed'
-                      } disabled:opacity-70`}
-                    >
-                      {!canAfford && <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />}
-                      {itemBusy
-                        ? t('shop.buying')
-                        : canAfford
-                          ? t('shop.buy')
-                          : t('shop.insufficient')}
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </motion.div>
             );
