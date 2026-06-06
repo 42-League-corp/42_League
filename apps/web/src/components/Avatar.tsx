@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useAvatarRingColor } from '../hooks/useAvatarRing';
 
 interface AvatarProps {
@@ -31,10 +31,31 @@ const SIZE = {
 };
 
 /** Épaisseur de l'anneau de grade (px) selon la taille de l'avatar. */
-const RING_W = { xs: 1.5, sm: 2, md: 2, lg: 2.5, xl: 3 };
+const RING_W = { xs: 2, sm: 2.5, md: 3, lg: 4, xl: 5 };
+/** Rayon du halo coloré (px) projeté autour de l'anneau, selon la taille. */
+const RING_GLOW = { xs: 4, sm: 6, md: 8, lg: 12, xl: 16 };
 
 /**
- * Avatar rond — design friendly et coloré.
+ * Construit le rebord « pierre précieuse » d'un avatar à partir de la couleur de
+ * grade : un anneau en `conic-gradient` dont les facettes alternent reflets clairs
+ * (color-mix vers le blanc) et ombres (vers le noir) pour un rendu métal/gemme qui
+ * accroche la lumière, surmonté d'un halo coloré (box-shadow) et d'un éclat
+ * spéculaire en haut. Rendu sur un calque absolu débordant (`-inset`) → aucun
+ * impact sur la mise en page et non rogné par l'`overflow-hidden` de la photo.
+ */
+function ringStyle(color: string, glow: number): CSSProperties {
+  const light = `color-mix(in srgb, ${color} 35%, #ffffff)`;
+  const dark = `color-mix(in srgb, ${color} 72%, #000000)`;
+  return {
+    background: `conic-gradient(from 125deg, ${color} 0deg, ${light} 55deg, ${color} 120deg, ${dark} 195deg, ${color} 265deg, ${light} 320deg, ${color} 360deg)`,
+    // Éclat spéculaire en haut + halo coloré net puis diffus tout autour.
+    boxShadow: `inset 0 1px 2px rgba(255,255,255,0.55), 0 0 ${glow}px ${color}, 0 0 ${glow * 2}px ${color}66, 0 2px 6px rgba(0,0,0,0.4)`,
+    filter: 'saturate(1.25)',
+  };
+}
+
+/**
+ * Avatar rond — design friendly et coloré, cerclé d'un rebord de grade façon gemme.
  */
 export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false, noRing = false }: AvatarProps) {
   const [broken, setBroken] = useState(false);
@@ -46,34 +67,45 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
     : '';
 
   // Anneau de grade (couleur du palier du joueur dans le mode courant). Désactivé
-  // en grayscale (saisons figées) ou via `noRing`. Tracé en `box-shadow` outset :
-  // pas d'impact sur la mise en page (avatars empilés) ni rogné par overflow-hidden.
+  // en grayscale (saisons figées) ou via `noRing`.
   const ringColor = useAvatarRingColor(login);
   const ring = !noRing && !grayscale ? ringColor : null;
   const ringW = RING_W[size];
-  const boxShadow = ring
-    ? `0 0 0 ${ringW}px ${ring}, 0 0 10px ${ring}66, 0 2px 8px rgba(0,0,0,0.35)`
-    : '0 2px 10px rgba(255, 154, 158, 0.3)';
 
   return (
     <div
-      className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
-      style={{
-        background: `${sheen}linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)`,
-        boxShadow,
-        color: '#fff',
-      }}
+      className={`relative flex-shrink-0 rounded-full flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
     >
-      {showImg ? (
-        <img
-          src={imageUrl}
-          alt={login}
-          className="w-full h-full object-cover block"
-          onError={() => setBroken(true)}
+      {ring && (
+        <div
+          aria-hidden
+          className="absolute rounded-full pointer-events-none"
+          style={{ inset: -ringW, ...ringStyle(ring, RING_GLOW[size]) }}
         />
-      ) : (
-        <span className="relative z-10">{initial}</span>
       )}
+      <div
+        className="relative w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+        style={{
+          background: `${sheen}linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)`,
+          // Liseré interne sombre pour détacher nettement la gemme de la photo
+          // (sinon le rebord et l'image se fondent). Sans anneau : ombre portée douce.
+          boxShadow: ring
+            ? 'inset 0 0 0 1px rgba(0,0,0,0.45), inset 0 1px 2px rgba(0,0,0,0.3)'
+            : '0 2px 10px rgba(255, 154, 158, 0.3)',
+          color: '#fff',
+        }}
+      >
+        {showImg ? (
+          <img
+            src={imageUrl}
+            alt={login}
+            className="w-full h-full object-cover block"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <span className="relative z-10">{initial}</span>
+        )}
+      </div>
     </div>
   );
 }
