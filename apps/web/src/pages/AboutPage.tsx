@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, HelpCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, Github } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { api, type ContributorStat } from '../lib/api';
 import { useT, useI18n } from '../lib/i18n';
@@ -2264,43 +2264,50 @@ function MemberCard({
         />
       )}
 
-      {/* « ? » des stats de contributions git (lignes ajout/suppr/net), en haut
-          à droite — seulement sur la carte active et si on a des chiffres. */}
+      {/* Pastille GitHub des stats de contributions git (lignes ajout/suppr/net),
+          en haut à droite — seulement sur la carte active et si on a des chiffres.
+          Le récap apparaît au survol (desktop) ou au tap (tactile, via showStats). */}
       {hasStats && active && (
-        <div className="absolute top-3 right-3 z-20">
+        <div className="absolute top-3 right-3 z-20 group/git">
           <button
             type="button"
             onClick={() => setShowStats((v) => !v)}
             aria-label={t('about.stats.aria')}
-            className={`grid place-items-center w-7 h-7 rounded-full border backdrop-blur-sm transition-colors ${
+            className={`grid place-items-center w-7 h-7 rounded-full border backdrop-blur-sm transition-colors group-hover/git:border-gold/60 group-hover/git:text-gold ${
               showStats
                 ? 'border-gold/70 bg-gold/25 text-gold'
-                : 'border-white/30 bg-black/40 text-white/85 hover:text-gold hover:border-gold/50'
+                : 'border-white/30 bg-black/40 text-white/85'
             }`}
           >
-            <HelpCircle className="w-4 h-4" strokeWidth={2.4} />
+            <Github className="w-4 h-4" strokeWidth={2.2} />
           </button>
-          {showStats && (
-            <div className="absolute right-0 mt-2 w-44 rounded-xl border border-gold/25 bg-bg-2/95 backdrop-blur-md p-3 shadow-xl">
-              <div className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-gold/85 mb-2">
+          <div
+            className={`absolute right-0 mt-2 w-44 rounded-xl border border-gold/25 bg-bg-2/95 backdrop-blur-md p-3 shadow-xl transition-opacity duration-100 group-hover/git:opacity-100 group-hover/git:pointer-events-auto ${
+              showStats ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 mb-2">
+              <Github className="w-3 h-3 text-gold/85" strokeWidth={2.4} />
+              <span className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-gold/85">
                 {t('about.stats.title')}
+              </span>
+              <span className="ml-auto text-[10px] font-mono font-bold text-muted-2">@{member.login}</span>
+            </div>
+            <div className="space-y-1 text-xs tabular-nums">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-2">{t('about.stats.added')}</span>
+                <span className="font-bold text-emerald-300">+{stat!.added.toLocaleString()}</span>
               </div>
-              <div className="space-y-1 text-xs tabular-nums">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-2">{t('about.stats.added')}</span>
-                  <span className="font-bold text-emerald-300">+{stat!.added.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-2">{t('about.stats.deleted')}</span>
-                  <span className="font-bold text-red">−{stat!.deleted.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-white/10 pt-1 mt-1">
-                  <span className="text-muted-2">{t('about.stats.net')}</span>
-                  <span className="font-extrabold text-gold">{stat!.net.toLocaleString()}</span>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-2">{t('about.stats.deleted')}</span>
+                <span className="font-bold text-red">−{stat!.deleted.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/10 pt-1 mt-1">
+                <span className="text-muted-2">{t('about.stats.net')}</span>
+                <span className="font-extrabold text-gold">{stat!.net.toLocaleString()}</span>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
