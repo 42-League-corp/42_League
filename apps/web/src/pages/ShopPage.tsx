@@ -9,6 +9,8 @@ import {
   Target,
   Dices,
   Gem,
+  ArrowUp,
+  ArrowDown,
   type LucideIcon,
 } from 'lucide-react';
 import { Panel } from '../components/Panel';
@@ -24,7 +26,13 @@ import {
   type ShopCategory,
   type ShopItemData,
 } from '../lib/api';
-import { RARITY, resolveRarity, type Rarity } from '../lib/rarity';
+import { trackEvent } from '../lib/analytics';
+import { RARITY, RARITY_ORDER, resolveRarity, type Rarity } from '../lib/rarity';
+
+/** Critères de tri proposés sous la barre de catégories. */
+type SortKey = 'name' | 'price' | 'rarity';
+type SortDir = 'asc' | 'desc';
+const SORT_KEYS: SortKey[] = ['name', 'price', 'rarity'];
 
 /** Catégories pour lesquelles « équiper » a du sens (titre / bannière / badge actifs). */
 const EQUIPPABLE: ShopCategory[] = ['title', 'banner', 'badge'];
@@ -297,6 +305,22 @@ export function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<ShopCategory | 'all'>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('rarity');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  /** Clic sur un critère de tri : si déjà actif, on inverse le sens ; sinon on
+   *  bascule sur ce critère avec un sens par défaut (rareté/prix décroissants,
+   *  nom croissant — l'ordre le plus naturel pour chacun). */
+  const onSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortDir(key === 'name' ? 'asc' : 'desc');
+      return key;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -326,6 +350,7 @@ export function ShopPage() {
         const res = await api.buyShopItem(item.id);
         setCoins(res.coins);
         setOwned((prev) => new Set(prev).add(item.id));
+        trackEvent('shop.buy');
         show(t('shop.bought'));
         void refresh();
         void load();
@@ -370,6 +395,17 @@ export function ShopPage() {
   const filteredItems =
     activeCat === 'all' ? items : items.filter((it) => it.category === activeCat);
 
+  /** Tri appliqué au catalogue filtré. La comparaison se fait toujours en ordre
+   *  croissant « naturel », puis on inverse selon `sortDir`. */
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    let cmp: number;
+    if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+    else if (sortKey === 'price') cmp = a.price - b.price;
+    else cmp = RARITY_ORDER.indexOf(resolveRarity(a)) - RARITY_ORDER.indexOf(resolveRarity(b));
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+  const sortLabel = (k: SortKey) => t(`shop.sort.${k}`);
+
   return (
     <div className="space-y-5">
       {/* ── En-tête + carte solde ──────────────────────────────────────── */}
@@ -399,26 +435,58 @@ export function ShopPage() {
       {/* ── Guide « comment gagner des coins » ─────────────────────────── */}
       <EarnGuide />
 
-      {/* ── Barre de filtres par catégorie ─────────────────────────────── */}
-      {!loading && presentCats.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {(['all', ...presentCats] as const).map((c) => {
-            const active = activeCat === c;
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setActiveCat(c)}
-                className={`px-3.5 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
-                  active
-                    ? 'bg-gradient-to-r from-gold to-gold-dim border-gold/50 text-bg-0 shadow-gold-glow'
-                    : 'bg-bg-2 border-border/70 text-muted-2 hover:text-text hover:border-gold/30'
-                }`}
-              >
-                {c === 'all' ? t('shop.cat.all') : catLabel(c)}
-              </button>
-            );
-          })}
+      {/* ── Barres de filtres : catégorie + tri ────────────────────────── */}
+      {!loading && items.length > 0 && (
+        <div className="space-y-2.5">
+          {/* Filtres par catégorie */}
+          {presentCats.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {(['all', ...presentCats] as const).map((c) => {
+                const active = activeCat === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setActiveCat(c)}
+                    className={`px-3.5 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
+                      active
+                        ? 'bg-gradient-to-r from-gold to-gold-dim border-gold/50 text-bg-0 shadow-gold-glow'
+                        : 'bg-bg-2 border-border/70 text-muted-2 hover:text-text hover:border-gold/30'
+                    }`}
+                  >
+                    {c === 'all' ? t('shop.cat.all') : catLabel(c)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Tri : un re-clic sur le critère actif inverse le sens. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-2">
+              {t('shop.sort.label')}
+            </span>
+            {SORT_KEYS.map((k) => {
+              const active = sortKey === k;
+              const Arrow = sortDir === 'asc' ? ArrowUp : ArrowDown;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => onSort(k)}
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.12em] border transition-colors ${
+                    active
+                      ? 'bg-violet-500/20 border-violet-400/50 text-violet-100'
+                      : 'bg-bg-2 border-border/70 text-muted-2 hover:text-text hover:border-violet-400/30'
+                  }`}
+                >
+                  {sortLabel(k)}
+                  {active && <Arrow className="w-3.5 h-3.5" strokeWidth={2.8} />}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -431,7 +499,7 @@ export function ShopPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {filteredItems.map((item) => {
+          {sortedItems.map((item) => {
             const isOwned = owned.has(item.id);
             const canAfford = coins >= item.price;
             const isEquipped = equipped.has(item.id);
