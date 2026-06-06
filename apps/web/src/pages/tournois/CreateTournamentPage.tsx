@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, User, Users } from 'lucide-react';
 import { Button } from '../../components/Button';
 import {
   TournamentPrizePicker,
@@ -9,39 +9,58 @@ import {
   EMPTY_PRIZE,
   type PrizeFormState,
 } from '../../components/tournois/TournamentPrizePicker';
-import { api } from '../../lib/api';
+import { PlayerSearch } from '../defis/shared/PlayerSearch';
+import { api, type LeaderboardEntry } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { haptic } from '../../mobile/feedback/useHaptic';
 import { useT } from '../../lib/i18n';
 
 type Capacity = 8 | 16 | 32;
+type Mode = '1v1' | '2v2';
 
 export function CreateTournamentPage() {
   const navigate = useNavigate();
   const flash = useFlash();
-  const { refresh, me } = useLeagueData();
+  const { refresh, me, leaderboard, locations } = useLeagueData();
   const t = useT();
   const isAdmin = !!me?.isAdmin;
 
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState<Capacity>(8);
   const [kind, setKind] = useState<'friendly' | 'official'>('friendly');
+  const [mode, setMode] = useState<Mode>('1v1');
+  const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
   const [prize, setPrize] = useState<PrizeFormState>(EMPTY_PRIZE);
   const [busy, setBusy] = useState(false);
 
-  const canSubmit = name.trim().length > 0;
+  // Coéquipiers candidats : tous les joueurs sauf moi (le créateur).
+  const partnerCandidates = leaderboard.filter((p) => p.login !== me?.login);
+
+  const canSubmit = name.trim().length > 0 && (mode === '1v1' || !!partner);
 
   const submit = async () => {
     const n = name.trim();
     if (!n) { haptic('error'); return; }
+    if (mode === '2v2' && !partner) {
+      flash.show(t('tournois.create.needPartner'), 'error');
+      haptic('error');
+      return;
+    }
     setBusy(true);
     try {
       // Les non-admins ne créent que des amicaux ; la récompense n'est envoyée
       // que pour un officiel (sinon le backend 400).
       const effKind = isAdmin ? kind : 'friendly';
       const prizePayload = effKind === 'official' ? buildPrizePayload(prize) : { kind: 'none' as const };
-      const tNew = await api.createTournament({ name: n, capacity, kind: effKind, prize: prizePayload });
+      const tNew = await api.createTournament({
+        name: n,
+        capacity,
+        kind: effKind,
+        mode,
+        partnerLogin: mode === '2v2' ? partner!.login : undefined,
+        prize: prizePayload,
+      });
       haptic('success');
       await refresh();
       navigate(`/tournaments/${encodeURIComponent(tNew.id)}`, { replace: true });
@@ -142,6 +161,67 @@ export function CreateTournamentPage() {
           )}
         </motion.div>
 
+        {/* Mode : 1v1 / 2v2 (babyfoot doubles) */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, delay: 0.11 }}
+        >
+          <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
+            {t('tournois.field.mode')}
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { m: '1v1' as Mode, icon: User, label: t('tournois.mode.1v1'), sub: t('tournois.mode.1v1.sub') },
+              { m: '2v2' as Mode, icon: Users, label: t('tournois.mode.2v2'), sub: t('tournois.mode.2v2.sub') },
+            ]).map(({ m, icon: Icon, label, sub }) => {
+              const active = mode === m;
+              return (
+                <motion.button
+                  key={m}
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    haptic('selection');
+                    setMode(m);
+                    if (m === '1v1') setPartner(null);
+                  }}
+                  className={`relative flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl border-2 tap-transparent transition-all ${
+                    active ? 'border-teal bg-teal/[0.08]' : 'border-border/60 bg-bg-1/50'
+                  }`}
+                >
+                  <Icon className={`w-6 h-6 ${active ? 'text-teal' : 'text-muted-2'}`} strokeWidth={2.2} />
+                  <span className={`text-sm font-extrabold ${active ? 'text-teal' : 'text-text-strong'}`}>{label}</span>
+                  <span className={`text-[10px] font-medium ${active ? 'text-teal/70' : 'text-muted-2/60'}`}>{sub}</span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Coéquipier (2v2) — le créateur engage sa paire */}
+        {mode === '2v2' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.12 }}
+          >
+            <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
+              {t('tournois.field.partner')}
+            </label>
+            <PlayerSearch
+              players={partnerCandidates}
+              recentPlayers={[]}
+              opponentCounts={{}}
+              selected={partner}
+              onSelect={setPartner}
+              onClear={() => setPartner(null)}
+              locations={locations}
+              variant="mobile"
+            />
+          </motion.div>
+        )}
+
         {/* Capacité */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -149,7 +229,7 @@ export function CreateTournamentPage() {
           transition={{ duration: 0.28, delay: 0.14 }}
         >
           <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-3">
-            {t('tournois.field.players')}
+            {mode === '2v2' ? t('tournois.field.teams') : t('tournois.field.players')}
           </label>
           <div className="grid grid-cols-3 gap-3">
             {([8, 16, 32] as Capacity[]).map((c) => {
@@ -195,10 +275,12 @@ export function CreateTournamentPage() {
                   </span>
                   <div className="relative z-10 text-center">
                     <div className={`text-[11px] font-extrabold uppercase tracking-wide ${active ? 'text-teal' : 'text-muted-2'}`}>
-                      {t('tournois.mobile.players')}
+                      {mode === '2v2' ? t('tournois.field.teams') : t('tournois.mobile.players')}
                     </div>
                     <div className={`text-[10px] font-medium mt-0.5 ${active ? 'text-teal/70' : 'text-muted-2/60'}`}>
-                      {c === 8 ? t('tournois.createPage.cap8') : t('tournois.createPage.cap16')}
+                      {mode === '2v2'
+                        ? `${c * 2} ${t('tournois.mobile.players')}`
+                        : c === 8 ? t('tournois.createPage.cap8') : t('tournois.createPage.cap16')}
                     </div>
                   </div>
                   {active && (

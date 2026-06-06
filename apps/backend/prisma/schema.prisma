@@ -244,7 +244,10 @@ model Tournament {
   kind           String    @default("friendly") // 'friendly' | 'official'
   isPrivate      Boolean   @default(false) @map("is_private") // privé = visible/rejoignable sur invitation uniquement
   imageUrl       String?   @map("image_url") // image de couverture optionnelle (URL) ; sinon visuel par défaut généré
-  capacity       Int // nombre de joueurs (>= 6) ; phase de poule activée à partir de 12
+  capacity       Int // 1v1 : nombre de joueurs ; 2v2 : nombre d'ÉQUIPES. Poules dès 12.
+  // '1v1' (un login par côté) | '2v2' (babyfoot doubles : chaque entrée = une paire,
+  // représentée dans le bracket par le login « capitaine », cf. partnerLogin).
+  mode           String    @default("1v1")
   format         String    @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
   game           String    @default("babyfoot") // 'babyfoot' | 'smash'
   status         String // 'registration' | 'in_progress' | 'finished' | 'cancelled'
@@ -264,6 +267,16 @@ model Tournament {
   prizeKind   String  @default("none") @map("prize_kind")
   prizeCoins  Int?    @map("prize_coins")
   prizeItemId String? @map("prize_item_id")
+
+  // ── Économie des paris & cash-prize (cf. tournament-economy.ts) ──────────────
+  // Multiplicateur de gain d'un pari sur le VAINQUEUR du tournoi. Les paliers
+  // intermédiaires (passer un tour, demi…) sont interpolés linéairement de 1
+  // (0 tour franchi → mise perdue) jusqu'à ce final. Amicaux : 2. Officiels : 2..10.
+  betFinalMult Int @default(2) @map("bet_final_mult")
+  // Cash-prize (coins) du CHAMPION pour un tournoi officiel. Les paliers inférieurs
+  // (demi, quart…) sont dérivés proportionnellement au tour atteint. null = pas de
+  // cash-prize (amicaux, ou officiel sans dotation).
+  cashPrizeBase Int? @map("cash_prize_base")
 
   createdBy User               @relation("tournamentCreator", fields: [createdByLogin], references: [login])
   winner    User?              @relation("tournamentWinner", fields: [winnerLogin], references: [login])
@@ -298,7 +311,11 @@ model TournamentInvite {
 
 model TournamentEntry {
   tournamentId String   @map("tournament_id")
-  login        String
+  login        String // 1v1 : le joueur. 2v2 : le « capitaine » (login canonique) de la paire.
+  // 2v2 uniquement : coéquipier du capitaine. Stocké en simple login (pas de relation)
+  // pour éviter d'alourdir le modèle User. Un login n'apparaît qu'une fois par tournoi
+  // (ni deux fois capitaine, ni capitaine+partenaire) — garanti côté route.
+  partnerLogin String?  @map("partner_login")
   joinedAt     DateTime @default(now()) @map("joined_at")
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

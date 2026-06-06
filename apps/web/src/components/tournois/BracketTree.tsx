@@ -67,6 +67,13 @@ export default function BracketTree({
     return map;
   }, [entries]);
 
+  // 2v2 : coéquipier par login capitaine (pour afficher la paire dans chaque carte).
+  const partnerOf = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const e of entries) map.set(e.login, e.partnerLogin ?? null);
+    return map;
+  }, [entries]);
+
   // Matchs groupés par round et triés par slot.
   const byRound = useMemo(() => {
     const m = new Map<number, TournamentMatch[]>();
@@ -219,6 +226,7 @@ export default function BracketTree({
               <MatchCard
                 match={m}
                 avatarOf={avatarOf}
+                partnerOf={partnerOf}
                 selected={selectedMatchId === m.id}
                 active={activeMatchId === m.id}
                 onSelect={onSelectMatch}
@@ -262,12 +270,14 @@ export default function BracketTree({
 function MatchCard({
   match,
   avatarOf,
+  partnerOf,
   selected,
   active,
   onSelect,
 }: {
   match: TournamentMatch;
   avatarOf: Map<string, string | null>;
+  partnerOf: Map<string, string | null>;
   selected: boolean;
   active: boolean;
   onSelect?: (m: TournamentMatch) => void;
@@ -307,6 +317,7 @@ function MatchCard({
       >
         <SlotRow
           login={match.playerALogin}
+          partnerName={match.playerALogin ? partnerOf.get(match.playerALogin) ?? null : null}
           score={match.scoreA}
           winner={winnerA}
           loser={done && !winnerA && !!match.playerALogin}
@@ -315,6 +326,7 @@ function MatchCard({
         <div className="h-px bg-border/40" />
         <SlotRow
           login={match.playerBLogin}
+          partnerName={match.playerBLogin ? partnerOf.get(match.playerBLogin) ?? null : null}
           score={match.scoreB}
           winner={winnerB}
           loser={done && !winnerB && !!match.playerBLogin}
@@ -327,12 +339,14 @@ function MatchCard({
 
 function SlotRow({
   login,
+  partnerName,
   score,
   winner,
   loser,
   avatarUrl,
 }: {
   login: string | null;
+  partnerName?: string | null;
   score: number | null;
   winner: boolean;
   loser: boolean;
@@ -369,13 +383,18 @@ function SlotRow({
         ) : (
           <div className="w-8 h-8 rounded-full border border-dashed border-muted/50 shrink-0" />
         )}
-        <span
-          className={`text-sm truncate ${
-            winner ? 'text-text-strong font-bold' : login ? 'text-text' : 'text-muted'
-          }`}
-        >
-          {login ?? '?'}
-        </span>
+        <div className="min-w-0 flex flex-col leading-tight">
+          <span
+            className={`text-sm truncate ${
+              winner ? 'text-text-strong font-bold' : login ? 'text-text' : 'text-muted'
+            }`}
+          >
+            {login ?? '?'}
+          </span>
+          {partnerName && (
+            <span className="text-[10px] text-muted-2 truncate">&amp; {partnerName}</span>
+          )}
+        </div>
       </div>
       <span
         className={`text-sm tabular-nums shrink-0 ${

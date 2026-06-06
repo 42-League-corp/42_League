@@ -57,6 +57,11 @@ export function TournoiDetailPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [invitee, setInvitee] = useState<LeaderboardEntry | null>(null);
+  // 2v2 : coéquipier choisi quand JE rejoins, et paire choisie par l'organisateur
+  // pour ajouter une équipe (capitaine + coéquipier).
+  const [joinPartner, setJoinPartner] = useState<LeaderboardEntry | null>(null);
+  const [addCaptain, setAddCaptain] = useState<LeaderboardEntry | null>(null);
+  const [addPartner, setAddPartner] = useState<LeaderboardEntry | null>(null);
   // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
   const [showCeremony, setShowCeremony] = useState(false);
   // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
@@ -134,8 +139,14 @@ export function TournoiDetailPage() {
   // « Officiant » : peut saisir un score / lancer la pièce SANS jouer le match.
   // Admin/superadmin partout ; le créateur seulement sur un tournoi amical.
   const canOfficiate = isAdmin || (isOrganizer && tournament.kind === 'friendly');
-  const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin);
+  const is2v2 = tournament.mode === '2v2';
+  // 2v2 : je suis inscrit si je suis capitaine OU coéquipier d'une entrée.
+  const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin || e.partnerLogin === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
+  // Logins déjà engagés (capitaines + coéquipiers) → exclus des sélecteurs 2v2.
+  const engagedLogins = new Set(
+    (tournament.entries ?? []).flatMap((e) => (e.partnerLogin ? [e.login, e.partnerLogin] : [e.login])),
+  );
 
   // Combattants de l'écran VERSUS (résolus depuis le match désigné + les avatars
   // des inscrits). Null si le match désigné n'existe plus (déjà confirmé).
@@ -199,6 +210,27 @@ export function TournoiDetailPage() {
     );
   };
 
+  // 2v2 : je rejoins avec mon coéquipier.
+  const handleJoin2v2 = async () => {
+    if (!joinPartner) return;
+    const p = joinPartner.login;
+    setJoinPartner(null);
+    await runAction(() => api.joinTournament(tournament.id, p), t('tournois.flash.registered'));
+  };
+
+  // 2v2 : l'organisateur ajoute directement une équipe (capitaine + coéquipier).
+  const handleAddTeam = async () => {
+    if (!addCaptain || !addPartner) return;
+    const cap = addCaptain.login;
+    const par = addPartner.login;
+    setAddCaptain(null);
+    setAddPartner(null);
+    await runAction(
+      () => api.addTournamentPlayer(tournament.id, cap, par),
+      t('tournois.flash.registered'),
+    );
+  };
+
   const handleAcceptInvite = async (invite: TournamentInvite) => {
     await runAction(
       () => api.acceptTournamentInvite(tournament.id, invite.id),
@@ -216,7 +248,8 @@ export function TournoiDetailPage() {
   const kindLabel = tournament.kind === 'official' ? t('tournois.detail.kind.official') : t('tournois.detail.kind.friendly');
   const visLabel = tournament.isPrivate ? t('tournois.detail.private') : '';
   const formatLabel = tournament.format === 'pools' ? t('tournois.detail.pools') : '';
-  const sub = `${kindLabel}${visLabel}${formatLabel} · ${entriesCount}/${tournament.capacity} · ${t(STATUS_KEY[tournament.status])}`;
+  const modeLabel = is2v2 ? ` · ${t('tournois.detail.mode2v2')}` : '';
+  const sub = `${kindLabel}${visLabel}${formatLabel}${modeLabel} · ${entriesCount}/${tournament.capacity} · ${t(STATUS_KEY[tournament.status])}`;
 
   const handleLeave = async () => {
     const ok = await confirm({
@@ -315,7 +348,7 @@ export function TournoiDetailPage() {
             </div>
           )}
           <div className="flex flex-wrap gap-2 mb-4">
-            {!iAmIn && entriesCount < tournament.capacity &&
+            {!is2v2 && !iAmIn && entriesCount < tournament.capacity &&
               (!tournament.isPrivate || isOrganizer || isAdmin) && (
               <Button onClick={() => runAction(() => api.joinTournament(tournament.id), t('tournois.flash.registered'))}>
                 {t('tournois.detail.join')}
@@ -333,6 +366,30 @@ export function TournoiDetailPage() {
               <Button variant="danger" onClick={handleCancel}>{t('tournois.detail.delete')}</Button>
             )}
           </div>
+
+          {/* 2v2 : je rejoins avec mon coéquipier (sélecteur + bouton). */}
+          {is2v2 && !iAmIn && entriesCount < tournament.capacity &&
+            (!tournament.isPrivate || isOrganizer || isAdmin) && (
+            <div className="mb-4 p-3 rounded-xl border border-teal/25 bg-teal/[0.05]">
+              <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
+                {t('tournois.detail.partnerPrompt')}
+              </div>
+              <div className="flex flex-col gap-2">
+                <PlayerSearch
+                  players={leaderboard.filter((p) => p.login !== myLogin && !engagedLogins.has(p.login))}
+                  recentPlayers={[]}
+                  opponentCounts={{}}
+                  selected={joinPartner}
+                  onSelect={setJoinPartner}
+                  onClear={() => setJoinPartner(null)}
+                  locations={locations}
+                />
+                <Button onClick={handleJoin2v2} disabled={!joinPartner}>
+                  {t('tournois.detail.join')}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Bannière : invitation reçue en attente de décision */}
           {myPendingInvite && !iAmIn && (
@@ -354,8 +411,40 @@ export function TournoiDetailPage() {
             </div>
           )}
 
-          {/* Section invitation (organisateur / admin) */}
-          {(isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
+          {/* 2v2 : l'organisateur ajoute directement une équipe (pas d'invitations). */}
+          {is2v2 && (isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
+            <div className="mb-4 p-3 rounded-xl border border-teal/20 bg-bg-2/30">
+              <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
+                {t('tournois.detail.addTeam')}
+              </div>
+              <div className="flex flex-col gap-2">
+                <PlayerSearch
+                  players={leaderboard.filter((p) => !engagedLogins.has(p.login) && p.login !== addPartner?.login)}
+                  recentPlayers={[]}
+                  opponentCounts={{}}
+                  selected={addCaptain}
+                  onSelect={setAddCaptain}
+                  onClear={() => setAddCaptain(null)}
+                  locations={locations}
+                />
+                <PlayerSearch
+                  players={leaderboard.filter((p) => !engagedLogins.has(p.login) && p.login !== addCaptain?.login)}
+                  recentPlayers={[]}
+                  opponentCounts={{}}
+                  selected={addPartner}
+                  onSelect={setAddPartner}
+                  onClear={() => setAddPartner(null)}
+                  locations={locations}
+                />
+                <Button onClick={handleAddTeam} disabled={!addCaptain || !addPartner}>
+                  {t('tournois.detail.addTeam.cta')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Section invitation (organisateur / admin) — 1v1 uniquement */}
+          {!is2v2 && (isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
             <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
               <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
                 {t('tournois.detail.invite.title')}
@@ -415,15 +504,34 @@ export function TournoiDetailPage() {
                 key={e.login}
                 className="flex items-center gap-2.5 p-2.5 border border-border bg-bg-2/40 rounded"
               >
-                <PlayerLink login={e.login} className="flex-1 min-w-0">
-                  <Avatar login={e.login} imageUrl={e.user?.imageUrl ?? null} size="md" />
-                  <div className="min-w-0">
-                    <div className="font-bold truncate text-text-strong">{e.login}</div>
-                    <div className="text-[11px] text-muted-2">
-                      <span className="text-teal font-bold">{e.user?.elo ?? '—'}</span> ELO
-                    </div>
+                {is2v2 ? (
+                  // Équipe : capitaine + coéquipier côte à côte.
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <PlayerLink login={e.login} className="min-w-0 flex items-center gap-1.5">
+                      <Avatar login={e.login} imageUrl={e.user?.imageUrl ?? null} size="sm" />
+                      <span className="font-bold truncate text-text-strong text-sm">{e.login}</span>
+                    </PlayerLink>
+                    <span className="text-muted-2 text-xs font-bold px-0.5">&amp;</span>
+                    {e.partnerLogin ? (
+                      <PlayerLink login={e.partnerLogin} className="min-w-0 flex items-center gap-1.5">
+                        <Avatar login={e.partnerLogin} imageUrl={e.partner?.imageUrl ?? null} size="sm" />
+                        <span className="font-bold truncate text-text-strong text-sm">{e.partnerLogin}</span>
+                      </PlayerLink>
+                    ) : (
+                      <span className="text-muted text-sm">?</span>
+                    )}
                   </div>
-                </PlayerLink>
+                ) : (
+                  <PlayerLink login={e.login} className="flex-1 min-w-0">
+                    <Avatar login={e.login} imageUrl={e.user?.imageUrl ?? null} size="md" />
+                    <div className="min-w-0">
+                      <div className="font-bold truncate text-text-strong">{e.login}</div>
+                      <div className="text-[11px] text-muted-2">
+                        <span className="text-teal font-bold">{e.user?.elo ?? '—'}</span> ELO
+                      </div>
+                    </div>
+                  </PlayerLink>
+                )}
               </div>
             ))}
             {Array.from({ length: tournament.capacity - entriesCount }).map((_, i) => (

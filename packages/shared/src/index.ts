@@ -5,3 +5,4 @@ export * from './schemas.js';
 export * from './games.js';
 export * from './rank.js';
 export * from './titles.js';
+export * from './tournament-economy.js';

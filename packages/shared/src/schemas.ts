@@ -196,18 +196,29 @@ export const TournamentPrizeSchema = z.discriminatedUnion('kind', [
 ]);
 export type TournamentPrizeInput = z.infer<typeof TournamentPrizeSchema>;
 
+// Multiplicateur final d'un pari sur le vainqueur : amicaux 2 (fixe), officiels 2..10.
+export const BET_FINAL_MULT_MIN = 2;
+export const BET_FINAL_MULT_MAX = 10;
 export const CreateTournamentSchema = z
   .object({
     name: z.string().min(2).max(60),
-    // Nombre de joueurs : puissance de 2 uniquement (8, 16, 32, 64) → le bracket est
-    // toujours plein, jamais de joueur exempt/seul au 1er tour (cf. refine plus bas).
-    // Les poules s'activent à partir de 12 (donc capacité ≥ 16).
+    // Capacité : puissance de 2 uniquement (8, 16, 32, 64) → bracket toujours plein.
+    // En 1v1 = nombre de joueurs ; en 2v2 = nombre d'ÉQUIPES (donc 2× joueurs).
+    // Les poules s'activent à partir de 12.
     capacity: z.number().int().min(8).max(64),
     kind: z.enum(['friendly', 'official']).default('friendly'),
+    // Mode : 1v1 classique, ou 2v2 (babyfoot doubles — chaque inscription est une paire).
+    mode: z.enum(['1v1', '2v2']).default('1v1'),
+    // 2v2 uniquement : coéquipier du créateur (il s'inscrit avec sa paire à la création).
+    partnerLogin: LoginSchema.optional(),
     // Format : élimination directe, ou phase de poules (puis bracket des qualifiés).
     format: z.enum(['elimination', 'pools']).default('elimination'),
     // Discipline du tournoi (babyfoot | smash).
     game: GameSchema.default('babyfoot'),
+    // Officiel : multiplicateur final du pari sur le vainqueur (2..10). Défaut 2.
+    betFinalMult: z.number().int().min(BET_FINAL_MULT_MIN).max(BET_FINAL_MULT_MAX).optional(),
+    // Officiel : cash-prize (coins) du champion ; paliers dérivés au prorata. 0/absent = aucun.
+    cashPrizeBase: z.number().int().min(0).max(1_000_000).optional(),
     // Privé = visible et rejoignable uniquement sur invitation (pas d'inscription libre).
     private: z.boolean().default(false),
     // Image de couverture optionnelle (URL). Vide → visuel par défaut généré côté front.
@@ -241,6 +252,25 @@ export const CreateTournamentSchema = z
   .refine((d) => d.prize.kind === 'none' || d.kind === 'official', {
     message: 'une récompense ne peut être attachée qu\'à un tournoi officiel',
     path: ['prize'],
+  })
+  // 2v2 : un coéquipier est obligatoire (le créateur engage sa paire).
+  .refine((d) => d.mode !== '2v2' || !!d.partnerLogin, {
+    message: 'un tournoi 2v2 nécessite de désigner ton coéquipier',
+    path: ['partnerLogin'],
+  })
+  // 2v2 réservé au babyfoot (seule discipline avec un système d'équipes).
+  .refine((d) => d.mode !== '2v2' || d.game === 'babyfoot', {
+    message: 'le mode 2v2 est réservé au babyfoot',
+    path: ['mode'],
+  })
+  // Réglages d'économie (multiplicateur, cash-prize) réservés aux officiels.
+  .refine((d) => d.betFinalMult === undefined || d.kind === 'official', {
+    message: 'le multiplicateur de pari ne se règle que sur un tournoi officiel',
+    path: ['betFinalMult'],
+  })
+  .refine((d) => d.cashPrizeBase === undefined || d.cashPrizeBase === 0 || d.kind === 'official', {
+    message: 'le cash-prize est réservé aux tournois officiels',
+    path: ['cashPrizeBase'],
   });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

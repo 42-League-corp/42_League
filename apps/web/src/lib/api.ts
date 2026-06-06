@@ -619,8 +619,12 @@ export interface TournamentMatch {
 export interface TournamentEntry {
   tournamentId: string;
   login: string;
+  /** 2v2 : coéquipier du capitaine (`login`). Null/absent en 1v1. */
+  partnerLogin?: string | null;
   joinedAt: string;
   user?: { login: string; imageUrl: string | null; elo: number };
+  /** 2v2 : utilisateur coéquipier résolu (avatar/elo) pour l'affichage des paires. */
+  partner?: { login: string; imageUrl: string | null; elo: number } | null;
 }
 
 export interface TournamentInvite {
@@ -639,6 +643,8 @@ export interface Tournament {
   isPrivate?: boolean;
   imageUrl?: string | null;
   capacity: number;
+  /** '1v1' classique | '2v2' (babyfoot doubles : chaque entrée = une paire). */
+  mode?: '1v1' | '2v2';
   format?: 'elimination' | 'pools';
   game?: Game;
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
@@ -659,6 +665,10 @@ export interface Tournament {
   prizeCoins?: number | null;
   prizeItemId?: string | null;
   prizeItem?: ShopItemData | null;
+  /** Multiplicateur final d'un pari sur le vainqueur (amicaux 2 ; officiels 2..10). */
+  betFinalMult?: number;
+  /** Cash-prize (coins) du champion d'un officiel ; paliers dérivés. null = aucun. */
+  cashPrizeBase?: number | null;
 }
 
 /** Récompense passée à la création d'un tournoi officiel (cf. backend). */
@@ -1067,20 +1077,25 @@ export const api = {
     name: string;
     capacity: number;
     kind: 'friendly' | 'official';
+    mode?: '1v1' | '2v2';
+    partnerLogin?: string;
     format?: 'elimination' | 'pools';
     game?: Game;
     private?: boolean;
     imageUrl?: string;
     prize?: TournamentPrize;
+    betFinalMult?: number;
+    cashPrizeBase?: number;
   }) =>
     request<Tournament>('/tournaments', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  joinTournament: (id: string) =>
+  // En 2v2, `partnerLogin` engage la paire (joueur + coéquipier).
+  joinTournament: (id: string, partnerLogin?: string) =>
     request<{ id: string; status: string }>(
       `/tournaments/${encodeURIComponent(id)}/join`,
-      { method: 'POST', body: JSON.stringify({}) },
+      { method: 'POST', body: JSON.stringify(partnerLogin ? { partnerLogin } : {}) },
     ),
   leaveTournament: (id: string) =>
     request<{ id: string; left: true }>(
@@ -1103,11 +1118,11 @@ export const api = {
       `/tournaments/${encodeURIComponent(tournamentId)}/invites/${encodeURIComponent(inviteId)}/decline`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
-  // Organisateur/admin : ajoute directement un joueur existant au tournoi.
-  addTournamentPlayer: (id: string, login: string) =>
+  // Organisateur/admin : ajoute directement un joueur (1v1) ou une paire (2v2).
+  addTournamentPlayer: (id: string, login: string, partnerLogin?: string) =>
     request<{ id: string; added: string; status: string }>(
       `/tournaments/${encodeURIComponent(id)}/add-player`,
-      { method: 'POST', body: JSON.stringify({ login }) },
+      { method: 'POST', body: JSON.stringify(partnerLogin ? { login, partnerLogin } : { login }) },
     ),
   startTournament: (id: string) =>
     request<{ id: string; started: true }>(

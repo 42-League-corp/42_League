@@ -45,6 +45,8 @@ import {
   OPS_FORCED_MATCHES,
   OPS_REFUSE_MULTIPLIER,
   seasonResetElo,
+  rankTierForRank,
+  GRANDMASTER_MIN_ELO,
   ownedTitles,
 } from '@42-league/shared';
 import {
@@ -1746,6 +1748,9 @@ app.post('/seasons', async (c) => {
       // (joueurs inscrits au mode, classés par leur Elo de ce jeu).
       // Map gameId → login du champion (pour badge avec discipline cloisonnée).
       const champions = new Map<string, string>();
+      // Map gameId → logins Grand Master (top N + déjà Diamant) : au reset, ils
+      // sont ramenés au plancher Diamant et non au plancher de leur ELO brut.
+      const gmByGame = new Map<string, Set<string>>();
       let totalPlayers = 0;
 
       for (const g of GAME_IDS) {
@@ -1768,9 +1773,12 @@ app.post('/seasons', async (c) => {
             else rec.l++;
           }
         }
+        const gmLogins = new Set<string>();
         let rank = 0;
         for (const u of users) {
           rank++;
+          const elo = readElo(u, g);
+          if (rankTierForRank(elo, rank).key === 'grandmaster') gmLogins.add(u.login);
           const s = wl.get(u.login) ?? { w: 0, l: 0 };
           await tx.seasonStanding.create({
             data: {
@@ -1779,12 +1787,13 @@ app.post('/seasons', async (c) => {
               game: g,
               login: u.login,
               rank,
-              elo: readElo(u, g),
+              elo,
               wins: s.w,
               losses: s.l,
             },
           });
         }
+        gmByGame.set(g, gmLogins);
         const champ = users[0]?.login;
         if (champ) champions.set(g, champ);
       }
@@ -1803,20 +1812,24 @@ app.post('/seasons', async (c) => {
       // grade courant (seasonResetElo) pour récompenser la progression de la saison.
       // Exception : les Étains (< 1000) sont remontés au plancher Bronze — personne
       // ne reste coincé sous le Bronze d'une saison à l'autre.
+      // Cas Grand Master (top N de la discipline) : ramené au plancher Diamant —
+      // un GM repart toujours au minimum Diamant la saison suivante.
       // Les compteurs de matchs sont eux remis à zéro.
+      const resetEloFor = (game: string, login: string, elo: number) =>
+        gmByGame.get(game)?.has(login) ? GRANDMASTER_MIN_ELO : seasonResetElo(elo);
       for (const u of allUsers) {
         await tx.user.update({
           where: { login: u.login },
           data: {
-            elo: seasonResetElo(u.elo),
+            elo: resetEloFor('babyfoot', u.login, u.elo),
             matchesPlayed: 0,
-            eloSmash: seasonResetElo(u.eloSmash),
+            eloSmash: resetEloFor('smash', u.login, u.eloSmash),
             matchesPlayedSmash: 0,
-            eloChess: seasonResetElo(u.eloChess),
+            eloChess: resetEloFor('chess', u.login, u.eloChess),
             matchesPlayedChess: 0,
-            eloSf: seasonResetElo(u.eloSf),
+            eloSf: resetEloFor('streetfighter', u.login, u.eloSf),
             matchesPlayedSf: 0,
-            eloFlechettes: seasonResetElo(u.eloFlechettes),
+            eloFlechettes: resetEloFor('flechettes', u.login, u.eloFlechettes),
             matchesPlayedFlechettes: 0,
           },
         });
@@ -4126,6 +4139,51 @@ app.post('/challenges/:id/record', async (c) => {
 
 /* ============ TOURNAMENTS ============ */
 
+// ── Tournois 2v2 : résolution des paires ────────────────────────────────────
+// En 2v2, chaque entrée porte un « capitaine » (entry.login = le seed du bracket)
+// et son coéquipier (entry.partnerLogin). Les matchs n'enregistrent que le login
+// capitaine (playerALogin/playerBLogin) ; les deux membres d'un camp sont résolus
+// via la table des entrées. En 1v1, partnerLogin est null → un seul membre.
+
+type TxOrPrisma = Prisma.TransactionClient | typeof prisma;
+
+/** Construit la table capitaine → coéquipier d'un tournoi (partenaires null en 1v1). */
+async function tournamentPartnerMap(
+  tx: TxOrPrisma,
+  tournamentId: string,
+): Promise<Map<string, string | null>> {
+  const entries = await tx.tournamentEntry.findMany({
+    where: { tournamentId },
+    select: { login: true, partnerLogin: true },
+  });
+  return new Map(entries.map((e) => [e.login, e.partnerLogin]));
+}
+
+/** Membres d'un camp (1 ou 2 logins) à partir du login capitaine. */
+function teamMembersOf(captain: string | null, partners: Map<string, string | null>): string[] {
+  if (!captain) return [];
+  const partner = partners.get(captain) ?? null;
+  return partner ? [captain, partner] : [captain];
+}
+
+/** Un login est-il déjà engagé (capitaine OU coéquipier) dans ces entrées ? */
+function loginEngaged(
+  entries: ReadonlyArray<{ login: string; partnerLogin: string | null }>,
+  login: string,
+): boolean {
+  return entries.some((e) => e.login === login || e.partnerLogin === login);
+}
+
+/** Vérifie qu'un login est un vrai joueur 42 disponible (inscription 2v2). Lève sinon. */
+async function assertRegisterablePartner(tx: TxOrPrisma, login: string): Promise<void> {
+  const u = await tx.user.findUnique({ where: { login } });
+  if (!u) throw new HTTPException(404, { message: `${login} doit se connecter au moins une fois` });
+  if (!u.ftId) throw new HTTPException(403, { message: `${login} doit être un vrai joueur 42` });
+  if (u.bannedAt || u.anonymizedAt || u.deletionScheduledAt) {
+    throw new HTTPException(403, { message: `${login} n'est plus disponible` });
+  }
+}
+
 // Génère les matchs au démarrage : phase de poules (format 'pools') ou bracket à
 // élimination directe (format 'elimination', byes inclus si nécessaire).
 async function launchTournamentMatches(
@@ -4150,12 +4208,15 @@ async function settleConfirmedTournamentMatch(
   m: { id: string; stage: string; round: number; slot: number; winnerLogin: string },
 ): Promise<{
   winnerLogin: string;
+  winners: string[];
   finished: boolean;
   prizeAwarded: boolean;
   bracketGenerated: boolean;
   betWinners: string[];
 }> {
   const winnerLogin = m.winnerLogin;
+  // Vainqueurs du tournoi (rempli à la finale) : capitaine seul ou paire en 2v2.
+  let winners: string[] = [winnerLogin];
   // Le duel désigné « match suivant » est terminé → on efface le pointeur
   // (sinon l'arbre garderait le badge « EN COURS » sur un match déjà joué).
   await tx.tournament.updateMany({
@@ -4190,7 +4251,7 @@ async function settleConfirmedTournamentMatch(
       await generateBracket(id, qualifiers, { preSeeded: true });
       bracketGenerated = true;
     }
-    return { winnerLogin, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
+    return { winnerLogin, winners, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
   }
 
   // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
@@ -4213,25 +4274,33 @@ async function settleConfirmedTournamentMatch(
       },
       select: { game: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
     });
-    // Crédite le bon compteur de titres selon la discipline du tournoi.
-    await tx.user.update({
-      where: { login: winnerLogin },
-      data: tournamentsWonDelta(parseGameId(tour.game), 1),
+    // Membres de l'équipe gagnante : capitaine seul (1v1) ou + coéquipier (2v2).
+    const winEntry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login: winnerLogin } },
+      select: { partnerLogin: true },
     });
-    // Récompense du vainqueur (tournois officiels uniquement) — une seule fois,
-    // ici, dans la transaction. Cosmétique → inventaire SANS auto-équipement.
+    winners = winEntry?.partnerLogin ? [winnerLogin, winEntry.partnerLogin] : [winnerLogin];
+    // Crédite le compteur de titres (selon la discipline) pour chaque vainqueur.
+    for (const w of winners) {
+      await tx.user.update({
+        where: { login: w },
+        data: tournamentsWonDelta(parseGameId(tour.game), 1),
+      });
+    }
+    // Récompense (tournois officiels) — versée à CHAQUE membre de l'équipe gagnante.
+    // Cosmétique → inventaire SANS auto-équipement.
     if (tour.kind === 'official' && tour.prizeKind === 'coins' && tour.prizeCoins) {
-      await grantCoinsTx(tx, winnerLogin, tour.prizeCoins);
+      for (const w of winners) await grantCoinsTx(tx, w, tour.prizeCoins);
       prizeAwarded = true;
     } else if (tour.kind === 'official' && tour.prizeKind === 'cosmetic' && tour.prizeItemId) {
-      await grantItemTx(tx, winnerLogin, tour.prizeItemId, false);
+      for (const w of winners) await grantItemTx(tx, w, tour.prizeItemId, false);
       prizeAwarded = true;
     }
     // Règlement des paris sur le VAINQUEUR du tournoi (cote fixe ×2).
     betWinners.push(...(await settleTournamentBetsTx(tx, id, winnerLogin)));
     finished = true;
   }
-  return { winnerLogin, finished, prizeAwarded, bracketGenerated: false, betWinners };
+  return { winnerLogin, winners, finished, prizeAwarded, bracketGenerated: false, betWinners };
 }
 
 app.get('/tournaments', async (c) => {
@@ -4242,12 +4311,13 @@ app.get('/tournaments', async (c) => {
     where: { game },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     include: {
-      entries: { select: { login: true } },
+      entries: { select: { login: true, partnerLogin: true } },
       winner: { select: { login: true, imageUrl: true } },
     },
   });
   const isParticipant = (t: (typeof list)[number]) =>
-    t.createdByLogin === me || t.entries.some((e) => e.login === me);
+    t.createdByLogin === me ||
+    t.entries.some((e) => e.login === me || e.partnerLogin === me);
   const visible = list.filter((t) => {
     // Tournoi privé : visible uniquement par son créateur, ses invités ou un admin.
     if (t.isPrivate && !isParticipant(t) && !isAdmin(me)) return false;
@@ -4305,16 +4375,38 @@ app.get('/tournaments/:id', async (c) => {
   if (!tournament) {
     throw new HTTPException(404, { message: 'tournament not found' });
   }
-  // Tournoi privé : accessible si créateur, inscrit, invité en attente, ou admin.
+  // Tournoi privé : accessible si créateur, inscrit (capitaine OU coéquipier en
+  // 2v2), invité en attente, ou admin.
   const hasInvite = tournament.invites.some((inv) => inv.inviteeLogin === me);
   if (
     tournament.isPrivate &&
     tournament.createdByLogin !== me &&
     !isAdmin(me) &&
-    !tournament.entries.some((e) => e.login === me) &&
+    !tournament.entries.some((e) => e.login === me || e.partnerLogin === me) &&
     !hasInvite
   ) {
     throw new HTTPException(404, { message: 'tournament not found' });
+  }
+  // 2v2 : résout les utilisateurs coéquipiers (avatar/elo) pour l'affichage des
+  // paires, et les attache à chaque entrée sous `partner`.
+  let entriesOut: Array<(typeof tournament.entries)[number] & {
+    partner?: { login: string; imageUrl: string | null; elo: number } | null;
+  }> = tournament.entries;
+  if (tournament.mode === '2v2') {
+    const partnerLogins = tournament.entries
+      .map((e) => e.partnerLogin)
+      .filter((l): l is string => !!l);
+    const partnerUsers = partnerLogins.length
+      ? await prisma.user.findMany({
+          where: { login: { in: partnerLogins } },
+          select: { login: true, imageUrl: true, elo: true },
+        })
+      : [];
+    const byLogin = new Map(partnerUsers.map((u) => [u.login, u]));
+    entriesOut = tournament.entries.map((e) => ({
+      ...e,
+      partner: e.partnerLogin ? byLogin.get(e.partnerLogin) ?? null : null,
+    }));
   }
   // Filtrer les invites visibles selon le rôle :
   // l'organisateur et les admins voient tout ; les autres ne voient que leur propre invite.
@@ -4323,7 +4415,7 @@ app.get('/tournaments/:id', async (c) => {
     isOrganizer || isAdmin(me)
       ? tournament.invites
       : tournament.invites.filter((inv) => inv.inviteeLogin === me);
-  return c.json({ ...tournament, invites: visibleInvites });
+  return c.json({ ...tournament, entries: entriesOut, invites: visibleInvites });
 });
 
 app.post('/tournaments', async (c) => {
@@ -4344,6 +4436,19 @@ app.post('/tournaments', async (c) => {
     throw new HTTPException(403, { message: 'only admins can attach a prize' });
   }
   await getOrCreateUser(me);
+  // 2v2 : le créateur engage sa paire. Le coéquipier doit être un vrai joueur
+  // disponible, différent de lui. L'entrée stocke le créateur en capitaine.
+  const partner = d.mode === '2v2' ? d.partnerLogin ?? null : null;
+  if (d.mode === '2v2') {
+    if (!partner || partner === me) {
+      throw new HTTPException(400, { message: 'choisis un coéquipier différent de toi' });
+    }
+    await assertRegisterablePartner(prisma, partner);
+  }
+  // Réglages d'économie (officiels) : multiplicateur final du pari (défaut 2),
+  // cash-prize du champion. Les amicaux restent à 2 / sans cash-prize.
+  const betFinalMult = d.kind === 'official' && d.betFinalMult ? d.betFinalMult : 2;
+  const cashPrizeBase = d.kind === 'official' && d.cashPrizeBase ? d.cashPrizeBase : null;
   // Transaction : un éventuel cosmétique custom est créé en même temps que le
   // tournoi (atomicité), et masqué de la boutique (active:false).
   const tournament = await prisma.$transaction(async (tx) => {
@@ -4386,6 +4491,7 @@ app.post('/tournaments', async (c) => {
         isPrivate: d.private,
         imageUrl: d.imageUrl ?? null,
         capacity: d.capacity,
+        mode: d.mode,
         format: d.format,
         game: d.game,
         status: 'registration',
@@ -4393,9 +4499,11 @@ app.post('/tournaments', async (c) => {
         prizeKind,
         prizeCoins,
         prizeItemId,
-        entries: { create: { login: me } },
+        betFinalMult,
+        cashPrizeBase,
+        entries: { create: { login: me, partnerLogin: partner } },
       },
-      include: { entries: { select: { login: true } }, prizeItem: true },
+      include: { entries: { select: { login: true, partnerLogin: true } }, prizeItem: true },
     });
   });
   return c.json(tournament, 201);
@@ -4405,6 +4513,11 @@ app.post('/tournaments/:id/join', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
   await getOrCreateUser(me);
+  // 2v2 : le joueur nomme son coéquipier dans le corps de la requête.
+  const body = await c.req.json().catch(() => ({}));
+  const partnerRaw = typeof (body as { partnerLogin?: unknown })?.partnerLogin === 'string'
+    ? ((body as { partnerLogin: string }).partnerLogin).trim()
+    : null;
   const result = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({
       where: { id },
@@ -4418,14 +4531,25 @@ app.post('/tournaments/:id/join', async (c) => {
     if (t.isPrivate && t.createdByLogin !== me && !isAdmin(me)) {
       throw new HTTPException(403, { message: 'tournoi privé — sur invitation uniquement' });
     }
-    if (t.entries.some((e) => e.login === me)) {
+    // 2v2 : valider la paire (coéquipier réel, différent, tous deux libres).
+    const partner = t.mode === '2v2' ? partnerRaw : null;
+    if (t.mode === '2v2') {
+      if (!partner || partner === me) {
+        throw new HTTPException(400, { message: 'choisis un coéquipier différent de toi' });
+      }
+      await assertRegisterablePartner(tx, partner);
+      if (loginEngaged(t.entries, partner)) {
+        throw new HTTPException(409, { message: `${partner} est déjà engagé dans ce tournoi` });
+      }
+    }
+    if (loginEngaged(t.entries, me)) {
       throw new HTTPException(409, { message: 'already registered' });
     }
     if (t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournament is full' });
     }
     await tx.tournamentEntry.create({
-      data: { tournamentId: id, login: me },
+      data: { tournamentId: id, login: me, partnerLogin: partner },
     });
     // Auto-start if full
     const newCount = t.entries.length + 1;
@@ -4436,7 +4560,12 @@ app.post('/tournaments/:id/join', async (c) => {
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
       });
-      void notifyMany(logins, {
+      // Notifier tous les membres (capitaines + coéquipiers en 2v2).
+      const everyone = [
+        ...t.entries.flatMap((e) => (e.partnerLogin ? [e.login, e.partnerLogin] : [e.login])),
+        ...(partner ? [me, partner] : [me]),
+      ];
+      void notifyMany(everyone, {
         type: 'tournament',
         title: `Tournoi "${t.name}" lancé`,
         body: 'Le bracket est généré — à toi de jouer !',
@@ -4458,7 +4587,11 @@ app.post('/tournaments/:id/join', async (c) => {
 
 // Inviter / ajouter directement un joueur existant à un tournoi (organisateur ou
 // admin), pendant la phase d'inscription. Auto-démarre si le tournoi devient plein.
-const AddTournamentPlayerSchema = z.object({ login: z.string().trim().min(1) });
+// `partnerLogin` requis uniquement pour les tournois 2v2 (l'orga ajoute une paire).
+const AddTournamentPlayerSchema = z.object({
+  login: z.string().trim().min(1),
+  partnerLogin: z.string().trim().min(1).optional(),
+});
 
 app.post('/tournaments/:id/add-player', async (c) => {
   const me = await getCurrentLogin(c);
@@ -4469,6 +4602,7 @@ app.post('/tournaments/:id/add-player', async (c) => {
     throw new HTTPException(400, { message: parsed.error.message });
   }
   const login = parsed.data.login;
+  const partnerInput = parsed.data.partnerLogin ?? null;
 
   const result = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
@@ -4485,13 +4619,24 @@ app.post('/tournaments/:id/add-player', async (c) => {
     if (!target || target.bannedAt || target.anonymizedAt || target.deletionScheduledAt) {
       throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
     }
-    if (t.entries.some((e) => e.login === login)) {
+    // 2v2 : une paire est requise (capitaine + coéquipier valides et distincts).
+    const partner = t.mode === '2v2' ? partnerInput : null;
+    if (t.mode === '2v2') {
+      if (!partner || partner === login) {
+        throw new HTTPException(400, { message: 'un tournoi 2v2 requiert une paire (deux joueurs distincts)' });
+      }
+      await assertRegisterablePartner(tx, partner);
+      if (loginEngaged(t.entries, partner)) {
+        throw new HTTPException(409, { message: `${partner} est déjà engagé dans ce tournoi` });
+      }
+    }
+    if (loginEngaged(t.entries, login)) {
       throw new HTTPException(409, { message: 'joueur déjà inscrit' });
     }
     if (t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
-    await tx.tournamentEntry.create({ data: { tournamentId: id, login } });
+    await tx.tournamentEntry.create({ data: { tournamentId: id, login, partnerLogin: partner } });
     const newCount = t.entries.length + 1;
     if (newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), login];
@@ -4500,7 +4645,11 @@ app.post('/tournaments/:id/add-player', async (c) => {
         where: { id },
         data: { status: 'in_progress', startedAt: new Date() },
       });
-      void notifyMany(logins, {
+      const everyone = [
+        ...t.entries.flatMap((e) => (e.partnerLogin ? [e.login, e.partnerLogin] : [e.login])),
+        ...(partner ? [login, partner] : [login]),
+      ];
+      void notifyMany(everyone, {
         type: 'tournament',
         title: `Tournoi "${t.name}" lancé`,
         body: 'Le bracket est généré — à toi de jouer !',
@@ -4534,6 +4683,9 @@ app.post('/tournaments/:id/invite', async (c) => {
   const result = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.mode === '2v2') {
+      throw new HTTPException(400, { message: 'tournoi 2v2 : pas d\'invitations — inscris directement une paire (ajouter une équipe)' });
+    }
     if (t.createdByLogin !== me && !isAdmin(me)) {
       throw new HTTPException(403, { message: "seul l'organisateur ou un admin peut inviter" });
     }
@@ -4782,7 +4934,11 @@ app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
     if (m.confirmedAt) {
       throw new HTTPException(409, { message: 'match already confirmed' });
     }
-    if (m.playerALogin !== me && m.playerBLogin !== me) {
+    // Participant = membre d'un des deux camps (les deux coéquipiers en 2v2).
+    const partners = await tournamentPartnerMap(tx, id);
+    const teamA = teamMembersOf(m.playerALogin, partners);
+    const teamB = teamMembersOf(m.playerBLogin, partners);
+    if (!teamA.includes(me) && !teamB.includes(me)) {
       throw new HTTPException(403, { message: 'not a participant' });
     }
     // Validation du score selon la discipline du tournoi (échecs 1-0, smash set,
@@ -4829,13 +4985,19 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
     if (m.confirmedAt) {
       throw new HTTPException(409, { message: 'match already confirmed' });
     }
-    if (m.recordedByLogin === me) {
+    // Camps résolus (2 coéquipiers en 2v2). Le confirmeur doit être un participant
+    // du CAMP ADVERSE à celui qui a saisi le score (pas de validation par sa propre équipe).
+    const partners = await tournamentPartnerMap(tx, id);
+    const teamA = teamMembersOf(m.playerALogin, partners);
+    const teamB = teamMembersOf(m.playerBLogin, partners);
+    const myTeam = teamA.includes(me) ? teamA : teamB.includes(me) ? teamB : null;
+    if (!myTeam) {
+      throw new HTTPException(403, { message: 'not a participant' });
+    }
+    if (myTeam.includes(m.recordedByLogin)) {
       throw new HTTPException(403, {
         message: "you can't confirm your own score",
       });
-    }
-    if (m.playerALogin !== me && m.playerBLogin !== me) {
-      throw new HTTPException(403, { message: 'not a participant' });
     }
     if (m.scoreA !== scoreA || m.scoreB !== scoreB) {
       // Reset score → both must redo
@@ -6183,6 +6345,9 @@ app.post('/admin/tournaments/:id/players', async (c) => {
   const invite = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.mode === '2v2') {
+      throw new HTTPException(400, { message: 'tournoi 2v2 : pas d\'invitations — ajoute directement une paire' });
+    }
     if (t.status !== 'registration') {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
