@@ -50,6 +50,13 @@ export const dict: Record<Lang, Dict> = {
     'about.team.next': 'Suivant',
     'about.team.goto': 'Aller à',
 
+    // Stats de contributions git (carte « ? »)
+    'about.stats.aria': 'Voir les lignes de code',
+    'about.stats.title': 'Lignes de code',
+    'about.stats.added': 'Ajoutées',
+    'about.stats.deleted': 'Supprimées',
+    'about.stats.net': 'Net',
+
     // Rôles d'équipe
     'about.role.throbert': 'Founder',
     'about.role.nithomas': 'Parrain',
@@ -130,6 +137,13 @@ export const dict: Record<Lang, Dict> = {
     'about.team.next': 'Next',
     'about.team.goto': 'Go to',
 
+    // Git contribution stats (card « ? »)
+    'about.stats.aria': 'View lines of code',
+    'about.stats.title': 'Lines of code',
+    'about.stats.added': 'Added',
+    'about.stats.deleted': 'Deleted',
+    'about.stats.net': 'Net',
+
     // Team roles
     'about.role.throbert': 'Founder',
     'about.role.nithomas': 'Mentor',
@@ -209,6 +223,13 @@ export const dict: Record<Lang, Dict> = {
     'about.team.prev': 'Anterior',
     'about.team.next': 'Siguiente',
     'about.team.goto': 'Ir a',
+
+    // Estadísticas de contribuciones git (tarjeta « ? »)
+    'about.stats.aria': 'Ver las líneas de código',
+    'about.stats.title': 'Líneas de código',
+    'about.stats.added': 'Añadidas',
+    'about.stats.deleted': 'Eliminadas',
+    'about.stats.net': 'Neto',
 
     // Roles del equipo
     'about.role.throbert': 'Founder',

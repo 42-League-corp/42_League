@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, HelpCircle } from 'lucide-react';
 import { Panel } from '../components/Panel';
-import { api } from '../lib/api';
+import { api, type ContributorStat } from '../lib/api';
 import { useT, useI18n } from '../lib/i18n';
 import type { Lang } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
@@ -1789,6 +1789,8 @@ type Member = {
   roleKey: string;
   accent: 'gold' | 'red' | 'violet';
   crown?: boolean;
+  /** Affiche le « ? » avec les stats de contributions git sur la carte. */
+  gitStats?: boolean;
   /** Blurb riche par langue. */
   blurb: Record<Lang, React.ReactNode>;
 };
@@ -1800,6 +1802,7 @@ const TEAM: Member[] = [
     login: 'throbert',
     roleKey: 'about.role.throbert',
     accent: 'gold',
+    gitStats: true,
     blurb: {
       fr: (
         <>
@@ -1868,6 +1871,7 @@ const TEAM: Member[] = [
     login: 'abidaux',
     roleKey: 'about.role.abidaux',
     accent: 'gold',
+    gitStats: true,
     blurb: {
       fr: (
         <>
@@ -1989,9 +1993,40 @@ const TEAM: Member[] = [
 
 // La page « À propos » est accessible avant connexion (parcours RGPD) — là, le
 // contexte LeagueData n'existe pas. On ne lit les photos intra que connecté.
+/**
+ * Stats de contributions git par login, rafraîchies « naturellement » : au montage
+ * puis toutes les 60 s (la valeur évolue au fil des commits — live en dev,
+ * réinjectée à chaque déploiement en prod). Échec silencieux → pas de « ? ».
+ */
+function useContributorStats() {
+  const [stats, setStats] = useState<Record<string, ContributorStat>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      api
+        .contributorStats()
+        .then(({ stats }) => {
+          if (!cancelled) setStats(stats);
+        })
+        .catch(() => {});
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return stats;
+}
+
 function TeamSection() {
   const { authenticated } = useAuth();
-  return authenticated ? <TeamSectionAuthed /> : <TeamCarousel photos={{}} />;
+  const stats = useContributorStats();
+  return authenticated ? (
+    <TeamSectionAuthed stats={stats} />
+  ) : (
+    <TeamCarousel photos={{}} stats={stats} />
+  );
 }
 
 // La photo intra d'un membre est la même quel que soit le jeu, mais le
@@ -1999,7 +2034,7 @@ function TeamSection() {
 // mode courant (ex. il n'a pas joué aux échecs) n'y figure pas, et sa photo
 // disparaîtrait en changeant de mode. On récupère donc les photos directement
 // par login (indépendant du mode), avec le leaderboard courant comme amorce.
-function TeamSectionAuthed() {
+function TeamSectionAuthed({ stats }: { stats: Record<string, ContributorStat> }) {
   const { leaderboard } = useLeagueData();
   const [fetched, setFetched] = useState<Record<string, string | null>>({});
 
@@ -2028,10 +2063,16 @@ function TeamSectionAuthed() {
   for (const [login, url] of Object.entries(fetched)) {
     if (url) photos[login] = url;
   }
-  return <TeamCarousel photos={photos} />;
+  return <TeamCarousel photos={photos} stats={stats} />;
 }
 
-function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
+function TeamCarousel({
+  photos,
+  stats,
+}: {
+  photos: Record<string, string | null>;
+  stats: Record<string, ContributorStat>;
+}) {
   const t = useT();
   // Ordre déclaré tel quel : nithomas centré au démarrage (throbert à gauche,
   // abidaux à droite).
@@ -2105,7 +2146,12 @@ function TeamCarousel({ photos }: { photos: Record<string, string | null> }) {
               onClick={() => offset !== 0 && setActive(i)}
               aria-hidden={offset !== 0}
             >
-              <MemberCard member={m} imageUrl={photos[m.login] ?? null} active={offset === 0} />
+              <MemberCard
+                member={m}
+                imageUrl={photos[m.login] ?? null}
+                active={offset === 0}
+                stat={stats[m.login]}
+              />
             </div>
           );
         })}
@@ -2161,16 +2207,21 @@ function MemberCard({
   member,
   imageUrl,
   active,
+  stat,
 }: {
   member: Member;
   imageUrl: string | null;
   active: boolean;
+  stat?: ContributorStat;
 }) {
   const { lang } = useI18n();
   const t = useT();
   const accent = ACCENT[member.accent];
   const [broken, setBroken] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const showImg = imageUrl && !broken;
+  // « ? » des stats git : seulement si la carte le demande ET qu'on a des chiffres.
+  const hasStats = member.gitStats && stat && stat.added + stat.deleted > 0;
   return (
     <div
       className={`relative w-[280px] sm:w-[330px] h-[440px] sm:h-[520px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
@@ -2211,6 +2262,46 @@ function MemberCard({
           fill="currentColor"
           strokeWidth={2}
         />
+      )}
+
+      {/* « ? » des stats de contributions git (lignes ajout/suppr/net), en haut
+          à droite — seulement sur la carte active et si on a des chiffres. */}
+      {hasStats && active && (
+        <div className="absolute top-3 right-3 z-20">
+          <button
+            type="button"
+            onClick={() => setShowStats((v) => !v)}
+            aria-label={t('about.stats.aria')}
+            className={`grid place-items-center w-7 h-7 rounded-full border backdrop-blur-sm transition-colors ${
+              showStats
+                ? 'border-gold/70 bg-gold/25 text-gold'
+                : 'border-white/30 bg-black/40 text-white/85 hover:text-gold hover:border-gold/50'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4" strokeWidth={2.4} />
+          </button>
+          {showStats && (
+            <div className="absolute right-0 mt-2 w-44 rounded-xl border border-gold/25 bg-bg-2/95 backdrop-blur-md p-3 shadow-xl">
+              <div className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-gold/85 mb-2">
+                {t('about.stats.title')}
+              </div>
+              <div className="space-y-1 text-xs tabular-nums">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-2">{t('about.stats.added')}</span>
+                  <span className="font-bold text-emerald-300">+{stat!.added.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-2">{t('about.stats.deleted')}</span>
+                  <span className="font-bold text-red">−{stat!.deleted.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/10 pt-1 mt-1">
+                  <span className="text-muted-2">{t('about.stats.net')}</span>
+                  <span className="font-extrabold text-gold">{stat!.net.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Contenu texte en bas */}
