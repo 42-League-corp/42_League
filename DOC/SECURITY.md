@@ -48,7 +48,8 @@ Fichier : `apps/backend/prisma/schema.prisma`
 
 ```prisma
 enum AdminAction {
-  SET_ROLE         // promotion/demotion USER ↔ ADMIN
+  SET_ROLE                  // promotion/demotion USER ↔ MODERATOR ↔ ADMIN
+  SET_MODERATOR_PERMISSIONS // (dé)coche des permissions granulaires d'un MODERATOR
   BAN_USER         // ban d'un user
   UNBAN_USER       // unban d'un user
   EDIT_STATS       // modif ELO / matchs / dodge / tournaments_won
@@ -62,6 +63,8 @@ enum AdminAction {
   DELETE_REJECTED_MATCH  // suppression d'un litige
   DELETE_OPS       // suppression d'un OPS
   DELETE_TOURNAMENT      // suppression d'un tournoi
+  IMPERSONATE_TESTER     // bascule en compte `tester` (staging, throbert/jagharra)
+  SYNC_ELO_FROM_PROD     // synchro ELO prod→staging (SUPERADMIN, lecture seule prod)
 }
 
 model AdminAuditLog {
@@ -110,6 +113,7 @@ Fichier : `apps/backend/src/index.ts`
 | Endpoint | Action loggée |
 |---|---|
 | `POST /admin/users/:login/role` | `SET_ROLE` |
+| `PATCH /admin/users/:login/moderator-permissions` | `SET_MODERATOR_PERMISSIONS` |
 | `POST /admin/users/:login/ban` | `BAN_USER` |
 | `POST /admin/users/:login/unban` | `UNBAN_USER` |
 | `PATCH /admin/users/:login/stats` | `EDIT_STATS` |
@@ -122,6 +126,8 @@ Fichier : `apps/backend/src/index.ts`
 | `DELETE /admin/ops/:id` | `DELETE_OPS` |
 | `DELETE /admin/tournaments/:id` | `DELETE_TOURNAMENT` |
 | `POST /admin/reset-database` | `RESET_DATABASE` |
+| `POST /admin/impersonate-tester` · `POST /admin/impersonate-fresh-tester` | `IMPERSONATE_TESTER` |
+| `POST /admin/seasons/sync-elo-from-prod` | `SYNC_ELO_FROM_PROD` |
 
 ### Consultation
 
@@ -334,6 +340,15 @@ lui-même est couvert par `rate-limit.test.ts`). Une requête bloquée renvoie `
 Le preflight CORS (`OPTIONS`) est court-circuité en amont et n'est pas décompté. Détails dans
 [API.md](./API.md#rate-limiting).
 
+**Exemption admin** : un Bearer **signé** d'un compte ADMIN/SUPERADMIN (détecté par `isAdminRequest`,
+cache 30 s) **contourne** le rate-limit, le body-limit et le plafond SSE — un admin doit pouvoir
+générer beaucoup de requêtes (multi-onglets, scripts de test, modération). L'anti-farming des coins,
+lui, reste appliqué à tout le monde.
+
+À cela s'ajoute un **`bodyLimit` global de 1 Mo** (`hono/body-limit` → `413`, admins exemptés) qui
+borne la mémoire bufferisée par requête (anti-DoS), et un **plafond de 5 flux SSE par login**
+(éviction du plus ancien, admins illimités).
+
 ---
 
 ## 7. Authentification (42 OAuth + sessions)
@@ -413,21 +428,51 @@ Une fois l'utilisateur **authentifié** (section 7), on vérifie ce qu'il a le *
 
 ### Les rôles
 
-- Enum `Role` en DB : `USER`, `ADMIN`, `SUPERADMIN` (`apps/backend/prisma/schema.prisma`).
+- Enum `Role` en DB : `USER`, `MODERATOR`, `ADMIN`, `SUPERADMIN` (`apps/backend/prisma/schema.prisma`).
 - `getUserRole(login)` (`apps/backend/src/index.ts`) calcule le rôle :
   - Si le login est dans la liste **SUPERADMINS hardcodée** (`abidaux`, `throbert`) → toujours `SUPERADMIN`.
   - Sinon → le rôle stocké en DB.
   - Sinon → `USER` par défaut.
+- `SetRoleSchema` (`packages/shared/src/schemas.ts`) n'accepte que `USER` / `MODERATOR` / `ADMIN` :
+  le rôle `SUPERADMIN` n'est **jamais** accordable par API (réservé à la liste hardcodée, cf. plus bas).
+
+### Le rôle MODERATOR et ses permissions granulaires
+
+Entre `USER` et `ADMIN`, le rôle **`MODERATOR`** ne donne **aucun** pouvoir par défaut. Chaque
+capacité est débloquée individuellement par un flag booléen, stocké dans la colonne JSON
+`moderatorPermissions` de `User` (`null` = aucune permission). Un ADMIN coche/décoche ces flags
+via `PATCH /admin/users/:login/moderator-permissions` (action auditée `SET_MODERATOR_PERMISSIONS`).
+
+La liste fait foi dans `MODERATOR_PERMISSIONS` (`apps/backend/src/index.ts`) :
+
+| Permission | Route(s) débloquée(s) |
+|---|---|
+| `canBan` | ban / unban d'un user |
+| `canEditStats` | `PATCH /admin/users/:login/stats` |
+| `canDeleteMatches` | `DELETE /admin/matches/:id` |
+| `canEditMatches` | `PATCH /admin/matches/:id` |
+| `canDeletePendingMatches` | `DELETE /admin/pending-matches/:id` |
+| `canDeleteRejectedMatches` | `GET` + `DELETE /admin/rejected-matches` |
+| `canDeleteChallenges` | `DELETE /admin/challenges/:id` |
+| `canDeleteOps` | `DELETE /admin/ops/:id` |
+| `canDeleteTournaments` | `DELETE /admin/tournaments/:id` |
+| `canViewSuspicious` | `GET /admin/suspicious` (détection anti-triche) |
+| `canViewAuditLog` | `GET /admin/audit-log` |
+| `canViewHistory` | `GET /admin/all-history` |
 
 ### Les gardes
 
 | Garde | Règle | Si échec |
 |---|---|---|
 | `requireAdmin(login)` | Le rôle doit être `ADMIN` ou `SUPERADMIN`. | `403` |
+| `requireAdminOrModerator(login)` | Rôle `ADMIN`, `SUPERADMIN` **ou** `MODERATOR` (consultation basique). | `403` |
+| `requirePerm(login, perm)` | `ADMIN`/`SUPERADMIN` → toujours OK ; `MODERATOR` → OK **si** `moderatorPermissions[perm]` ; `USER` → refusé. | `403` |
 | `requireSuperAdmin(login)` | Le login doit être dans la liste SUPERADMINS hardcodée. | `403` |
 | `assertNotBanned(login)` | L'utilisateur ne doit pas avoir `bannedAt`. | `403` |
 
-Chaque endpoint admin appelle la garde correspondante **avant** d'exécuter quoi que ce soit.
+Chaque endpoint admin appelle la garde correspondante **avant** d'exécuter quoi que ce soit. Les
+endpoints délégables à un modérateur sont gardés par `requirePerm(me, '<permission>')` plutôt que par
+`requireAdmin` — un ADMIN/SUPERADMIN les traverse toujours, un MODERATOR uniquement si le flag est posé.
 
 ### Le rôle SUPERADMIN est immuable
 
@@ -437,8 +482,109 @@ uniquement dans le code (`SUPERADMINS` dans `apps/backend/src/index.ts`).
 
 ### Deux notions d'« admin » distinctes (à ne pas confondre)
 
-1. **Rôle `ADMIN`/`SUPERADMIN`** (ci-dessus) → contrôle l'accès au **GOD panel** et aux actions admin (ban, ELO, rôles…). Gardé par `requireAdmin` / `requireSuperAdmin`.
-2. **Liste `isAdmin()`** (`apps/backend/src/admins.ts`, logins `throbert`/`abidaux`) → autorise uniquement la **création/validation des tournois OFFICIELS**. C'est une liste séparée, indépendante du rôle DB.
+1. **Rôle `USER`/`MODERATOR`/`ADMIN`/`SUPERADMIN`** (ci-dessus) → contrôle l'accès au **GOD panel** et aux actions admin (ban, ELO, rôles…). Gardé par `requireAdmin` / `requireSuperAdmin` / `requirePerm`.
+2. **Liste `isAdmin()`** (`apps/backend/src/admins.ts`, logins `throbert`/`abidaux` — les **founders**) → autorise uniquement la **création/validation des tournois OFFICIELS** et le **forçage des résultats** (cf. §8 ter). C'est une liste séparée, indépendante du rôle DB.
+
+---
+
+## 8 bis. Saisons — actions durcies en SUPERADMIN
+
+La gestion des saisons (`apps/backend/src/index.ts`) est **réservée aux SUPERADMIN** (`requireSuperAdmin`),
+pas aux simples ADMIN : une bascule de saison remet des ELO à zéro et fige un classement — c'est
+destructif et irréversible. Sont gardés en SUPERADMIN : `POST /seasons` (clôturer la saison courante +
+en ouvrir une neuve, reset ELO), `POST /seasons/:id/activate` (bascule de la vue saison),
+`POST /admin/seasons/sync-elo-from-prod` (§8 quater) et `DELETE /seasons/:id`.
+
+**Refus de supprimer la saison active** : `DELETE /seasons/:id` rejette en `400` si `season.isActive`
+(« activez d'abord une autre saison ») — sinon la ligue se retrouverait sans aucune saison courante.
+
+`CreateSeasonSchema` valide le nom (`z.string().trim().min(2).max(40)`) ; toute la bascule
+(désactiver l'ancienne + reset + créer la neuve) se fait dans **une seule transaction** Prisma.
+
+---
+
+## 8 ter. Impersonation testeur & endpoints god « force »
+
+### TesterSwitch — impersonation du compte `tester` (staging only)
+
+Pour vivre l'expérience d'un joueur lambda (UI sans privilèges), un admin peut basculer sur un
+compte de test. Garde-fous cumulés sur `POST /admin/impersonate-tester` et
+`POST /admin/impersonate-fresh-tester` :
+
+- **staging UNIQUEMENT** : refus `403` si `APP_ENV !== 'staging'` (jamais en prod, fail-secure).
+- **réservé à `throbert` / `jagharra`** : `TESTER_SWITCH_LOGINS` (`apps/backend/src/index.ts`).
+  Le front masque aussi le bouton hors de ces logins (`TesterSwitch.tsx`).
+- **seul le compte dédié `tester`** (rôle USER) est ciblable — on ne *mint* jamais le token d'un
+  vrai joueur arbitraire : aucune usurpation possible. La variante *fresh* crée un compte
+  `tester-<uuid8>` neuf (onboarding rejoué).
+- Chaque bascule est auditée (`IMPERSONATE_TESTER`). Le retour au compte d'origine est purement
+  côté client (`startImpersonation` / `stopImpersonation`, `apps/web/src/lib/storage.ts`).
+
+`jagharra` est un invité de test (rôle ADMIN sur staging, **jamais** SUPERADMIN, cf.
+`staging-seed.ts`). `abidaux` et `throbert` sont les **founders** (page À propos + `isAdmin()`).
+
+### Endpoints god « force » de tournoi
+
+| Endpoint | Qui peut |
+|---|---|
+| `POST /admin/tournaments/:id/invites/:inviteId/force-accept` | `requireAdmin` (ADMIN/SUPERADMIN) — inscrit d'office un invité. |
+| `POST /admin/tournaments/:id/matches/:matchId/force-result` | ADMIN/SUPERADMIN (`isAdminLogin`) **ou** le créateur d'un tournoi *amical* (`friendly`). Pose le score sans confirmation des joueurs, puis applique la même propagation que la confirmation normale. |
+
+Côté UI, l'accès au GOD panel et aux boutons « force » est gaté par `isAdmin` (rôle), mais — comme
+toujours — le **vrai contrôle reste serveur** : ces routes appellent leur garde avant d'agir.
+
+---
+
+## 8 quater. Synchro ELO prod → staging
+
+`POST /admin/seasons/sync-elo-from-prod` recopie les ELO/compteurs de la prod vers le staging pour
+que le classement staging reflète le réel. Garde-fous (`apps/backend/src/index.ts`) :
+
+- **staging UNIQUEMENT** (`APP_ENV === 'staging'`) et **`requireSuperAdmin`**.
+- **lecture seule de la prod** : un `PrismaClient` dédié pointe `PROD_READONLY_URL` (un rôle
+  Postgres SELECT-only attendu — défense en profondeur : même un bug ne peut rien écrire en prod) ;
+  `503` si la variable n'est pas configurée. Le client est `$disconnect()` dans un `finally`.
+- **seuls l'ELO + les compteurs** sont copiés (jamais rôle, permissions, coins) ; les comptes
+  prod absents du staging sont créés en rôle `USER` minimal. Audité `SYNC_ELO_FROM_PROD`.
+
+---
+
+## 8 quinquies. Anti-triche / anti-farming de l'économie virtuelle
+
+Suite à l'AUDIT_CYBER (cf. §10), l'intégrité de l'économie League Coins a été durcie :
+
+- **Gains de coins dégressifs** : la dégressivité anti-farming (`farmingDecayFactor`, ×0.75ⁿ pour
+  chaque rematch du jour contre le même adversaire/duo) s'applique désormais **aussi** aux coins,
+  pas seulement à l'ELO (`awardMatchEconomyTx`, 1v1 + 2v2). Les quêtes ne sont **pas** créditées sur
+  un rematch dégressé. But : neutraliser le farming de coins par matchs collusoires.
+- **Verrou des paris** (`betsLockedAt`) : en tournoi, le marché de paris est **figé définitivement**
+  au premier enregistrement d'un score (`m.betsLockedAt ?? new Date()`). Un `reject`/score divergent
+  ne peut plus *rouvrir* le marché après que l'issue a fuité via `GET /tournaments`. On interdit aussi
+  de **parier sur soi-même**. Migration `20260605130000_tournament_bets_lock`.
+- **Boutique cosmétique non-achetable pour l'instant** : aucune vraie pièce cosmétique n'est en
+  vente (cartes *placeholder* côté `ShopPage.tsx`) ; les coins se gagnent en match / quêtes mais ne
+  s'obtiennent autrement que par grant admin. L'achat (`POST /shop/:id/buy`) **revalide tout côté
+  serveur dans une transaction** : objet `active`, non déjà possédé, solde suffisant — le front ne
+  décide rien. L'admin du catalogue (`POST` / `PATCH /admin/shop/items/:id`) est gardé `requireAdmin`
+  et valide le payload via `ShopItemCreateSchema` / `ShopItemUpdateSchema`.
+
+---
+
+## 8 sexies. RGPD — consentement explicite
+
+Les CGU de l'API 42 exigent le consentement explicite **avant** tout traitement des données
+(`apps/backend/src/index.ts`). Le dispositif :
+
+- Preuve stockée sur la ligne `User` : `termsAcceptedAt` + `termsVersion`. Si la politique évolue,
+  on bumpe `CURRENT_TERMS_VERSION` (`'2026-05-31'`) → tous les utilisateurs doivent **re-consentir**.
+- **Consent-gate** middleware : tant que `consentRequired(user)` est vrai, l'API refuse l'accès,
+  sauf chemins exemptés (`CONSENT_EXEMPT_PATHS` : `/health`, `/me`, `/me/consent`, `/me/export`,
+  `/me/account`, `/events`, `/auth/*`) qui doivent fonctionner *avant* consentement.
+- Route `POST /me/consent` (`ConsentSchema`) : `accept:true` enregistre la preuve ; `accept:false`
+  → suppression sèche d'un compte vierge, **anonymisation** sinon (préserve l'intégrité de
+  l'historique des matchs). Un SUPERADMIN ne peut pas s'auto-supprimer.
+- `termsAcceptedAt` / `termsVersion` font partie des champs **retirés** des réponses publiques
+  (`PUBLIC_USER_OMIT` → `toPublicUser`, cf. §10).
 
 ---
 
@@ -495,6 +641,35 @@ on:
 ### Forcer un re-scan
 
 GitHub → Actions → choisir le workflow → **Run workflow** → main → Run.
+
+---
+
+## 10. Audit cyber & corrections appliquées
+
+Un **audit multi-agents** (8 zones, vérification adversariale de chaque finding) a été mené le
+2026-06-05 — rapport complet : [AUDIT_CYBER_2026-06-05.md](./AUDIT_CYBER_2026-06-05.md). Bilan :
+**0 critical, pas de RCE, pas d'injection SQL** (Prisma paramétrise tout), pas d'escalade directe.
+16 findings confirmés sur 24, **tous corrigés**. Le plus grave (seul *high*) était un flux SSE sans
+plafond de connexions. Résumé des durcissements (déjà reflétés dans les sections ci-dessus) :
+
+| Faille | Correctif |
+|---|---|
+| SSE sans plafond (DoS) | `sse.ts` : max **5 flux/login** (éviction du plus ancien), admins illimités. |
+| Spoof `X-Forwarded-For` (bypass rate-limit) | Caddy écrase `X-Forwarded-For`/`X-Real-IP` avec `{remote_host}` (prod + staging). |
+| Body sans limite (DoS mémoire) | `bodyLimit` **1 Mo** global (→ `413`), admins exemptés. |
+| Sur-exposition PII (`/users`, `/users/:login`, `/leaderboard`) | `toPublicUser` (deny-list `ftId` / `moderatorPermissions` / `stagingAllowed` / champs RGPD) + `take: 1000` ; `404` sur compte banni/anonymisé (sauf admin). |
+| Farming de coins | dégressivité appliquée **aussi** aux coins ; quêtes non créditées sur rematch dégressé (§8 quinquies). |
+| Bearer 30 j en localStorage / pas de CSP | **CSP** ajoutée côté Caddy (`connect-src 'self' https://api.intra.42.fr` bloque l'exfil) + `Vary: Origin`. |
+| Mdp Postgres `league:league` | `${POSTGRES_PASSWORD:-league}` injectable par environnement (compose prod/staging/registry). |
+| Dev expose `5432` | binding loopback `127.0.0.1:5432:5432`. |
+| Conteneurs en root | backend : `USER node` + cache npm/npx redirigé vers `/tmp` (Dockerfile). |
+| Backdoor `x-dev-login` | garde dure `NODE_ENV !== 'production'` + header CORS conditionnel. |
+| Paris tournoi (sur-soi + réouverture) | anti-self + colonne `betsLockedAt` (verrou permanent, §8 quinquies). |
+| Token extension en query string | lecture dans le **fragment** (`#token=`). |
+
+**Reste en durcissement (non bloquant)** : migrer le Bearer web vers un cookie `HttpOnly` (au lieu de
+localStorage) + TTL réduit / révocation ; resserrer `img-src` et retirer `script-src 'unsafe-inline'`
+via nonces ; passer le conteneur nginx en non-root. Voir aussi « Ce qui n'est PAS encore en place ».
 
 ---
 

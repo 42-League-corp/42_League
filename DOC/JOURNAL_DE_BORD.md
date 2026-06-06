@@ -2,8 +2,10 @@
 
 > Carnet chronologique de **tout** l'avancement du projet : à chaque étape, le problème
 > rencontré, ce qu'on a **tenté**, ce qui **n'a pas marché** et **pourquoi**, puis **comment
-> on a fixé**. Reconstruit à partir de l'historique git sur `main`, du **25 mai au 6 juin 2026**
-> (du premier commit aux features communautaires : notifications, badges, suivi, saisons).
+> on a fixé**. Reconstruit à partir de l'historique git (`main` + `develop`/staging), du **25 mai
+> au 6 juin 2026** (du premier commit aux features communautaires — notifications, badges, suivi,
+> saisons — puis au multi-disciplines, à l'économie de League Coin, aux paris, et à la refonte des
+> tournois).
 >
 > Cible : un dev qui reprend le repo et veut comprendre non seulement *ce que fait* le code
 > (voir [STACK](./STACK.md), [DOMAIN](./DOMAIN.md), [API](./API.md)…) mais *par quels
@@ -22,7 +24,11 @@
 | **3. Le métier** | 29 mai | ELO babyfoot, anti-farming, rôles, SSE temps réel | Seuils anti-farming, popups SSE |
 | **4. Durcissement** | 29 mai | Sécurité, backdoor dev, cookies, tests, RGPD | Backdoor `x-dev-login`, build qui casse |
 | **5. Polish & scale** | 30–31 mai | i18n, mobile, OPS, GOD panel, classement graphique, reset ligue | Sheets mobiles inatteignables, numéro de build |
-| **6. Communauté & ères** | 1–6 juin | Tournois privés/poules, OPS « chasse », H2H, notifs, badges, suivi, saisons | Brackets non-pow2, fuite du Bearer en SSE, open access |
+| **6. Communauté & ères** | 1–31 mai | Tournois privés/poules, OPS « chasse », H2H, notifs, badges, suivi, saisons | Brackets non-pow2, fuite du Bearer en SSE, open access |
+| **7. Multi-disciplines** | 31 mai–2 juin | Smash, Échecs, Street Fighter, fléchettes, babyfoot 2v2, game registry | Le « 10-0 aux échecs », FFA Smash vs fléchettes mêlés |
+| **8. Économie & paris** | 2–6 juin | League Coin (gains/quêtes hebdo), paris sur le vainqueur de tournoi, grades GM, GOAT | Farming de coins, paris sur soi-même, paris par match |
+| **9. Refonte tournois** | 5–6 juin | Pile-ou-face cinématique, `activeMatchId`, byes & capacités pow2, animations VERSUS/bracket | Page qui rechargeait tout, byes sur capacité non-pow2 |
+| **10. God, staging & durcissement** | 5–6 juin | Panneau god tournois, synchro ELO prod→staging, TesterSwitch, audit cyber, build | Boot staging cassé, builds CI hors-ligne |
 
 ---
 
@@ -410,7 +416,7 @@ points ELO × matchs joués) à l'échelle.
 
 ---
 
-## Phase 6 — Communauté & ères (1–6 juin)
+## Phase 6 — Communauté & ères (1–31 mai)
 
 Une fois le produit stable et déployé, la suite vise l'**engagement** : faire vivre la ligue dans la
 durée et lui donner une dimension sociale. Plusieurs gros chantiers s'enchaînent.
@@ -488,28 +494,389 @@ déclencher par accident.
 
 ---
 
+## Phase 7 — Multi-disciplines : la ligue n'est plus que du babyfoot (31 mai–2 juin)
+
+Le produit était mono-jeu. À partir du 31 mai au matin, la ligue s'ouvre à **plusieurs
+disciplines** — chacune avec son **classement ELO parallèle**, ses persos, son format de score.
+C'est le chantier qui a le plus structuré (et fragilisé) le back : ce qui était implicitement
+« babyfoot » devait devenir **agnostique au jeu**.
+
+### 7.1 Smash, puis Échecs : le mode babyfoot qui contamine tout
+
+**Contexte.** `Add: mode Smash Bros` (a59dda7) puis `Add: mode Échecs` (f2ddc2d) : classements
+parallèles, persos & sets Bo3/Bo5 (vies) pour le Smash, thème par jeu. Chaque discipline a ses
+**colonnes ELO/compteurs** propres (`elo_smash`, `matches_played_smash`…).
+
+**Symptôme révélateur** (`Add: mode Échecs… + fix le graphe ELO`, e81a7cc puis 9732b73). Le mode
+Échecs renvoyait les **données babyfoot** : un `?game=` manquant dans plusieurs requêtes faisait
+retomber le serveur sur la discipline par défaut. Le GOD panel a dû devenir **multi-mode granulaire**
+pour confirmer l'**indépendance réelle** des classements.
+
+### 7.2 ⭐ Le « 10-0 aux échecs » : le score qui ne respectait pas sa discipline
+
+**Symptôme.** Une partie d'échecs s'affichait **10-0**. Aux échecs on gagne **1-0**, pas 10-0.
+
+**Cause détaillée** (`fix(games): saisie & affichage des matchs agnostiques au jeu`, 1d29e3f). Le flux
+« défier un joueur » (`RecordResultForm`) enregistrait **tous** les résultats au format babyfoot
+(10-x) **sans envoyer la discipline**. Le backend stockait alors le match sous `game: ch.game` (donc
+échecs) mais avec un **score babyfoot**. Pire : l'affichage déterminait le vainqueur par « score = 10 »
+— faux pour un 1-0 (échecs) ou un 2-1 (smash).
+
+**Le fix, en deux couches :**
+- **Backend, autorité de vérité** : `/challenges/:id/record` **revalide** le résultat contre la
+  discipline **réelle du défi** (`ch.game`), pas le `game` envoyé par le client. Un défi d'échecs ne
+  peut plus être stocké avec un score babyfoot.
+- **Front, game-aware** : `RecordResultForm` adapte la saisie (échecs en 1-0, smash redirigé vers
+  « Déclarer une partie »), et le vainqueur est déterminé par **comparaison de scores**, plus par une
+  égalité magique à 10.
+
+**Leçon.** Le client ne doit jamais être la source de vérité du **type** d'un objet métier : le
+backend doit revalider contre l'état qu'il possède déjà. Écho direct à l'anti-escalation (4.1).
+
+### 7.3 La dette de tous ces ternaires → un Game Registry
+
+**Problème.** Avec 3 jeux, le back était truffé de `isSmash ? … : isChess ? …` éparpillés
+(leaderboard, clôture de saison, settlement ELO, crédit des titres). Ajouter une 4ᵉ discipline aurait
+voulu dire **rouvrir tous ces sites**.
+
+**Le fix** (`refactor(games): centralise la logique multi-jeux dans un Game Registry`, 0868d15). Un
+**registry partagé unique** (`packages/shared/src/games.ts`) + un **pont Prisma**
+(`apps/backend/src/games.ts`) qui isole les colonnes par-jeu. Comportement **strictement identique**
+(shared 214 + backend 177 tests verts), mais **ajouter une discipline = une entrée de config**. C'est
+ce qui a rendu les phases suivantes (Street Fighter, fléchettes) rapides. Détail dans
+[DOMAIN.md](./DOMAIN.md) §12.
+
+### 7.4 Street Fighter : une discipline « presque gratuite »
+
+**Contexte.** `feat(streetfighter): nouvelle discipline` (bb9dda9). Grâce au registry (7.3), SF
+**réutilise** la mécanique Smash (`calculateSmashElo`, sets Bo3/Bo5, persos) : il « suffit » d'ajouter
+l'entrée de jeu, les colonnes `elo_sf`/`matches_played_sf` (migration additive), le roster (40 puis 80
+persos, portraits locaux, fallback pastille) et le branding. La preuve que le refacto 7.3 a payé.
+
+### 7.5 Babyfoot 2v2 : le carry et l'ELO d'équipe
+
+**Contexte.** `feat(babyfoot): mode 2v2 complet` (f9838c0). Un duo n'est pas la somme de deux solos —
+il fallait un **ELO d'équipe** (`BabyfootTeam`, duo canonique, ELO pondéré 65/35) **et** un report
+individuel **anti-carry** : `calculateIndividualEloIn2v2` (« Calcul B ») évite qu'un joueur faible
+monte uniquement en étant porté par un fort. Validation **obligatoire des 3 non-déclarants** avant le
+settlement ELO (8714951) — comme en 1v1, on ne crédite pas sur la seule parole du déclarant. Page
+`/team/:id`, trophées de duo (« Le Plus Gros Carry », « Duo de Choc »). Schéma + migration
+`add_babyfoot_2v2`.
+
+### 7.6 Fléchettes : un ELO multijoueur (pas un duel)
+
+**Contexte.** `feat(flechettes): nouveau mode multijoueur 301/501 (2-8 joueurs)` (a118fbb). Rupture :
+les fléchettes ne sont **pas** un 1v1. `calculateDartsElo` pondère **par points restants** (moitié
+haute gagne, moitié basse perd, milieu neutre). **Pas de tournoi fléchettes** (multijoueur incompatible
+avec un bracket binaire). Les fléchettes **réutilisent les tables FFA** existantes (Smash multijoueur) +
+`startScore`/`remaining`.
+
+**Le piège qui en a découlé** (`fix: séparation FFA Smash/fléchettes`, 78d2272 & 043217f). Réutiliser
+les tables FFA signifiait que les **manches de fléchettes remontaient dans les listes FFA Smash**, et
+inversement. Fix : un **filtre `game`** systématique partout (listes, stats, standings de saison).
+Idem `bcc2578` : les **standings de fin de saison** ne savaient afficher ni Street Fighter ni les
+fléchettes — il manquait simplement les 2 disciplines récentes dans l'itération sur les 5 jeux.
+
+**Leçon.** Partager une table physique entre deux concepts métier est économique mais **dangereux** :
+sans clé de discrimination (`game`) appliquée **partout**, les vues fuient l'une dans l'autre.
+
+### 7.7 Cloisonnement par discipline (badges, fiches, trophées)
+
+Plusieurs fixes pour que rien ne « bave » d'un jeu à l'autre : badges de palmarès **cloisonnés par
+discipline** (9eb75b8), fiche d'un autre joueur **isolée par discipline** (785847d), saisie de score de
+tournoi **par jeu** (échecs/smash/babyfoot, 6b49c5a). Le multi-jeux force à se demander, partout :
+« de quelle discipline parle-t-on ici ? ».
+
+---
+
+## Phase 8 — Économie de League Coin, quêtes & paris (2–6 juin)
+
+Une fois plusieurs disciplines en place, on attaque l'**engagement par l'économie** : une monnaie
+virtuelle, des moyens de la **gagner**, et un marché de **paris**.
+
+### 8.1 League Coin : d'abord une boutique, sans encore de gains
+
+**Contexte.** `feat(shop): boutique League Coin` (1d462f4). On pose la **monnaie** (`User.leagueCoins`),
+les modèles `ShopItem` + `ShopInventory`, l'onglet Boutique, et un **back-office Shop GOD** (admins) pour
+créer des cosmétiques et **donner des coins**. À ce stade, **aucun gain automatique** : seul un admin
+peut créditer (un encart « Bientôt » annonce les gains à venir). Voir [DOMAIN.md](./DOMAIN.md) §13.
+
+### 8.2 Gains de match & quêtes hebdo : le volet « earn »
+
+**Contexte.** `feat(coins): gains de match, quêtes hebdo et paris (backend)` (f3d897b). Trois volets
+d'un coup :
+- **Volet A — gains de match** : **+20 joué / +50 victoire** crédités au **règlement** de chaque match
+  **classé** (1v1, 2v2, FFA, fléchettes), **jamais** sur un dodge / un match forcé / non-classé.
+- **Volet B — quêtes hebdo** : `WeeklyQuestProgress`, `GET /quests` + `POST /quests/:id/claim`, 4 quêtes
+  réinitialisées par **semaine ISO**, **anti double-claim** verrouillé.
+- **Volet C — paris** : `Bet`, cote fixe **x2**, règlement auto à la confirmation, remboursement à
+  l'annulation.
+
+Le front suit avec les **onglets Quêtes & Paris** du profil (7649f42) et l'animation « +N » au gain
+(57807c3).
+
+### 8.3 ⭐ L'intégrité de l'économie : farming de coins & paris sur soi-même
+
+**Symptôme (audit, cf. Phase 10.4).** L'audit cyber a montré que l'économie était **exploitable** :
+- deux comptes complices pouvaient **farmer des coins** (et valider des quêtes) en jouant en boucle ;
+- on pouvait **parier sur un tournoi où l'on joue**, voire sur soi-même.
+
+**Le fix** (`fix(security): corrige les failles de l'audit cyber`, bceb30a). L'**anti-farming**
+(déjà appliqué à l'ELO depuis 3.2) est **étendu aux coins ET aux quêtes** (1v1 + 2v2) : un match qui ne
+compte pas pour l'ELO ne crédite **ni coin ni progression de quête**. Et on **interdit de parier sur un
+tournoi où l'on joue**.
+
+**Leçon.** Une monnaie crée une **incitation** ; dès qu'on récompense un comportement, il faut se
+demander **comment on le triche**. L'anti-farming, conçu pour l'ELO, devient une primitive
+**transverse** à toute la couche « récompense ».
+
+### 8.4 Les paris : du « par match » au « vainqueur du tournoi », et le verrou
+
+**Problème.** Les premiers paris portaient **match par match**. Deux ennuis : (a) on pouvait parier
+pendant la **phase d'inscription** (avant que le bracket soit figé), et (b) un pari par match ouvre la
+porte à des **scores divulgués** (on parie en connaissant déjà l'issue).
+
+**Le fix, en plusieurs passes :**
+- `feat(bets): paris limités au tournoi EN COURS + verrou à la pose` (23f20cf) : `GET /bets` & `POST
+  /bets` n'ouvrent plus les paris que sur les tournois `in_progress` ; le pari est **verrouillé dès la
+  pose** (aucun endpoint de modification, garde anti-doublon).
+- `feat(paris): pari unique sur le vainqueur du tournoi (fin des paris par match)` (81413c8) puis
+  b9b7c75 : on **abandonne les paris par match** au profit d'**un seul pari sur le vainqueur du
+  tournoi**, ouvert **avant le 1er résultat seulement**.
+- Verrou permanent côté DB : `betsLockedAt` (migration `tournament_bets_lock`, bceb30a) — **le marché
+  ne se rouvre plus** une fois qu'un score a été divulgué.
+
+**Le bug d'argent qu'on a failli laisser passer** (`fix(coins): rembourse les paris ouverts sur les
+suppressions de tournoi en masse`, 434ae8a). Les chemins de **suppression groupée** (ban /
+anonymisation / suppression de compte, suppression d'un faux joueur, reset total de la base) effaçaient
+les paris **par cascade SQL** sans **rendre la mise** : des coins disparaissaient dans le vide. Helper
+`refundBetsTx` généralisé, remboursement **avant** chaque cascade delete. Cas typique « la suppression
+en cascade oublie les effets de bord métier ».
+
+### 8.5 Grades Grand Master : un grade **positionnel**, hors barème
+
+**Problème.** Les grades (Étain → Diamant) sont des **paliers d'ELO**. Mais on voulait un grade
+d'**élite** qui ne soit pas qu'« avoir beaucoup d'ELO » : être **dans le top**.
+
+**Le fix** (`feat(grades): grade Grand Master pour le top 5`, 719c718 puis cce15a2). **Grand Master**
+est **positionnel** (hors barème) : attribué au **top N** (5) de **chaque discipline**.
+`rankTierForRank(elo, rank)` renvoie GM si `1 ≤ rank ≤ 5`, sinon le palier d'ELO. `RankBadge` gagne une
+prop `rank` optionnelle (couronne violette). Branché sur les profils, puis sur les **lignes de
+classement** (923158b) — qui en a profité pour remplacer l'**auto-scroll au montage** par un bouton
+**« Où suis-je ? »** à la demande (le scroll automatique surprenait l'utilisateur). Voir
+[DOMAIN.md](./DOMAIN.md) §2 bis.
+
+### 8.6 G.O.A.T : scope saison et vue nuage
+
+**Contexte.** `feat(leaderboard): G.O.A.T en 3e vue` (dd4a09e), `feat(goat): scope saison` (bd151a8),
+`nuage + g.o.a.t sur les saisons passées` (2014ae3). Le G.O.A.T (greatest of all time) devient une
+**3ᵉ vue** du classement (liste / nuage / G.O.A.T) et accepte un **classement scopé à la saison** : les
+saisons passées recalculent nuage + G.O.A.T **depuis les matchs taggés** `seasonId`.
+
+**Perf au passage.** Le recalcul des stats du leaderboard à **chaque navigation** était coûteux : extrait
+dans une fonction **à cache module** (`computeLeaderboardStats`) → instantané au remontage. Le bouton
+**« Où suis-je ? »** fonctionne dans les **3 vues** (commande impérative `locateMe` du nuage). G.O.A.T
+**masqué pour la BETA** tant que le volume de données est faible.
+
+---
+
+## Phase 9 — Refonte des tournois : cinématique et lisibilité (5–6 juin)
+
+Les tournois marchaient mais l'expérience était frustrante. Trois douleurs : la page **rechargeait
+tout** au moindre clic, le **pile-ou-face** était minuscule et coupé, et on ne savait pas **quel match
+jouer maintenant**.
+
+### 9.1 ⭐ La page détail qui « rechargeait » tout l'écran
+
+**Symptôme.** Au moindre clic (toss, avantage, score, invite, join, start) **et** à chaque refresh SSE
+ou retour de focus, la page tournoi **rechargeait en entier** (skeleton plein écran). Pire : l'animation
+de pile-ou-face en cours était **démontée** → on « sortait » de l'animation.
+
+**Cause & fix** (`fix(tournois): la page détail ne recharge plus tout l'écran`, a343f8c). Le `load()`
+repassait **systématiquement** par `setLoading(true)`. Fix : `load(silent)` — le skeleton n'apparaît
+plus qu'au **1er chargement** / changement de tournoi ; les refresh de fond (SSE, `runAction`,
+`onChange` des matchs) **swappent les données en place**. C'est ce fix qui a **rendu possible** la
+cinématique de la 9.2 (sans lui, l'animation se faisait démonter à chaque tick).
+
+### 9.2 Le pile-ou-face en cinématique plein écran (et juste pour désigner le gagnant)
+
+**Symptôme.** Le lancer de pièce s'affichait **inline** dans la petite carte du match, coupé dès qu'on
+« sortait ».
+
+**Le fix** (`feat(tournois): pile-ou-face en cinématique plein écran`, c66c07a). Nouveau
+`CoinFlipOverlay` : la pièce s'affiche **en grand, centrée**, et reste pendant la rotation **puis**
+l'annonce du gagnant (~2 s, `b2c6aa1`) avant de laisser place à la suite. Couplé au refresh silencieux
+de 9.1, l'animation n'est **plus interrompue**.
+
+**Décision produit.** `feat(tournois): retire le choix d'avantage` (ec2e277) : l'avantage se règle
+**IRL** (qui commence, etc.) ; le pile-ou-face ne sert plus qu'à **désigner le gagnant** d'un amical
+arbitré. On **simplifie** le flux plutôt que d'empiler des écrans. L'organisateur d'un **amical** (et les
+admins) peut **officier** : lancer la pièce et saisir un **score d'autorité** sans jouer (b9b7c75).
+
+### 9.3 `activeMatchId` : « le match en cours », désigné par l'organisateur
+
+**Problème.** Dans un bracket, rien n'indiquait **quel duel** se joue **maintenant** — chaque
+spectateur voyait le bracket « à plat ».
+
+**Le fix** (`feat(tournois): match « en cours » désigné par l'organisateur`, 7dd1bd9 + animations
+a374df9). Un pointeur **`activeMatchId`** sur le tournoi + `POST
+/tournaments/:id/matches/:matchId/announce` (organisateur/admin, hors échecs). Désigner un match
+déclenche, **chez tous les spectateurs** (via SSE), un **écran VERSUS** plein écran (2 photos) et un
+badge **« EN COURS »** sur le duel dans l'arbre. Le pointeur est **effacé à la confirmation**. S'ajoutent
+le **tirage au sort animé** (chaque duel se place tour à tour) et l'**avancée du bracket** (le perdant
+grisé, l'avatar du vainqueur « monte » l'arbre).
+
+### 9.4 Capacités puissances de 2 & byes : la complexité qu'on a fini par trancher
+
+**Rappel.** En Phase 6.1, on avait ouvert les capacités **6–64** avec gestion des **byes** (joueur exempt
+au 1er tour quand la capacité n'est pas une puissance de 2) et des **poules**. C'était puissant mais
+source d'edge-cases (taille de bracket ≠ capacité, rounds recalculés sur les matchs réels).
+
+**La décision** (`feat(tournois): capacites en puissances de 2 uniquement (8/16/32)`, 87b7a67). On
+**re-restreint** aux **puissances de 2** : le bracket est **toujours plein**, **jamais** de joueur
+exempt au 1er tour. `CreateTournamentSchema` (et `AdminUpdateTournamentSchema` côté god) **imposent** une
+puissance de 2 (min 8) ; l'UI ne propose que **8/16/32**.
+
+**Leçon.** On avait généralisé (byes/poules) pour la flexibilité ; à l'usage, la **simplicité** (bracket
+plein) valait mieux que de gérer tous les cas limites. Revenir en arrière sur une feature est une
+décision **valide** — d'autant que la logique reste **testée** (`tournament.test.ts`). Au passage,
+`fix(tournois): retire bracketRounds mort du destructuring` (d874267) nettoie un reliquat de cette
+généralisation qui cassait le build `tsc -b`.
+
+---
+
+## Phase 10 — God, staging & durcissement (5–6 juin)
+
+Le déploiement bascule sur un vrai **environnement de staging** (`develop` → staging, `main` → prod ;
+cf. [GUIDE-GIT.md](./GUIDE-GIT.md)). Cette phase concentre l'**outillage admin**, un **audit cyber**, et
+une série de **galères d'infra** très « Phase 2 ».
+
+### 10.1 Panneau god des tournois : forcer l'avancement
+
+**Contexte.** `feat(god/tournois): panneau de gestion par tournoi` (b45ec09, 06f964a, f892b34, 62b91ab).
+Deux endpoints admin : **`force-accept`** (forcer une invitation en attente) et **`force-result`**
+(valider/forcer un match). Point clé : la **propagation est partagée** avec la confirmation normale
+(poules → bracket → finale → récompense → **paris**) — on ne **duplique pas** la logique métier, on
+**réutilise** le même chemin de settlement. C'est ce qui évite qu'un match forcé oublie de créditer une
+récompense ou de régler un pari. Voir [DOMAIN.md](./DOMAIN.md) §6.
+
+### 10.2 Synchro ELO prod → staging (en lecture seule)
+
+**Problème.** Sur **staging**, on veut des **vraies courbes ELO** pour tester (nuage, GOAT, grades) sans
+recopier toute la prod ni risquer d'**écraser** des données sensibles.
+
+**Le fix** (`feat(god): synchro ELO/stats prod → staging`, ccd206f). Bouton GOD › Saisons (**staging
+only**, superadmin) qui recopie ELO + compteurs depuis la **DB de prod en LECTURE SEULE**
+(`PROD_READONLY_URL`, rôle **SELECT-only**). N'écrase **que** l'ELO/compteurs par discipline —
+**jamais** les rôles, permissions, League Coins ni l'historique. Comptes de test staging **préservés** ;
+comptes prod absents **créés en identité minimale** (USER). Endpoint `POST
+/admin/seasons/sync-elo-from-prod` **fail-secure sur `APP_ENV`** (ne tourne qu'en staging), action
+d'audit `SYNC_ELO_FROM_PROD`. Encore la règle de 4.1 : un outil puissant, **gated** par l'environnement.
+
+### 10.3 TesterSwitch : tester « en mode user » sans se déloguer
+
+**Contexte.** `feat(staging): bouton « Tester en mode user »` (df4216f, f0288f3). Un admin voit tout en
+god — du coup il ne voit **jamais** l'app comme un simple user. Le **TesterSwitch** permet d'**impersonner
+le compte tester** (staging, admins), **réservé à throbert/jagharra**, abidaux reconnu **founder**.
+Quelques fixes de **positionnement** du bouton (chevauchement bas-gauche : 891a693, ad1a2c3, cd0260e) —
+détail UI mais récurrent.
+
+### 10.4 L'audit cyber : 16 failles, toutes corrigées
+
+**Contexte.** `fix(security): corrige les failles de l'audit cyber` (bceb30a), documenté dans
+[AUDIT_CYBER_2026-06-05.md](./AUDIT_CYBER_2026-06-05.md). Audit **multi-agents (8 zones)** avec
+**vérification adversariale** : **16 failles confirmées** sur 24 remontées. La seule **high** : le flux
+**SSE `/events` sans plafond** (un compte peut accumuler des milliers de streams et saturer le pool).
+
+**Corrections principales :**
+- **SSE** : plafond de **5 flux/login** (admins illimités) ; **body-limit 1 Mo** global (admins
+  exemptés).
+- **Sur-exposition de PII** : les routes publiques (`/users`, `/leaderboard`) renvoyaient l'objet `User`
+  **brut** (avec `ftId`, `moderatorPermissions`, horodatages RGPD). `toPublicUser` les **retire** + `take
+  1000` ; comptes bannis/anonymisés en **404** (sauf admin).
+- **Économie** (cf. 8.3) : anti-farming sur coins **et** quêtes, interdiction de parier sur un tournoi où
+  l'on joue, **verrou de marché** `betsLockedAt`.
+- **Backdoor** `x-dev-login` **neutralisée en dur en prod** (`NODE_ENV !== 'production'`).
+- **Infra** : CSP Caddy (`connect-src 'self'` bloque l'exfil du token), **anti-spoof
+  `X-Forwarded-For`** (`header_up {remote_host}` — sans ça, un client falsifie son IP et annule tout le
+  rate-limit), Postgres avec mot de passe paramétrable, port dev en **loopback**, **`USER node`**
+  (non-root) dans le Dockerfile backend, token OAuth d'extension lu dans le **fragment** (`#`) plutôt que
+  la query string.
+
+Les **admins sont exemptés** des garde-fous anti-abus (rate-limit / body-limit / plafond SSE) pour
+pouvoir **tester** librement (7b53464, 7353c92). Tout est ajouté à la mémoire de sécurité
+([security-patches.md](./security-patches.md)).
+
+### 10.5 ⭐ Le boot staging cassé par un import jamais commité
+
+**Symptôme — 502 sur `staging.42league.fr`.** Le backend staging **bouclait en crash**.
+
+**Cause** (`fix(backend): commit contributor-stats manquant`, aec39eb). `index.ts:82` importait
+`./contributor-stats.js`, mais **le fichier n'avait jamais été commité** → `ERR_MODULE_NOT_FOUND` au
+démarrage → boucle de crash. Le module étant **autonome** (repli env puis stats vides), le **simple
+ajout du fichier** restaure le boot.
+
+**Leçon.** Un import vers un fichier **non versionné** marche en local (le fichier est là) et casse
+partout ailleurs — variante directe du fil rouge « l'environnement de dev ≠ l'environnement cible ». Le
+typecheck ne l'attrape pas forcément si le fichier existe sur la machine du dev.
+
+### 10.6 Les builds CI qui n'atteignaient plus Docker Hub
+
+**Symptôme.** Les builds CI échouaient **en boucle** sur `node:20-alpine: dial tcp … i/o timeout` —
+`registry-1.docker.io` **injoignable** depuis les runners (rate-limit / réseau). Le **deploy staging**
+exige `build-backend` **ET** `build-frontend` en succès → **rien ne partait**.
+
+**Le fix** (`fix(ci): images de base via miroir AWS ECR Public`, bd03eb2). Bascule des `FROM`
+(`node:20-alpine`, `nginx:alpine`) vers **`public.ecr.aws/docker/library/*`** (miroir officiel Docker
+Hub, sans rate-limit anonyme bloquant). Encore une fois, la **mise en prod** déborde de cas
+d'infrastructure hors de notre code.
+
+### 10.7 Build front : les classiques du strict-mode et des imports morts
+
+Plusieurs `fix(build)` de cette période, tous dans la veine de la Phase 4.7 (« ça marche en dev ≠ ça
+build en prod ») : `SortableTh` manquant qui cassait le tri des colonnes GOD (51b08f6), `bracketRounds`
+mort dans un destructuring (d874267), variables/imports inutilisés sous `noUnusedLocals`. Et une optim
+de bundle : `perf(build): isole react et framer-motion dans des chunks vendor` (cc539ba) — `vendor-react`
+et `vendor-motion` séparés pour un cache long et un téléchargement parallèle.
+
+---
+
 ## Fils rouges du projet (ce qui revient sans cesse)
 
 1. **« L'environnement de dev ≠ l'environnement cible. »** WSL (0.1), conteneurs Docker (2.5),
-   build sans `.git` (5.3), typecheck strict au build (4.7). À chaque fois, le code « marchait »
+   build sans `.git` (5.3), typecheck strict au build (4.7), **import vers un fichier jamais commité**
+   (10.5), **registre Docker injoignable** en CI (10.6). À chaque fois, le code « marchait »
    quelque part et pas là où il fallait.
 
 2. **Config en mémoire ≠ config sur disque.** Le 404 Caddy (2.5) en est l'archétype : recréer
    le processus, ne pas juste lui demander de relire.
 
-3. **Tout raccourci de dev doit être OFF par défaut.** La backdoor `x-dev-login` (4.1) et la
-   confirmation manuelle du reset ligue (5.5) sont les deux faces de la même règle.
+3. **Tout raccourci / tout outil puissant doit être gardé par défaut.** La backdoor `x-dev-login`
+   (4.1), la confirmation manuelle du reset ligue (5.5), la synchro ELO prod→staging **gated par
+   `APP_ENV`** (10.2) et le TesterSwitch réservé (10.3) sont les facettes de la même règle.
 
 4. **Un incident → un test.** Anti-farming (3.2), privacy SSE (3.4), anti-escalation (4.1) sont
    tous devenus des tests de la suite DB-free (4.3) ; toute logique non triviale (brackets/byes/poules
-   en 6.1) est extraite en fonctions pures et testée (`tournament.test.ts`). On corrige une fois, on
-   régresse jamais.
+   en 6.1, multi-jeux/ELO en 7.3) est extraite en fonctions pures et testée (`tournament.test.ts`,
+   `games.ts`). On corrige une fois, on régresse jamais.
 
-5. **Honnêteté sur l'inachevé.** Le harness d'intégration (4.4) est explicitement marqué
+5. **Le client n'est jamais la source de vérité du métier.** Le « 10-0 aux échecs » (7.2) : le
+   backend revalide le **type** du match contre l'état qu'il possède, jamais contre le `game` envoyé.
+
+6. **Une récompense crée une incitation à tricher.** Dès qu'on gagne des coins (8.2), il faut se
+   demander comment on les farme : l'anti-farming devient transverse (coins + quêtes, 8.3), les paris
+   se verrouillent (8.4), on n'autorise pas à parier sur soi-même (10.4).
+
+7. **Généraliser puis re-trancher est valide.** On avait ouvert les tournois aux byes/poules (6.1)
+   pour la flexibilité, on est revenu aux **puissances de 2** (9.4) parce que la simplicité valait mieux
+   que tous les cas limites.
+
+8. **Honnêteté sur l'inachevé.** Le harness d'intégration (4.4) est explicitement marqué
    « Phase 2 — incomplet » dans le commit et la doc, plutôt que maquillé en terminé.
 
 ---
 
 > **Pour aller plus loin :** [POST_MORTEM_404_BUG.md](./POST_MORTEM_404_BUG.md) (l'incident en
-> détail), et à la racine du repo `security-patches.md` (mémoire de sécurité, patches numérotés)
-> et `pending.md` (backlog). Index général : [README.md](./README.md).
+> détail), [AUDIT_CYBER_2026-06-05.md](./AUDIT_CYBER_2026-06-05.md) (l'audit complet), et dans `DOC/`
+> [security-patches.md](./security-patches.md) (mémoire de sécurité, patches numérotés)
+> et [pending.md](./pending.md) (backlog). Index général : [README.md](./README.md).

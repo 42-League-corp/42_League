@@ -6,7 +6,10 @@ Document de référence. Décrit toute la stack : front, back, base de données,
 
 ## 1. Vue d'ensemble
 
-42 League est une application de ligue de babyfoot (défis, matchs, classement ELO, tournois).
+42 League est une application de ligue multi-disciplines (défis, matchs, classement ELO, tournois).
+Les disciplines sont définies dans `packages/shared/src/games.ts` (`GAMES`) : **Babyfoot**, **Smash**,
+**Échecs**, **Street Fighter** et **Fléchettes** (cette dernière multijoueur, 2 à 8, 301/501). Chaque
+discipline a son propre rating ELO, ses compteurs et son branding ; le babyfoot est la valeur par défaut.
 
 Le dépôt est un **monorepo npm workspaces**. Node.js `>=20`. TypeScript `^5.6` partout.
 
@@ -24,6 +27,10 @@ Le `package.json` racine expose : `npm run build`, `npm run test`, `npm run type
 
 - **Framework** : React 18 + react-router-dom 6.
 - **Build** : Vite 5. Script `build` = `tsc -b && vite build`.
+- **Découpage des bundles (perf)** : `vite.config.ts` isole les grosses dépendances dans des
+  **chunks vendor** via `build.rollupOptions.output.manualChunks` : `vendor-react`
+  (`react`, `react-dom`, `react-router-dom`) et `vendor-motion` (`framer-motion`). Ces chunks,
+  rarement modifiés, restent en cache navigateur entre les déploiements et allègent le bundle applicatif.
 - **CSS** : TailwindCSS 3 (+ PostCSS, autoprefixer).
 - **Animations** : framer-motion 11.
 - **Icônes** : lucide-react.
@@ -104,7 +111,9 @@ Modèles (tables) :
 - `Tournament`, `TournamentEntry`, `TournamentMatch`.
 - `Ops`, `FeatureRequest`, `AdminAuditLog`.
 - `Notification`, `UserBadge`, `Follow`, `Season`, `SeasonStanding` (centre de notifs, badges, suivi, saisons).
-- Enums : `Role`, `AdminAction`.
+- `PendingFfa`/`PlayedFfa` (+ participants) et `BabyfootTeam` (FFA Smash, modes 2v2).
+- `ShopItem`, `ShopInventory`, `WeeklyQuestProgress`, `Bet`, `MatchmakingQueue` (économie League Coins, quêtes, paris, file de matchmaking).
+- Enums : `Role` (`USER`, `MODERATOR`, `ADMIN`, `SUPERADMIN`), `AdminAction`.
 
 Identifiants Postgres (dev et conteneur) : user `league`, mot de passe `league`, base `league`.
 
@@ -133,13 +142,20 @@ Trois fichiers compose, pour trois usages.
 - `caddy` expose `80`, `443` et `3000`.
 - C'est ce fichier qui tourne en production.
 
+> **Images de base via le miroir AWS ECR Public.** Les deux Dockerfiles tirent leurs images de base
+> depuis `public.ecr.aws/docker/library/...` (`node:20-alpine`, `nginx:alpine`) plutôt que depuis le
+> Docker Hub. **Pourquoi** : `registry-1.docker.io` impose des *rate-limits* anonymes qui font
+> échouer le build CI par intermittence (`dial tcp ... i/o timeout` sur `node:20-alpine`). ECR Public
+> est un miroir officiel du Docker Hub, sans ces limites. **Où** : `apps/backend/Dockerfile` et
+> `apps/web/Dockerfile` (les `FROM`), introduit dans le commit *images de base via miroir AWS ECR Public*.
+
 ### Dockerfile frontend (`apps/web/Dockerfile`)
-- Étape 1 (`node:20-alpine`) : `npm install`, puis `npm run build -w @42-league/web`. `VITE_API_BASE_URL` injecté en build-arg.
-- Étape 2 (`nginx:alpine`) : copie `dist` dans `/usr/share/nginx/html`. Config Nginx avec fallback SPA (`try_files ... /index.html`). Écoute le port `80`.
+- Étape 1 (`public.ecr.aws/docker/library/node:20-alpine`) : `npm install`, puis `npm run build -w @42-league/web`. `VITE_API_BASE_URL`, `APP_BUILD` (= nombre de commits git) et `APP_DATE` injectés en build-arg.
+- Étape 2 (`public.ecr.aws/docker/library/nginx:alpine`) : copie `dist` dans `/usr/share/nginx/html`. Config Nginx (`apps/web/nginx.conf`) avec fallback SPA (`try_files ... /index.html`) + en-têtes de cache (assets hashés immuables 1 an, `index.html`/`sw.js` revalidés). Écoute le port `80`.
 
 ### Dockerfile backend (`apps/backend/Dockerfile`)
-- Étape 1 (`node:20-alpine`) : installe `openssl`+`libc6-compat`, `npm install`, `prisma generate`.
-- Étape 2 (`node:20-alpine`) : réinstalle `openssl`+`libc6-compat`, copie `node_modules`, `packages`, `apps/backend`. Écoute le port `3000`.
+- Étape 1 (`public.ecr.aws/docker/library/node:20-alpine`) : installe `openssl`+`libc6-compat`, `npm install`, `prisma generate`.
+- Étape 2 (`public.ecr.aws/docker/library/node:20-alpine`) : réinstalle `openssl`+`libc6-compat`, copie `node_modules`, `packages`, `apps/backend`. Reçoit `CONTRIBUTOR_STATS` (JSON des stats git, cf. CI §8) en build-arg → variable d'env. **Tourne en `USER node`** (non-root, cache npm/npx redirigé vers `/tmp`). Écoute le port `3000`.
 - Démarrage : `prisma migrate deploy && tsx src/index.ts` (migration auto puis lancement).
 
 ---
@@ -167,21 +183,26 @@ Serveur de prod : `163.172.141.178`, utilisateur SSH `root`, dossier `/opt/42_le
 
 Registre d'images : GitHub Container Registry (`ghcr.io/42-league-corp/...`).
 
-### Workflow `.github/workflows/deploy.yml`
+Deux environnements isolés : **prod** (`main` → `:main`, `/opt/42_league`) et **staging**
+(`develop` → `:develop`, `/opt/42_league_staging`). Détail complet de l'architecture dans
+[architecture-ci-cd.md](./architecture-ci-cd.md).
+
+### Workflow `.github/workflows/deploy-prod.yml`
 Déclenché sur :
 - `push` sur `main`.
-- `workflow_dispatch` manuel (input `deploy_only`, défaut `true` = déployer les images `:latest` existantes sans rebuild).
+- `workflow_dispatch` manuel (input `deploy_only`, défaut `true` = déployer les images `:main` existantes sans rebuild).
 
 Jobs :
 1. **`changes`** : `dorny/paths-filter` détermine si `backend` et/ou `frontend` ont changé (`apps/backend/**`, `apps/web/**`, `packages/**`).
 2. **`build-backend`** / **`build-frontend`** (sautés si `deploy_only=true`) :
    - Login GHCR.
-   - `docker/build-push-action` : build + push, tags `:latest` et `:${sha}`.
-   - Le front reçoit `VITE_API_BASE_URL` depuis `secrets.VITE_API_BASE_URL` au build.
+   - **Contributor git stats** : `bash .github/scripts/contributor-stats.sh` calcule les lignes ajoutées/supprimées des founders (groupées par e-mail, `--no-merges`) et l'injecte en build-arg `CONTRIBUTOR_STATS` dans l'image backend (la prod n'a ni `.git` ni binaire `git` ; lu par l'endpoint `/contributors/stats`). Le checkout se fait en `fetch-depth: 0` (historique complet, aussi pour le numéro de build front).
+   - `docker/build-push-action` : build + push, tags `:main`, `:latest` et `:${sha}`. Images de base via le miroir AWS ECR Public (cf. §6).
+   - Le front reçoit `VITE_API_BASE_URL` depuis `secrets.VITE_API_BASE_URL` + `APP_BUILD`/`APP_DATE` au build.
    - Scan de sécurité **Trivy** (`aquasecurity/trivy-action@v0.24.0`), sévérités `CRITICAL,HIGH`, en `continue-on-error`. Résultats SARIF envoyés dans l'onglet Security GitHub.
 3. **`deploy`** :
    - `scp` de `docker-compose.registry.yml`, `Caddyfile`, `Makefile.server` vers `/opt/42_league/` sur le serveur.
-   - `ssh` : login GHCR, renomme `Makefile.server` en `Makefile`, nettoie le disque si `< 5 GB` libres, puis `docker compose -f docker-compose.registry.yml pull` et `up -d --remove-orphans`, puis `docker image prune -af`.
+   - `ssh` : login GHCR, renomme `Makefile.server` en `Makefile`, **valide le `Caddyfile`** dans un conteneur jetable (zéro downtime : un Caddyfile invalide abort le deploy), nettoie le disque, puis `docker compose -f docker-compose.registry.yml pull` et `up -d --remove-orphans`, recrée Caddy, puis `docker image prune -af`.
 
 Secrets GitHub utilisés : `GITHUB_TOKEN` (push GHCR), `SSH_PRIVATE_KEY` (accès serveur), `VITE_API_BASE_URL` (build front).
 
@@ -189,9 +210,10 @@ Secrets GitHub utilisés : `GITHUB_TOKEN` (push GHCR), `SSH_PRIVATE_KEY` (accès
 > paths-filter v4, docker login v4 / build-push v7).
 
 ### Autres workflows
-- `ci.yml` : lint / typecheck / tests (unitaires) sur PR.
+- `deploy-staging.yml` : même pipeline, déclenché sur `push` sur `develop` → images `:develop`/`:dev-<sha>` (front baké avec `https://staging.42league.fr/api`), déployé dans `/opt/42_league_staging`.
+- `force-build-deploy.yml` : rebuild forcé des deux images (sans paths-filter) + redéploiement prod (`workflow_dispatch`).
+- `ci.yml` : lint / typecheck / tests (unitaires + intégration) sur PR.
 - `build.yml` : build/push manuel des images (`workflow_dispatch`, choix backend/frontend/both).
-- `force-build-deploy.yml` : déploiement forcé manuel.
 - `codeql.yml` : analyse statique CodeQL.
 - `dependency-audit.yml` : audit des dépendances.
 - `security-alerts.yml` : alertes de sécurité ponctuelles + résumé.

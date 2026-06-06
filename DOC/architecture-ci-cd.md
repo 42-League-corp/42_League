@@ -128,18 +128,52 @@ donc il tape bien l'API staging et jamais la prod.
 | `force-build-deploy.yml` | manuel | Rebuild forcé + redéploiement prod (dépannage). |
 | `build.yml` | manuel | Rebuild des images sans déployer. |
 
+### Images de base via le miroir AWS ECR Public
+
+Les builds backend et frontend (`deploy-prod.yml`, `deploy-staging.yml`, `force-build-deploy.yml`)
+tirent leurs images de base depuis **`public.ecr.aws/docker/library/...`** (`node:20-alpine`,
+`nginx:alpine`) au lieu du Docker Hub. Le changement vit dans les `FROM` des **Dockerfiles**
+(`apps/backend/Dockerfile`, `apps/web/Dockerfile`), pas dans les workflows eux-mêmes.
+
+**Pourquoi** : `registry-1.docker.io` impose des *rate-limits* anonymes qui faisaient échouer le
+build CI par intermittence (`dial tcp ... i/o timeout` sur `node:20-alpine`). ECR Public est un
+miroir officiel du Docker Hub, sans ces limites → builds CI fiables. C'est transparent pour le reste
+du pipeline (mêmes images, même contenu).
+
+### Le dossier `.github/scripts/` — stats de contributeurs
+
+Récemment ajouté : `.github/scripts/contributor-stats.sh`. Avant chaque build backend, les trois
+workflows de déploiement exécutent ce script (`fetch-depth: 0` requis pour avoir l'historique git
+complet). Il calcule les lignes ajoutées/supprimées/net des **founders** (`throbert`, `abidaux`,
+groupées par e-mail pour fusionner les identités, `--no-merges`, binaires ignorés) et émet un JSON
+sur une ligne. Ce JSON est injecté en build-arg **`CONTRIBUTOR_STATS`** dans l'image backend
+(→ variable d'env), car la prod n'a ni `.git` ni binaire `git` : l'endpoint `/contributors/stats`
+(page « À propos ») lit cette valeur bakée plutôt que de recalculer. Même logique que
+`apps/backend/src/contributor-stats.ts` et l'alias `git lines`.
+
 ### Le garde-fou « zéro downtime » (important)
 
-Avant de redéployer la prod, `deploy-prod.yml` exécute :
+Avant de redéployer la prod, `deploy-prod.yml` valide le Caddyfile dans un conteneur jetable. Le
+hash bcrypt du basic-auth staging est stocké avec des `$$` (échappement requis par l'interpolation
+Compose d'`env_file`) ; on le **dé-échappe `$$` → `$`** avant de le passer pour valider un bcrypt
+correct :
 
 ```bash
+CADDY_HASH=$(grep '^STAGING_BASICAUTH_HASH=' caddy.env | cut -d= -f2- | sed 's/\$\$/$/g')
 docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
-  --env-file caddy.env caddy:alpine caddy validate --config /etc/caddy/Caddyfile
+  -e "STAGING_BASICAUTH_HASH=$CADDY_HASH" \
+  caddy:alpine caddy validate --config /etc/caddy/Caddyfile
 ```
 
 Si le Caddyfile est invalide (ex. : hash basic-auth manquant), `set -e` **abort le
 déploiement** et les conteneurs **actuels continuent de tourner intacts**. La prod
-ne tombe jamais à cause d'une config cassée.
+ne tombe jamais à cause d'une config cassée. Après le `up -d`, Caddy est **recréé**
+(`--force-recreate`) pour garantir qu'il remonte le Caddyfile fraîchement copié (un `reload` lit
+parfois la config interne au conteneur).
+
+> **Seed `:main` au premier cutover.** Un push infra-only ne rebuild pas (paths-filter) ; si l'image
+> `:main` n'existe pas encore, le job `deploy` la crée depuis `:latest` (l'image déjà en prod) via
+> `docker tag` + `push` pour que le `pull` réussisse. Aux déploiements suivants, `:main` existe → sauté.
 
 ### Où sont les secrets
 

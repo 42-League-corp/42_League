@@ -45,17 +45,25 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 ## 3. Deux stratégies d'émission
 
 - **Ciblé** (`emit`) — dans les handlers, pour ce qui ne concerne que certains joueurs :
-  `match:*`, `challenge:*`, `ops:update`, `notification`.
+  `match:*`, `challenge:*`, `ffa:*`, `darts:*`, `ops:update`, `notification`, `tournament:invite`,
+  `tournament:invite_declined`, et les `panel:update` ciblés (gain de coins / résolution de pari).
 - **Global** (`broadcast`) — pour ce qui est visible de tous. Deux mécanismes :
   - explicite dans un handler (ex. `leaderboard:update` après un match confirmé) ;
   - **middleware** `broadcastOnMutation` (`index.ts`) : après toute mutation 2xx sur un préfixe,
     diffuse un événement. Mappings : `/tournaments*` → `tournament:update` ; `/admin/*` → `data:update` ;
-    `/matches*`, `/challenges*`, `/feature-requests*` → `panel:update`.
+    `/matches*`, `/challenges*`, `/feature-requests*`, `/bug-reports*` → `panel:update`.
 
-> **`panel:update`** est un signal **léger dédié au GOD panel**. Les mutations de matchs/défis/idées
+> **`panel:update`** est un signal **léger dédié au GOD panel**. Les mutations de matchs/défis/idées/bugs
 > n'émettent qu'en **ciblé** (aux joueurs concernés) → un admin qui regarde le panel ne les verrait
 > jamais. Ce broadcast comble le trou ; seul le front du panel l'écoute (les autres clients n'ont pas
-> de listener pour ce type → l'event est ignoré, aucun re-fetch inutile).
+> de listener pour ce type → l'event est ignoré, aucun re-fetch inutile). Le même type `panel:update`
+> est aussi **émis en ciblé** (`emit([login], …)`) hors broadcast pour pousser un **rafraîchissement de
+> solde** au gagnant d'un pari, au vainqueur récompensé d'un tournoi et aux parieurs remboursés.
+
+> **Matchmaking : pas de SSE.** Le « match aléatoire » fonctionne par **polling** (`GET /queue/status`
+> toutes les 2,5 s, cf. `useMatchmaking`). Quand deux joueurs sont appariés, le backend crée un duel et
+> émet un `challenge:received` **ciblé** (pour rafraîchir la liste des défis) + une notif `matchmaking` ;
+> il n'existe **pas** d'événement SSE `matchmaking`. L'overlay VERSUS est piloté par le résultat du poll.
 
 ---
 
@@ -69,17 +77,25 @@ L'endpoint `GET /events` (auth via `getStreamLogin` : cookie / Bearer / `?token=
 | `match:confirmed` | ciblé (2 joueurs) | `POST /matches/:id/confirm` | `PlayedMatch` |
 | `match:rejected` | ciblé (déclarant) | `POST /matches/:id/reject` | `{ id, contestReason, rejectedBy }` |
 | `match:cancelled` | ciblé (adversaire / 2 joueurs) | `POST /matches/:id/cancel`, `DELETE /admin/pending-matches/:id` | `{ id, cancelledBy }` |
-| `match:expired` | ciblé (2 joueurs) | `POST /admin/matches/:id/force-cancel` | `{ id }` |
-| `challenge:received` | ciblé (adversaire) | `POST /challenges` | `Challenge` |
+| `match:expired` | ciblé (joueurs, +coéquipiers en 2v2) | `POST /admin/matches/:id/force-cancel` + **purge quotidienne** des matchs en attente trop vieux | `{ id }` |
+| `challenge:received` | ciblé (adversaire ; matchmaking : 2 joueurs) | `POST /challenges`, appariement `/queue/join` | `Challenge` ou `{}` |
 | `challenge:accepted` | ciblé (challenger) | `POST /challenges/:id/accept` | `Challenge` |
 | `challenge:declined` | ciblé (l'autre) | `POST /challenges/:id/decline` | `{ id, status, eloPenalty, declinedBy }` |
 | `challenge:recorded` | ciblé (2 joueurs) | `POST /challenges/:id/record` | `{ pendingId }` |
+| `ffa:pending` | ciblé (autres participants) | `POST /matches/ffa` | `{ id, declarerLogin }` |
+| `ffa:progress` | ciblé (participants restants) | `POST /matches/ffa/:id/confirm` (confirmation partielle) | `{ id, confirmed, total }` |
+| `ffa:confirmed` | ciblé (participants) | `POST /matches/ffa/:id/confirm` (dernière confirmation) | `PlayedFfa` |
+| `ffa:contested` | ciblé (déclarant) | `POST /matches/ffa/:id/contest` | `{ id, contestedBy, claimedPosition, proposedPosition }` |
+| `ffa:cancelled` | ciblé (participants) | `POST /matches/ffa/:id/contest` ou `/cancel` (incl. indispo) | `{ id, cancelledBy?, reason? }` |
+| `darts:pending` / `darts:progress` / `darts:confirmed` / `darts:contested` / `darts:cancelled` | ciblé (participants) | `POST /matches/darts*` — **mêmes sémantiques que `ffa:*`** (modèle fléchettes) | idem `ffa:*` (`PlayedFfa` pour `confirmed`) |
 | `ops:update` | ciblé (owner, target) | `POST /ops`, `DELETE /admin/ops/:id` + timers expiry/cooldown | `Ops` ou `{ reason }` |
+| `tournament:invite` | ciblé (invité) | `POST /tournaments/:id/invite` | `{ tournamentId, inviteId }` |
+| `tournament:invite_declined` | ciblé (organisateur/invitant) | `POST /tournaments/:id/invites/:inviteId/decline` | `{ tournamentId, inviteeLogin }` |
 | `notification` | ciblé (destinataire(s)) | toute création de notif (`notify`/`notifyMany`) | `{}` (signal → re-fetch `/notifications`) |
 | `leaderboard:update` | global | confirm match, dodge/OPS, clôture saison | `{}` |
-| `tournament:update` | global | mutations `/tournaments*` | `{}` |
+| `tournament:update` | global | mutations `/tournaments*` (inclut le changement d'`activeMatchId`) | `{}` |
 | `data:update` | global | mutations `/admin/*` | `{}` |
-| `panel:update` | global (écouté par le GOD panel seul) | mutations `/matches*`, `/challenges*`, `/feature-requests*` | `{}` |
+| `panel:update` | global (GOD panel) **ou** ciblé (solde) | mutations `/matches*`, `/challenges*`, `/feature-requests*`, `/bug-reports*` ; **ciblé** au gain de coins / résolution de pari (gagnant, parieurs, remboursés) | `{}` |
 
 ---
 
@@ -98,13 +114,24 @@ Mapping (domaines = tranches de `LeagueData`) :
 | `match:confirmed` | `matches`, `me` |
 | `challenge:received/accepted/declined` | `challenges` |
 | `challenge:recorded` | `matches`, `challenges` |
+| `ffa:pending` / `ffa:progress` / `ffa:contested` / `ffa:cancelled` | `ffa` |
+| `ffa:confirmed` | `ffa`, `matches`, `me`, `leaderboard` |
+| `darts:pending` / `darts:progress` / `darts:contested` / `darts:cancelled` | `ffa` |
+| `darts:confirmed` | `ffa`, `matches`, `me`, `leaderboard` |
 | `leaderboard:update` | `leaderboard` |
 | `tournament:update` | `tournaments` |
 | `ops:update` | `ops` |
 | `data:update` | **tous** les domaines |
 
-> `notification` n'est pas dans `EVENT_DOMAINS` : il est consommé à part par la **cloche**
-> (`NotificationBell` via `useServerEvents`), qui re-fetch `/notifications` sans toucher `LeagueData`.
+> Le domaine **`ffa`** couvre à la fois le **FFA Smash** et les **manches de fléchettes** (même modèle
+> de données) : son fetcher recharge `pendingFfas`/`playedFfas`/`pendingDarts`/`playedDarts`.
+
+> Plusieurs types **ne sont pas** dans `EVENT_DOMAINS` (donc ignorés par `useLeagueData`) car consommés
+> ailleurs par des `useServerEvents` locaux (cf. §6) : `notification` (cloche), `panel:update`
+> (GOD panel), `tournament:invite` / `tournament:invite_declined` (page détail de tournoi), et les
+> `*:contested` qui pilotent aussi l'overlay « rage ». La **balance de coins** suit le domaine `me`
+> (rafraîchi par les events qui touchent `me` : `match:confirmed`, `ffa:confirmed`, `data:update`…) ;
+> les `panel:update` ciblés « solde » ne déclenchent un re-fetch que sur les vues qui les écoutent.
 
 ### Debounce
 Les domaines sales s'accumulent dans un `Set`. Un timer de **250 ms** se réarme à chaque événement ;
@@ -128,6 +155,14 @@ useServerEvents(onEvent, types, { enabled?, debounceMs = 300 })
 - Le callback est gardé dans une `ref` → changer son identité ne relance pas la connexion ; seuls
   `types`/`enabled` le font (clé stable `types.join(',')`).
 - Reconnexion automatique d'`EventSource` ; cleanup complet au démontage.
+
+### Consommateurs `useServerEvents` (hors `useLeagueData`)
+| Vue / composant | Types écoutés | Effet |
+|---|---|---|
+| `NotificationBell` | `notification` | re-fetch `/notifications` (badge non-lues) |
+| GOD panel (`GODPage`, chaque onglet) | `data:update`, `panel:update` (+ `tournament:update` pour l'onglet tournois) | rechargement silencieux de l'onglet |
+| `TournoiDetailPage` | `tournament:update`, `tournament:invite`, `tournament:invite_declined` | refresh silencieux de la page détail (bracket, invitations, `activeMatchId`) **sans re-blanchir l'écran** ; un changement d'`activeMatchId` arme l'overlay VERSUS |
+| `ContestRageOverlay` (monté dans l'`AppShell`) | `match:rejected`, `ffa:contested`, `darts:contested` | déclenche l'overlay « rage » côté **contesté** (le côté contesteur le déclenche localement depuis `lib/api.ts` via un `CustomEvent`, sans SSE) |
 
 ---
 

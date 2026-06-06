@@ -7,6 +7,8 @@ comprendre n'importe quel aspect « de fond en comble ».
 - [**STACK.md**](./STACK.md) — Stack complète : front, back, base de données, Docker, reverse proxy
   (Caddy), déploiement CI/CD (GitHub Actions, GHCR, Trivy), variables d'environnement, flux d'une
   requête en prod, démarrage local.
+- [**architecture-ci-cd.md**](./architecture-ci-cd.md) — Le pipeline en détail : staging vs prod,
+  les deux environnements, circulation d'une requête, miroir d'images, comment travailler avec Git.
 
 ## Domaine & données
 - [**DOMAIN.md**](./DOMAIN.md) — Logique métier : ELO (formule babyfoot exacte), anti-farming,
@@ -30,15 +32,29 @@ comprendre n'importe quel aspect « de fond en comble ».
 ## Qualité & sécurité
 - [**TESTING.md**](./TESTING.md) — Tests unitaires + intégration HTTP : harness, DB de test, commandes.
 - [**SECURITY.md**](./SECURITY.md) — Dispositif de sécurité applicative & CI/CD : Zod, OAuth 42,
-  rôles, audit log, webhooks Discord, CodeQL, Trivy, npm audit, gating UI.
+  rôles, plafond SSE, body-limit, `toPublicUser` (PII), verrou de marché des paris, audit log,
+  webhooks Discord, CodeQL, Trivy, npm audit, gating UI.
+- [**security-patches.md**](./security-patches.md) — Mémoire de sécurité du projet : threat model et
+  patches numérotés, à compléter à chaque PR introduisant ou corrigeant une surface d'attaque.
+- [**AUDIT_CYBER_2026-06-05.md**](./AUDIT_CYBER_2026-06-05.md) — Audit cyber multi-agents (8 zones,
+  vérification adversariale) : 16 failles confirmées et leurs corrections (DoS SSE, PII, économie, infra).
+- [**CONFORMITE_CGU_API_42.md**](./CONFORMITE_CGU_API_42.md) — Rapport de conformité aux CGU de l'API
+  Intra 42 (version 08.01.2025) : traitement des données, OAuth, RGPD.
 
 ## Historique & post-mortems
 - [**JOURNAL_DE_BORD.md**](./JOURNAL_DE_BORD.md) — Avancement complet du projet de 0 au déploiement,
   par phases : à chaque étape, le problème rencontré, ce qu'on a tenté, ce qui n'a pas marché et
-  pourquoi, comment on a fixé. Reconstruit depuis l'historique git (25–31 mai 2026).
+  pourquoi, comment on a fixé. Reconstruit depuis l'historique git (25 mai – 6 juin 2026) : amorçage,
+  prod, métier, durcissement, communauté, **multi-disciplines, économie & paris, refonte tournois,
+  god/staging & audit**.
 - [**POST_MORTEM_404_BUG.md**](./POST_MORTEM_404_BUG.md) — Analyse d'incident (bug 404).
+
+## Process & notes
+- [**GUIDE-GIT.md**](./GUIDE-GIT.md) / [**WORKFLOW.md**](./WORKFLOW.md) — Modèle Git du projet :
+  `develop` → staging, `main` → prod, déploiement automatique, comment promouvoir en prod.
+- [**NOTES.md**](./NOTES.md) — Bugs/observations repérés en lisant le code (corrigés ou en attente).
 
 ---
 
-> Voir aussi, à la racine du repo : `security-patches.md` (mémoire de sécurité, patches numérotés)
-> et `pending.md` (backlog).
+> Voir aussi, dans `DOC/` : [security-patches.md](./security-patches.md) (mémoire de sécurité) et
+> [pending.md](./pending.md) (backlog).
