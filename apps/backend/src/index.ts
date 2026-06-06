@@ -6175,7 +6175,10 @@ app.post('/admin/tournaments/:id/players', async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
   const login = parsed.data.login;
 
-  const result = await prisma.$transaction(async (tx) => {
+  // Le GOD n'inscrit pas directement : il envoie une invitation EN ATTENTE. Le
+  // joueur doit accepter (ou le GOD « Forcer l'acceptation ») pour devenir
+  // participant. Logique idempotente identique à POST /tournaments/:id/invite.
+  const invite = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
     if (t.status !== 'registration') {
@@ -6191,34 +6194,43 @@ app.post('/admin/tournaments/:id/players', async (c) => {
     if (t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
-    await tx.tournamentEntry.create({ data: { tournamentId: id, login } });
-    const newCount = t.entries.length + 1;
-    if (newCount === t.capacity) {
-      const logins = [...t.entries.map((e) => e.login), login];
-      await launchTournamentMatches(id, t.format, logins);
-      await tx.tournament.update({
-        where: { id },
-        data: { status: 'in_progress', startedAt: new Date() },
+    // Idempotent : invitation déjà en attente → on la renvoie ; après un refus,
+    // on la repasse en pending.
+    const existing = await tx.tournamentInvite.findUnique({
+      where: { tournamentId_inviteeLogin: { tournamentId: id, inviteeLogin: login } },
+    });
+    if (existing) {
+      if (existing.status === 'pending') return existing;
+      return tx.tournamentInvite.update({
+        where: { id: existing.id },
+        data: { status: 'pending', decidedAt: null },
       });
-      void notifyMany(logins, {
-        type: 'tournament',
-        title: `Tournoi "${t.name}" lancé`,
-        body: 'Le bracket est généré — à toi de jouer !',
-        link: `/tournaments/${id}`,
-      });
-      return { autoStarted: true };
     }
-    return { autoStarted: false };
+    return tx.tournamentInvite.create({
+      data: { id: randomUUID(), tournamentId: id, inviterLogin: me, inviteeLogin: login },
+    });
   });
+  const invTournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: { name: true, game: true },
+  });
+  void notify(login, {
+    type: 'tournament_invite',
+    title: `Invitation au tournoi "${invTournament?.name}"`,
+    body: `@${me} t'invite à rejoindre le tournoi`,
+    link: `/tournaments/${id}`,
+    game: invTournament?.game ?? undefined,
+  });
+  emit([login], { type: 'tournament:invite', payload: { tournamentId: id, inviteId: invite.id } });
   broadcast({ type: 'tournament:update', payload: {} });
   void logAdminAction(c, {
     actor: me,
     actorRole: await getUserRole(me),
     action: 'EDIT_MATCH',
     target: login,
-    payload: { forced: 'add-player', tournamentId: id, login, autoStarted: result.autoStarted },
+    payload: { forced: 'invite-player', tournamentId: id, login, inviteId: invite.id },
   });
-  return c.json({ id, added: login, status: result.autoStarted ? 'in_progress' : 'registration' });
+  return c.json({ id, invited: login, inviteId: invite.id, status: 'pending' }, 201);
 });
 
 // Admin : forcer le lancement d'un tournoi en inscription, même incomplet

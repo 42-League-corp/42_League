@@ -1316,7 +1316,7 @@ export const api = {
       { method: 'POST' },
     ),
   adminAddTournamentPlayer: (tournamentId: string, login: string) =>
-    request<{ id: string; added: string; status: string }>(
+    request<{ id: string; invited: string; inviteId: string; status: string }>(
       `/admin/tournaments/${encodeURIComponent(tournamentId)}/players`,
       { method: 'POST', body: JSON.stringify({ login }) },
     ),
