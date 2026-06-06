@@ -1,6 +1,8 @@
 # apps/web/Dockerfile
 # Etape 1 : Build
-FROM node:20-alpine AS builder
+# Images de base via le miroir AWS ECR Public (mirroir officiel Docker Hub) pour
+# eviter les timeouts aleatoires de registry-1.docker.io en CI.
+FROM public.ecr.aws/docker/library/node:20-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN npm install
@@ -22,7 +24,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build -w @42-league/web
 
 # Etape 2 : Production (Nginx)
-FROM nginx:alpine AS runner
+FROM public.ecr.aws/docker/library/nginx:alpine AS runner
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="frontend"
