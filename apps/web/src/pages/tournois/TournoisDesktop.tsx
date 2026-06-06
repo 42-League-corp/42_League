@@ -11,7 +11,8 @@ import {
   type PrizeFormState,
 } from '../../components/tournois/TournamentPrizePicker';
 import { Trophy, Lock, X, Swords, Users, Info } from 'lucide-react';
-import { api, type Tournament } from '../../lib/api';
+import { api, type Tournament, type LeaderboardEntry } from '../../lib/api';
+import { PlayerSearch } from '../defis/shared/PlayerSearch';
 import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
@@ -334,10 +335,14 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const flash = useFlash();
   const navigate = useNavigate();
   const { game } = useGameMode();
+  const { leaderboard, me, locations } = useLeagueData();
   const t = useT();
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState(8);
   const [kind, setKind] = useState<'friendly' | 'official'>(isAdmin ? initialKind : 'friendly');
+  // Mode 1v1 / 2v2 — le 2v2 (doubles) est réservé au babyfoot (cf. backend).
+  const [mode, setMode] = useState<'1v1' | '2v2'>('1v1');
+  const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
   const [imageUrl, setImageUrl] = useState('');
@@ -346,11 +351,16 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
 
   const poolsAllowed = capacity >= POOLS_MIN;
   const effectiveFormat = poolsAllowed ? format : 'elimination';
+  // 2v2 uniquement en babyfoot ; partout ailleurs on force le 1v1.
+  const teamMode = game === 'babyfoot' && mode === '2v2';
+  // Coéquipiers candidats : tous les joueurs sauf moi (le créateur).
+  const partnerCandidates = leaderboard.filter((p) => p.login !== me?.user?.login);
 
   const submit = async () => {
     const n = name.trim();
     if (n.length < 2) { flash.show(t('tournois.flash.nameRequired'), 'error'); return; }
     if (capacity < 6) { flash.show(t('tournois.flash.capacityMin'), 'error'); return; }
+    if (teamMode && !partner) { flash.show(t('tournois.create.needPartner'), 'error'); return; }
     setBusy(true);
     try {
       const img = imageUrl.trim();
@@ -358,6 +368,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
       const prizePayload = kind === 'official' ? buildPrizePayload(prize) : { kind: 'none' as const };
       const tNew = await api.createTournament({
         name: n, capacity, kind, format: effectiveFormat, game,
+        mode: teamMode ? '2v2' : '1v1',
+        partnerLogin: teamMode ? partner!.login : undefined,
         private: visibility === 'private',
         prize: prizePayload,
         ...(img ? { imageUrl: img } : {}),
@@ -410,9 +422,38 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               className="w-full px-3 py-2.5 bg-bg-1 border border-border rounded-xl text-sm focus:border-gold outline-none transition-colors"
             />
           </Field>
+          {/* Mode 1v1 / 2v2 — proposé uniquement en babyfoot (seule discipline à
+              système d'équipes côté backend). */}
+          {game === 'babyfoot' && (
+            <Field label={t('tournois.field.mode')}>
+              <Pills<'1v1' | '2v2'>
+                value={mode}
+                onChange={(m) => { setMode(m); if (m === '1v1') setPartner(null); }}
+                choices={[
+                  { value: '1v1', label: t('tournois.mode.1v1') },
+                  { value: '2v2', label: t('tournois.mode.2v2') },
+                ]}
+              />
+            </Field>
+          )}
+          {/* Coéquipier (2v2) — le créateur engage sa paire dès la création. */}
+          {teamMode && (
+            <Field label={t('tournois.field.partner')}>
+              <PlayerSearch
+                players={partnerCandidates}
+                recentPlayers={[]}
+                opponentCounts={{}}
+                selected={partner}
+                onSelect={setPartner}
+                onClear={() => setPartner(null)}
+                locations={locations}
+                variant="desktop"
+              />
+            </Field>
+          )}
           {/* Capacités en puissances de 2 uniquement → bracket toujours plein,
-              jamais de joueur exempt/seul au 1er tour. */}
-          <Field label={t('tournois.field.players')}>
+              jamais de joueur exempt/seul au 1er tour. En 2v2 = nombre d'équipes. */}
+          <Field label={teamMode ? t('tournois.field.teams') : t('tournois.field.players')}>
             <Pills<string>
               value={String(capacity)}
               onChange={(v) => setCapacity(Number(v))}
