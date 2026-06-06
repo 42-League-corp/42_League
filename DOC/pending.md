@@ -1,5 +1,8 @@
 # À faire
 
+> Backlog court (vue rapide). Pour l'analyse **détaillée et exhaustive** des manques
+> (8 domaines, ~320 entrées avec pistes d'implémentation), voir [`manques/`](./manques/README.md).
+
 ## Backend / logique
 - [x] **Défis (Challenges)** : entité + endpoints (create/list/accept/decline/record). Le record crée un PendingMatch existant
 - [x] **Matchmaking** : file d'attente « match aléatoire » + pairing backend (`matchmaking_queue`), overlay VERSUS

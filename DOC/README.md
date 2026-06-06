@@ -49,6 +49,14 @@ comprendre n'importe quel aspect « de fond en comble ».
   god/staging & audit**.
 - [**POST_MORTEM_404_BUG.md**](./POST_MORTEM_404_BUG.md) — Analyse d'incident (bug 404).
 
+## Manques & roadmap
+- [**manques/**](./manques/README.md) — **Gap-analysis exhaustive** : tout ce qui n'est pas
+  encore écrit, incomplet, buggé ou améliorable, sur 8 domaines (~6 400 lignes, ~320 manques),
+  chacun au gabarit *État → Manque → Fichiers → Piste → Effort → Priorité*. L'index
+  ([manques/README.md](./manques/README.md)) synthétise les **priorités transverses**
+  (bugs, sécurité/RGPD, équilibrage, dette, tests). Va plus loin que `pending.md`.
+- [**pending.md**](./pending.md) — Backlog historique court (coché/à faire) — vue rapide.
+
 ## Process & notes
 - [**GUIDE-GIT.md**](./GUIDE-GIT.md) / [**WORKFLOW.md**](./WORKFLOW.md) — Modèle Git du projet :
   `develop` → staging, `main` → prod, déploiement automatique, comment promouvoir en prod.
@@ -56,5 +64,5 @@ comprendre n'importe quel aspect « de fond en comble ».
 
 ---
 
-> Voir aussi, dans `DOC/` : [security-patches.md](./security-patches.md) (mémoire de sécurité) et
-> [pending.md](./pending.md) (backlog).
+> Voir aussi, dans `DOC/` : [security-patches.md](./security-patches.md) (mémoire de sécurité),
+> [pending.md](./pending.md) (backlog) et [manques/](./manques/README.md) (gap-analysis détaillée).
