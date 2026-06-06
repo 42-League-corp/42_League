@@ -506,6 +506,11 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
   const sub = t(meta.subKey);
 
   if (!expanded) {
+    // NB : `transition-colors` (et NON `transition-all`) — la carte porte le morph
+    // `layoutId`, donc Framer Motion pilote son `transform` à chaque frame. Un
+    // `transition: all` ferait re-transitionner ce transform par le navigateur en
+    // parallèle du ressort → conflit visible (saccades / à-coups). On limite donc la
+    // transition CSS à la couleur de bordure (seul état hover de la carte).
     return (
       <motion.button
         layoutId={`hero-cta-${kind}`}
@@ -517,8 +522,7 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
         className={`shine group relative overflow-hidden rounded-2xl border-2 ${meta.border}
           bg-gradient-to-br from-bg-2/80 to-bg-1/90
           flex items-center gap-5 px-7 py-6
-          transition-all duration-300 text-left
-          active:scale-[0.98]
+          transition-colors duration-300 text-left
           ${kind === 'ffa' || kind === 'darts' ? 'md:col-span-2 md:w-[calc(50%-0.5rem)] md:mx-auto' : ''}`}
         style={{ boxShadow: meta.glow }}
       >
