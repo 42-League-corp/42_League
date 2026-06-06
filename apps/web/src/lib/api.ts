@@ -762,11 +762,15 @@ export interface QuestsResponse {
 export type BetStatus = 'open' | 'won' | 'lost' | 'refunded';
 export interface MyBet {
   id: string;
-  targetType: 'tournament' | 'match';
-  tournamentId: string;
+  targetType: 'tournament' | 'match' | 'ops';
+  tournamentId: string | null;
   tournamentName: string | null;
   game: Game | null;
   matchId: string | null;
+  /** Duel d'ops parié (targetType='ops'). */
+  opsId: string | null;
+  opsOwnerLogin: string | null;
+  opsTargetLogin: string | null;
   choiceLogin: string;
   stake: number;
   status: BetStatus;
@@ -781,15 +785,31 @@ export interface OpenBetTournament {
   status: string;
   entrants: string[];
 }
+/** Duel d'ops en cours, ouvert aux paris (hunter ⚔️ cible). */
+export interface OpenOpsDuel {
+  id: string;
+  ownerLogin: string;
+  targetLogin: string;
+  ownerImageUrl: string | null;
+  targetImageUrl: string | null;
+  expiresAt: string;
+}
 export interface BetsResponse {
   coins: number;
   myBets: MyBet[];
   openTournaments: OpenBetTournament[];
+  openOpsDuels: OpenOpsDuel[];
 }
 /** On ne parie plus que sur le vainqueur d'un tournoi (plus de paris par match). */
 export interface PlaceBetInput {
   targetType: 'tournament';
   tournamentId: string;
+  choiceLogin: string;
+  stake: number;
+}
+/** Pari sur l'issue d'un duel d'ops : pronostic = hunter ou cible. */
+export interface PlaceOpsBetInput {
+  opsId: string;
   choiceLogin: string;
   stake: number;
 }
@@ -1517,6 +1537,11 @@ export const api = {
   bets: () => request<BetsResponse>('/bets'),
   placeBet: (input: PlaceBetInput) =>
     request<{ bet: { id: string }; coins: number }>('/bets', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  placeOpsBet: (input: PlaceOpsBetInput) =>
+    request<{ bet: { id: string }; coins: number }>('/bets/ops', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

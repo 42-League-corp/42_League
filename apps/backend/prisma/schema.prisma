@@ -233,6 +233,7 @@ model Ops {
 
   owner  User @relation("opsOwner", fields: [ownerLogin], references: [login])
   target User @relation("opsTarget", fields: [targetLogin], references: [login])
+  bets   Bet[] @relation("opsBets")
 
   @@index([ownerLogin, expiresAt])
   @@index([targetLogin, expiresAt])
@@ -722,15 +723,18 @@ model WeeklyQuestProgress {
 //
 // Pari à cote fixe ×2 : la mise est débitée à la prise (jamais de solde négatif) ;
 // au règlement, un pari gagnant crédite 2× la mise (gain net = mise), un perdant
-// ne crédite rien. Cible = vainqueur d'un tournoi ('tournament') OU d'un match de
-// bracket précis ('match'). Le règlement a lieu à la confirmation du match de
-// tournoi / de la finale ; l'annulation d'un tournoi rembourse les paris ouverts.
+// ne crédite rien. Cible = vainqueur d'un tournoi ('tournament'), d'un match de
+// bracket précis ('match') OU d'un duel d'OPS ('ops' : vainqueur du duel hunter↔cible).
+// Le règlement a lieu à la confirmation du match de tournoi / de la finale, ou à
+// l'expiration de l'ops (qui gagne le plus de matchs ; égalité/aucun match →
+// remboursement) ; l'annulation d'un tournoi/ops rembourse les paris ouverts.
 model Bet {
   id           String    @id @default(uuid())
   bettorLogin  String    @map("bettor_login")
-  targetType   String    @map("target_type") // 'tournament' | 'match'
-  tournamentId String    @map("tournament_id") // toujours renseigné (pari match → son tournoi)
+  targetType   String    @map("target_type") // 'tournament' | 'match' | 'ops'
+  tournamentId String?   @map("tournament_id") // renseigné pour 'tournament'/'match' ; null pour 'ops'
   matchId      String?   @map("match_id") // TournamentMatch.id quand targetType='match'
+  opsId        String?   @map("ops_id") // Ops.id quand targetType='ops'
   choiceLogin  String    @map("choice_login") // vainqueur pronostiqué
   stake        Int // mise débitée à la prise
   status       String    @default("open") // 'open' | 'won' | 'lost' | 'refunded'
@@ -738,12 +742,14 @@ model Bet {
   createdAt    DateTime  @default(now()) @map("created_at")
   settledAt    DateTime? @map("settled_at")
 
-  bettor     User       @relation("userBets", fields: [bettorLogin], references: [login], onDelete: Cascade)
-  tournament Tournament @relation("tournamentBets", fields: [tournamentId], references: [id], onDelete: Cascade)
+  bettor     User        @relation("userBets", fields: [bettorLogin], references: [login], onDelete: Cascade)
+  tournament Tournament? @relation("tournamentBets", fields: [tournamentId], references: [id], onDelete: Cascade)
+  ops        Ops?        @relation("opsBets", fields: [opsId], references: [id], onDelete: Cascade)
 
   @@index([bettorLogin])
   @@index([tournamentId, status])
   @@index([matchId, status])
+  @@index([opsId, status])
   @@map("bets")
 }
 

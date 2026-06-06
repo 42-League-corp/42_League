@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronRight, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
@@ -29,7 +29,12 @@ export function ProfilMobile() {
   const { signOut } = useAuth();
   const t = useT();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<ProfilTab>('profile');
+  // Deep-link `?tab=bets` (ex. depuis une notif « parie sur ce duel »).
+  const [params] = useSearchParams();
+  const queryTab = params.get('tab');
+  const initialTab: ProfilTab =
+    queryTab === 'bets' || queryTab === 'quests' ? queryTab : 'profile';
+  const [tab, setTab] = useState<ProfilTab>(initialTab);
 
   if (!me?.user) {
     return (

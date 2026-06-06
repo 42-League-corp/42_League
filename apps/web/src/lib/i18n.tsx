@@ -75,7 +75,7 @@ const fr: Dict = {
   'shop.earn.quests.desc': '4 quêtes renouvelées chaque lundi. À réclamer dans l’onglet Quêtes de ton profil.',
   'shop.earn.bets.title': 'Paris',
   'shop.earn.bets.unit': 'ta mise',
-  'shop.earn.bets.desc': 'Mise sur le vainqueur des tournois en cours, avant leur premier résultat. Pronostic gagnant = mise doublée. Onglet Parier.',
+  'shop.earn.bets.desc': "Mise sur le vainqueur d'un tournoi en cours OU d'un duel d'ops, avant le premier résultat. Pronostic gagnant = mise doublée. Onglet Paris du profil.",
 
   'panel.defis.title': 'Défis',
   'panel.defis.sub': 'Lance un duel — sois honoré.',
@@ -279,7 +279,7 @@ const en: Dict = {
   'shop.earn.quests.desc': '4 quests refreshed every Monday. Claim them in the Quests tab of your profile.',
   'shop.earn.bets.title': 'Bets',
   'shop.earn.bets.unit': 'your stake',
-  'shop.earn.bets.desc': "Bet on the winner of ongoing tournaments, before their first result. A winning pick doubles your stake. Bet tab.",
+  'shop.earn.bets.desc': "Bet on the winner of an ongoing tournament OR an ops duel, before the first result. A winning pick doubles your stake. Bets tab in your profile.",
 
   'panel.defis.title': 'Challenges',
   'panel.defis.sub': 'Throw down — earn glory.',
@@ -479,7 +479,7 @@ const es: Dict = {
   'shop.earn.quests.desc': '4 misiones que se renuevan cada lunes. Recláma­las en la pestaña Misiones de tu perfil.',
   'shop.earn.bets.title': 'Apuestas',
   'shop.earn.bets.unit': 'tu apuesta',
-  'shop.earn.bets.desc': 'Apuesta por el ganador de los torneos en curso, antes de su primer resultado. Un pronóstico ganador duplica tu apuesta. Pestaña Apostar.',
+  'shop.earn.bets.desc': 'Apuesta por el ganador de un torneo en curso O de un duelo de ops, antes del primer resultado. Un pronóstico ganador duplica tu apuesta. Pestaña Apuestas del perfil.',
 
   'panel.defis.title': 'Desafíos',
   'panel.defis.sub': 'Lanza un duelo — gánate la gloria.',

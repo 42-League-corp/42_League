@@ -3549,6 +3549,14 @@ app.delete('/admin/users/:login', async (c) => {
     await tx.challenge.deleteMany({
       where: { OR: [{ challengerLogin: login }, { opponentLogin: login }] },
     });
+    // Rembourse les paris ouverts sur les duels d'ops du joueur avant le cascade.
+    const userOps = await tx.ops.findMany({
+      where: { OR: [{ ownerLogin: login }, { targetLogin: login }] },
+      select: { id: true },
+    });
+    if (userOps.length) {
+      await refundBetsTx(tx, { targetType: 'ops', opsId: { in: userOps.map((o) => o.id) } });
+    }
     await tx.ops.deleteMany({
       where: { OR: [{ ownerLogin: login }, { targetLogin: login }] },
     });
@@ -3603,16 +3611,17 @@ app.post('/admin/reset-database', async (c) => {
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    // Rembourse toutes les mises encore ouvertes AVANT d'effacer ops/tournois :
+    // le reset ne touche pas `leagueCoins`, donc une mise non rendue serait
+    // définitivement perdue du solde des joueurs conservés. À faire avant les
+    // deleteMany ci-dessous, sinon le cascade efface les paris avant le rendu.
+    await refundBetsTx(tx, {});
     // 1. Effacer tout l'historique de jeu.
     await tx.pendingMatch.deleteMany({});
     await tx.playedMatch.deleteMany({});
     await tx.challenge.deleteMany({});
     await tx.ops.deleteMany({});
     await tx.rejectedMatch.deleteMany({});
-    // Rembourse toutes les mises encore ouvertes avant d'effacer les tournois :
-    // le reset ne touche pas `leagueCoins`, donc une mise non rendue serait
-    // définitivement perdue du solde des joueurs conservés.
-    await refundBetsTx(tx, {});
     await tx.tournament.deleteMany({}); // cascade → entries + tournament_matches
 
     // 2. Retirer définitivement les comptes désactivés / supprimés (joueurs partis),
@@ -5526,9 +5535,11 @@ const OPS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 function scheduleOpsTimers(ownerLogin: string, targetLogin: string, expiresAt: Date): void {
   const expiryDelay = expiresAt.getTime() - Date.now() + 1000;
   if (expiryDelay > 0) {
-    // À l'expiration : `current` (auteur) et `targetedBy` (cible) repassent à null.
+    // À l'expiration : `current` (auteur) et `targetedBy` (cible) repassent à null,
+    // et les paris ouverts sur ce duel sont soldés (vainqueur = plus de matchs gagnés).
     setTimeout(() => {
       emit([ownerLogin, targetLogin], { type: 'ops:update', payload: { reason: 'expired' } });
+      void sweepExpiredOpsBets();
     }, expiryDelay);
   }
   const cooldownDelay = expiresAt.getTime() + OPS_COOLDOWN_MS - Date.now() + 1000;
@@ -5662,12 +5673,19 @@ app.post('/ops', async (c) => {
     body: 'Un OPS te vise — tes 3 prochains défis face à lui sont forcés.',
     link: '/profile',
   });
-  // Abonnés du traqueur notifiés qu'il a lancé un OPS.
+  // Abonnés du traqueur ET de la cible (pref notifyOps) prévenus que le duel est
+  // ouvert aux paris — chacun est invité à parier sur l'issue.
   void notifyFollowers(me, 'notifyOps', {
     type: 'follow_ops',
     title: `@${me} a lancé un OPS`,
-    body: `Cible : @${target}`,
-    link: `/player/${encodeURIComponent(me)}`,
+    body: `Cible : @${target} — parie sur l'issue du duel !`,
+    link: '/profile?tab=bets',
+  });
+  void notifyFollowers(target, 'notifyOps', {
+    type: 'follow_ops',
+    title: `@${target} est pris pour cible`,
+    body: `Traqueur : @${me} — parie sur l'issue du duel !`,
+    link: '/profile?tab=bets',
   });
   // Programme l'émission de `ops:update` à l'expiration + fin de cooldown.
   scheduleOpsTimers(me, target, ops.expiresAt);
@@ -6105,8 +6123,15 @@ app.delete('/admin/ops/:id', async (c) => {
   const { id } = c.req.param();
   const row = await prisma.ops.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'ops not found' });
-  await prisma.ops.delete({ where: { id } });
+  // Rembourse les paris encore ouverts AVANT le delete (le cascade les effacerait
+  // sinon, mise perdue), puis supprime l'ops.
+  const refunded = await prisma.$transaction(async (tx) => {
+    const r = await refundBetsTx(tx, { targetType: 'ops', opsId: id });
+    await tx.ops.delete({ where: { id } });
+    return r;
+  });
   emit([row.ownerLogin, row.targetLogin], { type: 'ops:update', payload: {} });
+  if (refunded.length) emit([...new Set(refunded)], { type: 'panel:update', payload: {} });
   void logAdminAction(c, {
     actor: me, actorRole: await getUserRole(me),
     action: 'DELETE_OPS',
@@ -7684,6 +7709,90 @@ function refundOpenBetsForTournamentTx(tx: Prisma.TransactionClient, tournamentI
   return refundBetsTx(tx, { tournamentId });
 }
 
+// ─── Paris : duels d'OPS ─────────────────────────────────────────────────────
+
+/** Forme minimale d'un ops nécessaire pour départager un duel. */
+type OpsDuelInfo = {
+  id: string;
+  ownerLogin: string;
+  targetLogin: string;
+  declaredAt: Date;
+  expiresAt: Date;
+};
+
+/**
+ * Vainqueur d'un duel d'OPS = qui a gagné le PLUS de matchs classés 1v1 entre le
+ * hunter (owner) et sa cible (target) pendant la fenêtre de l'ops
+ * [declaredAt, expiresAt]. Renvoie le login gagnant, ou `null` en cas d'égalité
+ * ou si aucun match n'a été joué (→ remboursement des paris).
+ */
+async function opsDuelWinner(
+  tx: Prisma.TransactionClient,
+  ops: OpsDuelInfo,
+): Promise<string | null> {
+  const matches = await tx.playedMatch.findMany({
+    where: {
+      playedAt: { gte: ops.declaredAt, lte: ops.expiresAt },
+      OR: [
+        { playerALogin: ops.ownerLogin, playerBLogin: ops.targetLogin },
+        { playerALogin: ops.targetLogin, playerBLogin: ops.ownerLogin },
+      ],
+    },
+    select: { playerALogin: true, playerBLogin: true, winner: true, mode: true },
+  });
+  let ownerWins = 0;
+  let targetWins = 0;
+  for (const m of matches) {
+    if (m.mode === '2v2') continue; // OPS = mécanique strictement 1v1
+    const winnerLogin = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
+    if (winnerLogin === ops.ownerLogin) ownerWins += 1;
+    else if (winnerLogin === ops.targetLogin) targetWins += 1;
+  }
+  if (ownerWins === targetWins) return null;
+  return ownerWins > targetWins ? ops.ownerLogin : ops.targetLogin;
+}
+
+/**
+ * Règle les paris ouverts d'un duel d'ops : crédite ×2 les bons pronostics si un
+ * vainqueur se dégage, rembourse tout le monde sinon (égalité / aucun match).
+ * Renvoie les logins crédités (pour un emit après commit).
+ */
+async function settleOpsDuelBetsTx(
+  tx: Prisma.TransactionClient,
+  ops: OpsDuelInfo,
+): Promise<string[]> {
+  const open = await tx.bet.findMany({
+    where: { targetType: 'ops', opsId: ops.id, status: 'open' },
+    select: { id: true },
+  });
+  if (open.length === 0) return [];
+  const winner = await opsDuelWinner(tx, ops);
+  if (winner === null) {
+    return refundBetsTx(tx, { targetType: 'ops', opsId: ops.id });
+  }
+  return settleBetsTx(tx, { targetType: 'ops', opsId: ops.id }, winner);
+}
+
+/**
+ * Règlement paresseux : repère les ops EXPIRÉS qui portent encore des paris
+ * ouverts et les solde (robuste aux redémarrages — les timers d'expiration sont
+ * perdus à chaque relance). Appelé au démarrage, à l'expiration d'un ops et à
+ * chaque consultation de la page Paris.
+ */
+async function sweepExpiredOpsBets(): Promise<void> {
+  const now = new Date();
+  const due = await prisma.ops.findMany({
+    where: { expiresAt: { lte: now }, bets: { some: { status: 'open' } } },
+  });
+  if (due.length === 0) return;
+  const credited = await prisma.$transaction(async (tx) => {
+    const acc: string[] = [];
+    for (const ops of due) acc.push(...(await settleOpsDuelBetsTx(tx, ops)));
+    return acc;
+  });
+  if (credited.length) emit([...new Set(credited)], { type: 'panel:update', payload: {} });
+}
+
 /**
  * Rembourse les paris ouverts d'un ENSEMBLE de tournois — à appeler avant une
  * suppression en masse (purge d'un compte, suppression d'un faux joueur) qui
@@ -7763,12 +7872,19 @@ app.post('/quests/:id/claim', async (c) => {
 
 app.get('/bets', async (c) => {
   const me = await getCurrentLogin(c);
-  const [user, myBetsRaw, openTours] = await Promise.all([
+  // Solde d'abord les duels d'ops expirés (robuste aux redémarrages), pour que
+  // l'historique « Mes paris » reflète immédiatement les gains/remboursements.
+  await sweepExpiredOpsBets();
+  const now = new Date();
+  const [user, myBetsRaw, openTours, activeOps] = await Promise.all([
     prisma.user.findUnique({ where: { login: me }, select: { leagueCoins: true } }),
     prisma.bet.findMany({
       where: { bettorLogin: me },
       orderBy: { createdAt: 'desc' },
-      include: { tournament: { select: { name: true, game: true } } },
+      include: {
+        tournament: { select: { name: true, game: true } },
+        ops: { select: { ownerLogin: true, targetLogin: true } },
+      },
     }),
     // Tournois ouverts aux paris : UNIQUEMENT en cours (plus pendant l'inscription),
     // vainqueur inconnu, et AVANT le premier résultat — dès qu'un match est confirmé
@@ -7783,7 +7899,47 @@ app.get('/bets', async (c) => {
       orderBy: { createdAt: 'desc' },
       include: { entries: { select: { login: true } } },
     }),
+    // Duels d'ops en cours auxquels JE ne participe pas (ni hunter ni cible).
+    prisma.ops.findMany({
+      where: { expiresAt: { gt: now }, ownerLogin: { not: me }, targetLogin: { not: me } },
+      orderBy: { declaredAt: 'desc' },
+      include: {
+        owner: { select: { login: true, imageUrl: true } },
+        target: { select: { login: true, imageUrl: true } },
+      },
+    }),
   ]);
+  // Marché d'un duel ouvert tant qu'AUCUN match n'a été joué entre les deux
+  // depuis la déclaration (comme les tournois, on ne parie qu'au tout début), et
+  // si je n'ai pas déjà un pari ouvert dessus.
+  const myOpenOpsIds = new Set(
+    myBetsRaw.filter((b) => b.targetType === 'ops' && b.status === 'open').map((b) => b.opsId),
+  );
+  const openOpsDuels = (
+    await Promise.all(
+      activeOps.map(async (o) => {
+        if (myOpenOpsIds.has(o.id)) return null;
+        const played = await prisma.playedMatch.count({
+          where: {
+            playedAt: { gte: o.declaredAt },
+            OR: [
+              { playerALogin: o.ownerLogin, playerBLogin: o.targetLogin },
+              { playerALogin: o.targetLogin, playerBLogin: o.ownerLogin },
+            ],
+          },
+        });
+        if (played > 0) return null; // le duel a commencé → marché fermé
+        return {
+          id: o.id,
+          ownerLogin: o.ownerLogin,
+          targetLogin: o.targetLogin,
+          ownerImageUrl: o.owner.imageUrl,
+          targetImageUrl: o.target.imageUrl,
+          expiresAt: o.expiresAt,
+        };
+      }),
+    )
+  ).filter((x): x is NonNullable<typeof x> => x !== null);
   return c.json({
     coins: user?.leagueCoins ?? 0,
     myBets: myBetsRaw.map((b) => ({
@@ -7793,6 +7949,9 @@ app.get('/bets', async (c) => {
       tournamentName: b.tournament?.name ?? null,
       game: b.tournament?.game ?? null,
       matchId: b.matchId,
+      opsId: b.opsId,
+      opsOwnerLogin: b.ops?.ownerLogin ?? null,
+      opsTargetLogin: b.ops?.targetLogin ?? null,
       choiceLogin: b.choiceLogin,
       stake: b.stake,
       status: b.status,
@@ -7807,6 +7966,7 @@ app.get('/bets', async (c) => {
       status: t.status,
       entrants: t.entries.map((e) => e.login),
     })),
+    openOpsDuels,
   });
 });
 
@@ -7874,6 +8034,77 @@ app.post('/bets', async (c) => {
         targetType,
         tournamentId,
         matchId: null,
+        choiceLogin,
+        stake,
+      },
+    });
+    return { bet, balance: u.leagueCoins - stake };
+  });
+  emit([me], { type: 'panel:update', payload: {} });
+  return c.json({ bet: result.bet, coins: result.balance }, 201);
+});
+
+// Pari sur l'issue d'un duel d'OPS : on pronostique le hunter (owner) OU la cible
+// (target). Vainqueur du duel = qui gagne le plus de matchs pendant l'ops.
+const PlaceOpsBetSchema = z.object({
+  opsId: z.string().min(1),
+  choiceLogin: z.string().min(1),
+  stake: z.number().int().positive(),
+});
+
+app.post('/bets/ops', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = PlaceOpsBetSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { opsId, choiceLogin, stake } = parsed.data;
+  const result = await prisma.$transaction(async (tx) => {
+    const ops = await tx.ops.findUnique({ where: { id: opsId } });
+    if (!ops) throw new HTTPException(404, { message: 'duel introuvable' });
+    // Marché ouvert uniquement tant que l'ops est actif.
+    if (ops.expiresAt <= new Date()) {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le duel est terminé' });
+    }
+    // Les deux protagonistes ne peuvent pas parier sur leur propre duel.
+    if (me === ops.ownerLogin || me === ops.targetLogin) {
+      throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre duel' });
+    }
+    // Le pronostic doit être l'un des deux duellistes.
+    if (choiceLogin !== ops.ownerLogin && choiceLogin !== ops.targetLogin) {
+      throw new HTTPException(400, { message: 'le pronostic doit être un des deux duellistes' });
+    }
+    // On ne parie qu'AU DÉBUT : dès qu'un match a été joué entre eux, marché fermé.
+    const played = await tx.playedMatch.count({
+      where: {
+        playedAt: { gte: ops.declaredAt },
+        OR: [
+          { playerALogin: ops.ownerLogin, playerBLogin: ops.targetLogin },
+          { playerALogin: ops.targetLogin, playerBLogin: ops.ownerLogin },
+        ],
+      },
+    });
+    if (played > 0) {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le duel a déjà commencé' });
+    }
+    // Un seul pari ouvert par duel.
+    const dup = await tx.bet.findFirst({
+      where: { bettorLogin: me, status: 'open', opsId },
+    });
+    if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur ce duel' });
+
+    const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
+    if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+    if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
+    await grantCoinsTx(tx, me, -stake);
+
+    const bet = await tx.bet.create({
+      data: {
+        id: randomUUID(),
+        bettorLogin: me,
+        targetType: 'ops',
+        tournamentId: null,
+        matchId: null,
+        opsId,
         choiceLogin,
         stake,
       },
@@ -8008,6 +8239,10 @@ if (process.env.NODE_ENV !== 'test') {
     }
     rescheduleOpsTimers().catch((err) => {
       console.error('failed to reschedule ops timers', err);
+    });
+    // Solde les paris d'ops expirés pendant l'arrêt du process (timers perdus).
+    sweepExpiredOpsBets().catch((err) => {
+      console.error('failed to sweep expired ops bets', err);
     });
     const runDailyPurges = () => {
       purgeOldAuditLogs().catch((err) => {
