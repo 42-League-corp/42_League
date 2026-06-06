@@ -68,14 +68,28 @@ export const GRANDMASTER: RankTier = {
 };
 
 /**
+ * ELO minimal pour prétendre au Grand Master : il faut DÉJÀ être Diamant.
+ * Le top {@link GRANDMASTER_TOP_N} ne suffit pas si l'on n'a pas atteint ce palier.
+ */
+export const GRANDMASTER_MIN_ELO =
+  RANK_TIERS.find((t) => t.key === 'diamant')?.min ?? 1400;
+
+/**
  * Palier d'un joueur en tenant compte de sa POSITION dans le classement de sa
- * discipline : top {@link GRANDMASTER_TOP_N} → Grand Master, sinon palier ELO classique.
+ * discipline : top {@link GRANDMASTER_TOP_N} **ET** déjà Diamant
+ * (ELO >= {@link GRANDMASTER_MIN_ELO}) → Grand Master, sinon palier ELO classique.
  *
  * @param elo  score ELO du joueur dans la discipline.
  * @param rank position (1 = 1er) ; null/0/absent = non classé → palier ELO seul.
  */
 export function rankTierForRank(elo: number, rank?: number | null): RankTier {
-  if (rank != null && rank >= 1 && rank <= GRANDMASTER_TOP_N) return GRANDMASTER;
+  if (
+    rank != null &&
+    rank >= 1 &&
+    rank <= GRANDMASTER_TOP_N &&
+    elo >= GRANDMASTER_MIN_ELO
+  )
+    return GRANDMASTER;
   return rankTier(elo);
 }
 

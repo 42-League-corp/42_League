@@ -2,7 +2,15 @@ import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Gem, Shield, Crown } from 'lucide-react';
-import { RANK_TIERS, rankTier, GRANDMASTER, GRANDMASTER_TOP_N, type RankTier } from '@42-league/shared';
+import {
+  RANK_TIERS,
+  rankTier,
+  rankTierForRank,
+  GRANDMASTER,
+  GRANDMASTER_TOP_N,
+  GRANDMASTER_MIN_ELO,
+  type RankTier,
+} from '@42-league/shared';
 import { Avatar } from '../components/Avatar';
 import { useLeagueData } from '../hooks/useLeagueData';
 import type { LeaderboardEntry } from '../lib/api';
@@ -21,6 +29,9 @@ const ELO_SPAN_PCT = 85;
 const CLUSTER_RADIUS = 18;
 /** Avatars empilés (superposés) avant le badge "+N". Le reste se lit au survol. */
 const MAX_PER_COL = 3;
+
+/** Couleur du palier Diamant (prérequis Grand Master), pour le texte d'info. */
+const DIAMANT_COLOR = RANK_TIERS.find((t) => t.key === 'diamant')?.color ?? '#5fd0e0';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -88,12 +99,15 @@ export function GradesPage() {
 
   const champion = leaderboard.find((e) => e.rank === 1) ?? null;
 
-  // Grand Master : grade POSITIONNEL (top N de la discipline), superposé au barème ELO.
-  const gmCount = Math.min(GRANDMASTER_TOP_N, leaderboard.length);
+  // Grand Master : grade POSITIONNEL (top N de la discipline) superposé au barème
+  // ELO, MAIS réservé aux joueurs déjà Diamant — on compte donc les vrais éligibles.
+  const gmCount = leaderboard.filter(
+    (e) => rankTierForRank(e.elo, e.rank).key === 'grandmaster',
+  ).length;
 
   // Mon standing.
   const myEntry = leaderboard.find((e) => e.login === myLogin) ?? null;
-  const isGm = !!myEntry && myEntry.rank >= 1 && myEntry.rank <= GRANDMASTER_TOP_N;
+  const isGm = !!myEntry && rankTierForRank(myEntry.elo, myEntry.rank).key === 'grandmaster';
   const myTier = myEntry ? rankTier(myEntry.elo) : null;
   const nextTier = myEntry ? RANK_TIERS.find((t) => t.min > myEntry.elo) ?? null : null;
   const ptsToNext = nextTier && myEntry ? nextTier.min - myEntry.elo : null;
@@ -280,12 +294,22 @@ export function GradesPage() {
         </header>
 
         {/* Règle de fin de saison : reset au plancher du grade, sauf Étain → Bronze. */}
-        <p className="relative text-[11px] leading-relaxed text-muted-2 mb-4 -mt-1">
+        <p className="relative text-[11px] leading-relaxed text-muted-2 mb-2 -mt-1">
           En fin de saison, chacun est remis au plancher de son grade. Les{' '}
           <span className="font-extrabold" style={{ color: RANK_TIERS[0]?.color ?? '#9aa4ad' }}>Étain</span>{' '}
           sont remontés en{' '}
           <span className="font-extrabold" style={{ color: RANK_TIERS[1]?.color ?? '#cd7f32' }}>Bronze</span>{' '}
           — personne ne reste coincé sous le Bronze d'une saison à l'autre.
+        </p>
+
+        {/* Règle Grand Master : top N de la discipline ET déjà Diamant. */}
+        <p className="relative text-[11px] leading-relaxed text-muted-2 mb-4">
+          Le grade{' '}
+          <span className="font-extrabold" style={{ color: GRANDMASTER.color }}>Grand Master</span>{' '}
+          récompense le top {GRANDMASTER_TOP_N} de chaque mode — mais il faut{' '}
+          <span className="font-extrabold">déjà être{' '}
+            <span style={{ color: DIAMANT_COLOR }}>Diamant</span></span>{' '}
+          ({GRANDMASTER_MIN_ELO} ELO) pour y prétendre.
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -537,6 +561,12 @@ function TierCard({
       <div className="font-mono text-[10px] font-bold text-muted-2 tabular-nums mt-0.5">
         {tier.key === 'grandmaster' ? `Top ${GRANDMASTER_TOP_N}` : max ? `${tier.min} – ${max - 1}` : `${tier.min} +`}
       </div>
+      {/* Prérequis Grand Master : être déjà Diamant. */}
+      {tier.key === 'grandmaster' && (
+        <div className="text-[8.5px] font-bold uppercase tracking-wider mt-0.5" style={{ color: DIAMANT_COLOR }}>
+          Diamant requis
+        </div>
+      )}
       <div className="mt-2 pt-2 border-t border-border/50">
         <span className="font-display text-lg font-black tabular-nums text-text-strong leading-none">{count}</span>
         <span className="text-[9px] text-muted uppercase tracking-wider font-extrabold ml-1">
