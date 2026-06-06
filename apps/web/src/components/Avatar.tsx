@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAvatarRingColor } from '../hooks/useAvatarRing';
 
 interface AvatarProps {
   login: string;
@@ -7,6 +8,11 @@ interface AvatarProps {
   className?: string;
   /** Grise la photo (saisons passées : classement figé, plus "live"). */
   grayscale?: boolean;
+  /**
+   * Désactive l'anneau de grade (couleur du palier du joueur dans le mode
+   * courant). Par défaut l'anneau est affiché dès qu'un grade est connu.
+   */
+  noRing?: boolean;
   /**
    * Ajoute un reflet diagonal sur le placeholder (sans photo). Le disque uni
    * tourne déjà en 3D sur les podiums, mais sans surface à suivre du regard la
@@ -24,10 +30,13 @@ const SIZE = {
   xl: 'w-24 h-24 text-4xl',
 };
 
+/** Épaisseur de l'anneau de grade (px) selon la taille de l'avatar. */
+const RING_W = { xs: 1.5, sm: 2, md: 2, lg: 2.5, xl: 3 };
+
 /**
  * Avatar rond — design friendly et coloré.
  */
-export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false }: AvatarProps) {
+export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false, noRing = false }: AvatarProps) {
   const [broken, setBroken] = useState(false);
   const showImg = imageUrl && !broken;
   const initial = (login[0] ?? '?').toUpperCase();
@@ -36,12 +45,22 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
     ? 'linear-gradient(115deg, rgba(255,255,255,0) 36%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 64%), '
     : '';
 
+  // Anneau de grade (couleur du palier du joueur dans le mode courant). Désactivé
+  // en grayscale (saisons figées) ou via `noRing`. Tracé en `box-shadow` outset :
+  // pas d'impact sur la mise en page (avatars empilés) ni rogné par overflow-hidden.
+  const ringColor = useAvatarRingColor(login);
+  const ring = !noRing && !grayscale ? ringColor : null;
+  const ringW = RING_W[size];
+  const boxShadow = ring
+    ? `0 0 0 ${ringW}px ${ring}, 0 0 10px ${ring}66, 0 2px 8px rgba(0,0,0,0.35)`
+    : '0 2px 10px rgba(255, 154, 158, 0.3)';
+
   return (
     <div
       className={`relative flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
       style={{
         background: `${sheen}linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)`,
-        boxShadow: '0 2px 10px rgba(255, 154, 158, 0.3)',
+        boxShadow,
         color: '#fff',
       }}
     >
