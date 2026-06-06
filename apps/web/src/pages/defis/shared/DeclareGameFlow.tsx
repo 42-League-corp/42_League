@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AbacusSlider } from '../../../components/AbacusSlider';
 import { OutcomeButton } from '../../../components/OutcomeButton';
@@ -81,6 +81,22 @@ export function DeclareGameFlow({
   const iWon = outcome === 'win';
   const isDraw = outcome === 'draw';
   const hasOutcome = outcome !== null;
+  // Une fois l'issue choisie, le bloc de paramètres (score, persos Smash…)
+  // se déploie sous le résumé. On fait remonter ce résumé en haut de la zone
+  // scrollable pour que les nouveaux champs soient visibles sans scroll manuel.
+  // Cantonné au mobile : la BottomSheet a sa propre zone scrollable contrainte.
+  // Sur desktop le formulaire vit dans le scroll global de la page, où un saut
+  // automatique serait plus déroutant qu'utile.
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!hasOutcome || variant !== 'mobile') return;
+    const el = resultRef.current;
+    if (!el) return;
+    const raf = window.requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [hasOutcome, variant]);
   const [loserScore, setLoserScore] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -245,7 +261,7 @@ export function DeclareGameFlow({
       )}
 
       {opponent && hasOutcome && (
-        <div className="relative mt-6 animate-fade-in">
+        <div ref={resultRef} className="relative mt-6 scroll-mt-3 animate-fade-in">
           <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
             {t('defis.result')}
           </label>
