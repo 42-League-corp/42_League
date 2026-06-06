@@ -215,6 +215,9 @@ export interface TeamProfile extends BabyfootTeamEntry {
 
 export type ShopCategory = 'title' | 'banner' | 'badge';
 
+/** Rareté d'un objet — pilote la couleur de sa carte (cf. lib/rarity.ts). */
+export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
 export interface ShopItemData {
   id: string;
   name: string;
@@ -222,6 +225,8 @@ export interface ShopItemData {
   category: ShopCategory;
   /** Couleur d'accent (hex #rrggbb) — titres & badges. */
   color: string | null;
+  /** Rareté explicite — null = déduite du prix (objets antérieurs). */
+  rarity: ShopRarity | null;
   price: number;
   payload: Record<string, unknown> | null;
   active: boolean;
@@ -233,6 +238,7 @@ export interface ShopItemInput {
   description?: string | null;
   category: ShopCategory;
   color?: string | null;
+  rarity?: ShopRarity | null;
   price: number;
   payload?: Record<string, unknown> | null;
   active?: boolean;

@@ -24,6 +24,7 @@ import {
   type ShopCategory,
   type ShopItemData,
 } from '../lib/api';
+import { RARITY, resolveRarity, type Rarity } from '../lib/rarity';
 
 /** Catégories pour lesquelles « équiper » a du sens (titre / bannière / badge actifs). */
 const EQUIPPABLE: ShopCategory[] = ['title', 'banner', 'badge'];
@@ -38,32 +39,10 @@ const MIN_TILES = 6;
 const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'badge'];
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Système de rareté — déduit du prix, à la manière des boutiques de jeux
- * (Fortnite / Valorant / LoL). Chaque palier porte sa couleur, son halo et
- * son libellé : c'est lui qui apporte la richesse visuelle et la hiérarchie
- * sans alourdir la palette globale (or = sommet de la rareté).
+ * Système de rareté — désormais un champ EXPLICITE de l'objet (choisi dans
+ * Shop GOD), avec repli sur une déduction par le prix pour les objets antérieurs.
+ * Couleurs, halos et libellés sont partagés via `lib/rarity` (source unique).
  * ──────────────────────────────────────────────────────────────────────── */
-type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
-
-interface RarityStyle {
-  hex: string;
-  /** Dégradé de la bordure (effet liseré premium). */
-  border: string;
-}
-
-const RARITY: Record<Rarity, RarityStyle> = {
-  common: { hex: '#9fb2c7', border: 'rgba(159,178,199,0.55)' },
-  rare: { hex: '#4aa8ff', border: 'rgba(74,168,255,0.65)' },
-  epic: { hex: '#b07bff', border: 'rgba(176,123,255,0.7)' },
-  legendary: { hex: '#ffc94a', border: 'rgba(255,201,74,0.85)' },
-};
-
-function rarityOf(price: number): Rarity {
-  if (price >= 900) return 'legendary';
-  if (price >= 400) return 'epic';
-  if (price >= 150) return 'rare';
-  return 'common';
-}
 
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
@@ -228,8 +207,8 @@ function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: st
     <div
       className="relative h-28 w-full shrink-0 overflow-hidden rounded-xl border flex items-center justify-center px-3"
       style={{
-        borderColor: `${rarityHex}3a`,
-        background: `linear-gradient(160deg, ${rarityHex}1f 0%, rgba(42,36,28,0.55) 45%, rgba(21,18,14,0.7) 100%)`,
+        borderColor: `${rarityHex}4a`,
+        background: `linear-gradient(160deg, ${rarityHex}33 0%, rgba(72,63,50,0.62) 45%, rgba(48,42,33,0.7) 100%)`,
       }}
     >
       {/* Halo de rareté derrière l'aperçu */}
@@ -458,7 +437,7 @@ export function ShopPage() {
             const isEquipped = equipped.has(item.id);
             const showEquip = isOwned && EQUIPPABLE.includes(item.category);
             const itemBusy = busy === item.id;
-            const rarity = rarityOf(item.price);
+            const rarity = resolveRarity(item);
             const rk = RARITY[rarity];
             return (
               <motion.div
@@ -469,14 +448,14 @@ export function ShopPage() {
                 whileHover={{ y: -3 }}
                 className="group relative rounded-2xl p-px transition-shadow"
                 style={{
-                  background: `linear-gradient(150deg, ${rk.border} 0%, ${rk.hex}1f 38%, rgba(58,48,34,0.45) 100%)`,
+                  background: `linear-gradient(150deg, ${rk.border} 0%, ${rk.hex}33 38%, rgba(96,84,64,0.55) 100%)`,
                 }}
               >
                 {/* Surface intérieure — nettement plus claire que le fond global */}
                 <div
                   className="relative h-full overflow-hidden rounded-[15px] p-4 flex flex-col gap-3"
                   style={{
-                    background: `linear-gradient(165deg, ${rk.hex}1c 0%, rgba(42,36,28,0.92) 42%, rgba(26,22,17,0.96) 100%)`,
+                    background: `linear-gradient(165deg, ${rk.hex}33 0%, rgba(72,63,50,0.96) 45%, rgba(54,47,37,0.97) 100%)`,
                   }}
                 >
                   <div className="absolute inset-0 hud-diag pointer-events-none opacity-25" />
@@ -509,8 +488,8 @@ export function ShopPage() {
                       className="shrink-0 px-2 py-0.5 rounded-full border text-[9px] font-extrabold uppercase tracking-[0.12em]"
                       style={{
                         color: rk.hex,
-                        borderColor: `${rk.hex}40`,
-                        background: `${rk.hex}14`,
+                        borderColor: `${rk.hex}55`,
+                        background: `${rk.hex}26`,
                       }}
                     >
                       {catLabel(item.category)}

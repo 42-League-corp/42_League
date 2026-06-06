@@ -627,6 +627,9 @@ model ShopItem {
   price       Int // en League Coins
   // Couleur d'accent (hex #rrggbb) — titres & badges. Choisie dans le créateur (Shop GOD).
   color       String?
+  // Rareté de l'objet ('common' | 'rare' | 'epic' | 'legendary') — pilote la couleur
+  // de la carte en vitrine. Null = rareté déduite du prix (objets antérieurs).
+  rarity      String?
   // Données spécifiques à la catégorie :
   //   title  -> {"title":"Pionnier"}
   //   badge  -> {"code":"...","icon":"Crown","label":"..."}

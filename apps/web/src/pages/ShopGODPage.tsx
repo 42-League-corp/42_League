@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift } from 'lucide-react';
+import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift, Gem } from 'lucide-react';
 import {
   api,
   type ShopCategory,
   type ShopItemData,
   type ShopItemInput,
 } from '../lib/api';
+import { RARITY, resolveRarity } from '../lib/rarity';
 // Formulaire de cosmétique + primitives extraits (réutilisés par la récompense de tournoi).
 import {
   Input,
@@ -275,6 +276,7 @@ function ItemsSection({ onItemsChanged }: { onItemsChanged?: (items: ShopItemDat
                 <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
                   <th className="text-left py-2 px-3">Nom</th>
                   <th className="text-left py-2 px-3">Catégorie</th>
+                  <th className="text-left py-2 px-3">Rareté</th>
                   <th className="text-right py-2 px-3">Prix</th>
                   <th className="text-right py-2 px-3">Ordre</th>
                   <th className="text-center py-2 px-3">Actif</th>
@@ -299,6 +301,22 @@ function ItemsSection({ onItemsChanged }: { onItemsChanged?: (items: ShopItemDat
                       )}
                     </td>
                     <td className="py-2 px-3"><CategoryBadge category={it.category} /></td>
+                    <td className="py-2 px-3">
+                      {(() => {
+                        const r = resolveRarity(it);
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs tracking-wide"
+                            style={{ color: RARITY[r].hex }}
+                            title={it.rarity ? 'Rareté explicite' : 'Déduite du prix'}
+                          >
+                            <Gem className="w-3 h-3" strokeWidth={2.5} />
+                            {RARITY[r].label}
+                            {!it.rarity && <span className="text-zinc-600">~</span>}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="py-2 px-3 text-right tabular-nums text-amber-400">
                       <span className="inline-flex items-center gap-1 justify-end">
                         {it.price} <CoinIcon />

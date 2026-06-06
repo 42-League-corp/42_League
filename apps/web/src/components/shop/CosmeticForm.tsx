@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
-import { UploadCloud } from 'lucide-react';
-import { type ShopCategory, type ShopItemData, type ShopItemInput } from '../../lib/api';
+import { UploadCloud, Gem } from 'lucide-react';
+import { type ShopCategory, type ShopItemData, type ShopItemInput, type ShopRarity } from '../../lib/api';
 import { BADGE_ICON_NAMES, badgeIcon } from '../../lib/badgeIcons';
+import { RARITY, RARITY_ORDER, rarityOf } from '../../lib/rarity';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CosmeticForm — formulaire de création/édition de cosmétique, EXTRAIT de
@@ -73,6 +74,7 @@ export interface FormState {
   description: string;
   category: ShopCategory;
   color: string; // hex #rrggbb (titres & badges)
+  rarity: ShopRarity; // pilote la couleur de la carte en vitrine
   price: string;
   active: boolean;
   sortOrder: string;
@@ -89,6 +91,7 @@ export function emptyForm(): FormState {
     description: '',
     category: 'title',
     color: '#ffc94a',
+    rarity: 'common',
     price: '0',
     active: true,
     sortOrder: '0',
@@ -111,6 +114,7 @@ export function formFromItem(it: ShopItemData): FormState {
     description: it.description ?? '',
     category: it.category,
     color: it.color ?? '#ffc94a',
+    rarity: it.rarity ?? rarityOf(it.price),
     price: String(it.price),
     active: it.active,
     sortOrder: String(it.sortOrder),
@@ -162,6 +166,7 @@ export function buildInput(f: FormState): ShopItemInput {
     description: f.description.trim() || undefined,
     category: f.category,
     color,
+    rarity: f.rarity,
     price: Number(f.price) || 0,
     active: f.active,
     sortOrder: Number(f.sortOrder) || 0,
@@ -374,6 +379,29 @@ export function ItemFormFields({ form, set }: { form: FormState; set: <K extends
             </div>
           </label>
         )}
+
+        {/* Rareté — détermine la couleur de la carte en vitrine (Shop). */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Rareté</span>
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center justify-center w-9 h-9 shrink-0 rounded border"
+              style={{ color: RARITY[form.rarity].hex, borderColor: `${RARITY[form.rarity].hex}66`, background: `${RARITY[form.rarity].hex}18` }}
+            >
+              <Gem className="w-4 h-4" strokeWidth={2.4} />
+            </span>
+            <select
+              value={form.rarity}
+              onChange={(e) => set('rarity', e.target.value as ShopRarity)}
+              className="flex-1 bg-zinc-800 border rounded px-3 py-1.5 text-sm font-mono focus:outline-none"
+              style={{ color: RARITY[form.rarity].hex, borderColor: `${RARITY[form.rarity].hex}55` }}
+            >
+              {RARITY_ORDER.map((r) => (
+                <option key={r} value={r} className="text-zinc-100 bg-zinc-800">{RARITY[r].label}</option>
+              ))}
+            </select>
+          </div>
+        </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Prix (League Coins)</span>

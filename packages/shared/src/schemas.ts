@@ -148,6 +148,9 @@ export type RecordResultInput = z.infer<typeof RecordResultSchema>;
 // tournoi officiel (cosmétique custom créé inline). Cap d'octets sur la data-URL
 // de bannière (~700 Ko) : évite de gonfler la table et les réponses.
 export const MAX_BANNER_DATAURL_LEN = 700_000;
+// Rareté d'un objet de boutique — pilote la couleur de sa carte en vitrine.
+export const ShopRaritySchema = z.enum(['common', 'rare', 'epic', 'legendary']);
+export type ShopRarity = z.infer<typeof ShopRaritySchema>;
 export const ShopItemCreateSchema = z
   .object({
     name: z.string().trim().min(1),
@@ -157,6 +160,7 @@ export const ShopItemCreateSchema = z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
       .nullish(),
+    rarity: ShopRaritySchema.nullish(),
     price: z.number().int().min(0),
     payload: z.record(z.any()).nullish(),
     active: z.boolean().optional(),

@@ -12,6 +12,7 @@ import {
   RecordResultSchema,
   CreateTournamentSchema,
   ShopItemCreateSchema,
+  ShopRaritySchema,
   MAX_BANNER_DATAURL_LEN,
   TournamentRecordSchema,
   TournamentForceResultSchema,
@@ -4366,6 +4367,7 @@ app.post('/tournaments', async (c) => {
           description: ck.description ?? null,
           category: ck.category,
           color: ck.color ?? null,
+          rarity: ck.rarity ?? null,
           price: ck.price,
           payload: (ck.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull,
           active: false, // exclusif au tournoi → jamais en boutique
@@ -6690,6 +6692,7 @@ function serializeShopItem(item: {
   description: string | null;
   category: string;
   color: string | null;
+  rarity: string | null;
   price: number;
   payload: Prisma.JsonValue | null;
   active: boolean;
@@ -6701,6 +6704,7 @@ function serializeShopItem(item: {
     description: item.description,
     category: item.category,
     color: item.color ?? null,
+    rarity: item.rarity ?? null,
     price: item.price,
     payload: item.payload ?? null,
     active: item.active,
@@ -6856,6 +6860,7 @@ const ShopItemUpdateSchema = z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
       .nullish(),
+    rarity: ShopRaritySchema.nullish(),
     price: z.number().int().min(0).optional(),
     payload: z.record(z.any()).nullish(),
     active: z.boolean().optional(),
@@ -6952,6 +6957,7 @@ app.post('/admin/shop/items', async (c) => {
       description: d.description ?? null,
       category: d.category,
       color: d.color ?? null,
+      rarity: d.rarity ?? null,
       price: d.price,
       payload: (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull,
       ...(d.active !== undefined ? { active: d.active } : {}),
@@ -6977,6 +6983,7 @@ app.patch('/admin/shop/items/:id', async (c) => {
   if (d.description !== undefined) data.description = d.description ?? null;
   if (d.category !== undefined) data.category = d.category;
   if (d.color !== undefined) data.color = d.color ?? null;
+  if (d.rarity !== undefined) data.rarity = d.rarity ?? null;
   if (d.price !== undefined) data.price = d.price;
   if (d.payload !== undefined) {
     data.payload = (d.payload ?? PrismaRuntime.DbNull) as Prisma.InputJsonValue | typeof PrismaRuntime.DbNull;
