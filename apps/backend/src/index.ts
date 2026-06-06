@@ -14,6 +14,11 @@ import {
   ShopItemCreateSchema,
   ShopRaritySchema,
   MAX_BANNER_DATAURL_LEN,
+  betPayout,
+  cashPrizeForRounds,
+  DEFAULT_BET_FINAL_MULT,
+  BET_FINAL_MULT_MIN,
+  BET_FINAL_MULT_MAX,
   TournamentRecordSchema,
   TournamentForceResultSchema,
   SetTitleSchema,
@@ -4205,7 +4210,15 @@ async function launchTournamentMatches(
 async function settleConfirmedTournamentMatch(
   tx: Prisma.TransactionClient,
   id: string,
-  m: { id: string; stage: string; round: number; slot: number; winnerLogin: string },
+  m: {
+    id: string;
+    stage: string;
+    round: number;
+    slot: number;
+    winnerLogin: string;
+    playerALogin: string | null;
+    playerBLogin: string | null;
+  },
 ): Promise<{
   winnerLogin: string;
   winners: string[];
@@ -4250,6 +4263,20 @@ async function settleConfirmedTournamentMatch(
       const qualifiers = qualifiersFromPools(poolMatches);
       await generateBracket(id, qualifiers, { preSeeded: true });
       bracketGenerated = true;
+      // Paris progressifs : les pronostics éliminés en poules (non qualifiés)
+      // n'ont franchi aucun tour de bracket → perdus (mise non rendue). Sans ça,
+      // leurs paris resteraient « open » à jamais (ils n'apparaîtront jamais
+      // comme perdant d'un match de bracket).
+      const qualSet = new Set(qualifiers);
+      const allEntries = await tx.tournamentEntry.findMany({
+        where: { tournamentId: id },
+        select: { login: true },
+      });
+      for (const e of allEntries) {
+        if (!qualSet.has(e.login)) {
+          await settleTournamentBetsForPick(tx, id, e.login, 0, 1, DEFAULT_BET_FINAL_MULT);
+        }
+      }
     }
     return { winnerLogin, winners, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
   }
@@ -4261,6 +4288,31 @@ async function settleConfirmedTournamentMatch(
     _max: { round: true },
   });
   const totalBracketRounds = agg._max.round ?? 1;
+
+  // ── Économie progressive (paris + cash-prize) ───────────────────────────────
+  // Réglages du tournoi : multiplicateur final du pari + base du cash-prize.
+  const econ = await tx.tournament.findUnique({
+    where: { id },
+    select: { kind: true, betFinalMult: true, cashPrizeBase: true },
+  });
+  const finalMult = econ?.betFinalMult ?? DEFAULT_BET_FINAL_MULT;
+  const cashBase = econ?.kind === 'official' && econ.cashPrizeBase ? econ.cashPrizeBase : 0;
+  const partners = await tournamentPartnerMap(tx, id);
+
+  // Le PERDANT de ce match est éliminé en ayant franchi (round − 1) tours.
+  // → règle ses paris au prorata (0 tour = perdu) et lui verse son palier de
+  //   cash-prize (les deux coéquipiers en 2v2).
+  const loserLogin = winnerLogin === m.playerALogin ? m.playerBLogin : m.playerALogin;
+  const roundsWonLoser = m.round - 1;
+  if (loserLogin) {
+    betWinners.push(
+      ...(await settleTournamentBetsForPick(tx, id, loserLogin, roundsWonLoser, totalBracketRounds, finalMult)),
+    );
+    if (cashBase > 0) {
+      await payCashPrizeTx(tx, teamMembersOf(loserLogin, partners), roundsWonLoser, totalBracketRounds, cashBase);
+    }
+  }
+
   const adv = await advanceWinner(id, m.round, m.slot, winnerLogin, totalBracketRounds);
   let finished = false;
   let prizeAwarded = false;
@@ -4296,8 +4348,14 @@ async function settleConfirmedTournamentMatch(
       for (const w of winners) await grantItemTx(tx, w, tour.prizeItemId, false);
       prizeAwarded = true;
     }
-    // Règlement des paris sur le VAINQUEUR du tournoi (cote fixe ×2).
-    betWinners.push(...(await settleTournamentBetsTx(tx, id, winnerLogin)));
+    // Paris : le CHAMPION a franchi tous les tours → gain au multiplicateur final.
+    betWinners.push(
+      ...(await settleTournamentBetsForPick(tx, id, winnerLogin, totalBracketRounds, totalBracketRounds, finalMult)),
+    );
+    // Cash-prize du champion (palier maximal = base) aux deux coéquipiers en 2v2.
+    if (cashBase > 0) {
+      await payCashPrizeTx(tx, winners, totalBracketRounds, totalBracketRounds, cashBase);
+    }
     finished = true;
   }
   return { winnerLogin, winners, finished, prizeAwarded, bracketGenerated: false, betWinners };
@@ -5027,6 +5085,8 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
       round: m.round,
       slot: m.slot,
       winnerLogin,
+      playerALogin: m.playerALogin,
+      playerBLogin: m.playerBLogin,
     });
   });
   // Push live au vainqueur APRÈS commit (jamais d'emit dans la transaction).
@@ -6225,6 +6285,8 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
       round: m.round,
       slot: m.slot,
       winnerLogin,
+      playerALogin: m.playerALogin,
+      playerBLogin: m.playerBLogin,
     });
   });
 
@@ -6461,6 +6523,10 @@ const AdminUpdateTournamentSchema = z.object({
     })
     .optional(),
   format: z.enum(['elimination', 'pools']).optional(),
+  // Économie (officiels) : multiplicateur final du pari (2..10) + cash-prize du
+  // champion (0/null = aucun). Modifiables tant que le tournoi n'est pas terminé.
+  betFinalMult: z.number().int().min(BET_FINAL_MULT_MIN).max(BET_FINAL_MULT_MAX).optional(),
+  cashPrizeBase: z.number().int().min(0).max(1_000_000).nullable().optional(),
 });
 
 app.patch('/admin/tournaments/:id', async (c) => {
@@ -6480,6 +6546,8 @@ app.patch('/admin/tournaments/:id', async (c) => {
     if (patch.name !== undefined) data.name = patch.name;
     if (patch.kind !== undefined) data.kind = patch.kind;
     if (patch.isPrivate !== undefined) data.isPrivate = patch.isPrivate;
+    if (patch.betFinalMult !== undefined) data.betFinalMult = patch.betFinalMult;
+    if (patch.cashPrizeBase !== undefined) data.cashPrizeBase = patch.cashPrizeBase;
 
     if (patch.capacity !== undefined || patch.format !== undefined) {
       if (t.status !== 'registration') {
@@ -7400,9 +7468,54 @@ function settleMatchBetsTx(tx: Prisma.TransactionClient, matchId: string, winner
   return settleBetsTx(tx, { targetType: 'match', matchId }, winnerLogin);
 }
 
-/** Règle les paris sur le vainqueur d'un tournoi. */
-function settleTournamentBetsTx(tx: Prisma.TransactionClient, tournamentId: string, winnerLogin: string) {
-  return settleBetsTx(tx, { targetType: 'tournament', tournamentId }, winnerLogin);
+/**
+ * Règle les paris « vainqueur du tournoi » placés sur UN pronostic donné, selon
+ * le nombre de tours qu'il a franchis (cote progressive). Appelé quand ce
+ * pronostic est éliminé (perdant d'un match de bracket) ou sacré champion :
+ *   gain = round(mise × betMultiplier(roundsWon, totalRounds, finalMult))
+ * 0 tour franchi → gain 0 (mise perdue). Renvoie les logins crédités.
+ */
+async function settleTournamentBetsForPick(
+  tx: Prisma.TransactionClient,
+  tournamentId: string,
+  pickLogin: string,
+  roundsWon: number,
+  totalRounds: number,
+  finalMult: number,
+): Promise<string[]> {
+  const open = await tx.bet.findMany({
+    where: { targetType: 'tournament', tournamentId, choiceLogin: pickLogin, status: 'open' },
+  });
+  const credited: string[] = [];
+  const now = new Date();
+  for (const b of open) {
+    const payout = betPayout(b.stake, roundsWon, totalRounds, finalMult);
+    if (payout > 0) {
+      await grantCoinsTx(tx, b.bettorLogin, payout);
+      credited.push(b.bettorLogin);
+    }
+    await tx.bet.update({
+      where: { id: b.id },
+      data: { status: payout > 0 ? 'won' : 'lost', payout, settledAt: now },
+    });
+  }
+  return credited;
+}
+
+/**
+ * Verse le cash-prize (coins) d'un palier à chaque membre fourni (les deux
+ * coéquipiers en 2v2). Montant = base × tours franchis / total (0 si 0 tour).
+ */
+async function payCashPrizeTx(
+  tx: Prisma.TransactionClient,
+  members: string[],
+  roundsWon: number,
+  totalRounds: number,
+  base: number,
+): Promise<void> {
+  const amount = cashPrizeForRounds(roundsWon, totalRounds, base);
+  if (amount <= 0) return;
+  for (const login of members) await grantCoinsTx(tx, login, amount);
 }
 
 /**

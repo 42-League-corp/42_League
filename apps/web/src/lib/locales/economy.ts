@@ -32,7 +32,8 @@ export const dict: Record<Lang, Dict> = {
 
     // Paris
     'bets.title': 'Paris',
-    'bets.subtitle': 'Cote fixe ×2 — un pari gagnant double ta mise',
+    'bets.subtitle': 'Gain proportionnel à la progression de ton pronostic',
+    'bets.progressiveNote': 'Gain progressif : plus ton pronostic va loin, plus tu gagnes (jusqu’à ×{mult} sur le champion). Aucun tour franchi = mise perdue.',
     'bets.balance': 'Solde',
     'bets.openTournaments': 'Tournois ouverts',
     'bets.openMatches': 'Matchs ouverts',
@@ -85,7 +86,8 @@ export const dict: Record<Lang, Dict> = {
     'quest.win_3.desc': 'Win 3 ranked matches',
 
     'bets.title': 'Bets',
-    'bets.subtitle': 'Fixed ×2 odds — a winning bet doubles your stake',
+    'bets.subtitle': 'Payout scales with how far your pick goes',
+    'bets.progressiveNote': 'Progressive payout: the further your pick goes, the more you win (up to ×{mult} on the champion). No rounds cleared = stake lost.',
     'bets.balance': 'Balance',
     'bets.openTournaments': 'Open tournaments',
     'bets.openMatches': 'Open matches',
@@ -138,7 +140,8 @@ export const dict: Record<Lang, Dict> = {
     'quest.win_3.desc': 'Gana 3 partidas clasificatorias',
 
     'bets.title': 'Apuestas',
-    'bets.subtitle': 'Cuota fija ×2 — una apuesta ganadora dobla tu apuesta',
+    'bets.subtitle': 'Ganancia proporcional a lo lejos que llegue tu pronóstico',
+    'bets.progressiveNote': 'Ganancia progresiva: cuanto más avanza tu pronóstico, más ganas (hasta ×{mult} con el campeón). Ninguna ronda superada = apuesta perdida.',
     'bets.balance': 'Saldo',
     'bets.openTournaments': 'Torneos abiertos',
     'bets.openMatches': 'Partidas abiertas',

@@ -120,6 +120,11 @@ export function TournamentBets({
             )}
           </div>
           <div className="text-[11px] text-muted-2 mt-1">{entrants.length} 👥</div>
+          {canBetWinner && (
+            <p className="text-[11px] text-gold/80 mt-2 leading-snug">
+              {t('bets.progressiveNote').replace('{mult}', String(tournament.betFinalMult ?? 2))}
+            </p>
+          )}
           {canBetWinner ? (
             openForm === 'winner' && (
               <BetForm

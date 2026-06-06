@@ -340,6 +340,23 @@ export function TournoiDetailPage() {
         </div>
       )}
 
+      {/* Cash-prize par palier (officiels) — coins versés au prorata du tour atteint. */}
+      {tournament.kind === 'official' && !!tournament.cashPrizeBase && tournament.cashPrizeBase > 0 && (
+        <div className="mb-4 flex items-center gap-3 p-3 rounded-xl border border-teal/30 bg-teal/[0.06]">
+          <span className="text-2xl leading-none">💰</span>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold">
+              {t('tournois.detail.cashPrize')}
+            </div>
+            <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
+              <img src="/42coin.png" alt="" className="w-4 h-4" />
+              {tournament.cashPrizeBase.toLocaleString()}
+              <span className="text-[11px] text-muted-2 font-medium">{t('tournois.detail.cashPrize.note')}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tournament.status === 'registration' && (
         <>
           {tournament.isPrivate && !iAmIn && !isOrganizer && !isAdmin && (

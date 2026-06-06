@@ -32,6 +32,9 @@ export function CreateTournamentPage() {
   const [mode, setMode] = useState<Mode>('1v1');
   const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
   const [prize, setPrize] = useState<PrizeFormState>(EMPTY_PRIZE);
+  // Économie (officiels) : multiplicateur final du pari (2..10) + cash-prize du champion.
+  const [betFinalMult, setBetFinalMult] = useState(2);
+  const [cashPrize, setCashPrize] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Coéquipiers candidats : tous les joueurs sauf moi (le créateur).
@@ -53,6 +56,7 @@ export function CreateTournamentPage() {
       // que pour un officiel (sinon le backend 400).
       const effKind = isAdmin ? kind : 'friendly';
       const prizePayload = effKind === 'official' ? buildPrizePayload(prize) : { kind: 'none' as const };
+      const cashBase = cashPrize.trim() ? Math.max(0, Math.round(Number(cashPrize))) : 0;
       const tNew = await api.createTournament({
         name: n,
         capacity,
@@ -60,6 +64,8 @@ export function CreateTournamentPage() {
         mode,
         partnerLogin: mode === '2v2' ? partner!.login : undefined,
         prize: prizePayload,
+        betFinalMult: effKind === 'official' ? betFinalMult : undefined,
+        cashPrizeBase: effKind === 'official' && cashBase > 0 ? cashBase : undefined,
       });
       haptic('success');
       await refresh();
@@ -338,6 +344,53 @@ export function CreateTournamentPage() {
             </label>
             <p className="text-[10px] text-muted-2 mb-3">{t('tournois.field.prize.hint')}</p>
             <TournamentPrizePicker value={prize} onChange={setPrize} />
+          </motion.div>
+        )}
+
+        {/* Économie (admin · officiel) : multiplicateur de pari + cash-prize par palier */}
+        {isAdmin && kind === 'official' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.22 }}
+            className="flex flex-col gap-4"
+          >
+            <div>
+              <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-1">
+                {t('tournois.field.betMult')}
+              </label>
+              <p className="text-[10px] text-muted-2 mb-2">{t('tournois.field.betMult.hint')}</p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={2}
+                  max={10}
+                  step={1}
+                  value={betFinalMult}
+                  onChange={(e) => setBetFinalMult(Number(e.target.value))}
+                  className="flex-1 accent-teal"
+                />
+                <span className="font-mono font-black text-teal text-lg tabular-nums w-10 text-right">×{betFinalMult}</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] uppercase tracking-widest text-muted font-bold mb-1">
+                {t('tournois.field.cashPrize')}
+              </label>
+              <p className="text-[10px] text-muted-2 mb-2">{t('tournois.field.cashPrize.hint')}</p>
+              <div className="relative">
+                <img src="/42coin.png" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" />
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={cashPrize}
+                  onChange={(e) => setCashPrize(e.target.value)}
+                  placeholder={t('tournois.field.cashPrize.ph')}
+                  className="w-full pl-9 pr-4 py-3 bg-bg-1 border-2 border-border rounded-xl text-base font-semibold focus:border-teal outline-none text-text-strong placeholder:text-muted/50 transition-all allow-select"
+                />
+              </div>
+            </div>
           </motion.div>
         )}
 
