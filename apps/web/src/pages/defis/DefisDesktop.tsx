@@ -317,10 +317,14 @@ function HeroCTAs({
       />
     )}
     <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-      {/* initial={false} : les cartes déjà présentes à l'arrivée s'affichent
-          instantanément (sinon leur animation d'entrée rejoue à chaque visite de
-          la page → clignotement). L'ouverture/fermeture reste animée. */}
-      <AnimatePresence mode="popLayout" initial={false}>
+      {/* Seule la carte sélectionnée s'anime, via le morph `layoutId` (bouton ↔
+          panneau). Les 2 autres cartes n'ont PAS d'animation d'opacité d'entrée/
+          sortie : sinon, combinées au `popLayout` (qui les repositionne dans un
+          portail le temps de la sortie), elles clignotent à chaque ouverture/
+          fermeture. Elles apparaissent/disparaissent donc instantanément pendant
+          que la carte choisie se redimensionne. initial={false} évite en plus que
+          le morph rejoue à chaque visite de la page. */}
+      <AnimatePresence initial={false}>
         {(openCard === null || openCard === 'declare') && (
           <HeroCTACard
             key="declare"
@@ -505,13 +509,8 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
     return (
       <motion.button
         layoutId={`hero-cta-${kind}`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
         transition={{
           layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
-          duration: 0.22,
-          ease: [0.16, 1, 0.3, 1],
         }}
         type="button"
         onClick={onOpen}
@@ -558,13 +557,8 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
   return (
     <motion.div
       layoutId={`hero-cta-${kind}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
       transition={{
         layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
-        duration: 0.26,
-        ease: [0.16, 1, 0.3, 1],
       }}
       className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col"
       style={{
