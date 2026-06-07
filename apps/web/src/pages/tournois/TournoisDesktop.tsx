@@ -10,7 +10,7 @@ import {
   EMPTY_PRIZE,
   type PrizeFormState,
 } from '../../components/tournois/TournamentPrizePicker';
-import { Trophy, Lock, X, Swords, Users, Info } from 'lucide-react';
+import { Trophy, Lock, X, Swords, Users, Info, Crown } from 'lucide-react';
 import { api, type Tournament, type LeaderboardEntry } from '../../lib/api';
 import { PlayerSearch } from '../defis/shared/PlayerSearch';
 import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
@@ -254,16 +254,32 @@ function TournoiCard({ t }: { t: Tournament }) {
   const art = tournamentArt(t.id);
   const cover = safeImageUrl(t.imageUrl);
   const fillPct = Math.min(100, Math.round((count / t.capacity) * 100));
+  const isOfficial = t.kind === 'official';
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
       className="group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
       style={
-        t.kind === 'official'
-          ? { border: '2px solid #ff5366', boxShadow: '0 0 0 1px rgba(255,83,102,0.35), 0 0 18px rgba(255,83,102,0.45)' }
+        isOfficial
+          ? {
+              border: '2.5px solid #ff3347',
+              boxShadow:
+                '0 0 0 1.5px rgba(255,51,71,0.5), 0 0 22px rgba(255,51,71,0.55), inset 0 0 40px rgba(255,51,71,0.12)',
+            }
           : undefined
       }
     >
+      {/* Liseré rouge officiel : bandeau supérieur + halo d'angle */}
+      {isOfficial && (
+        <>
+          <div className="absolute inset-x-0 top-0 h-[3px] z-20 bg-gradient-to-r from-transparent via-[#ff3347] to-transparent" />
+          <div
+            aria-hidden
+            className="absolute inset-0 z-10 pointer-events-none rounded-xl"
+            style={{ background: 'radial-gradient(120% 80% at 50% 0%, rgba(255,51,71,0.18) 0%, transparent 55%)' }}
+          />
+        </>
+      )}
       {/* Art en haut (format 4:3) */}
       <div className="relative aspect-video overflow-hidden">
         {cover ? (
@@ -295,10 +311,11 @@ function TournoiCard({ t }: { t: Tournament }) {
       {/* Infos bas */}
       <div className="p-3">
         <div className="flex items-start justify-between gap-1 mb-1.5">
-          <span className={`inline-block text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${
-            t.kind === 'official' ? 'text-gold border-gold/50 bg-gold/10' : 'text-muted-2 border-border bg-transparent'
+          <span className={`inline-flex items-center gap-1 text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider border ${
+            isOfficial ? 'text-white border-[#ff3347] bg-[#e8132a]' : 'text-muted-2 border-border bg-transparent'
           }`}>
-            {t.kind === 'official' ? tr('tournois.kind.official') : tr('tournois.kind.friendly')}
+            {isOfficial && <Crown className="w-2.5 h-2.5" strokeWidth={3} />}
+            {isOfficial ? tr('tournois.kind.official') : tr('tournois.kind.friendly')}
           </span>
           {t.isPrivate && <Lock className="w-3 h-3 text-teal flex-shrink-0 mt-0.5" strokeWidth={2.5} />}
         </div>
