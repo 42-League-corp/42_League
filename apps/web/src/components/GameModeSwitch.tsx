@@ -161,9 +161,10 @@ export function GameModeSwitch() {
               className="grid place-items-center"
               style={{ color: m.color }}
             >
-              {/* Logo agrandi (32px) : à 20px les PNG (échecs/SF/smash) paraissent
-                  perdus dans le rond de 52px. */}
-              {m.icon(true, 32)}
+              {/* Logo agrandi : à 20px les PNG (échecs/SF/smash) paraissent perdus
+                  dans le rond de 52px. L'échecs est un roi vertical (étroit) →
+                  `object-contain` le réduit en largeur, on l'agrandit davantage. */}
+              {m.icon(true, game === 'chess' ? 42 : 32)}
             </motion.span>
           </motion.button>
         )}
