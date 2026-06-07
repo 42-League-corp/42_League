@@ -292,6 +292,9 @@ export const dict: Record<Lang, Dict> = {
     'defis.queue.cancel': 'Annuler',
     'defis.versus.found': 'Adversaire trouvé !',
     'defis.versus.continue': 'Continuer',
+    'defis.strike.accepted': 'Duel accepté',
+    'defis.strike.sent': 'Duel lancé',
+    'defis.strike.tap': 'Toucher pour continuer',
   },
 
   en: {
@@ -562,6 +565,9 @@ export const dict: Record<Lang, Dict> = {
     'defis.queue.cancel': 'Cancel',
     'defis.versus.found': 'Opponent found!',
     'defis.versus.continue': 'Continue',
+    'defis.strike.accepted': 'Duel accepted',
+    'defis.strike.sent': 'Duel launched',
+    'defis.strike.tap': 'Tap to continue',
   },
 
   es: {
@@ -832,5 +838,8 @@ export const dict: Record<Lang, Dict> = {
     'defis.queue.cancel': 'Cancelar',
     'defis.versus.found': '¡Rival encontrado!',
     'defis.versus.continue': 'Continuar',
+    'defis.strike.accepted': 'Duelo aceptado',
+    'defis.strike.sent': 'Duelo lanzado',
+    'defis.strike.tap': 'Toca para continuar',
   },
 };
