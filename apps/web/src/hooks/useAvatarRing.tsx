@@ -21,12 +21,13 @@ export function AvatarRingProvider({ children }: { children: ReactNode }) {
   const { leaderboard } = useLeagueData();
 
   // login → couleur de grade (grandmaster inclus, selon rang + ELO du mode courant).
+  // Tout joueur présent au classement du mode est cerclé de la couleur de son
+  // grade, même sans match joué : son Elo (de départ ou attribué) définit déjà un
+  // palier — donc un anneau à afficher.
   const colorByLogin = useMemo(() => {
     const m = new Map<string, string>();
     for (const e of leaderboard) {
-      // On ne cercle que les joueurs ayant réellement disputé des matchs : sans
-      // partie, pas de grade significatif à afficher.
-      if (e.matchesPlayed > 0) m.set(e.login, rankTierForRank(e.elo, e.rank).color);
+      m.set(e.login, rankTierForRank(e.elo, e.rank).color);
     }
     return m;
   }, [leaderboard]);

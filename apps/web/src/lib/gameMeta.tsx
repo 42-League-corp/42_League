@@ -34,14 +34,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(255,201,74,0.10)',
     glowColor: 'rgba(255,201,74,0.45)',
     button: { from: '#ffd87a', via: '#f0a020', to: '#c5520a', text: '#1a0d00', border: 'rgba(255,201,102,0.6)', glow: 'rgba(255,128,32,0.4)' },
-    icon: (_sel, size = 20) => (
-      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
-        <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
-        <rect x="10.8" y="5" width="2.4" height="10" rx="1" fill="currentColor" />
-        <circle cx="12" cy="9.5" r="2.8" fill="currentColor" />
-        <rect x="8.5" y="12" width="7" height="4.5" rx="1.2" fill="currentColor" />
-        <circle cx="12" cy="20" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
+    icon: (sel, size = 20) => (
+      <img src={sel ? '/coulour%20baby.png' : '/gray%20baby.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   smash: {

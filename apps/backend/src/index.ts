@@ -57,6 +57,7 @@ import {
 import {
   GAME_IDS,
   applyGameElo,
+  eloAllGames,
   eloOrderBy,
   getGameAdvantage,
   getGameDef,
@@ -3506,8 +3507,11 @@ app.post('/admin/users', async (c) => {
     throw new HTTPException(409, { message: `Le login "${login}" existe déjà.` });
   }
 
+  // L'Elo attribué vaut pour TOUS les modes (pas le seul babyfoot) et le joueur
+  // adhère à toutes les disciplines → il a un grade, donc un anneau de pp, partout.
+  const eloVal = elo ?? 1000;
   const user = await prisma.user.create({
-    data: { login, campus: campus ?? null, elo: elo ?? 1000 },
+    data: { login, campus: campus ?? null, games: [...GAME_IDS], ...eloAllGames(eloVal) },
   });
 
   await logAdminAction(c, {

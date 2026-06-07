@@ -106,3 +106,12 @@ export function ratingUpdate(
 export function tournamentsWonDelta(game: GameId, delta: number): Prisma.UserUpdateInput {
   return { [COLUMNS[game].tournamentsWon]: { increment: delta } } as Prisma.UserUpdateInput;
 }
+
+/**
+ * Pose le MÊME Elo sur TOUTES les disciplines. Utilisé à la création d'un joueur
+ * depuis GOD : l'Elo attribué vaut pour tous les modes de jeu (et non le seul
+ * babyfoot), si bien que le joueur a un grade — donc un anneau de pp — partout.
+ */
+export function eloAllGames(elo: number): Record<RatingColumns['elo'], number> {
+  return { elo, eloSmash: elo, eloChess: elo, eloSf: elo, eloFlechettes: elo };
+}
