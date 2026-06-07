@@ -60,11 +60,9 @@ export default function CoinFlip({
     <div className="flex flex-col items-center gap-4 py-2">
       {/* Scène du lancer : pièce + ombre projetée au sol. On ne réserve la hauteur
           de vol que pendant le lancer (sinon, au repos, un grand vide au-dessus). */}
-      <motion.div
+      <div
         className="relative flex items-end justify-center"
-        style={{ width: size, perspective: 900 }}
-        animate={{ height: flipping ? size + lift : size }}
-        transition={{ duration: 0.25 }}
+        style={{ width: size, height: size, perspective: 900 }}
       >
         <AnimatePresence mode="popLayout">
           {resolved && winnerLogin ? (
@@ -85,21 +83,28 @@ export default function CoinFlip({
               key="coin"
               className="absolute left-1/2 bottom-0 -translate-x-1/2"
               style={{ width: size, height: size, transformStyle: 'preserve-3d' }}
+              initial={flipping ? { y: throwStart, scale: 0.7 } : false}
               exit={{ opacity: 0, scale: 0.7, transition: { duration: 0.2 } }}
               animate={
                 flipping
                   ? {
-                      // Parabole : monte haut (suspens à l'apex) puis retombe, en boucle.
-                      y: [0, -lift, -lift * 0.5, -lift, 0],
-                      rotateY: [0, 540, 1080, 1620, 2160],
-                      rotateX: [0, 160, 320, 500, 720],
-                      scale: [1, 1.12, 1.06, 1.12, 1],
+                      // Lancer : du bas de l'écran → sort par le haut → retombe au centre,
+                      // en tournoyant (rotateX/rotateY en boucle continue).
+                      y: [throwStart, throwTop, 0],
+                      scale: [0.7, 1.05, 1],
+                      rotateY: [0, 360],
+                      rotateX: [0, 360],
                     }
                   : { y: 0, rotateY: restAngle, rotateX: 0, scale: 1 }
               }
               transition={
                 flipping
-                  ? { duration: 1.4, ease: 'easeInOut', repeat: Infinity, times: [0, 0.28, 0.5, 0.72, 1] }
+                  ? {
+                      y: { duration: 1.5, times: [0, 0.4, 1], ease: ['easeOut', 'easeIn'] },
+                      scale: { duration: 1.5, times: [0, 0.4, 1] },
+                      rotateY: { duration: 0.45, ease: 'linear', repeat: Infinity },
+                      rotateX: { duration: 0.8, ease: 'linear', repeat: Infinity },
+                    }
                   : { type: 'spring', stiffness: 260, damping: 16 }
               }
             >
@@ -113,25 +118,15 @@ export default function CoinFlip({
           )}
         </AnimatePresence>
 
-        {/* Ombre au sol — se rétrécit/s'éclaircit quand la pièce monte */}
-        {!resolved && (
-          <motion.div
+        {/* Ombre au sol — uniquement au repos (la pièce est en l'air pendant le lancer) */}
+        {!resolved && !flipping && (
+          <div
             aria-hidden
             className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-[50%]"
-            style={{ width: size * 0.7, height: size * 0.16, background: 'rgba(0,0,0,0.45)', filter: 'blur(4px)' }}
-            animate={
-              flipping
-                ? { scaleX: [1, 0.5, 0.7, 0.5, 1], opacity: [0.45, 0.12, 0.25, 0.12, 0.45] }
-                : { scaleX: 1, opacity: 0.4 }
-            }
-            transition={
-              flipping
-                ? { duration: 1.4, ease: 'easeInOut', repeat: Infinity, times: [0, 0.28, 0.5, 0.72, 1] }
-                : { duration: 0.4 }
-            }
+            style={{ width: size * 0.7, height: size * 0.16, background: 'rgba(0,0,0,0.45)', filter: 'blur(4px)', opacity: 0.4 }}
           />
         )}
-      </motion.div>
+      </div>
 
       {/* États */}
       {resolved && winnerName ? (

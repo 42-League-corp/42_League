@@ -196,11 +196,41 @@ function StreetFighterScene() {
   );
 }
 
+function FlechettesScene() {
+  return (
+    <svg viewBox="0 0 800 600" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
+      <g fill="none" stroke={STROKE} strokeWidth={2} opacity={0.5}>
+        {/* Cible : anneaux concentriques + bull */}
+        <circle cx={400} cy={300} r={210} />
+        <circle cx={400} cy={300} r={160} />
+        <circle cx={400} cy={300} r={95} />
+        <circle cx={400} cy={300} r={45} />
+        <circle cx={400} cy={300} r={16} fill={STROKE} />
+        {/* Secteurs */}
+        {Array.from({ length: 20 }, (_, i) => {
+          const a = (i * Math.PI) / 10;
+          return (
+            <line
+              key={i}
+              x1={400 + Math.cos(a) * 45}
+              y1={300 + Math.sin(a) * 45}
+              x2={400 + Math.cos(a) * 210}
+              y2={300 + Math.sin(a) * 210}
+              opacity={0.4}
+            />
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
 const SCENES: Record<Game, () => React.ReactElement> = {
   babyfoot: BabyfootScene,
   smash: SmashScene,
   chess: ChessScene,
   streetfighter: StreetFighterScene,
+  flechettes: FlechettesScene,
 };
 
 function GameBackdropImpl() {
