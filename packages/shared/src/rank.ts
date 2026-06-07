@@ -27,7 +27,7 @@ export interface RankTier {
   color: string;
 }
 
-const ETAIN: RankTier = { key: 'etain', label: 'Étain', min: 0, floor: 900, color: '#9aa4ad' };
+const ETAIN: RankTier = { key: 'etain', label: 'Étain', min: 0, floor: 900, color: '#787f87' };
 
 /** Table des paliers, ordonnée par ELO croissant. */
 export const RANK_TIERS: readonly RankTier[] = [
