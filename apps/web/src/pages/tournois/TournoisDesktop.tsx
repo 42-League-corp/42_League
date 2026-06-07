@@ -257,7 +257,9 @@ function TournoiCard({ t }: { t: Tournament }) {
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
+      className={`group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5 ${
+        t.kind === 'official' ? 'ring-2 ring-red/70 hover:ring-red' : ''
+      }`}
     >
       {/* Art en haut (format 4:3) */}
       <div className="relative aspect-video overflow-hidden">

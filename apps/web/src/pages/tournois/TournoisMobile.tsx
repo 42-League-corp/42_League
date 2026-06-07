@@ -128,8 +128,8 @@ function LiveHero({ tournament }: { tournament: Tournament }) {
         className="relative rounded-2xl overflow-hidden active:scale-[0.98] transition-transform tap-transparent"
         style={{
           background: 'linear-gradient(145deg, rgba(42,34,12,0.9) 0%, rgba(18,15,6,0.96) 100%)',
-          border: '1.5px solid rgba(255,201,74,0.5)',
-          boxShadow: '0 0 32px rgba(255,201,74,0.18)',
+          border: tournament.kind === 'official' ? '2px solid rgba(225,29,29,0.8)' : '1.5px solid rgba(255,201,74,0.5)',
+          boxShadow: tournament.kind === 'official' ? '0 0 32px rgba(225,29,29,0.22)' : '0 0 32px rgba(255,201,74,0.18)',
         }}
       >
         {/* Scanline live */}

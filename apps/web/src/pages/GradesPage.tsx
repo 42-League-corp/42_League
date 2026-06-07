@@ -195,6 +195,10 @@ export function GradesPage() {
 
           {/* Mon standing */}
           {myEntry && myTier ? (
+            (() => {
+            // Grade affiché dans la pastille de la pp : Grand Master (positionnel) prime sur l'ELO.
+            const displayTier = isGm ? GRANDMASTER : myTier;
+            return (
             <div className="flex items-center gap-4 sm:gap-6 flex-wrap sm:flex-nowrap">
               {/* Avatar + anneau du palier */}
               <div className="relative flex-shrink-0">
@@ -205,13 +209,15 @@ export function GradesPage() {
                 <div className="relative rounded-full p-[3px]" style={{ background: `linear-gradient(135deg, ${myTier.color}, ${myTier.color}55)` }}>
                   <Avatar login={myEntry.login} imageUrl={myEntry.imageUrl} size="lg" className="ring-2 ring-bg-1" />
                 </div>
-                {/* Pastille palier */}
+                {/* Pastille palier — Grand Master abrégé en « GM » pour tenir dans la case */}
                 <div
-                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full font-gaming text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ring-2 ring-bg-1"
-                  style={{ background: myTier.color, color: '#15120e' }}
+                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full font-gaming text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ring-2 ring-bg-1 max-w-[120%]"
+                  style={{ background: displayTier.color, color: '#15120e' }}
                 >
-                  <TierIcon tierKey={myTier.key} label={myTier.label} className="w-3 h-3 ring-1 ring-black/20" />
-                  {myTier.label}
+                  <TierIcon tierKey={displayTier.key} label={displayTier.label} className="w-3 h-3 flex-shrink-0 ring-1 ring-black/20" />
+                  <span className="truncate">
+                    {displayTier.key === 'grandmaster' ? 'GM' : displayTier.label}
+                  </span>
                 </div>
               </div>
 
@@ -258,6 +264,8 @@ export function GradesPage() {
                 )}
               </div>
             </div>
+            );
+            })()
           ) : (
             <div className="text-sm text-muted-2 py-4">Joue une partie pour apparaître dans la frise.</div>
           )}

@@ -85,24 +85,8 @@ const UNIVERSE: Record<Game, {
     label: 'ÉCHECS',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        {/* Échiquier */}
-        {Array.from({ length: 5 }, (_, r) =>
-          Array.from({ length: 5 }, (_, c) => {
-            if ((r + c) % 2 === 0) return null;
-            return (
-              <rect key={`${r}-${c}`} x={12 + c * 19.2} y={8 + r * 19.2}
-                width="19.2" height="19.2" fill="#0f3d2a" opacity="0.7" />
-            );
-          })
-        )}
-        <rect x="12" y="8" width="96" height="96" fill="none" stroke="rgba(86,196,110,0.3)" strokeWidth="1.5" rx="2" />
-        {/* Roi d'échecs centré */}
-        <g transform="translate(60, 62)" fill="#dfeee2">
-          <path d="M0 -18 v7 M-4 -15 h8" stroke="#dfeee2" strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M0 -9 C-10 -9 -12 0 -7 6 L-10 20 h20 l-3 -14 C15 0 10 -9 0 -9 Z" />
-          <rect x="-13" y="20" width="26" height="7" rx="2.5" />
-          <rect x="-17" y="27" width="34" height="6" rx="2.5" />
-        </g>
+        {/* Pièce blanche (roi en marbre) centrée */}
+        <image href="/chess.png" x="20" y="6" width="80" height="108" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
