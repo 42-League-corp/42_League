@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronLeft, Gem, Shield, Crown } from 'lucide-react';
+import { ChevronLeft, Crown } from 'lucide-react';
 import {
   RANK_TIERS,
   rankTier,
@@ -10,8 +10,11 @@ import {
   GRANDMASTER_TOP_N,
   GRANDMASTER_MIN_ELO,
   type RankTier,
+  type RankTierKey,
 } from '@42-league/shared';
 import { Avatar } from '../components/Avatar';
+import { TierEmblem } from '../components/TierEmblem';
+import { tierImage } from '../lib/tierImages';
 import { useLeagueData } from '../hooks/useLeagueData';
 import type { LeaderboardEntry } from '../lib/api';
 
@@ -35,9 +38,28 @@ const DIAMANT_COLOR = RANK_TIERS.find((t) => t.key === 'diamant')?.color ?? '#5f
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function TierIcon({ tierKey, className, style }: { tierKey: string; className?: string; style?: React.CSSProperties }) {
-  const Icon = tierKey === 'grandmaster' ? Crown : tierKey === 'diamant' ? Gem : Shield;
-  return <Icon className={className} style={style} strokeWidth={2.2} />;
+/** Emblème (blason) du palier, cadré rond — cf. `public/<tier>.png`. */
+function TierIcon({
+  tierKey,
+  label,
+  className,
+  style,
+}: {
+  tierKey: RankTierKey;
+  label?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <img
+      src={tierImage(tierKey)}
+      alt={label ?? ''}
+      loading="lazy"
+      draggable={false}
+      className={`rounded-full object-cover select-none ${className ?? ''}`}
+      style={style}
+    />
+  );
 }
 
 function fullName(e: { firstName?: string | null; lastName?: string | null; login: string }) {
@@ -188,7 +210,7 @@ export function GradesPage() {
                   className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full font-gaming text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ring-2 ring-bg-1"
                   style={{ background: myTier.color, color: '#15120e' }}
                 >
-                  <TierIcon tierKey={myTier.key} className="w-2.5 h-2.5" />
+                  <TierIcon tierKey={myTier.key} label={myTier.label} className="w-3 h-3 ring-1 ring-black/20" />
                   {myTier.label}
                 </div>
               </div>
@@ -486,7 +508,12 @@ function FriseTrack({
           >
             {/* reflet brossé */}
             <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            <TierIcon tierKey={tier.key} className="w-4 h-4 mb-0.5 flex-shrink-0" style={{ color: tier.color }} />
+            <TierIcon
+              tierKey={tier.key}
+              label={tier.label}
+              className="w-5 h-5 mb-0.5 flex-shrink-0 ring-1"
+              style={{ ['--tw-ring-color' as string]: `${tier.color}66` }}
+            />
             <span
               className="font-gaming text-[9px] font-extrabold uppercase tracking-[0.14em] leading-none truncate px-1"
               style={{ color: tier.color }}
@@ -548,12 +575,7 @@ function TierCard({
           Toi
         </span>
       )}
-      <div
-        className="mx-auto mb-2 w-9 h-9 rounded-lg flex items-center justify-center"
-        style={{ background: `${tier.color}1f`, border: `1px solid ${tier.color}55` }}
-      >
-        <TierIcon tierKey={tier.key} className="w-4 h-4" style={{ color: tier.color }} />
-      </div>
+      <TierEmblem tier={tier} size={52} rounded="lg" className="mx-auto mb-2" />
       <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.12em]" style={{ color: tier.color }}>
         {tier.label}
       </div>

@@ -1,6 +1,6 @@
-import { Crown, Gem, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { rankTierForRank } from '@42-league/shared';
+import { tierImage } from '../lib/tierImages';
 
 /**
  * Badge pill « palier RANKED » à poser à côté d'un score ELO.
@@ -29,8 +29,7 @@ export function RankBadge({
   className?: string;
 }) {
   const tier = rankTierForRank(elo, rank);
-  const Icon = tier.key === 'grandmaster' ? Crown : tier.key === 'diamant' ? Gem : Shield;
-  const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : 'w-3 h-3';
+  const iconCls = size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5';
   const sizeCls = showLabel
     ? size === 'xs'
       ? 'text-[8px] px-1 py-px gap-0.5'
@@ -48,7 +47,14 @@ export function RankBadge({
       }}
       title={tier.label}
     >
-      <Icon className={iconCls} strokeWidth={2.5} />
+      <img
+        src={tierImage(tier.key)}
+        alt={tier.label}
+        loading="lazy"
+        draggable={false}
+        className={`${iconCls} rounded-full object-cover select-none ring-1`}
+        style={{ ['--tw-ring-color' as string]: `${tier.color}66` }}
+      />
       {showLabel && <span>{tier.label}</span>}
     </span>
   );
