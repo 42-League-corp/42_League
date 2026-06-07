@@ -197,29 +197,34 @@ function StreetFighterScene() {
 }
 
 function FlechettesScene() {
+  // Cible de fléchettes vue de face : couronnes concentriques + 20 secteurs
+  // rayonnants + une fléchette plantée en oblique.
+  const cx = 400;
+  const cy = 300;
+  const spokes = Array.from({ length: 20 }, (_, i) => {
+    const a = (i / 20) * Math.PI * 2 - Math.PI / 2;
+    return [cx + Math.cos(a) * 70, cy + Math.sin(a) * 70, cx + Math.cos(a) * 200, cy + Math.sin(a) * 200];
+  });
   return (
     <svg viewBox="0 0 800 600" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
       <g fill="none" stroke={STROKE} strokeWidth={2} opacity={0.5}>
-        {/* Cible : anneaux concentriques + bull */}
-        <circle cx={400} cy={300} r={210} />
-        <circle cx={400} cy={300} r={160} />
-        <circle cx={400} cy={300} r={95} />
-        <circle cx={400} cy={300} r={45} />
-        <circle cx={400} cy={300} r={16} fill={STROKE} />
-        {/* Secteurs */}
-        {Array.from({ length: 20 }, (_, i) => {
-          const a = (i * Math.PI) / 10;
-          return (
-            <line
-              key={i}
-              x1={400 + Math.cos(a) * 45}
-              y1={300 + Math.sin(a) * 45}
-              x2={400 + Math.cos(a) * 210}
-              y2={300 + Math.sin(a) * 210}
-              opacity={0.4}
-            />
-          );
-        })}
+        <circle cx={cx} cy={cy} r={200} />
+        <circle cx={cx} cy={cy} r={180} />
+        <circle cx={cx} cy={cy} r={130} strokeWidth={10} opacity={0.3} />
+        <circle cx={cx} cy={cy} r={70} />
+        <circle cx={cx} cy={cy} r={55} strokeWidth={8} opacity={0.3} />
+        <circle cx={cx} cy={cy} r={22} />
+        <circle cx={cx} cy={cy} r={9} fill={STROKE} />
+        {spokes.map(([x1, y1, x2, y2], i) => (
+          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />
+        ))}
+      </g>
+      {/* Fléchette plantée près du centre, en oblique */}
+      <g opacity={0.6} transform={`translate(${cx + 18} ${cy - 24}) rotate(38)`}>
+        <line x1={0} y1={0} x2={150} y2={0} stroke={STROKE} strokeWidth={5} strokeLinecap="round" />
+        <path d="M0 0 l-14 -7 l4 7 l-4 7 z" fill={STROKE} />
+        <path d="M150 0 l26 -12 l-6 12 l6 12 z" fill={STROKE} />
+        <path d="M158 0 l22 -10 l-5 10 l5 10 z" fill={STROKE} opacity={0.7} />
       </g>
     </svg>
   );
