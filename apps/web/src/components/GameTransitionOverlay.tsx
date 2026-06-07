@@ -31,26 +31,8 @@ const UNIVERSE: Record<Game, {
     label: 'BABYFOOT',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        <defs>
-          <radialGradient id="tb-felt" cx="50%" cy="40%" r="60%">
-            <stop offset="0%" stopColor="#1a5236" />
-            <stop offset="100%" stopColor="#0c2a1c" />
-          </radialGradient>
-        </defs>
-        <circle cx="60" cy="60" r="56" fill="url(#tb-felt)" stroke="rgba(255,201,74,0.4)" strokeWidth="2" />
-        {/* Lignes de terrain */}
-        <line x1="60" y1="10" x2="60" y2="110" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-        <circle cx="60" cy="60" r="16" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-        {/* Barres */}
-        {[32, 50, 70, 88].map((x) => (
-          <g key={x}>
-            <line x1={x} y1="14" x2={x} y2="106" stroke="#c0a060" strokeOpacity="0.55" strokeWidth="2.5" />
-            <circle cx={x} cy="60" r="4.5" fill="#1a1208" stroke="#c0a060" strokeOpacity="0.6" strokeWidth="1.5" />
-          </g>
-        ))}
-        {/* Ballon */}
-        <circle cx="60" cy="60" r="8" fill="white" opacity="0.9" />
-        <circle cx="57" cy="57" r="2.5" fill="#222" opacity="0.6" />
+        {/* Baby-foot (table) centré — visuel dédié à la cinématique de transition */}
+        <image href="/baby%20anim-Photoroom.png" x="2" y="14" width="116" height="92" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
