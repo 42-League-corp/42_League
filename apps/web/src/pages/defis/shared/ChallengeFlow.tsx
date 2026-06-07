@@ -9,6 +9,8 @@ import { useFlash } from '../../../hooks/useFlash';
 import { useI18n, useT } from '../../../lib/i18n';
 import { fmtDayLabel, fmtTime } from '../../../lib/format';
 import { haptic } from '../../../mobile/feedback/useHaptic';
+import { triggerDuelStrike } from '../../../lib/duelStrike';
+import { getGame } from '../../../lib/gameMode';
 import { PlayerSearch } from './PlayerSearch';
 
 const SEND_AWAY_ANIM_MS = 140;
@@ -42,6 +44,7 @@ export function ChallengeFlow({
   others,
   recentOpponents,
   opponentCounts,
+  myLogin,
   presetOpponent = null,
   locations,
   onSubmitted,
@@ -64,6 +67,15 @@ export function ChallengeFlow({
         scheduledAt: when.toISOString(),
       });
       trackEvent('challenge.create');
+      // Cinématique « coup de foudre → VERSUS » : on lance le duel.
+      if (myLogin) {
+        triggerDuelStrike({
+          kind: 'challenge',
+          meLogin: myLogin,
+          opponentLogin: opponent.login,
+          game: getGame(),
+        });
+      }
       flash.show(`${t('defis.challengeSentTo')} @${opponent.login}`);
       haptic('success');
       await onSubmitted();
@@ -74,7 +86,7 @@ export function ChallengeFlow({
       setBusy(false);
       setSending(false);
     }
-  }, [opponent, when, flash, onSubmitted, t]);
+  }, [opponent, when, flash, onSubmitted, t, myLogin]);
 
   const triggerSend = () => {
     setSending(true);

@@ -5,6 +5,7 @@ import { useFlash } from '../../../hooks/useFlash';
 import { useConfirm } from '../../../hooks/useConfirm';
 import { useOpsStatus } from '../../../hooks/useOpsStatus';
 import { useT } from '../../../lib/i18n';
+import { triggerDuelStrike } from '../../../lib/duelStrike';
 
 export interface DefisLogic {
   myLogin: string | undefined;
@@ -204,7 +205,18 @@ export function useDefisLogic(): DefisLogic {
       }
       try {
         if (action === 'accept') {
+          const challenge = challenges.find((c) => c.id === id);
           await api.acceptChallenge(id);
+          // Cinématique « coup de foudre → VERSUS » : on est l'adversaire qui
+          // accepte, le challenger est en face.
+          if (challenge && myLogin) {
+            triggerDuelStrike({
+              kind: 'accept',
+              meLogin: myLogin,
+              opponentLogin: challenge.challengerLogin,
+              game: challenge.game,
+            });
+          }
           flash.show(t('defis.toast.challengeAccepted'));
         } else {
           const res = await api.declineChallenge(id);
@@ -219,7 +231,7 @@ export function useDefisLogic(): DefisLogic {
         flash.show(err instanceof Error ? err.message : String(err), 'error');
       }
     },
-    [challenges, confirm, declinePrompt, flash, refresh, t],
+    [challenges, confirm, declinePrompt, flash, refresh, t, myLogin],
   );
 
   const cancelDeclaration = useCallback(
