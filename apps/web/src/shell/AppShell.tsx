@@ -10,6 +10,7 @@ import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
 import { MatchmakingOverlay } from '../components/MatchmakingOverlay';
+import { DuelStrikeOverlay } from '../components/DuelStrikeOverlay';
 import { ContestRageOverlay } from '../components/ContestRageOverlay';
 
 interface AppShellProps {
@@ -49,6 +50,8 @@ export function AppShell({ children }: AppShellProps) {
       {/* Réaction « rage » plein écran quand une game est contestée — des deux
           côtés du litige (contesteur via API, contesté via SSE) */}
       <ContestRageOverlay />
+      {/* Cinématique « coup de foudre → VERSUS » à l'acceptation/lancement d'un duel */}
+      <DuelStrikeOverlay />
     </>
   );
 }
