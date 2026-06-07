@@ -83,6 +83,29 @@
       linear-gradient(90deg, rgba(255, 122, 24, 0.025) 1px, transparent 1px);
   }
 
+  /* ─── MODE FLÉCHETTES : univers teal/sarcelle ───────────────────────────── */
+  [data-game='flechettes'] {
+    --accent-gold: 20 184 166;
+    --accent-gold-dim: 13 148 136;
+    --accent-gold-deep: 8 80 72;
+    --accent-teal: 20 184 166;
+    --accent-teal-dim: 13 148 136;
+    --accent-teal-deep: 8 80 72;
+  }
+  /* Fond : teinté teal sombre + vignette */
+  [data-game='flechettes'] body {
+    background:
+      radial-gradient(ellipse 60% 40% at 50% -5%, rgba(20, 184, 166, 0.10) 0%, transparent 55%),
+      radial-gradient(ellipse 100% 60% at 50% 115%, rgba(10, 100, 90, 0.08) 0%, transparent 55%),
+      linear-gradient(180deg, #03100e 0%, #020a09 100%);
+  }
+  /* Grille technique en teal très subtil */
+  [data-game='flechettes'] body::before {
+    background-image:
+      linear-gradient(rgba(20, 184, 166, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20, 184, 166, 0.025) 1px, transparent 1px);
+  }
+
   html,
   body,
   #root {

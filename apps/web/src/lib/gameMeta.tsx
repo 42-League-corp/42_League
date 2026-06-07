@@ -20,7 +20,9 @@ export interface GameMeta {
   button: { from: string; via: string; to: string; text: string; border: string; glow: string };
   // Reçoit `sel` (univers sélectionné) : les logos PNG basculent gris↔couleur ;
   // les SVG l'ignorent et se colorent via `currentColor` sur le parent.
-  icon: (sel: boolean) => React.ReactElement;
+  // `size` (px, défaut 20) permet d'agrandir le logo dans les gros contenants
+  // (ex : FAB du sélecteur d'univers) où un PNG à 20px paraît trop petit.
+  icon: (sel: boolean, size?: number) => React.ReactElement;
 }
 
 export const GAME_META: Record<Game, GameMeta> = {
@@ -32,8 +34,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(255,201,74,0.10)',
     glowColor: 'rgba(255,201,74,0.45)',
     button: { from: '#ffd87a', via: '#f0a020', to: '#c5520a', text: '#1a0d00', border: 'rgba(255,201,102,0.6)', glow: 'rgba(255,128,32,0.4)' },
-    icon: () => (
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+    icon: (_sel, size = 20) => (
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
         <rect x="2" y="5" width="20" height="2" rx="1" fill="currentColor" opacity="0.55" />
         <rect x="10.8" y="5" width="2.4" height="10" rx="1" fill="currentColor" />
         <circle cx="12" cy="9.5" r="2.8" fill="currentColor" />
@@ -50,8 +52,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(255,61,80,0.10)',
     glowColor: 'rgba(255,61,80,0.45)',
     button: { from: '#ff9aa6', via: '#ff3d50', to: '#a8121f', text: '#2a0307', border: 'rgba(255,128,140,0.6)', glow: 'rgba(255,61,80,0.4)' },
-    icon: (sel) => (
-      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
+    icon: (sel, size = 20) => (
+      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   chess: {
@@ -62,8 +64,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(86,196,110,0.10)',
     glowColor: 'rgba(86,196,110,0.45)',
     button: { from: '#9ce6ab', via: '#56c46e', to: '#2c7a40', text: '#04240e', border: 'rgba(140,224,160,0.6)', glow: 'rgba(86,196,110,0.4)' },
-    icon: (sel) => (
-      <img src={sel ? '/chess.png' : '/gray%20chess.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
+    icon: (sel, size = 20) => (
+      <img src={sel ? '/chess.png' : '/gray%20chess.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   streetfighter: {
@@ -74,8 +76,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(255,122,24,0.10)',
     glowColor: 'rgba(255,122,24,0.45)',
     button: { from: '#ffc08a', via: '#ff7a18', to: '#b8480a', text: '#2a1200', border: 'rgba(255,176,102,0.6)', glow: 'rgba(255,122,24,0.4)' },
-    icon: (sel) => (
-      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={20} height={20} loading="eager" decoding="async" className="object-contain" aria-hidden />
+    icon: (sel, size = 20) => (
+      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   flechettes: {
@@ -87,8 +89,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     glowColor: 'rgba(20,184,166,0.45)',
     button: { from: '#6fe3d6', via: '#14b8a6', to: '#0a7064', text: '#04241f', border: 'rgba(95,224,210,0.6)', glow: 'rgba(20,184,166,0.4)' },
     // Cible de fléchettes — anneaux concentriques + bull, en currentColor.
-    icon: () => (
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+    icon: (_sel, size = 20) => (
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
         <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.55" />
         <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.8" />
         <circle cx="12" cy="12" r="2.6" fill="currentColor" />

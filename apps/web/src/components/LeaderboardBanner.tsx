@@ -6,25 +6,65 @@ import { useGameMode } from '../hooks/useGameMode';
  * sans prendre la parole : pas de titre "Classement Babyfoot" en gros, juste
  * une immersion visuelle subtile.
  *
- * - Babyfoot : terrain en feutrine verte avec lignes et barres
- * - Smash    : fond sombre rouge avec Smash Ball
- * - Échecs   : échiquier discret vert foncé
+ * - Babyfoot   : terrain en feutrine verte avec lignes et barres
+ * - Smash      : fond sombre rouge avec Smash Ball
+ * - Échecs     : échiquier discret vert foncé
+ * - Street F.  : fond sombre orangé avec logo SF
+ * - Fléchettes : cible discrète teal avec anneaux et bull
  */
 export function LeaderboardBanner() {
   const { game } = useGameMode();
   return (
     <div className="relative -mx-4 sm:mx-0 h-16 sm:h-20 sm:rounded-xl overflow-hidden mb-5">
-      {game === 'smash' ? <SmashField /> : game === 'chess' ? <ChessField /> : game === 'streetfighter' ? <SfField /> : <FoosField />}
+      {game === 'smash' ? <SmashField />
+        : game === 'chess' ? <ChessField />
+        : game === 'streetfighter' ? <SfField />
+        : game === 'flechettes' ? <DartsField />
+        : <FoosField />}
       {/* Fondu vers le bas — le contenu de la page apparaît proprement */}
       <div className="absolute inset-0 bg-gradient-to-t from-bg-1 via-bg-1/50 to-transparent" />
       {/* Petit label discret */}
       <div className="absolute left-4 bottom-2 flex items-center gap-2 opacity-50">
         <div className="w-1 h-3 bg-gradient-to-b from-accent to-accent-dim rounded-full" />
         <span className="text-[9px] uppercase tracking-[0.22em] font-extrabold text-muted-2">
-          {game === 'smash' ? 'Smash Bros' : game === 'chess' ? 'Échecs' : game === 'streetfighter' ? 'Street Fighter' : 'Babyfoot'} · classement
+          {game === 'smash' ? 'Smash Bros'
+            : game === 'chess' ? 'Échecs'
+            : game === 'streetfighter' ? 'Street Fighter'
+            : game === 'flechettes' ? 'Fléchettes'
+            : 'Babyfoot'} · classement
         </span>
       </div>
     </div>
+  );
+}
+
+function DartsField() {
+  return (
+    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 120" aria-hidden>
+      <defs>
+        <linearGradient id="lb-darts" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#062b28" />
+          <stop offset="100%" stopColor="#031a18" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="120" fill="url(#lb-darts)" />
+      {/* Cible à droite : anneaux concentriques + secteurs + bull */}
+      <g transform="translate(340,60)">
+        <circle r="50" fill="none" stroke="rgba(20,184,166,0.35)" strokeWidth="2" />
+        <circle r="38" fill="none" stroke="rgba(20,184,166,0.45)" strokeWidth="2" />
+        <circle r="24" fill="none" stroke="rgba(20,184,166,0.6)" strokeWidth="2" />
+        {Array.from({ length: 10 }, (_, i) => {
+          const a = (i * Math.PI) / 5;
+          return (
+            <line key={i} x1={Math.cos(a) * 14} y1={Math.sin(a) * 14}
+              x2={Math.cos(a) * 50} y2={Math.sin(a) * 50}
+              stroke="rgba(255,255,255,0.10)" strokeWidth="1.2" />
+          );
+        })}
+        <circle r="13" fill="none" stroke="#2dd4bf" strokeWidth="2" />
+        <circle r="5.5" fill="#14b8a6" />
+      </g>
+    </svg>
   );
 }
 

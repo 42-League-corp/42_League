@@ -158,9 +158,12 @@ export function GameModeSwitch() {
               initial={false}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 600, damping: 24 }}
+              className="grid place-items-center"
               style={{ color: m.color }}
             >
-              {m.icon(true)}
+              {/* Logo agrandi (32px) : à 20px les PNG (échecs/SF/smash) paraissent
+                  perdus dans le rond de 52px. */}
+              {m.icon(true, 32)}
             </motion.span>
           </motion.button>
         )}
