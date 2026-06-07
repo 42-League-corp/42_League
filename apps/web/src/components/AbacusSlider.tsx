@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 interface AbacusSliderProps {
   value: number;
@@ -53,6 +53,70 @@ function beadShadow(tone: BeadTone, dragging: boolean): string {
         : `0 0 ${r}px rgba(255,193,50,${a})`;
   return `${glow}, 0 ${dragging ? 12 : 8}px ${dragging ? 20 : 14}px rgba(0,0,0,0.60), inset -3px -4px 8px rgba(0,0,0,0.38), inset 2px 2px 5px rgba(255,255,255,0.32)`;
 }
+
+// ─── Bouton −/+ avec maintien enfoncé (répétition automatique) ──────────────
+
+interface StepButtonProps {
+  direction: -1 | 1;
+  disabled: boolean;
+  tone: BeadTone;
+  onStep: () => void;
+}
+
+function StepButton({ direction, disabled, tone, onStep }: StepButtonProps) {
+  const holdRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startHold = () => {
+    onStep();
+    holdRef.current = setInterval(onStep, 120);
+  };
+  const stopHold = () => {
+    if (holdRef.current !== null) {
+      clearInterval(holdRef.current);
+      holdRef.current = null;
+    }
+  };
+  useEffect(() => stopHold, []);
+
+  const activeColor = tone === 'neg' ? 'rgba(232,38,60,0.22)' : tone === 'pos' ? 'rgba(255,193,50,0.22)' : 'rgba(120,108,90,0.18)';
+  const glowColor  = tone === 'neg' ? 'rgba(232,38,60,0.55)'  : tone === 'pos' ? 'rgba(255,193,50,0.55)'  : 'rgba(120,108,90,0.40)';
+  const textColor  = tone === 'neg' ? '#ff6878' : tone === 'pos' ? '#ffd34a' : '#a8a094';
+
+  return (
+    <button
+      type="button"
+      aria-label={direction === -1 ? 'Moins' : 'Plus'}
+      disabled={disabled}
+      onPointerDown={(e) => { e.preventDefault(); if (!disabled) startHold(); }}
+      onPointerUp={stopHold}
+      onPointerLeave={stopHold}
+      onPointerCancel={stopHold}
+      className="flex-shrink-0 relative grid place-items-center w-10 h-10 rounded-full select-none touch-none
+                 transition-all duration-150 active:scale-90 disabled:opacity-30 disabled:pointer-events-none"
+      style={{
+        background: 'linear-gradient(145deg, #1e1a14 0%, #0e0c09 100%)',
+        boxShadow: `inset 0 1px 0 rgba(255,215,120,0.12), inset 0 -1px 0 rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.55), 0 0 0 1.5px rgba(255,215,120,0.14)`,
+      }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {/* Halo coloré actif — s'allume au hover/focus */}
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-full opacity-0 transition-opacity duration-150 pointer-events-none
+                   group-hover:opacity-100"
+        style={{ background: activeColor }}
+      />
+      {/* Symbole */}
+      <span
+        className="relative z-10 font-black text-lg leading-none select-none"
+        style={{ color: textColor, textShadow: disabled ? 'none' : `0 0 10px ${glowColor}` }}
+      >
+        {direction === -1 ? '−' : '+'}
+      </span>
+    </button>
+  );
+}
+
+// ─── Composant principal ─────────────────────────────────────────────────────
 
 export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -115,6 +179,14 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
   const ratio = max === min ? 0 : (value - min) / (max - min);
   const tone = toneFor(value);
 
+  const step = useCallback(
+    (dir: -1 | 1) => {
+      const next = clamp(value + dir);
+      if (next !== value) onChange(next);
+    },
+    [value, clamp, onChange],
+  );
+
   return (
     <div className="select-none">
       {/* Affichage numérique */}
@@ -128,9 +200,12 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
         </span>
       </div>
 
-      {/* Tige + perle */}
-      <div
-        ref={trackRef}
+      {/* Tige + perle + boutons −/+ */}
+      <div className="flex items-center gap-2">
+        <StepButton direction={-1} disabled={value <= min} tone={tone} onStep={() => step(-1)} />
+        <div className="flex-1 min-w-0">
+        <div
+          ref={trackRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -263,6 +338,9 @@ export function AbacusSlider({ value, onChange, min = -10, max = 9 }: AbacusSlid
         )}
         <span>{max}</span>
       </div>
+        </div>{/* flex-1 */}
+        <StepButton direction={1} disabled={value >= max} tone={tone} onStep={() => step(1)} />
+      </div>{/* flex row */}
     </div>
   );
 }
