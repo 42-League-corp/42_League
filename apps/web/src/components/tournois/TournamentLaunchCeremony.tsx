@@ -213,19 +213,187 @@ function DrawReveal({
   );
 }
 
-// ─── Particules (étincelles) ─────────────────────────────────────────────────────
+// ─── Particules (étincelles autour du titre) ─────────────────────────────────────
 
-const PARTICLES = Array.from({ length: 14 }, (_, i) => {
-  const angle = (i / 14) * 2 * Math.PI;
-  const dist = 140 + Math.random() * 90;
+const PARTICLES = Array.from({ length: 22 }, (_, i) => {
+  const angle = (i / 22) * 2 * Math.PI;
+  const dist = 150 + Math.random() * 120;
   return {
     id: i,
     x: Math.cos(angle) * dist,
     y: Math.sin(angle) * dist,
-    size: 3 + Math.random() * 6,
+    size: 3 + Math.random() * 7,
     delay: Math.random() * 0.4,
   };
 });
+
+// ─── Braises ascendantes (ambiance arène) ────────────────────────────────────────
+
+const EMBERS = Array.from({ length: 46 }, (_, i) => ({
+  id: i,
+  left: Math.random() * 100,
+  size: 2 + Math.random() * 4,
+  delay: Math.random() * 5,
+  dur: 5 + Math.random() * 5,
+  drift: (Math.random() - 0.5) * 90,
+}));
+
+/** Pluie de braises dorées qui montent en continu, déphasées. Purement décoratif. */
+function EmberField({ accent }: { accent: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      {EMBERS.map((e) => (
+        <motion.div
+          key={e.id}
+          className="absolute rounded-full"
+          style={{
+            left: `${e.left}%`, bottom: -12,
+            width: e.size, height: e.size,
+            background: accent, boxShadow: `0 0 ${e.size * 2.5}px ${accent}`,
+          }}
+          initial={{ y: 0, x: 0, opacity: 0 }}
+          animate={{ y: -1200, x: e.drift, opacity: [0, 0.9, 0.9, 0] }}
+          transition={{ delay: e.delay, duration: e.dur, ease: 'linear', repeat: Infinity }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Rayons divins (god rays) ────────────────────────────────────────────────────
+
+/** Deux couronnes de rayons contra-rotatives derrière le titre, fondues en bord. */
+function GodRays({ accent }: { accent: string }) {
+  const mask = 'radial-gradient(closest-side, rgba(0,0,0,1) 10%, rgba(0,0,0,0.5) 45%, transparent 78%)';
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden>
+      <motion.div
+        className="absolute"
+        style={{
+          width: '200vmax', height: '200vmax',
+          background: `repeating-conic-gradient(from 0deg at 50% 50%, ${accent}22 0deg 5deg, transparent 5deg 24deg)`,
+          WebkitMaskImage: mask, maskImage: mask, filter: 'blur(2px)',
+        }}
+        initial={{ rotate: 0, opacity: 0 }}
+        animate={{ rotate: 360, opacity: 0.55 }}
+        transition={{ rotate: { duration: 60, ease: 'linear', repeat: Infinity }, opacity: { duration: 1.2 } }}
+      />
+      <motion.div
+        className="absolute"
+        style={{
+          width: '160vmax', height: '160vmax',
+          background: `repeating-conic-gradient(from 0deg at 50% 50%, ${accent}14 0deg 3deg, transparent 3deg 30deg)`,
+          WebkitMaskImage: mask, maskImage: mask, filter: 'blur(3px)',
+        }}
+        animate={{ rotate: -360 }}
+        transition={{ duration: 90, ease: 'linear', repeat: Infinity }}
+      />
+    </div>
+  );
+}
+
+// ─── Ondes de choc (impact d'ouverture) ──────────────────────────────────────────
+
+/** Anneaux d'énergie qui jaillissent du centre au lancement. */
+function Shockwaves({ accent }: { accent: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
+      {[0, 0.18, 0.36].map((d, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full"
+          style={{ border: `2.5px solid ${accent}`, boxShadow: `0 0 40px ${accent}` }}
+          initial={{ width: 0, height: 0, opacity: 0.8 }}
+          animate={{ width: 1500, height: 1500, opacity: 0 }}
+          transition={{ delay: d, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Épées croisées (clash) ──────────────────────────────────────────────────────
+
+function Sword({ flip, accent }: { flip?: boolean; accent: string }) {
+  return (
+    <svg viewBox="0 0 150 26" width="150" height="26" style={{ transform: flip ? 'scaleX(-1)' : undefined, overflow: 'visible' }} aria-hidden>
+      <defs>
+        <linearGradient id={`blade-${flip ? 'r' : 'l'}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#eef4fb" />
+          <stop offset="50%" stopColor="#aeb9c7" />
+          <stop offset="100%" stopColor="#6b7682" />
+        </linearGradient>
+      </defs>
+      {/* Lame */}
+      <polygon points="34,9 132,11 144,13 132,15 34,17" fill={`url(#blade-${flip ? 'r' : 'l'})`} stroke="#8a96a4" strokeWidth="0.6" />
+      <line x1="40" y1="13" x2="130" y2="13" stroke="#fff" strokeWidth="0.8" opacity="0.5" />
+      {/* Garde */}
+      <rect x="26" y="3" width="7" height="20" rx="3" fill="#caa24a" stroke="#8a6534" strokeWidth="0.8" />
+      {/* Poignée */}
+      <rect x="10" y="10" width="18" height="6" rx="3" fill="#5a3d1c" />
+      {/* Pommeau */}
+      <circle cx="9" cy="13" r="6" fill="#caa24a" stroke="#8a6534" strokeWidth="0.8" />
+      <circle cx="9" cy="13" r="2.4" fill={accent} />
+    </svg>
+  );
+}
+
+/** Deux épées qui foncent et se croisent en X avec une gerbe d'étincelles au clash. */
+function CrossedSwords({ accent }: { accent: string }) {
+  const [clashed, setClashed] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setClashed(true), 520);
+    return () => clearTimeout(id);
+  }, []);
+  const sparks = Array.from({ length: 12 }, (_, i) => {
+    const a = (i / 12) * 2 * Math.PI;
+    return { id: i, x: Math.cos(a) * (50 + Math.random() * 40), y: Math.sin(a) * (50 + Math.random() * 40) };
+  });
+  return (
+    <div className="relative flex items-center justify-center" style={{ height: 60, width: 240 }} aria-hidden>
+      <motion.div
+        className="absolute"
+        initial={{ x: -260, y: -10, rotate: 28, opacity: 0 }}
+        animate={{ x: -8, y: 0, rotate: 28, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 15, delay: 0.18 }}
+        style={{ transformOrigin: 'center' }}
+      >
+        <Sword accent={accent} />
+      </motion.div>
+      <motion.div
+        className="absolute"
+        initial={{ x: 260, y: -10, rotate: -28, opacity: 0 }}
+        animate={{ x: 8, y: 0, rotate: -28, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 15, delay: 0.18 }}
+        style={{ transformOrigin: 'center' }}
+      >
+        <Sword flip accent={accent} />
+      </motion.div>
+      {/* Flash + étincelles au point de contact */}
+      {clashed && (
+        <>
+          <motion.div
+            className="absolute rounded-full"
+            style={{ background: '#fff', boxShadow: `0 0 50px 20px ${accent}` }}
+            initial={{ width: 8, height: 8, opacity: 1 }}
+            animate={{ width: 70, height: 70, opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+          {sparks.map((s) => (
+            <motion.div
+              key={s.id}
+              className="absolute rounded-full"
+              style={{ width: 3, height: 3, background: accent, boxShadow: `0 0 8px ${accent}` }}
+              initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+              animate={{ x: s.x, y: s.y, opacity: 0, scale: 0 }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
@@ -267,24 +435,37 @@ export default function TournamentLaunchCeremony({
           transition={{ duration: 0.3 }}
           className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden"
           style={{
-            background: 'radial-gradient(ellipse at center, rgba(18,14,8,0.96) 0%, rgba(5,4,2,0.99) 100%)',
+            background: 'radial-gradient(ellipse at center, rgba(20,15,8,0.97) 0%, rgba(3,2,1,0.995) 100%)',
             backdropFilter: 'blur(10px)',
           }}
           onClick={(e) => { if (e.target === e.currentTarget) handleDone(); }}
         >
+          {/* Rayons divins rotatifs derrière toute la scène */}
+          <GodRays accent={accent} />
+
+          {/* Pluie de braises ascendantes */}
+          <EmberField accent={accent} />
+
+          {/* Ondes de choc à l'ouverture */}
+          <Shockwaves accent={accent} />
+
           {/* Décor de joute aux deux bords (chevaliers + bannières + drapeaux) */}
           <JoustingFlanks accent={accent} />
 
-          {/* Vignette + halo conique tournant */}
+          {/* Flash blanc d'impact synchronisé sur le clash des épées */}
           <motion.div
             aria-hidden
+            className="absolute inset-0 pointer-events-none bg-white"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.55, 0] }}
+            transition={{ delay: 0.52, duration: 0.4, times: [0, 0.15, 1] }}
+          />
+
+          {/* Vignette sombre pour concentrer le regard au centre */}
+          <div
+            aria-hidden
             className="absolute inset-0 pointer-events-none"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 24, ease: 'linear', repeat: Infinity }}
-            style={{
-              background: `conic-gradient(from 0deg at 50% 50%, transparent 0deg, ${accent}26 60deg, transparent 120deg)`,
-              filter: 'blur(70px)',
-            }}
+            style={{ background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.65) 100%)' }}
           />
 
           {/* Bouton Passer */}
@@ -296,8 +477,15 @@ export default function TournamentLaunchCeremony({
             {t('tourn.launch.skip')}
           </button>
 
-          {/* ── Contenu central ── */}
-          <div className="relative z-10 flex flex-col items-center gap-7 px-6 max-w-2xl w-full">
+          {/* ── Contenu central (secousse d'impact au clash) ── */}
+          <motion.div
+            className="relative z-10 flex flex-col items-center gap-6 px-6 max-w-2xl w-full"
+            animate={{ x: [0, -8, 7, -4, 2, 0], y: [0, 5, -4, 2, -1, 0] }}
+            transition={{ delay: 0.52, duration: 0.45, ease: 'easeOut' }}
+          >
+
+            {/* Épées qui s'entrechoquent */}
+            <CrossedSwords accent={accent} />
 
             {/* Titre */}
             <motion.div
@@ -324,17 +512,19 @@ export default function TournamentLaunchCeremony({
               >
                 ⚔ {tournamentName} ⚔
               </div>
-              <div
-                className="font-display text-4xl sm:text-5xl font-black uppercase tracking-tight leading-tight"
+              <motion.div
+                initial={{ scale: 2.7, opacity: 0, filter: 'blur(16px)' }}
+                animate={{ scale: 1, opacity: 1, filter: `blur(0px) drop-shadow(0 0 26px ${accent}aa)` }}
+                transition={{ delay: 0.35, type: 'spring', stiffness: 280, damping: 17 }}
+                className="font-display text-5xl sm:text-7xl font-black uppercase tracking-tight leading-[0.95]"
                 style={{
                   background: `linear-gradient(135deg, #fff7e4 0%, ${accent} 55%, #fff7e4 100%)`,
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  filter: `drop-shadow(0 0 22px ${accent}99)`,
                 }}
               >
                 {t('tourn.launch.title')}
-              </div>
+              </motion.div>
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -390,7 +580,7 @@ export default function TournamentLaunchCeremony({
             >
               {t('tourn.launch.revealBracket')}
             </motion.button>
-          </div>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>

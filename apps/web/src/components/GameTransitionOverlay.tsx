@@ -79,21 +79,8 @@ const UNIVERSE: Record<Game, {
     label: 'FLÉCHETTES',
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
-        {/* Cible : anneaux concentriques + secteurs + bull */}
-        <circle cx="60" cy="60" r="56" fill="#062b28" stroke="rgba(20,184,166,0.4)" strokeWidth="2" />
-        <circle cx="60" cy="60" r="44" fill="none" stroke="rgba(20,184,166,0.45)" strokeWidth="2" />
-        <circle cx="60" cy="60" r="30" fill="none" stroke="rgba(20,184,166,0.6)" strokeWidth="2" />
-        {Array.from({ length: 10 }, (_, i) => {
-          const a = (i * Math.PI) / 5;
-          return (
-            <line key={i} x1={60 + Math.cos(a) * 16} y1={60 + Math.sin(a) * 16}
-              x2={60 + Math.cos(a) * 56} y2={60 + Math.sin(a) * 56}
-              stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
-          );
-        })}
-        <circle cx="60" cy="60" r="16" fill="none" stroke="#2dd4bf" strokeWidth="2" />
-        <circle cx="60" cy="60" r="7" fill="#ff4d5c" />
-        <circle cx="60" cy="60" r="3" fill="#0c2a28" />
+        {/* Fléchette seule, centrée */}
+        <image href="/flechette.png" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },

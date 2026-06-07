@@ -82,14 +82,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(20,184,166,0.10)',
     glowColor: 'rgba(20,184,166,0.45)',
     button: { from: '#6fe3d6', via: '#14b8a6', to: '#0a7064', text: '#04241f', border: 'rgba(95,224,210,0.6)', glow: 'rgba(20,184,166,0.4)' },
-    // Cible de fléchettes — anneaux concentriques + bull, en currentColor.
     icon: (_sel, size = 20) => (
-      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.55" />
-        <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" opacity="0.8" />
-        <circle cx="12" cy="12" r="2.6" fill="currentColor" />
-        <path d="M12 1.5 v3 M12 19.5 v3 M1.5 12 h3 M19.5 12 h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.5" />
-      </svg>
+      <img src="/flechette.png" alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
 };

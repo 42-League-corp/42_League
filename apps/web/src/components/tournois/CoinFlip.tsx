@@ -44,8 +44,11 @@ export default function CoinFlip({
 
   // Angle final : la face « pile » (heads) tombe à 0°, « face » (tails) à 180°.
   const restAngle = side === 'tails' ? 180 : 0;
-  // Hauteur de la « scène » : la pièce doit pouvoir monter sans être rognée.
-  const lift = Math.round(size * 1.15);
+  // Lancer plein écran : la pièce part du bas de l'écran, sort par le haut, puis
+  // retombe au centre. Distances dérivées de la hauteur du viewport.
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const throwStart = vh * 0.6; // point de départ, sous l'écran
+  const throwTop = -vh * 0.6; // apogée, au-dessus de l'écran (hors champ)
 
   const faceStyle = {
     backfaceVisibility: 'hidden' as const,
