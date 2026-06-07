@@ -257,9 +257,12 @@ function TournoiCard({ t }: { t: Tournament }) {
   return (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className={`group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5 ${
-        t.kind === 'official' ? 'ring-2 ring-red/70 hover:ring-red' : ''
-      }`}
+      className="group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
+      style={
+        t.kind === 'official'
+          ? { border: '2px solid #ff5366', boxShadow: '0 0 0 1px rgba(255,83,102,0.35), 0 0 18px rgba(255,83,102,0.45)' }
+          : undefined
+      }
     >
       {/* Art en haut (format 4:3) */}
       <div className="relative aspect-video overflow-hidden">
@@ -392,10 +395,10 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
         initial={{ opacity: 0, scale: 0.95, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-        className="relative w-full max-w-lg rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
+        className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40">
+        <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40 shrink-0">
           {game === 'smash' ? <SmashTrophy accent="#ff4d5c" className="w-10 h-10 shrink-0" />
             : game === 'streetfighter' ? <SmashTrophy accent="#ff7a18" className="w-10 h-10 shrink-0" />
             : game === 'chess' ? <ChessTrophy accent="#56c46e" className="w-10 h-10 shrink-0" />
@@ -412,7 +415,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
           <Field label={t('tournois.field.name')}>
             <input
               value={name}
