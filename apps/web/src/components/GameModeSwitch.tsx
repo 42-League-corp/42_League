@@ -115,7 +115,7 @@ export function GameModeSwitch() {
                         boxShadow: sel ? `0 0 16px -5px ${gm.glowColor}` : 'none',
                       }}
                     >
-                      <span className="grid h-6 w-6 place-items-center" style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel)}</span>
+                      <span className="grid h-8 w-8 place-items-center" style={{ color: sel ? gm.color : 'rgba(255,255,255,0.45)' }}>{gm.icon(sel, 28)}</span>
                       {/* Libellé court, identique quelle que soit la langue (Baby / Smash / Échecs / SF). */}
                       <span
                         className="w-full text-center text-[10px] font-extrabold uppercase tracking-wider leading-none whitespace-nowrap"

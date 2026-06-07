@@ -36,8 +36,16 @@ import {
   type DayPoint,
 } from '../lib/api';
 import type { Game } from '../lib/gameMode';
+import { useGameMode } from '../hooks/useGameMode';
+import { useLeagueData } from '../hooks/useLeagueData';
+import { GAMES, GAME_META } from '../lib/gameMeta';
+import { fireContestRage } from '../lib/contestRage';
+import { VersusOverlay as GlobalVersusOverlay } from '../components/VersusOverlay';
+import { VersusOverlay as TournVersusOverlay } from '../components/tournois/VersusOverlay';
+import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
+import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -3762,6 +3770,103 @@ function StatsTab() {
   );
 }
 
+// ─── Onglet ANIMATIONS : déclenche manuellement les cinématiques du site ───────
+function AnimationsTab({ myLogin }: { myLogin: string }) {
+  const t = useT();
+  const { leaderboard, me } = useLeagueData();
+  const { game, setGame } = useGameMode();
+
+  // Échantillon de joueurs : vrais joueurs du classement si dispo, sinon factices.
+  const meLogin = me?.login ?? myLogin;
+  const pool = leaderboard.map((e) => ({ login: e.login, imageUrl: e.imageUrl }));
+  const meP = { login: meLogin, imageUrl: pool.find((p) => p.login === meLogin)?.imageUrl ?? null };
+  const others = pool.filter((p) => p.login !== meLogin);
+  const opp = others[0] ?? { login: 'rival', imageUrl: null };
+  const participants =
+    pool.length >= 4
+      ? pool.slice(0, 8)
+      : [meP, opp, { login: 'joueur3', imageUrl: null }, { login: 'joueur4', imageUrl: null }];
+  const pairings: { a: { login: string; imageUrl: string | null } | null; b: { login: string; imageUrl: string | null } | null }[] = [];
+  for (let i = 0; i < participants.length; i += 2) {
+    pairings.push({ a: participants[i] ?? null, b: participants[i + 1] ?? null });
+  }
+  const accent = GAME_META[game].color;
+
+  type Anim = null | 'versus' | 'tversus' | 'ceremony';
+  const [anim, setAnim] = useState<Anim>(null);
+  const [coinOpen, setCoinOpen] = useState(false);
+  const [coin, setCoin] = useState<{ flipping: boolean; side: 'heads' | 'tails' | null }>({ flipping: false, side: null });
+
+  const playCoin = () => {
+    setCoinOpen(true);
+    setCoin({ flipping: true, side: null });
+    // Lancer ~2.6 s, atterrissage + PP du gagnant ~4 s, puis fermeture.
+    window.setTimeout(() => setCoin({ flipping: false, side: Date.now() % 2 ? 'heads' : 'tails' }), 2600);
+    window.setTimeout(() => { setCoinOpen(false); setCoin({ flipping: false, side: null }); }, 6500);
+  };
+  const coinWinner = coin.side === 'tails' ? opp : meP;
+
+  const cycleGame = () => {
+    const idx = GAMES.indexOf(game);
+    const next = GAMES[(idx + 1) % GAMES.length];
+    if (next) setGame(next);
+  };
+
+  const items: { key: string; label: string; desc: string; onClick: () => void }[] = [
+    { key: 'versus', label: 'VERSUS (matchmaking)', desc: 'Écran VS plein écran (toi vs un joueur).', onClick: () => setAnim('versus') },
+    { key: 'tversus', label: 'VERSUS (tournoi)', desc: 'Éclair diagonal + VS, couleur du mode courant.', onClick: () => setAnim('tversus') },
+    { key: 'coin', label: 'Pile ou face', desc: 'Pièce lancée en l\'air + révélation de la PP du gagnant.', onClick: playCoin },
+    { key: 'ceremony', label: 'Cérémonie de lancement', desc: 'Cérémonie de tournoi (titre, tirage, parade).', onClick: () => setAnim('ceremony') },
+    { key: 'rage', label: 'Contestation (rage)', desc: 'Flash rouge + onde de choc + emojis de rage.', onClick: () => fireContestRage('sender') },
+    { key: 'transition', label: 'Transition de mode ⚠️', desc: 'Joue la cinématique en passant au mode suivant (change ton mode).', onClick: cycleGame },
+  ];
+
+  return (
+    <div className="p-4 space-y-4">
+      <p className="text-zinc-400 text-xs">
+        Déclenche manuellement les cinématiques du site, avec des données d'exemple. Le mode courant ({t(`game.${game}`)}) sert d'accent.
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {items.map((it) => (
+          <button
+            key={it.key}
+            onClick={it.onClick}
+            className="text-left p-4 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+          >
+            <div className="text-zinc-100 text-sm font-bold tracking-wide">{it.label}</div>
+            <div className="text-zinc-500 text-[11px] mt-1 leading-snug">{it.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Cinématiques montées à la demande (chacune portale en plein écran) */}
+      {anim === 'versus' && (
+        <GlobalVersusOverlay me={meP} opponent={opp} game={game} onDone={() => setAnim(null)} />
+      )}
+      <TournVersusOverlay open={anim === 'tversus'} a={meP} b={opp} accent={accent} onDone={() => setAnim(null)} t={t} />
+      <CoinFlipOverlay
+        open={coinOpen}
+        side={coin.side}
+        flipping={coin.flipping}
+        winnerName={!coin.flipping && coin.side ? coinWinner.login : undefined}
+        winnerLogin={!coin.flipping && coin.side ? coinWinner.login : undefined}
+        winnerImageUrl={coinWinner.imageUrl}
+        t={t}
+      />
+      {anim === 'ceremony' && (
+        <TournamentLaunchCeremony
+          tournamentName="Tournoi de démonstration"
+          participants={participants}
+          pairings={pairings}
+          accent={accent}
+          onDone={() => setAnim(null)}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'stats' },
   { id: 'users' },
@@ -3776,6 +3881,7 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'history' },
   { id: 'tournaments' },
   { id: 'seasons', superAdminOnly: true },
+  { id: 'animations' },
 ];
 
 export function GODPage() {
@@ -3922,6 +4028,7 @@ export function GODPage() {
           {activeTab === 'history' && <AllHistoryTab />}
           {activeTab === 'tournaments' && <TournamentsTab />}
           {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
+          {activeTab === 'animations' && <AnimationsTab myLogin={myLogin} />}
         </motion.div>
       </div>
     </div>
