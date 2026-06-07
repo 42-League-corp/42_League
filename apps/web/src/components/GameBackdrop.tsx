@@ -44,7 +44,10 @@ function GameBackdropImpl() {
     <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {/* React remonte la scène à chaque changement → fondu via `animate-backdrop-in`. */}
       <div key={game} className="absolute inset-0 animate-backdrop-in">
-        {/* 1. Photo héro plein écran */}
+        {/* 1. Photo héro : floutée + désaturée + assombrie en BG → la photo
+               devient AMBIANCE, jamais SUJET. Le contenu reste lisible partout.
+               Brightness 38 % + flou 14 px = forme/couleur perceptibles, mais
+               aucun détail ne parasite le HUD. */}
         <img
           src={bg}
           alt=""
@@ -53,25 +56,21 @@ function GameBackdropImpl() {
           loading="eager"
           fetchPriority="low"
           decoding="async"
+          style={{ filter: 'blur(14px) saturate(0.85) brightness(0.38)', transform: 'scale(1.08)' }}
         />
 
-        {/* 2. Scrim radial : assombrit les bords pour garantir la lecture du HUD.
-               Bords ≈ noir opaque, centre ≈ photo à fond. */}
+        {/* 2. Voile sombre plat sur toute la surface — supprime les
+               variations de luminosité qui parasitaient la lecture (barres
+               brillantes, joueurs centraux trop visibles). */}
+        <div className="absolute inset-0" style={{ background: 'rgba(8,6,4,0.55)' }} />
+
+        {/* 3. Vignette radiale : assombrit encore les bords pour focaliser
+               l'attention vers le centre où vit le contenu. */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(ellipse 85% 78% at 50% 45%, rgba(8,6,4,0) 0%, rgba(8,6,4,0.35) 55%, rgba(8,6,4,0.92) 100%)',
-          }}
-        />
-
-        {/* 3. Scrim vertical : voile sombre en bas — c'est là que les pages
-               affichent la majorité de leur contenu (cartes, listes). */}
-        <div
-          className="absolute inset-x-0 bottom-0 h-2/3"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.55) 55%, rgba(8,6,4,0.88) 100%)',
+              'radial-gradient(ellipse 90% 80% at 50% 45%, transparent 0%, rgba(8,6,4,0.6) 100%)',
           }}
         />
 
@@ -83,8 +82,8 @@ function GameBackdropImpl() {
           draggable={false}
           loading="lazy"
           decoding="async"
-          className="absolute left-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 select-none opacity-[0.18] mix-blend-screen 2xl:block"
-          style={{ filter: 'drop-shadow(0 0 28px rgba(255,201,74,0.18))' }}
+          className="absolute left-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 select-none opacity-[0.10] mix-blend-screen 2xl:block"
+          style={{ filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))' }}
         />
         <img
           src={prop}
@@ -92,8 +91,8 @@ function GameBackdropImpl() {
           draggable={false}
           loading="lazy"
           decoding="async"
-          className="absolute right-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 -scale-x-100 select-none opacity-[0.18] mix-blend-screen 2xl:block"
-          style={{ filter: 'drop-shadow(0 0 28px rgba(255,201,74,0.18))' }}
+          className="absolute right-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 -scale-x-100 select-none opacity-[0.10] mix-blend-screen 2xl:block"
+          style={{ filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))' }}
         />
       </div>
     </div>
