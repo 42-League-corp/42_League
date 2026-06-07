@@ -15,12 +15,16 @@ export function CoinFlipOverlay({
   side,
   flipping,
   winnerName,
+  winnerLogin,
+  winnerImageUrl,
   t,
 }: {
   open: boolean;
   side: 'heads' | 'tails' | null;
   flipping: boolean;
   winnerName?: string;
+  winnerLogin?: string;
+  winnerImageUrl?: string | null;
   t: (k: string) => string;
 }) {
   return createPortal(
@@ -56,6 +60,8 @@ export function CoinFlipOverlay({
               side={side}
               flipping={flipping}
               winnerName={winnerName}
+              winnerLogin={winnerLogin}
+              winnerImageUrl={winnerImageUrl}
               onFlip={undefined}
               t={t}
               size={188}

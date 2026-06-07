@@ -2,19 +2,25 @@
  * CoinFlip — pile-ou-face médiéval avec la pièce 42coin en 3D.
  *
  * Tout passe par les props (aucune logique réseau ici) :
- *  - `flipping` true → la pièce tourne en boucle (rotateY) tant que le backend
- *    n'a pas tranché ; `side` la fige sur 'heads'/'tails'.
+ *  - `flipping` true → la pièce est LANCÉE EN L'AIR : elle décrit une parabole
+ *    (montée/chute) en tournoyant (rotateX + rotateY) tant que le backend n'a pas
+ *    tranché ; `side` la fige sur 'heads'/'tails'.
  *  - tant que `side === null && !flipping` : on montre le bouton « Pile ou face ».
- *  - une fois résolu : « {name} gagne le tirage ».
+ *  - une fois résolu : la pièce se retire et on dévoile la PP du vainqueur du
+ *    tirage avec « {name} gagne le tirage ».
  *
  * La fonction de trad `t` est fournie par le parent (interpolation via replace).
  */
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Avatar } from '../Avatar';
 
 export interface CoinFlipProps {
   side: 'heads' | 'tails' | null;
   flipping: boolean;
   winnerName?: string;
+  /** Login + photo du vainqueur du tirage, pour révéler sa PP à l'atterrissage. */
+  winnerLogin?: string;
+  winnerImageUrl?: string | null;
   onFlip?: () => void;
   t: (k: string) => string;
   /** Diamètre de la pièce en px (défaut 96 ; l'overlay l'affiche en grand). */
@@ -23,49 +29,113 @@ export interface CoinFlipProps {
 
 const COIN = '/42coin.png';
 
-export default function CoinFlip({ side, flipping, winnerName, onFlip, t, size = 96 }: CoinFlipProps) {
+export default function CoinFlip({
+  side,
+  flipping,
+  winnerName,
+  winnerLogin,
+  winnerImageUrl,
+  onFlip,
+  t,
+  size = 96,
+}: CoinFlipProps) {
   const resolved = side !== null && !flipping;
+  const big = size >= 140;
 
   // Angle final : la face « pile » (heads) tombe à 0°, « face » (tails) à 180°.
-  // Pendant le flip on enchaîne des tours complets ; à l'arrêt on cale dessus.
   const restAngle = side === 'tails' ? 180 : 0;
+  // Hauteur de la « scène » : la pièce doit pouvoir monter sans être rognée.
+  const lift = Math.round(size * 1.15);
+
+  const faceStyle = {
+    backfaceVisibility: 'hidden' as const,
+    WebkitBackfaceVisibility: 'hidden' as const,
+    filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))',
+  };
 
   return (
     <div className="flex flex-col items-center gap-4 py-2">
-      {/* Pièce en perspective 3D */}
-      <div style={{ perspective: 800 }}>
-        <motion.div
-          className="relative"
-          style={{ width: size, height: size, transformStyle: 'preserve-3d' }}
-          animate={
-            flipping
-              ? { rotateY: [0, 360, 720, 1080] }
-              : { rotateY: restAngle }
-          }
-          transition={
-            flipping
-              ? { duration: 0.7, ease: 'linear', repeat: Infinity }
-              : { duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }
-          }
-        >
-          <img
-            src={COIN}
-            alt="42coin"
-            draggable={false}
-            className="w-full h-full object-contain select-none"
-            style={{
-              backfaceVisibility: 'hidden',
-              filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))',
-            }}
+      {/* Scène du lancer : pièce + ombre projetée au sol. On ne réserve la hauteur
+          de vol que pendant le lancer (sinon, au repos, un grand vide au-dessus). */}
+      <motion.div
+        className="relative flex items-end justify-center"
+        style={{ width: size, perspective: 900 }}
+        animate={{ height: flipping ? size + lift : size }}
+        transition={{ duration: 0.25 }}
+      >
+        <AnimatePresence mode="popLayout">
+          {resolved && winnerLogin ? (
+            // ── Révélation : PP du vainqueur qui jaillit ──
+            <motion.div
+              key="winner-pp"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              initial={{ scale: 0.2, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.6, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 18 }}
+            >
+              <Avatar login={winnerLogin} imageUrl={winnerImageUrl ?? null} size={big ? 'xl' : 'lg'} />
+            </motion.div>
+          ) : (
+            // ── Pièce lancée en l'air ──
+            <motion.div
+              key="coin"
+              className="absolute left-1/2 bottom-0 -translate-x-1/2"
+              style={{ width: size, height: size, transformStyle: 'preserve-3d' }}
+              exit={{ opacity: 0, scale: 0.7, transition: { duration: 0.2 } }}
+              animate={
+                flipping
+                  ? {
+                      // Parabole : monte haut (suspens à l'apex) puis retombe, en boucle.
+                      y: [0, -lift, -lift * 0.5, -lift, 0],
+                      rotateY: [0, 540, 1080, 1620, 2160],
+                      rotateX: [0, 160, 320, 500, 720],
+                      scale: [1, 1.12, 1.06, 1.12, 1],
+                    }
+                  : { y: 0, rotateY: restAngle, rotateX: 0, scale: 1 }
+              }
+              transition={
+                flipping
+                  ? { duration: 1.4, ease: 'easeInOut', repeat: Infinity, times: [0, 0.28, 0.5, 0.72, 1] }
+                  : { type: 'spring', stiffness: 260, damping: 16 }
+              }
+            >
+              {/* Face avant + face arrière (la pièce reste visible quel que soit l'angle) */}
+              <img src={COIN} alt="42coin" draggable={false}
+                className="absolute inset-0 w-full h-full object-contain select-none" style={faceStyle} />
+              <img src={COIN} alt="" aria-hidden draggable={false}
+                className="absolute inset-0 w-full h-full object-contain select-none"
+                style={{ ...faceStyle, transform: 'rotateY(180deg)' }} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Ombre au sol — se rétrécit/s'éclaircit quand la pièce monte */}
+        {!resolved && (
+          <motion.div
+            aria-hidden
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-[50%]"
+            style={{ width: size * 0.7, height: size * 0.16, background: 'rgba(0,0,0,0.45)', filter: 'blur(4px)' }}
+            animate={
+              flipping
+                ? { scaleX: [1, 0.5, 0.7, 0.5, 1], opacity: [0.45, 0.12, 0.25, 0.12, 0.45] }
+                : { scaleX: 1, opacity: 0.4 }
+            }
+            transition={
+              flipping
+                ? { duration: 1.4, ease: 'easeInOut', repeat: Infinity, times: [0, 0.28, 0.5, 0.72, 1] }
+                : { duration: 0.4 }
+            }
           />
-        </motion.div>
-      </div>
+        )}
+      </motion.div>
 
       {/* États */}
       {resolved && winnerName ? (
         <motion.p
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
           className="text-sm font-extrabold uppercase tracking-wider text-gold text-center"
         >
           {t('tourn.duel.tossWinner').replace('{name}', winnerName)}

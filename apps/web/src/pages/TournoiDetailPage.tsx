@@ -1017,6 +1017,15 @@ function BracketMatch({
   // tranché ET révélé (on garde l'annonce du gagnant à l'écran un instant).
   const duelPending = isBracket && canRecord && !recorded && (!tossDone || !tossRevealed);
   const tossWinnerName = match.tossWinnerLogin ?? '';
+  // PP du vainqueur du tirage (révélée à l'atterrissage de la pièce).
+  const tossWinnerImageUrl = match.tossWinnerLogin
+    ? (tournament.entries ?? [])
+        .flatMap((e) => [
+          { login: e.login, imageUrl: e.user?.imageUrl ?? null },
+          ...(e.partnerLogin ? [{ login: e.partnerLogin, imageUrl: e.partner?.imageUrl ?? null }] : []),
+        ])
+        .find((p) => p.login === match.tossWinnerLogin)?.imageUrl ?? null
+    : null;
 
   // Une fois le résultat du tirage arrivé, on coupe l'animation de la pièce, on
   // la laisse atterrir (~0.6 s) puis on souffle sur le résultat avant de dévoiler
@@ -1125,6 +1134,8 @@ function BracketMatch({
         side={match.tossSide ?? null}
         flipping={flipping}
         winnerName={tossWinnerName || undefined}
+        winnerLogin={tossWinnerName || undefined}
+        winnerImageUrl={tossWinnerImageUrl}
         t={t}
       />
 
