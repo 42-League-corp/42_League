@@ -5,6 +5,7 @@ import { ViewportSwitch } from './ViewportSwitch';
 import { NotifBanner } from '../components/NotifBanner';
 import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
 import { GameModeSwitch } from '../components/GameModeSwitch';
+import { GameBackdrop } from '../components/GameBackdrop';
 import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
@@ -28,6 +29,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   return (
     <>
+      {/* Décor d'ambiance par univers — derrière tout le contenu */}
+      <GameBackdrop />
       <ViewportSwitch
         mobile={<MobileShell>{children}</MobileShell>}
         desktop={<DesktopShell>{children}</DesktopShell>}
