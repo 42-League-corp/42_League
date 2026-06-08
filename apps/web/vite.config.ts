@@ -127,6 +127,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
             'vendor-motion': ['framer-motion'],
+            'vendor-icons': ['lucide-react'],
           },
         },
       },
