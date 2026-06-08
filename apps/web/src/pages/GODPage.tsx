@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Fragment, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
+import { useEffect, useState, useCallback, useRef, Fragment, type ReactNode, type ClipboardEvent, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
@@ -4202,7 +4202,6 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'users' },
   { id: 'moderation' },
   { id: 'rejets' },
-  { id: 'matches' },
   { id: 'pending', superAdminOnly: true },
   { id: 'ideas' },
   { id: 'bugs' },
@@ -4250,6 +4249,11 @@ export function GODPage() {
     onSwipeLeft: () => goToTab(1),
     onSwipeRight: () => goToTab(-1),
   });
+
+  // Barre d'onglets : drag à la souris (maintenir + pousser gauche/droite) pour
+  // scroller horizontalement et atteindre les onglets partiellement cachés.
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const tabDrag = useRef({ down: false, moved: false, startX: 0, scroll: 0 });
 
   useEffect(() => {
     api.me()
@@ -4316,7 +4320,32 @@ export function GODPage() {
 
       {/* Tab bar */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/30">
-        <div className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          ref={tabBarRef}
+          onPointerDown={(e) => {
+            const el = tabBarRef.current;
+            if (!el) return;
+            tabDrag.current = { down: true, moved: false, startX: e.clientX, scroll: el.scrollLeft };
+          }}
+          onPointerMove={(e) => {
+            const el = tabBarRef.current;
+            if (!el || !tabDrag.current.down) return;
+            const dx = e.clientX - tabDrag.current.startX;
+            if (Math.abs(dx) > 4) tabDrag.current.moved = true;
+            el.scrollLeft = tabDrag.current.scroll - dx;
+          }}
+          onPointerUp={() => { tabDrag.current.down = false; }}
+          onPointerLeave={() => { tabDrag.current.down = false; }}
+          // Un vrai drag ne doit pas changer d'onglet : on avale le clic qui suit.
+          onClickCapture={(e) => {
+            if (tabDrag.current.moved) {
+              e.preventDefault();
+              e.stopPropagation();
+              tabDrag.current.moved = false;
+            }
+          }}
+          className="max-w-screen-2xl mx-auto px-4 flex items-center gap-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}

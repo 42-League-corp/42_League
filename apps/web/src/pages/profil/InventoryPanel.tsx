@@ -114,7 +114,10 @@ export function InventoryPanel() {
                 </div>
                 <p className="text-[11px] text-muted-2 leading-snug mt-0.5 line-clamp-2">{meta.desc}</p>
                 <div className="text-[10px] text-muted mt-0.5 font-medium tabular-nums">
-                  {c.monthlyUsed}/{c.monthlyCap} achetés ce mois
+                  <span style={{ color: meta.color }} className="font-bold">
+                    {Math.max(0, c.monthlyCap - c.monthlyUsed)}/{c.monthlyCap}
+                  </span>{' '}
+                  par mois
                   {armed && <span className="ml-2 text-gold font-bold">· armé</span>}
                   {left > 0 && <span className="ml-2 text-red font-bold">· cooldown {fmtLeft(left)}</span>}
                 </div>

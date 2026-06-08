@@ -7646,7 +7646,7 @@ function isConsumableKind(s: string): s is ConsumableKind {
 }
 const ELO_MULT_FACTOR = 2;
 const ANTI_OPS_MONTHLY_CAP = 2;
-const ELO_MULT_MONTHLY_CAP = 2;
+const ELO_MULT_MONTHLY_CAP = 6;
 const ANTI_OPS_USE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 semaines entre usages
 const ANTI_OPS_SHIELD_MS = 7 * 24 * 60 * 60 * 1000; // 1 semaine sans re-ciblage
 const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
@@ -7833,7 +7833,7 @@ const ShopItemUpdateSchema = z
   .object({
     name: z.string().trim().min(1).optional(),
     description: z.string().nullish(),
-    category: z.enum(['title', 'banner', 'badge']).optional(),
+    category: z.enum(['title', 'banner', 'badge', 'consumable']).optional(),
     color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
@@ -7862,6 +7862,12 @@ const ShopItemUpdateSchema = z
       const label = typeof d.payload.label === 'string' ? d.payload.label : '';
       if (!code || !label) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
+      }
+    }
+    if (d.category === 'consumable') {
+      const kind = typeof d.payload.kind === 'string' ? d.payload.kind : '';
+      if (kind !== 'anti_ops' && kind !== 'elo_mult') {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind doit être 'anti_ops' ou 'elo_mult'" });
       }
     }
   });
@@ -9098,7 +9104,10 @@ if (process.env.NODE_ENV !== 'test') {
       prisma.shopItem
         .upsert({
           where: { id: ci.id },
-          update: { name: ci.name, description: ci.description, price: ci.price, rarity: ci.rarity, category: 'consumable', payload: { kind: ci.kind } },
+          // On ne corrige QUE la structure (catégorie + type) au redémarrage : le
+          // prix, le nom, la rareté, etc. restent éditables depuis le /GOD shop et
+          // ne sont jamais réécrits par le seed.
+          update: { category: 'consumable', payload: { kind: ci.kind } },
           create: {
             id: ci.id,
             name: ci.name,

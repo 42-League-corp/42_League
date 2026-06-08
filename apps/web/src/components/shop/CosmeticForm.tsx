@@ -86,6 +86,7 @@ export interface FormState {
   badgeLabel: string; // catégorie badge
   badgeIconName: string; // catégorie badge (nom lucide)
   bannerImage: string; // catégorie banner (data-URL)
+  consumableKind: string; // catégorie consumable ('anti_ops' | 'elo_mult')
 }
 
 export function emptyForm(): FormState {
@@ -103,6 +104,7 @@ export function emptyForm(): FormState {
     badgeLabel: '',
     badgeIconName: 'Crown',
     bannerImage: '',
+    consumableKind: '',
   };
 }
 
@@ -126,6 +128,7 @@ export function formFromItem(it: ShopItemData): FormState {
     badgeLabel: typeof p.label === 'string' ? p.label : '',
     badgeIconName: typeof p.icon === 'string' ? p.icon : 'Crown',
     bannerImage: typeof p.image === 'string' ? p.image : '',
+    consumableKind: typeof p.kind === 'string' ? p.kind : '',
   };
 }
 
@@ -160,6 +163,15 @@ export function buildInput(f: FormState): ShopItemInput {
     case 'banner': {
       if (!f.bannerImage) throw new Error('Dépose une image de bannière à la bonne taille.');
       payload = { image: f.bannerImage };
+      break;
+    }
+    case 'consumable': {
+      // Le type de consommable est figé (les 2 consommables sont seedés) — on
+      // préserve simplement payload.kind pour ne pas le perdre à l'édition.
+      if (f.consumableKind !== 'anti_ops' && f.consumableKind !== 'elo_mult') {
+        throw new Error('Type de consommable invalide.');
+      }
+      payload = { kind: f.consumableKind };
       break;
     }
   }
@@ -523,15 +535,26 @@ export function ItemFormFields({ form, set }: { form: FormState; set: <K extends
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Catégorie</span>
-          <select
-            value={form.category}
-            onChange={(e) => set('category', e.target.value as ShopCategory)}
-            className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
-            ))}
-          </select>
+          {CATEGORIES.includes(form.category) ? (
+            <select
+              value={form.category}
+              onChange={(e) => set('category', e.target.value as ShopCategory)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+              ))}
+            </select>
+          ) : (
+            // Catégorie non créable (consommable / boîte mystère) : verrouillée en
+            // édition pour ne pas casser le type — seuls prix, rareté, etc. changent.
+            <div className="bg-zinc-800/60 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-400">
+              {CATEGORY_LABEL[form.category]}
+              {form.category === 'consumable' && form.consumableKind && (
+                <span className="ml-2 text-teal-400">· {form.consumableKind === 'anti_ops' ? 'Anti-OPS' : 'x2 ELO'}</span>
+              )}
+            </div>
+          )}
         </label>
 
         {/* Champs spécifiques à la catégorie */}

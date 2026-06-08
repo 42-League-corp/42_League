@@ -333,6 +333,9 @@ export function ShopPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   // Objet en cours de prévisualisation sur la carte de profil (modal).
   const [preview, setPreview] = useState<ShopItemData | null>(null);
+  // État mensuel des consommables (kind → achats restants ce mois). Décrémente à
+  // l'achat (rechargé après chaque buy), reset au 1er du mois (clé mois côté serveur).
+  const [monthly, setMonthly] = useState<Record<string, { used: number; cap: number }>>({});
 
   /** Clic sur un critère de tri : si déjà actif, on inverse le sens ; sinon on
    *  bascule sur ce critère avec un sens par défaut (rareté/prix décroissants,
@@ -350,14 +353,20 @@ export function ShopPage() {
 
   const load = useCallback(async () => {
     try {
-      const [shop, inventory] = await Promise.all([
+      const [shop, inventory, consumables] = await Promise.all([
         api.shop(),
         api.inventory().catch(() => [] as InventoryEntry[]),
+        api.consumables().catch(() => null),
       ]);
       setCoins(shop.coins ?? 0);
       setItems(shop.items ?? []);
       setOwned(new Set(shop.owned ?? []));
       setEquipped(new Set(inventory.filter((e) => e.equipped).map((e) => e.itemId)));
+      setMonthly(
+        Object.fromEntries(
+          (consumables?.items ?? []).map((c) => [c.kind, { used: c.monthlyUsed, cap: c.monthlyCap }]),
+        ),
+      );
     } catch (err) {
       show(err instanceof Error ? err.message : t('shop.error'), 'error');
     } finally {
@@ -533,6 +542,14 @@ export function ShopPage() {
             const isEquipped = equipped.has(item.id);
             const showEquip = isOwned && EQUIPPABLE.includes(item.category);
             const itemBusy = busy === item.id;
+            // Consommable : achats restants ce mois (cap mensuel).
+            const consKind =
+              item.category === 'consumable' && typeof payloadOf(item).kind === 'string'
+                ? (payloadOf(item).kind as string)
+                : null;
+            const consMonthly = consKind ? monthly[consKind] : undefined;
+            const consRemaining = consMonthly ? Math.max(0, consMonthly.cap - consMonthly.used) : null;
+            const consExhausted = consRemaining !== null && consRemaining <= 0;
             const rarity = resolveRarity(item);
             const rk = RARITY[rarity];
             return (
@@ -595,6 +612,16 @@ export function ShopPage() {
                   {/* Aperçu visuel de l'item acheté */}
                   <ShopItemVisual item={item} rarityHex={rk.hex} />
 
+                  {/* Consommable : achats restants ce mois (décrémente à l'achat, reset le 1er du mois) */}
+                  {consRemaining !== null && (
+                    <div className="relative -mb-0.5 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide tabular-nums">
+                      <span className={consExhausted ? 'text-red' : 'text-teal-300'}>
+                        {consRemaining}/{consMonthly!.cap}
+                      </span>
+                      <span className="text-muted-2">par mois</span>
+                    </div>
+                  )}
+
                   <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
                     <CoinAmount
                       value={item.price}
@@ -639,20 +666,22 @@ export function ShopPage() {
                     ) : (
                       <button
                         type="button"
-                        disabled={!canAfford || itemBusy}
+                        disabled={!canAfford || itemBusy || consExhausted}
                         onClick={() => void buy(item)}
                         className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-all ${
-                          canAfford
+                          canAfford && !consExhausted
                             ? 'bg-gradient-to-r from-gold to-gold-dim text-bg-0 hover:shadow-gold-glow hover:brightness-110'
                             : 'bg-bg-1 border border-border/60 text-muted cursor-not-allowed'
                         } disabled:opacity-70`}
                       >
-                        {!canAfford && <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />}
+                        {(!canAfford || consExhausted) && <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />}
                         {itemBusy
                           ? t('shop.buying')
-                          : canAfford
-                            ? t('shop.buy')
-                            : t('shop.insufficient')}
+                          : consExhausted
+                            ? 'Épuisé ce mois'
+                            : canAfford
+                              ? t('shop.buy')
+                              : t('shop.insufficient')}
                       </button>
                     )}
                     </div>
