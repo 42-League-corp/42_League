@@ -257,7 +257,10 @@ export function TournoiDetailPage() {
 
   const kindLabel = tournament.kind === 'official' ? t('tournois.detail.kind.official') : t('tournois.detail.kind.friendly');
   const visLabel = tournament.isPrivate ? t('tournois.detail.private') : '';
-  const formatLabel = tournament.format === 'pools' ? t('tournois.detail.pools') : '';
+  const formatLabel =
+    tournament.format === 'pools' ? t('tournois.detail.pools')
+    : tournament.format === 'league' ? t('tournois.detail.league')
+    : '';
   const modeLabel = is2v2 ? ` · ${t('tournois.detail.mode2v2')}` : '';
   const sub = `${kindLabel}${visLabel}${formatLabel}${modeLabel} · ${entriesCount}/${tournament.capacity} · ${t(STATUS_KEY[tournament.status])}`;
 
@@ -671,9 +674,10 @@ interface Standing {
   diff: number;
 }
 
-// Classement d'une poule (miroir de poolStandings côté serveur) : victoires, puis
-// différence de buts, puis buts marqués.
-function computeStandings(matches: TournamentMatch[]): Standing[] {
+// Classement (miroir des helpers serveur) à partir des matchs confirmés.
+//  - 'pool'   : victoires → différence de buts → buts marqués (poolStandings)
+//  - 'league' : différence de buts (goal average) → buts marqués → victoires (leagueStandings)
+function computeStandings(matches: TournamentMatch[], mode: 'pool' | 'league' = 'pool'): Standing[] {
   const table = new Map<string, Standing>();
   const ensure = (login: string): Standing => {
     let s = table.get(login);
@@ -698,11 +702,22 @@ function computeStandings(matches: TournamentMatch[]): Standing[] {
   }
   const rows = [...table.values()];
   for (const r of rows) r.diff = r.goalsFor - r.goalsAgainst;
-  rows.sort((x, y) => y.wins - x.wins || y.diff - x.diff || y.goalsFor - x.goalsFor);
+  if (mode === 'league') {
+    rows.sort((x, y) => y.diff - x.diff || y.goalsFor - x.goalsFor || y.wins - x.wins);
+  } else {
+    rows.sort((x, y) => y.wins - x.wins || y.diff - x.diff || y.goalsFor - x.goalsFor);
+  }
   return rows;
 }
 
 const QUALIFY_PER_POOL = 2;
+
+/** Plus grande puissance de 2 ≤ n (≥ 2). Taille de bracket par défaut à la qualification. */
+function largestPow2AtMost(n: number): number {
+  let p = 2;
+  while (p * 2 <= n) p *= 2;
+  return p;
+}
 
 function PoolsAndBracket({
   tournament,
@@ -721,9 +736,19 @@ function PoolsAndBracket({
   const flash = useFlash();
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [announcing, setAnnouncing] = useState(false);
-  const { poolGroups, bracketMatchesFlat, totalBracketRounds, poolsComplete } = useMemo(() => {
+  const {
+    poolGroups,
+    bracketMatchesFlat,
+    totalBracketRounds,
+    poolsComplete,
+    leagueDays,
+    leagueStandings,
+    leagueComplete,
+    leagueCount,
+  } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
+    const leagueMatches = all.filter((m) => m.stage === 'league');
     const bracketMatches = all.filter((m) => (m.stage ?? 'bracket') === 'bracket');
 
     // Poules regroupées par index.
@@ -743,6 +768,20 @@ function PoolsAndBracket({
       }));
     const complete = poolMatches.length > 0 && poolMatches.every((m) => m.confirmedAt);
 
+    // Ligue : matchs groupés par journée (poolIndex), un seul classement au goal average.
+    const byDay = new Map<number, TournamentMatch[]>();
+    for (const m of leagueMatches) {
+      const d = m.poolIndex ?? 1;
+      const arr = byDay.get(d) ?? [];
+      arr.push(m);
+      byDay.set(d, arr);
+    }
+    const days = [...byDay.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, matches]) => ({ day, matches: [...matches].sort((a, b) => a.slot - b.slot) }));
+    const lgStandings = computeStandings(leagueMatches, 'league');
+    const lgComplete = leagueMatches.length > 0 && leagueMatches.every((m) => m.confirmedAt);
+
     // Bracket : nombre de rounds = round max réel (byes/poules font diverger la capacité).
     const total = bracketMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
 
@@ -751,11 +790,18 @@ function PoolsAndBracket({
       bracketMatchesFlat: bracketMatches,
       totalBracketRounds: total,
       poolsComplete: complete,
+      leagueDays: days,
+      leagueStandings: lgStandings,
+      leagueComplete: lgComplete,
+      leagueCount: leagueMatches.length,
     };
   }, [tournament.matches]);
 
   const hasPools = poolGroups.length > 0;
   const hasBracket = totalBracketRounds > 0;
+  // Phase de ligue : active tant que le bracket n'a pas été généré (bascule finale).
+  const isLeague = tournament.format === 'league';
+  const leagueEditable = isLeague && !hasBracket;
   // Match sélectionné dans l'arbre (détail + duel/saisie en dessous).
   const selectedMatch = useMemo(
     () => bracketMatchesFlat.find((m) => m.id === selectedMatchId) ?? null,
@@ -794,6 +840,21 @@ function PoolsAndBracket({
 
   return (
     <div className="space-y-6">
+      {isLeague && (
+        <LeagueSection
+          tournament={tournament}
+          days={leagueDays}
+          standings={leagueStandings}
+          complete={leagueComplete}
+          matchCount={leagueCount}
+          editable={leagueEditable}
+          canManage={canManage}
+          canOfficiate={canOfficiate}
+          myLogin={myLogin}
+          onChange={onChange}
+        />
+      )}
+
       {hasPools && (
         <section>
           <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-3 flex items-center gap-2">
@@ -874,11 +935,300 @@ function PoolsAndBracket({
           )}
         </section>
       ) : (
-        !hasPools && (
+        !hasPools && !isLeague && (
           <div className="text-center text-muted-2 py-8 text-sm">{t('tournois.bracket.preparing')}</div>
         )
       )}
     </div>
+  );
+}
+
+// ── Phase de ligue ─────────────────────────────────────────────────────────────
+// Classement unique au goal average + historique par journée + outils admin
+// (composer les affiches, supprimer une affiche non confirmée, basculer en phase
+// finale). Une fois le bracket généré (bascule effectuée), `editable` passe à false
+// et la section devient un historique en lecture seule.
+function LeagueSection({
+  tournament,
+  days,
+  standings,
+  complete,
+  matchCount,
+  editable,
+  canManage,
+  canOfficiate,
+  myLogin,
+  onChange,
+}: {
+  tournament: Tournament;
+  days: { day: number; matches: TournamentMatch[] }[];
+  standings: Standing[];
+  complete: boolean;
+  matchCount: number;
+  editable: boolean;
+  canManage: boolean;
+  canOfficiate: boolean;
+  myLogin: string | null;
+  onChange: () => Promise<void>;
+}) {
+  const t = useT();
+  const flash = useFlash();
+  const confirm = useConfirm();
+  // Affiches déjà confirmées sont conservées ; seules les non confirmées sont supprimables.
+  const entries = tournament.entries ?? [];
+  const lastDay = days.length ? days[days.length - 1]!.day : 1;
+  const [journee, setJournee] = useState(lastDay);
+  const [playerA, setPlayerA] = useState('');
+  const [playerB, setPlayerB] = useState('');
+  const [adding, setAdding] = useState(false);
+  // Nombre de qualifiés (puissance de 2) — défaut : plus grande puissance de 2 ≤ classés.
+  const [qualifyCount, setQualifyCount] = useState(() => largestPow2AtMost(standings.length || 2));
+  const [finalizing, setFinalizing] = useState(false);
+
+  // Choix possibles de qualifiés : puissances de 2 de 2 jusqu'au nombre de classés.
+  const qualifyChoices: number[] = [];
+  for (let p = 2; p <= standings.length; p *= 2) qualifyChoices.push(p);
+  const effectiveQualify = qualifyChoices.includes(qualifyCount)
+    ? qualifyCount
+    : qualifyChoices[qualifyChoices.length - 1] ?? 2;
+
+  const handleAdd = async () => {
+    if (!playerA || !playerB || playerA === playerB) {
+      flash.show(t('tournois.league.pickTwo'), 'error');
+      return;
+    }
+    setAdding(true);
+    try {
+      await api.addLeagueMatch(tournament.id, playerA, playerB, journee);
+      setPlayerA('');
+      setPlayerB('');
+      flash.show(t('tournois.league.matchAdded'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDelete = async (matchId: string) => {
+    try {
+      await api.deleteLeagueMatch(tournament.id, matchId);
+      flash.show(t('tournois.league.matchDeleted'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
+  const handleFinalize = async () => {
+    const ok = await confirm({
+      title: t('tournois.league.finalize.title'),
+      message: t('tournois.league.finalize.message').replace('{n}', String(effectiveQualify)),
+      warning: t('tournois.league.finalize.warning'),
+      confirmLabel: t('tournois.league.finalize.confirm'),
+      cancelLabel: t('tournois.league.finalize.cancel'),
+    });
+    if (!ok) return;
+    setFinalizing(true);
+    try {
+      await api.finalizeLeague(tournament.id, effectiveQualify);
+      flash.show(t('tournois.league.finalized'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="text-[10px] uppercase tracking-[0.16em] text-gold font-extrabold mb-3 flex items-center gap-2">
+        <span className="inline-block w-1 h-2.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+        {t('tournois.league.phase')}
+        <span className="text-muted-2 normal-case font-mono">{t('tournois.league.goalAverage')}</span>
+      </div>
+
+      {/* Classement unique au goal average. Surligne les N premiers (qualifiables). */}
+      {standings.length > 0 ? (
+        <div className="rounded-xl border border-border bg-bg-2/30 overflow-hidden mb-4">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-2 border-b border-border/40">
+                <th className="text-left font-semibold py-1.5 pl-3">#</th>
+                <th className="text-left font-semibold py-1.5">{t('tournois.pool.col.player')}</th>
+                <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.played')}</th>
+                <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.wins')}</th>
+                <th className="text-center font-semibold py-1.5 pr-3">{t('tournois.pool.col.diff')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((s, i) => {
+                const qualified = editable && i < effectiveQualify;
+                return (
+                  <tr
+                    key={s.login}
+                    className={`border-b border-border/20 last:border-0 ${qualified ? 'bg-teal/5' : ''}`}
+                  >
+                    <td className="py-1.5 pl-3">
+                      <span className={`inline-flex w-4 justify-center font-bold ${qualified ? 'text-teal' : 'text-muted-2'}`}>
+                        {i + 1}
+                      </span>
+                    </td>
+                    <td className="py-1.5">
+                      <PlayerLink login={s.login} className="text-sm truncate">
+                        <span className={qualified ? 'text-text-strong font-semibold' : ''}>{s.login}</span>
+                      </PlayerLink>
+                    </td>
+                    <td className="py-1.5 text-center tabular-nums text-muted-2">{s.played}</td>
+                    <td className="py-1.5 text-center tabular-nums font-bold">{s.wins}</td>
+                    <td className="py-1.5 text-center tabular-nums pr-3">
+                      <span className={s.diff > 0 ? 'text-[#7fd66e]' : s.diff < 0 ? 'text-red' : ''}>
+                        {s.diff > 0 ? `+${s.diff}` : s.diff}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-2 mb-4">{t('tournois.league.noMatchesYet')}</p>
+      )}
+
+      {/* Outils admin : composer une affiche + supprimer (tant que la ligue est éditable). */}
+      {canManage && editable && (
+        <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30 space-y-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold">
+            {t('tournois.league.addMatch')}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] text-muted-2 uppercase tracking-wider font-semibold">
+              {t('tournois.league.matchday')}
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={journee}
+              onChange={(e) => setJournee(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
+              className="w-16 px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none tabular-nums"
+            />
+            <Button size="sm" variant="ghost" onClick={() => setJournee(lastDay + 1)}>
+              {t('tournois.league.newMatchday')}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={playerA}
+              onChange={(e) => setPlayerA(e.target.value)}
+              className="flex-1 min-w-[8rem] px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none"
+            >
+              <option value="">{t('tournois.league.pickPlayer')}</option>
+              {entries.map((e) => (
+                <option key={e.login} value={e.login} disabled={e.login === playerB}>
+                  {e.login}
+                </option>
+              ))}
+            </select>
+            <span className="text-muted-2 text-xs font-bold">vs</span>
+            <select
+              value={playerB}
+              onChange={(e) => setPlayerB(e.target.value)}
+              className="flex-1 min-w-[8rem] px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none"
+            >
+              <option value="">{t('tournois.league.pickPlayer')}</option>
+              {entries.map((e) => (
+                <option key={e.login} value={e.login} disabled={e.login === playerA}>
+                  {e.login}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" loading={adding} onClick={handleAdd} disabled={!playerA || !playerB}>
+              {t('tournois.league.add')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Historique par journée. */}
+      {days.length > 0 && (
+        <div className="space-y-4">
+          {days.map((d) => (
+            <div key={d.day} className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
+              <div className="px-3 py-2 bg-bg-2/60 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-text-strong">
+                {t('tournois.league.matchdayLabel').replace('{n}', String(d.day))}
+              </div>
+              <div className="p-2.5 space-y-2">
+                {d.matches.map((m) => (
+                  <div key={m.id} className="relative">
+                    {canManage && editable && !m.confirmedAt && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(m.id)}
+                        title={t('tournois.league.deleteMatch')}
+                        className="absolute -top-1 -right-1 z-10 w-5 h-5 rounded-full bg-red/80 text-white text-xs font-bold flex items-center justify-center hover:bg-red"
+                      >
+                        ×
+                      </button>
+                    )}
+                    <BracketMatch
+                      tournament={tournament}
+                      match={m}
+                      myLogin={myLogin}
+                      canOfficiate={canOfficiate}
+                      onChange={onChange}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bascule en phase finale (admin) : sélection du nombre de qualifiés. */}
+      {canManage && editable && (
+        <div className="mt-4 p-3 rounded-xl border border-teal/25 bg-teal/[0.05]">
+          <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
+            {t('tournois.league.toKnockout')}
+          </div>
+          {qualifyChoices.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] text-muted-2 uppercase tracking-wider font-semibold">
+                {t('tournois.league.qualifyCount')}
+              </label>
+              <select
+                value={effectiveQualify}
+                onChange={(e) => setQualifyCount(Number(e.target.value))}
+                className="px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none tabular-nums"
+              >
+                {qualifyChoices.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                loading={finalizing}
+                onClick={handleFinalize}
+                disabled={matchCount === 0 || !complete}
+              >
+                {t('tournois.league.finalizeCta')}
+              </Button>
+              {matchCount > 0 && !complete && (
+                <span className="text-[11px] text-muted-2">{t('tournois.league.pendingMatches')}</span>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-2">{t('tournois.league.needMorePlayers')}</p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -366,13 +366,16 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const [mode, setMode] = useState<'1v1' | '2v2'>('1v1');
   const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [format, setFormat] = useState<'elimination' | 'pools'>('elimination');
+  const [format, setFormat] = useState<'elimination' | 'pools' | 'league'>('elimination');
   const [imageUrl, setImageUrl] = useState('');
   const [prize, setPrize] = useState<PrizeFormState>(EMPTY_PRIZE);
   const [busy, setBusy] = useState(false);
 
+  const isLeague = format === 'league';
   const poolsAllowed = capacity >= POOLS_MIN;
-  const effectiveFormat = poolsAllowed ? format : 'elimination';
+  // Ligue : le format est conservé tel quel (nombre de joueurs libre). Sinon, les
+  // poules retombent en élimination directe si la capacité est trop faible.
+  const effectiveFormat = isLeague ? 'league' : poolsAllowed ? format : 'elimination';
   // 2v2 uniquement en babyfoot ; partout ailleurs on force le 1v1.
   const teamMode = game === 'babyfoot' && mode === '2v2';
   // Coéquipiers candidats : tous les joueurs sauf moi (le créateur).
@@ -381,7 +384,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const submit = async () => {
     const n = name.trim();
     if (n.length < 2) { flash.show(t('tournois.flash.nameRequired'), 'error'); return; }
-    if (capacity < 6) { flash.show(t('tournois.flash.capacityMin'), 'error'); return; }
+    if (capacity < (isLeague ? 3 : 6)) { flash.show(t('tournois.flash.capacityMin'), 'error'); return; }
     if (teamMode && !partner) { flash.show(t('tournois.create.needPartner'), 'error'); return; }
     setBusy(true);
     try {
@@ -473,18 +476,33 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               />
             </Field>
           )}
-          {/* Capacités en puissances de 2 uniquement → bracket toujours plein,
-              jamais de joueur exempt/seul au 1er tour. En 2v2 = nombre d'équipes. */}
-          <Field label={teamMode ? t('tournois.field.teams') : t('tournois.field.players')}>
-            <Pills<string>
-              value={String(capacity)}
-              onChange={(v) => setCapacity(Number(v))}
-              choices={[
-                { value: '8', label: '8' },
-                { value: '16', label: '16' },
-                { value: '32', label: '32' },
-              ]}
-            />
+          {/* Élimination/poules : capacités en puissances de 2 uniquement → bracket
+              toujours plein, jamais de joueur exempt au 1er tour. Ligue : nombre libre
+              (l'admin compose les affiches). En 2v2 = nombre d'équipes. */}
+          <Field
+            label={teamMode ? t('tournois.field.teams') : t('tournois.field.players')}
+            hint={isLeague ? t('tournois.field.players.hint.league') : undefined}
+          >
+            {isLeague ? (
+              <input
+                type="number"
+                min={3}
+                max={64}
+                value={capacity}
+                onChange={(e) => setCapacity(Math.max(3, Math.min(64, Number(e.target.value) || 0)))}
+                className="w-24 px-3 py-2 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none transition-colors tabular-nums"
+              />
+            ) : (
+              <Pills<string>
+                value={String(capacity)}
+                onChange={(v) => setCapacity(Number(v))}
+                choices={[
+                  { value: '8', label: '8' },
+                  { value: '16', label: '16' },
+                  { value: '32', label: '32' },
+                ]}
+              />
+            )}
           </Field>
           <Field label={t('tournois.field.type')} hint={isAdmin ? undefined : t('tournois.field.type.hint')}>
             {isAdmin ? (
@@ -519,13 +537,24 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               choices={[{ value: 'public', label: t('tournois.field.visibility.public') }, { value: 'private', label: t('tournois.field.visibility.private') }]}
             />
           </Field>
-          <Field label={t('tournois.field.format')} hint={poolsAllowed
+          <Field label={t('tournois.field.format')} hint={
+            isLeague ? t('tournois.field.format.hint.league')
+            : poolsAllowed
             ? effectiveFormat === 'pools' ? t('tournois.field.format.hint.pools') : t('tournois.field.format.hint.elim')
             : t('tournois.field.format.hint.minpools').replace('{n}', String(POOLS_MIN))
           }>
-            <Pills<'elimination' | 'pools'> value={effectiveFormat}
-              onChange={(v) => { if (v === 'pools' && !poolsAllowed) { flash.show(t('tournois.flash.poolsMin').replace('{n}', String(POOLS_MIN)), 'error'); return; } setFormat(v); }}
-              choices={[{ value: 'elimination', label: t('tournois.field.format.elim') }, { value: 'pools', label: poolsAllowed ? t('tournois.field.format.pools') : t('tournois.field.format.pools.locked') }]}
+            <Pills<'elimination' | 'pools' | 'league'> value={effectiveFormat}
+              onChange={(v) => {
+                if (v === 'pools' && !poolsAllowed) { flash.show(t('tournois.flash.poolsMin').replace('{n}', String(POOLS_MIN)), 'error'); return; }
+                // En quittant la ligue, recale une capacité libre vers une puissance de 2 valide.
+                if (v !== 'league' && (capacity < 8 || (capacity & (capacity - 1)) !== 0)) setCapacity(8);
+                setFormat(v);
+              }}
+              choices={[
+                { value: 'elimination', label: t('tournois.field.format.elim') },
+                { value: 'pools', label: poolsAllowed ? t('tournois.field.format.pools') : t('tournois.field.format.pools.locked') },
+                { value: 'league', label: t('tournois.field.format.league') },
+              ]}
             />
           </Field>
           <Field label={t('tournois.field.cover')} hint={t('tournois.field.cover.hint')}>
