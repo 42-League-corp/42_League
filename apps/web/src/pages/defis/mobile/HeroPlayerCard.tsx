@@ -155,7 +155,10 @@ export function HeroPlayerCard() {
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
-          className={`absolute top-3 left-3 z-20 flex items-center justify-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
+          // `!absolute` (important) car .metal-plate-gold impose `position:relative`
+          // (même calque utilities, déclarée après) et écrasait sinon `.absolute`,
+          // transformant le badge #1 en bloc flex pleine largeur.
+          className={`!absolute top-3 left-3 z-20 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
             isTop1
               ? 'metal-plate-gold shadow-gold-glow'
               : isTop3

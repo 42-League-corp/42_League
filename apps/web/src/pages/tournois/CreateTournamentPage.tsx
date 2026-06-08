@@ -82,7 +82,7 @@ export function CreateTournamentPage() {
     // en fin de scroll par Chrome/Safari mobile → c'est le padding propre de la
     // page qui doit dégager la tab bar fixe (60px + safe-area), sinon le bouton du
     // bas passe derrière.
-    <div className="max-w-sm mx-auto flex flex-col gap-8 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+    <div className="max-w-sm mx-auto flex flex-col gap-8 pb-[calc(5rem_+_env(safe-area-inset-bottom))]">
 
       {/* ── Back ── */}
       <button
