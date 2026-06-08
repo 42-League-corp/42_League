@@ -11,8 +11,6 @@ import { AvatarRingProvider } from './hooks/useAvatarRing';
 import { MatchmakingProvider } from './hooks/useMatchmaking';
 import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
-import { GODPage } from './pages/GODPage';
-import { AboutPage } from './pages/AboutPage';
 import { ConsentGate } from './components/ConsentGate';
 import { StagingGate } from './components/StagingGate';
 import { IS_STAGING } from './lib/config';
@@ -92,6 +90,13 @@ const ShopGODPage = lazy(() =>
 const GradesPage = lazy(() =>
   import('./pages/GradesPage').then((m) => ({ default: m.GradesPage })),
 );
+// Pages secondaires sorties du bundle d'entrée : admin (GOD) + à-propos.
+const GODPage = lazy(() =>
+  import('./pages/GODPage').then((m) => ({ default: m.GODPage })),
+);
+const AboutPage = lazy(() =>
+  import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
@@ -129,7 +134,16 @@ export function App() {
       >
         <Routes>
           <Route path="/auth/return" element={<AuthReturnPage />} />
-          {!authenticated && <Route path="/about" element={<AboutPage />} />}
+          {!authenticated && (
+            <Route
+              path="/about"
+              element={
+                <Suspense fallback={<PageSkeleton />}>
+                  <AboutPage />
+                </Suspense>
+              }
+            />
+          )}
           <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
           <Route
             path="*"
@@ -167,9 +181,15 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
   // Précharger tous les chunks de routes en arrière-plan dès que les données sont prêtes.
   // Évite toute suspension Suspense pendant la navigation → transitions AnimatePresence stables.
   useEffect(() => {
-    if (!loading && !me?.consentRequired) {
-      prefetchRouteChunks();
-    }
+    if (loading || me?.consentRequired) return;
+    // Décalé en idle : le préchargement (~10 chunks) ne doit pas concurrencer le
+    // rendu initial / LCP / interactivité. requestIdleCallback avec fallback
+    // setTimeout (Safari < 17).
+    const schedule =
+      window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const id = schedule(() => prefetchRouteChunks());
+    return () => cancel(id);
   }, [loading, me?.consentRequired]);
 
   // Barrière de consentement RGPD : tant que l'utilisateur n'a pas consenti, on
