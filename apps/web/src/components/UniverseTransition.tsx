@@ -23,7 +23,7 @@ interface UniverseTransitionProps {
 }
 
 // ─── Réglages ────────────────────────────────────────────────────────────────
-const EXIT_DUR = 360;
+const EXIT_DUR = 380;
 const ENTER_DUR = 480;
 const REVEAL_HOLD = 300; // durée où les blocs sont hors-champ (backdrop exposée)
 const MAX_TILES = 42;
@@ -147,8 +147,8 @@ export function UniverseTransition({ children }: UniverseTransitionProps) {
       el.style.willChange = 'transform, opacity';
       el.style.backfaceVisibility = 'hidden';
       const exitT =
-        `perspective(1200px) translate3d(calc(${tx.toFixed(3)} * 46vw), calc(${ty.toFixed(3)} * 46vh), 150px) ` +
-        `rotateY(${(tx * 18).toFixed(1)}deg) rotateX(${(-ty * 18).toFixed(1)}deg) scale(0.9)`;
+        `perspective(1200px) translate3d(calc(${tx.toFixed(3)} * 60vw), calc(${ty.toFixed(3)} * 60vh), 200px) ` +
+        `rotateY(${(tx * 18).toFixed(1)}deg) rotateX(${(-ty * 18).toFixed(1)}deg) scale(0.72)`;
       const anim = el.animate(
         [
           { transform: base, opacity: 1, offset: 0 },
@@ -175,8 +175,8 @@ export function UniverseTransition({ children }: UniverseTransitionProps) {
         const enterAnims: Animation[] = [];
         vecs.forEach(({ el, tx, ty }, i) => {
           const fromT =
-            `perspective(1200px) translate3d(calc(${(-tx).toFixed(3)} * 26vw), calc(${(-ty).toFixed(3)} * 26vh), -240px) ` +
-            `rotateY(${(-tx * 14).toFixed(1)}deg) rotateX(${(ty * 14).toFixed(1)}deg) scale(0.86)`;
+            `perspective(1200px) translate3d(calc(${(-tx).toFixed(3)} * 38vw), calc(${(-ty).toFixed(3)} * 38vh), -320px) ` +
+            `rotateY(${(-tx * 14).toFixed(1)}deg) rotateX(${(ty * 14).toFixed(1)}deg) scale(0.78)`;
           const enterDelay = (n - 1 - i) * stagger;
           const anim = el.animate(
             [
