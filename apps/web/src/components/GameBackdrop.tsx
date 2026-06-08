@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useGameMode } from '../hooks/useGameMode';
 import { useTransitionPhase } from '../hooks/useTransitionPhase';
+import { gameColor } from '../lib/gameVisuals';
 import type { Game } from '../lib/gameMode';
 
 /**
@@ -8,8 +9,7 @@ import type { Game } from '../lib/gameMode';
  * lisibilité, orchestrée avec la cinématique de changement d'univers :
  *
  *  - idle  : flou léger (3px) + brightness 0.55 + scrim 0.42 → l'image est
- *            nettement reconnaissable, mais le texte reste lisible partout
- *            (luminance moyenne ~10, pire reflet contraste ≈ 6:1 sur blanc).
+ *            nettement reconnaissable, mais le texte reste lisible partout.
  *  - reveal: le scrim tombe (0.42→0.05) et l'image s'éclaircit (brightness
  *            0.9) → plein écran 4K pendant que les blocs du HUD sont hors-champ,
  *            avec un cross-fade vers le nouvel univers.
@@ -18,29 +18,34 @@ import type { Game } from '../lib/gameMode';
  * phase `reveal`. Les 5 photos sont préchargées au montage (fondu instantané).
  */
 
-const BG: Record<Game, string> = {
-  babyfoot: '/universe/babyfoot.jpg',
-  smash: '/universe/smash.jpg',
-  chess: '/universe/chess.jpg',
-  streetfighter: '/universe/streetfighter.jpg',
-  flechettes: '/universe/flechettes.jpg',
+interface UniverseArt {
+  bg: string;
+  prop: string;
+  symbol: string;
+}
+
+const ART: Record<Game, UniverseArt> = {
+  babyfoot:      { bg: '/universe/babyfoot.jpg',      prop: '/universe/babyfoot-prop.png',      symbol: '/universe/babyfoot-symbol.png' },
+  smash:         { bg: '/universe/smash.jpg',         prop: '/universe/smash-prop.png',         symbol: '/universe/smash-symbol.png' },
+  chess:         { bg: '/universe/chess.jpg',         prop: '/universe/chess-prop.png',         symbol: '/universe/chess-symbol.png' },
+  streetfighter: { bg: '/universe/streetfighter.jpg', prop: '/universe/streetfighter-prop.png', symbol: '/universe/streetfighter-symbol.png' },
+  flechettes:    { bg: '/universe/flechettes.jpg',    prop: '/universe/flechettes-prop.png',    symbol: '/universe/flechettes-symbol.png' },
 };
 
-// Flou constant (3px) : on ne l'anime jamais (coûteux) ; le « pop » du reveal
-// passe par brightness/saturate (léger) + la chute du scrim (opacity, GPU).
-const FILTER_IDLE = 'blur(3px) saturate(1.03) brightness(0.55)';
+const FILTER_IDLE   = 'blur(3px) saturate(1.03) brightness(0.55)';
 const FILTER_REVEAL = 'blur(3px) saturate(1.12) brightness(0.9)';
 
 function GameBackdropImpl() {
   const { game } = useGameMode();
   const phase = useTransitionPhase();
   const revealed = phase === 'reveal';
+  const transitioning = phase !== 'idle';
 
   // Précharge les 5 photos une fois → cross-fade instantané ensuite.
   useEffect(() => {
-    Object.values(BG).forEach((src) => {
+    Object.values(ART).forEach(({ bg }) => {
       const im = new Image();
-      im.src = src;
+      im.src = bg;
     });
   }, []);
 
@@ -63,19 +68,20 @@ function GameBackdropImpl() {
     }
   }, [phase, game, active, activeGame]);
 
+  const accent = gameColor(game);
+
   const imgStyle = (visible: boolean): React.CSSProperties => ({
     opacity: visible ? 1 : 0,
     filter: revealed ? FILTER_REVEAL : FILTER_IDLE,
     transform: revealed ? 'scale(1.01)' : 'scale(1.06)',
-    transition:
-      'opacity 360ms ease, filter 340ms ease, transform 760ms cubic-bezier(0.16, 1, 0.3, 1)',
+    transition: 'opacity 360ms ease, filter 340ms ease, transform 760ms cubic-bezier(0.16, 1, 0.3, 1)',
   });
 
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {/* Slot A */}
       <img
-        src={BG[slotA]}
+        src={ART[slotA].bg}
         alt=""
         className="absolute inset-0 h-full w-full select-none object-cover"
         draggable={false}
@@ -87,7 +93,7 @@ function GameBackdropImpl() {
       {/* Slot B */}
       {slotB && (
         <img
-          src={BG[slotB]}
+          src={ART[slotB].bg}
           alt=""
           className="absolute inset-0 h-full w-full select-none object-cover"
           draggable={false}
@@ -108,7 +114,7 @@ function GameBackdropImpl() {
         }}
       />
 
-      {/* Vignette radiale — assombrit les bords (focalise le centre). */}
+      {/* Vignette radiale — assombrit les bords. */}
       <div
         className="absolute inset-0"
         style={{
@@ -116,6 +122,55 @@ function GameBackdropImpl() {
             'radial-gradient(ellipse 92% 82% at 50% 45%, transparent 0%, rgba(8,6,4,0.6) 100%)',
           opacity: revealed ? 0.3 : 1,
           transition: 'opacity 320ms ease',
+        }}
+      />
+
+      {/* Grand symbole du jeu — surgit au centre pendant la transition, peak à REVEAL. */}
+      <div className="absolute inset-0 grid place-items-center">
+        <img
+          src={ART[game].symbol}
+          alt=""
+          draggable={false}
+          decoding="async"
+          className="select-none object-contain"
+          style={{
+            maxHeight: 'min(42vh, 400px)',
+            maxWidth: '62vw',
+            width: 'auto',
+            height: 'auto',
+            opacity: revealed ? 0.96 : transitioning ? 0.25 : 0,
+            transform: revealed ? 'scale(1)' : transitioning ? 'scale(0.78)' : 'scale(0.6)',
+            filter: `drop-shadow(0 0 60px ${accent}aa) drop-shadow(0 12px 40px rgba(0,0,0,0.6))`,
+            transition: 'opacity 320ms ease, transform 460ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        />
+      </div>
+
+      {/* Props latéraux desktop only (2xl+). */}
+      <img
+        src={ART[game].prop}
+        alt=""
+        draggable={false}
+        loading="lazy"
+        decoding="async"
+        className="absolute left-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 select-none mix-blend-screen 2xl:block"
+        style={{
+          opacity: revealed ? 0.22 : 0.1,
+          filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))',
+          transition: 'opacity 300ms ease',
+        }}
+      />
+      <img
+        src={ART[game].prop}
+        alt=""
+        draggable={false}
+        loading="lazy"
+        decoding="async"
+        className="absolute right-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 -scale-x-100 select-none mix-blend-screen 2xl:block"
+        style={{
+          opacity: revealed ? 0.22 : 0.1,
+          filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))',
+          transition: 'opacity 300ms ease',
         }}
       />
     </div>
