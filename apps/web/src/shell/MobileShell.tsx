@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { MobileHeader } from '../mobile/primitives/MobileHeader';
 import { MobileTabBar } from '../mobile/primitives/MobileTabBar';
 import { PageTransition } from '../mobile/motion/PageTransition';
+import { UniverseTransition } from '../components/UniverseTransition';
 import { FABProvider } from '../mobile/primitives/FAB';
 import { useViewport } from '../hooks/useViewport';
 import { ScrollRootContext } from './scrollRoot';
@@ -61,7 +62,9 @@ export function MobileShell({ children }: MobileShellProps) {
               paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 8px)',
             }}
           >
-            <PageTransition>{children}</PageTransition>
+            <UniverseTransition>
+              <PageTransition>{children}</PageTransition>
+            </UniverseTransition>
           </main>
 
           <MobileTabBar />

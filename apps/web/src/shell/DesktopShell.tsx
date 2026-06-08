@@ -25,6 +25,7 @@ import { useGameMode } from '../hooks/useGameMode';
 import { GAME_META } from '../lib/gameMeta';
 import { pickRating } from '../lib/gameStats';
 import { useT } from '../lib/i18n';
+import { UniverseTransition } from '../components/UniverseTransition';
 
 interface NavDef {
   to: string;
@@ -178,7 +179,7 @@ export function DesktopShell({ children }: DesktopShellProps) {
         {/* Vignette dorée derrière le contenu */}
         <div className="absolute inset-0 bg-gold-vignette pointer-events-none" />
         <div className="relative px-6 lg:px-10 py-8 max-w-[1600px] mx-auto w-full">
-          {children}
+          <UniverseTransition>{children}</UniverseTransition>
         </div>
       </main>
     </div>
