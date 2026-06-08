@@ -189,7 +189,10 @@ export interface Declare2v2Response {
   status: 'pending';
   /** True si le duo déclarant est créé pour la première fois. */
   myTeamIsNew: boolean;
+  /** Id de l'équipe du déclarant — créée dès la déclaration (jamais vide). */
   myTeamId: string;
+  /** ELO d'équipe réel (pondéré 65/35) calculé côté back. */
+  myTeamElo?: number;
 }
 
 /** Un point de l'historique ELO d'une équipe. */
