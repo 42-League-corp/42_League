@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, User, Users } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useViewport';
 import { Button } from '../../components/Button';
 import {
   TournamentPrizePicker,
@@ -25,6 +27,7 @@ export function CreateTournamentPage() {
   const { refresh, me, leaderboard, locations } = useLeagueData();
   const t = useT();
   const isAdmin = !!me?.isAdmin;
+  const isMobile = useIsMobile();
 
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState<Capacity>(8);
@@ -77,16 +80,8 @@ export function CreateTournamentPage() {
     }
   };
 
-  return (
-    // Mobile : overlay contenu AU-DESSUS de la tab bar, se terminant AVANT elle,
-    // avec scroll interne — le bouton « Créer » n'est jamais caché derrière la barre.
-    // Desktop (sm+) : page normale dans le flux du shell.
-    <div
-      className="fixed inset-x-0 top-0 z-[60] flex flex-col bg-bg-0 sm:static sm:z-auto sm:bg-transparent sm:block"
-      style={{ bottom: 'calc(52px + env(safe-area-inset-bottom))' }}
-    >
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:overflow-visible sm:p-0">
-        <div className="max-w-sm mx-auto flex flex-col gap-8 pb-8">
+  const content = (
+    <div className="max-w-sm mx-auto flex flex-col gap-8 pb-8">
 
       {/* ── Back ── */}
       <button
@@ -421,9 +416,27 @@ export function CreateTournamentPage() {
           </p>
         </motion.div>
 
-        </div>
-        </div>
       </div>
     </div>
   );
+
+  // Mobile : overlay porté sur <body> — échappe à l'ancêtre transformé du shell
+  // (PageTransition/framer laisse un transform → un `fixed` y serait piégé). Vrai
+  // `fixed` viewport AU-DESSUS de la tab bar, se terminant AVANT elle, avec scroll
+  // interne → le bouton « Créer » n'est jamais caché. Desktop : flux normal.
+  if (isMobile) {
+    return createPortal(
+      <div
+        className="fixed inset-x-0 top-0 z-[60] flex flex-col bg-bg-0"
+        style={{ bottom: 'calc(52px + env(safe-area-inset-bottom))' }}
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4">
+          {content}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  return content;
 }
