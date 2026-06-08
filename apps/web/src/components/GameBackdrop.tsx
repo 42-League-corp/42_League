@@ -1,7 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { useGameMode } from '../hooks/useGameMode';
 import { useTransitionPhase } from '../hooks/useTransitionPhase';
-import { gameColor } from '../lib/gameVisuals';
 import type { Game } from '../lib/gameMode';
 
 /**
@@ -39,7 +38,6 @@ function GameBackdropImpl() {
   const { game } = useGameMode();
   const phase = useTransitionPhase();
   const revealed = phase === 'reveal';
-  const transitioning = phase !== 'idle';
 
   // Précharge les 5 photos une fois → cross-fade instantané ensuite.
   useEffect(() => {
@@ -67,8 +65,6 @@ function GameBackdropImpl() {
       requestAnimationFrame(() => setActive('A'));
     }
   }, [phase, game, active, activeGame]);
-
-  const accent = gameColor(game);
 
   const imgStyle = (visible: boolean): React.CSSProperties => ({
     opacity: visible ? 1 : 0,
@@ -124,27 +120,6 @@ function GameBackdropImpl() {
           transition: 'opacity 320ms ease',
         }}
       />
-
-      {/* Grand symbole du jeu — surgit au centre pendant la transition, peak à REVEAL. */}
-      <div className="absolute inset-0 grid place-items-center">
-        <img
-          src={ART[game].symbol}
-          alt=""
-          draggable={false}
-          decoding="async"
-          className="select-none object-contain"
-          style={{
-            maxHeight: 'min(42vh, 400px)',
-            maxWidth: '62vw',
-            width: 'auto',
-            height: 'auto',
-            opacity: revealed ? 0.96 : transitioning ? 0.25 : 0,
-            transform: revealed ? 'scale(1)' : transitioning ? 'scale(0.78)' : 'scale(0.6)',
-            filter: `drop-shadow(0 0 60px ${accent}aa) drop-shadow(0 12px 40px rgba(0,0,0,0.6))`,
-            transition: 'opacity 320ms ease, transform 460ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        />
-      </div>
 
       {/* Props latéraux desktop only (2xl+). */}
       <img
