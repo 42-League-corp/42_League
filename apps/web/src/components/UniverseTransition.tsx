@@ -3,65 +3,97 @@ import { useGameMode } from '../hooks/useGameMode';
 import { setTransitionPhase } from '../lib/universeTransition';
 
 /**
- * Wrapper du contenu de page qui orchestre la cinématique de changement
- * d'univers en 4 phases (≈1.1s total) :
+ * Cinématique de changement d'univers — « les blocs du HUD se dispersent en 3D,
+ * la backdrop 4K + le symbole du jeu se révèlent, puis les blocs se
+ * recomposent ». Pilotée par la Web Animations API (et non par du CSS) car :
  *
- *   1. EXIT   (380ms) — chaque enfant direct part radialement vers son bord
- *                       d'écran le plus proche, avec stagger, GPU-only.
- *   2. REVEAL (280ms) — les blocs sont hors-champ, la backdrop est exposée
- *                       (le scrim s'éclaircit) ; les 2 photos se cross-fadent.
- *   3. ENTER  (420ms) — les blocs reviennent depuis l'opposé, en cascade.
- *   4. IDLE           — état stable.
+ *  • La WAAPI surcharge les transforms inline posées par framer-motion sur
+ *    beaucoup de blocs (motion.div) — du CSS ne le pourrait pas (l'inline gagne).
+ *  • 100 % GPU-composité (transform + opacity), 0 reflow pendant l'anim.
+ *  • Auto-nettoyage : à la fin les éléments reviennent à leur état React naturel.
  *
- * Stratégie « zero-refonte » : avant le démarrage de l'animation, on lit la
- * position de chaque enfant direct, on calcule son vecteur radial depuis le
- * centre écran, et on écrit ce vecteur sur l'élément en custom property
- * (`--g-tx`, `--g-ty`, `--g-delay`). Les règles CSS globales (index.css)
- * consomment ces variables → animations transform/opacity uniquement, donc
- * 60 fps garantis.
- *
- * Respecte `prefers-reduced-motion` : transition réduite à un simple fondu.
+ * La sélection des tuiles est RÉCURSIVE : on descend dans tout conteneur trop
+ * grand (ex. le <Panel> qui enveloppe la page) jusqu'à atteindre les vraies
+ * cartes / lignes, en ignorant les overlays décoratifs. Donc aucune page n'a
+ * besoin d'être taguée : ça marche partout, et les blocs sont bien découpés.
  */
-
-const EXIT_MS = 380;
-const REVEAL_MS = 280;
-const ENTER_MS = 420;
-const STAGGER_MS = 35;
 
 interface UniverseTransitionProps {
   children: ReactNode;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// ─── Réglages ────────────────────────────────────────────────────────────────
+const EXIT_DUR = 360;
+const ENTER_DUR = 480;
+const REVEAL_HOLD = 300; // durée où les blocs sont hors-champ (backdrop exposée)
+const MAX_TILES = 42;
+const EXIT_EASE = 'cubic-bezier(0.7, 0, 0.84, 0)'; // accélère vers les bords
+const ENTER_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'; // décélère, settle premium
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
 }
 
-/** Vecteur unitaire (cx, cy) → (x, y), avec bias selon la zone d'écran. */
-function radialVector(rect: DOMRect, vw: number, vh: number): { tx: number; ty: number; rot: number } {
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const dx = cx - vw / 2;
-  const dy = cy - vh / 2;
-  const len = Math.hypot(dx, dy) || 1;
-  // Normalisation puis ajout d'un terme constant pour que les blocs très
-  // proches du centre partent quand même (sinon ils restent sur place).
-  const tx = dx / len + Math.sign(dx) * 0.25;
-  const ty = dy / len + Math.sign(dy) * 0.25;
-  // Petite rotation aléatoire-déterministe pour donner du caractère (les
-  // blocs au-dessus du centre tournent un peu, ceux en-dessous l'inverse).
-  const rot = (dy / vh) * -8 + (dx / vw) * 4;
-  return { tx, ty, rot };
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Descend récursivement dans le sous-arbre pour récupérer les « tuiles »
+ * animables : on éclate tout conteneur dont la hauteur dépasse ~42 % du viewport
+ * (= une section, pas une carte), on garde les éléments plus petits tels quels,
+ * et on ignore les overlays décoratifs / marqueurs invisibles.
+ */
+function collectTiles(container: HTMLElement, vh: number): HTMLElement[] {
+  const MAX_H = vh * 0.42;
+  const tiles: HTMLElement[] = [];
+  const walk = (node: HTMLElement, depth: number) => {
+    for (const child of Array.from(node.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      if (tiles.length >= MAX_TILES) return;
+      const rect = child.getBoundingClientRect();
+      if (rect.width < 12 || rect.height < 12) continue; // marqueurs / vides
+      const cs = getComputedStyle(child);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+      // Overlays décoratifs (filigrane, vignette interne…) → ne pas animer.
+      if ((cs.position === 'absolute' || cs.position === 'fixed') && cs.pointerEvents === 'none') continue;
+      const isTallContainer = rect.height > MAX_H && child.children.length > 0 && depth < 5;
+      if (isTallContainer) walk(child, depth + 1);
+      else tiles.push(child);
+    }
+  };
+  walk(container, 0);
+  return tiles.slice(0, MAX_TILES);
+}
+
+interface TileVec {
+  el: HTMLElement;
+  tx: number;
+  ty: number;
+  dist: number;
 }
 
 export function UniverseTransition({ children }: UniverseTransitionProps) {
   const { game } = useGameMode();
   const prevGameRef = useRef(game);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const animsRef = useRef<Animation[]>([]);
   const timersRef = useRef<number[]>([]);
+  const tilesRef = useRef<HTMLElement[]>([]);
 
-  // useLayoutEffect : on doit calculer les vecteurs AVANT que les nouveaux
-  // children soient peints (sinon flash).
+  const cleanup = () => {
+    animsRef.current.forEach((a) => a.cancel());
+    animsRef.current = [];
+    timersRef.current.forEach((t) => window.clearTimeout(t));
+    timersRef.current = [];
+    tilesRef.current.forEach((el) => {
+      el.style.willChange = '';
+      el.style.backfaceVisibility = '';
+    });
+    tilesRef.current = [];
+  };
+
   useLayoutEffect(() => {
     if (prevGameRef.current === game) return;
     prevGameRef.current = game;
@@ -69,82 +101,112 @@ export function UniverseTransition({ children }: UniverseTransitionProps) {
     const wrap = wrapRef.current;
     if (!wrap) return;
 
-    // Nettoyage des timers d'une transition précédente non terminée.
-    timersRef.current.forEach((t) => window.clearTimeout(t));
-    timersRef.current = [];
+    cleanup(); // annule une transition précédente non terminée
 
+    // Reduced motion → simple bascule de la backdrop, pas de ballet.
     if (prefersReducedMotion()) {
-      // Fondu simple — pas de dispersion.
       setTransitionPhase('reveal');
-      timersRef.current.push(window.setTimeout(() => setTransitionPhase('idle'), 350));
+      timersRef.current.push(window.setTimeout(() => setTransitionPhase('idle'), REVEAL_HOLD));
       return;
     }
 
-    // Détection intelligente du « vrai » niveau des blocs : on descend tant
-    // qu'il n'y a qu'un seul enfant (PageTransition, wrappers de page, etc.)
-    // pour atteindre la rangée d'items qui doivent se disperser.
-    let blockParent: HTMLElement = wrap;
-    while (blockParent.children.length === 1 && blockParent.firstElementChild instanceof HTMLElement) {
-      blockParent = blockParent.firstElementChild;
-    }
-
-    // Calcul des vecteurs sur chaque enfant direct ----------------------------
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const children = Array.from(blockParent.children) as HTMLElement[];
-    // Pour que les règles CSS ciblent le bon parent, on lui ajoute une marque.
-    blockParent.dataset.universeBlocks = '';
+    const tiles = collectTiles(wrap, vh);
+    if (tiles.length === 0) {
+      setTransitionPhase('reveal');
+      timersRef.current.push(window.setTimeout(() => setTransitionPhase('idle'), REVEAL_HOLD));
+      return;
+    }
+    tilesRef.current = tiles;
 
-    // Tri par distance au centre (les plus éloignés partent en premier → effet
-    // d'aspiration vers les bords).
-    const indexed = children.map((el, i) => {
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dist = Math.hypot(cx - vw / 2, cy - vh / 2);
-      return { el, rect, dist, originalIndex: i };
+    // Vecteur radial unitaire (centre écran → centre tuile) + tri éloigné→proche.
+    const vecs: TileVec[] = tiles.map((el) => {
+      const r = el.getBoundingClientRect();
+      const dx = r.left + r.width / 2 - vw / 2;
+      const dy = r.top + r.height / 2 - vh / 2;
+      const len = Math.hypot(dx, dy) || 1;
+      return {
+        el,
+        tx: dx / len + Math.sign(dx) * 0.22,
+        ty: dy / len + Math.sign(dy) * 0.22,
+        dist: len,
+      };
     });
-    indexed.sort((a, b) => b.dist - a.dist);
+    vecs.sort((a, b) => b.dist - a.dist);
 
-    indexed.forEach(({ el, rect }, sortedIndex) => {
-      const { tx, ty, rot } = radialVector(rect, vw, vh);
-      el.style.setProperty('--g-tx', tx.toFixed(3));
-      el.style.setProperty('--g-ty', ty.toFixed(3));
-      el.style.setProperty('--g-rot', rot.toFixed(2));
-      el.style.setProperty('--g-delay', `${sortedIndex * STAGGER_MS}ms`);
-    });
+    const n = vecs.length;
+    const stagger = clamp(Math.round(180 / n), 6, 26);
+    const staggerTotal = (n - 1) * stagger;
 
-    // Orchestration des phases ------------------------------------------------
+    const base = 'perspective(1200px) translate3d(0,0,0) rotateX(0deg) rotateY(0deg) scale(1)';
+
+    // ── Phase EXIT : chaque tuile fuit vers son bord, pivote en 3D, s'efface ──
     setTransitionPhase('exit');
+    vecs.forEach(({ el, tx, ty }, i) => {
+      el.style.willChange = 'transform, opacity';
+      el.style.backfaceVisibility = 'hidden';
+      const exitT =
+        `perspective(1200px) translate3d(calc(${tx.toFixed(3)} * 46vw), calc(${ty.toFixed(3)} * 46vh), 150px) ` +
+        `rotateY(${(tx * 18).toFixed(1)}deg) rotateX(${(-ty * 18).toFixed(1)}deg) scale(0.9)`;
+      const anim = el.animate(
+        [
+          { transform: base, opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.35 },
+          { transform: exitT, opacity: 0, offset: 1 },
+        ],
+        { duration: EXIT_DUR, delay: i * stagger, easing: EXIT_EASE, fill: 'forwards' },
+      );
+      animsRef.current.push(anim);
+    });
 
-    const tReveal = window.setTimeout(() => setTransitionPhase('reveal'), EXIT_MS);
-    const tEnter  = window.setTimeout(() => setTransitionPhase('enter'),  EXIT_MS + REVEAL_MS);
-    const tIdle   = window.setTimeout(() => {
-      setTransitionPhase('idle');
-      // Cleanup des custom properties pour libérer la mémoire compositeur.
-      indexed.forEach(({ el }) => {
-        el.style.removeProperty('--g-tx');
-        el.style.removeProperty('--g-ty');
-        el.style.removeProperty('--g-rot');
-        el.style.removeProperty('--g-delay');
-      });
-      delete blockParent.dataset.universeBlocks;
-    }, EXIT_MS + REVEAL_MS + ENTER_MS);
+    // ── Orchestration ──
+    const revealAt = Math.round(staggerTotal * 0.45 + EXIT_DUR * 0.62);
+    const enterAt = revealAt + REVEAL_HOLD;
+    const idleAt = enterAt + staggerTotal + ENTER_DUR;
 
-    timersRef.current.push(tReveal, tEnter, tIdle);
+    timersRef.current.push(window.setTimeout(() => setTransitionPhase('reveal'), revealAt));
+
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setTransitionPhase('enter');
+        // ── Phase ENTER : retour depuis l'opposé (en profondeur), settle ──
+        // stagger inversé : les tuiles proches du centre se recomposent d'abord.
+        const enterAnims: Animation[] = [];
+        vecs.forEach(({ el, tx, ty }, i) => {
+          const fromT =
+            `perspective(1200px) translate3d(calc(${(-tx).toFixed(3)} * 26vw), calc(${(-ty).toFixed(3)} * 26vh), -240px) ` +
+            `rotateY(${(-tx * 14).toFixed(1)}deg) rotateX(${(ty * 14).toFixed(1)}deg) scale(0.86)`;
+          const enterDelay = (n - 1 - i) * stagger;
+          const anim = el.animate(
+            [
+              { transform: fromT, opacity: 0, offset: 0 },
+              { transform: base, opacity: 1, offset: 1 },
+            ],
+            { duration: ENTER_DUR, delay: enterDelay, easing: ENTER_EASE, fill: 'backwards' },
+          );
+          enterAnims.push(anim);
+        });
+        // Les anims d'entrée (créées après) priment ; on libère les exit.
+        animsRef.current.forEach((a) => a.cancel());
+        animsRef.current = enterAnims;
+      }, enterAt),
+    );
+
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setTransitionPhase('idle');
+        cleanup();
+      }, idleAt),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game]);
 
-  // Cleanup global au démontage.
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach((t) => window.clearTimeout(t));
-      setTransitionPhase('idle');
-    };
+  useEffect(() => () => {
+    cleanup();
+    setTransitionPhase('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
-    <div ref={wrapRef} className="universe-transition-root">
-      {children}
-    </div>
-  );
+  return <div ref={wrapRef}>{children}</div>;
 }
