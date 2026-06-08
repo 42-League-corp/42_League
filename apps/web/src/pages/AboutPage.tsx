@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, Github } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, Github, Megaphone } from 'lucide-react';
 import { Panel } from '../components/Panel';
-import { api, type ContributorStat } from '../lib/api';
+import { api, type ContributorStat, type AnnouncementData } from '../lib/api';
+import { announcementKindMeta } from '../lib/announcements';
 import { useT, useI18n } from '../lib/i18n';
 import type { Lang } from '../lib/i18n';
 import { useAuth } from '../hooks/useAuth';
@@ -10,7 +11,7 @@ import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
 import type { Game } from '../lib/gameMode';
 
-type Tab = 'rules' | 'privacy' | 'tech' | 'team';
+type Tab = 'rules' | 'announcements' | 'privacy' | 'tech' | 'team';
 
 export function AboutPage() {
   const t = useT();
@@ -24,6 +25,11 @@ export function AboutPage() {
         <TabBtn active={tab === 'rules'} onClick={() => setTab('rules')} Icon={BookOpen}>
           {t('about.rules.title')}
         </TabBtn>
+        {authenticated && (
+          <TabBtn active={tab === 'announcements'} onClick={() => setTab('announcements')} Icon={Megaphone}>
+            {t('about.announcements.title')}
+          </TabBtn>
+        )}
         <TabBtn active={tab === 'privacy'} onClick={() => setTab('privacy')} Icon={Shield}>
           {t('about.privacy.title')}
         </TabBtn>
@@ -37,6 +43,8 @@ export function AboutPage() {
 
       {tab === 'rules' ? (
         <RulesSection />
+      ) : tab === 'announcements' ? (
+        <AnnouncementsSection />
       ) : tab === 'privacy' ? (
         <PrivacySection />
       ) : tab === 'tech' ? (
@@ -96,6 +104,66 @@ function TabBtn({
       <Icon className="w-3.5 h-3.5 shrink-0 hidden sm:inline-flex" strokeWidth={2.5} />
       <span className="truncate">{children}</span>
     </button>
+  );
+}
+
+// ─── Dernières annonces (listées en permanence) ──────────────────────────────
+
+function AnnouncementsSection() {
+  const t = useT();
+  const { lang } = useI18n();
+  const [list, setList] = useState<AnnouncementData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .announcements()
+      .then((items) => {
+        if (!cancelled) setList(items);
+      })
+      .catch(() => {
+        /* best-effort : on laisse la liste vide */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Panel title={t('about.announcements.heading')} sub={t('about.announcements.sub')} accent="megaphone">
+      {loading ? (
+        <div className="text-sm text-muted-2">…</div>
+      ) : list.length === 0 ? (
+        <div className="text-sm text-muted-2">{t('about.announcements.empty')}</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {list.map((a) => {
+            const meta = announcementKindMeta(a.kind);
+            const Icon = meta.Icon;
+            return (
+              <div
+                key={a.id}
+                className="rounded-xl p-3.5"
+                style={{ background: `${meta.accent}0d`, border: `1px solid ${meta.accent}33` }}
+              >
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <Icon className="w-4 h-4 shrink-0" style={{ color: meta.accent }} strokeWidth={2.4} />
+                  <span className="text-sm font-bold text-text-strong leading-tight">{a.title}</span>
+                  <span className="ml-auto text-[11px] font-mono text-muted-2 shrink-0">
+                    {new Date(a.createdAt).toLocaleDateString(lang, { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+                <p className="text-sm text-muted leading-relaxed whitespace-pre-line">{a.body}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }
 

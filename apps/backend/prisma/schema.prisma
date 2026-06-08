@@ -112,8 +112,45 @@ model User {
   weeklyQuests              WeeklyQuestProgress[]   @relation("userQuests")
   bets                      Bet[]                   @relation("userBets")
   analyticsEvents           AnalyticsEvent[]        @relation("userAnalytics")
+  // Annonces générales déjà vues (popup « une seule fois » par utilisateur).
+  announcementsSeen         AnnouncementSeen[]      @relation("announcementsSeen")
 
   @@map("users")
+}
+
+// Annonce générale rédigée par un admin (cf. /GOD onglet Annonces). Affichée
+// une seule fois en popup à la prochaine connexion de chaque utilisateur
+// (suivi via AnnouncementSeen), puis listée en permanence dans la page À propos.
+model Announcement {
+  id             String   @id @default(uuid())
+  title          String
+  body           String
+  // 'info' | 'important' | 'event' — pilote l'accent/icône du popup & de la liste.
+  kind           String   @default("info")
+  // Masquée si false : ne popup plus et disparaît de la liste publique.
+  active         Boolean  @default(true)
+  createdByLogin String?  @map("created_by_login")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  seenBy AnnouncementSeen[]
+
+  @@index([active, createdAt])
+  @@map("announcements")
+}
+
+// Accusé de lecture d'une annonce par un utilisateur — garantit l'affichage
+// « une seule fois » (à travers tous ses appareils/sessions).
+model AnnouncementSeen {
+  announcementId String   @map("announcement_id")
+  userLogin      String   @map("user_login")
+  seenAt         DateTime @default(now()) @map("seen_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user         User         @relation("announcementsSeen", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([announcementId, userLogin])
+  @@index([userLogin])
+  @@map("announcement_seen")
 }
 
 model Follow {
@@ -250,7 +287,10 @@ model Tournament {
   // '1v1' (un login par côté) | '2v2' (babyfoot doubles : chaque entrée = une paire,
   // représentée dans le bracket par le login « capitaine », cf. partnerLogin).
   mode           String    @default("1v1")
-  format         String    @default("elimination") // 'elimination' (bracket direct) | 'pools' (poules puis bracket)
+  // 'elimination' (bracket direct) | 'pools' (poules puis bracket) |
+  // 'league' (phase de ligue : affiches composées par l'admin, classement au goal
+  // average, puis bascule en élimination directe des premiers — cf. tournament.ts)
+  format         String    @default("elimination")
   game           String    @default("babyfoot") // 'babyfoot' | 'smash'
   status         String // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String    @map("created_by_login")
@@ -330,10 +370,10 @@ model TournamentEntry {
 model TournamentMatch {
   id              String    @id @default(uuid())
   tournamentId    String    @map("tournament_id")
-  stage           String    @default("bracket") // 'pool' | 'bracket'
-  poolIndex       Int?      @map("pool_index") // index de poule (stage='pool')
-  round           Int // bracket: 1,2,3... ; pool: 0
-  slot            Int // position in the round (0-indexed) ; pool: index global
+  stage           String    @default("bracket") // 'pool' | 'bracket' | 'league'
+  poolIndex       Int?      @map("pool_index") // stage='pool': index de poule ; stage='league': n° de journée
+  round           Int // bracket: 1,2,3... ; pool & league: 0
+  slot            Int // position in the round (0-indexed) ; pool & league: index global
   playerALogin    String?   @map("player_a_login")
   playerBLogin    String?   @map("player_b_login")
   scoreA          Int?      @map("score_a")

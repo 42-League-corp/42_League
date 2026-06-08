@@ -17,6 +17,12 @@ export const dict: Record<Lang, Dict> = {
     'about.privacy.title': 'Confidentialité',
     'about.tech.title': 'Technique',
     'about.team.title': 'Équipe',
+    'about.announcements.title': 'Annonces',
+    'about.announcements.heading': 'Dernières annonces',
+    'about.announcements.sub': 'Toutes les annonces de la ligue',
+    'about.announcements.empty': 'Aucune annonce pour le moment.',
+    'announce.popup.next': 'Suivant',
+    'announce.popup.ok': "J'ai compris",
 
     // Navigation
     'about.back.login': 'Connexion',
@@ -104,6 +110,12 @@ export const dict: Record<Lang, Dict> = {
     'about.privacy.title': 'Privacy',
     'about.tech.title': 'Tech',
     'about.team.title': 'Team',
+    'about.announcements.title': 'News',
+    'about.announcements.heading': 'Latest announcements',
+    'about.announcements.sub': 'All league announcements',
+    'about.announcements.empty': 'No announcements yet.',
+    'announce.popup.next': 'Next',
+    'announce.popup.ok': 'Got it',
 
     // Navigation
     'about.back.login': 'Sign in',
@@ -191,6 +203,12 @@ export const dict: Record<Lang, Dict> = {
     'about.privacy.title': 'Privacidad',
     'about.tech.title': 'Técnica',
     'about.team.title': 'Equipo',
+    'about.announcements.title': 'Anuncios',
+    'about.announcements.heading': 'Últimos anuncios',
+    'about.announcements.sub': 'Todos los anuncios de la liga',
+    'about.announcements.empty': 'No hay anuncios por ahora.',
+    'announce.popup.next': 'Siguiente',
+    'announce.popup.ok': 'Entendido',
 
     // Navegación
     'about.back.login': 'Iniciar sesión',

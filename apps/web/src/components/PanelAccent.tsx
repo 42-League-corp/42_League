@@ -1,5 +1,5 @@
 import { motion, useReducedMotion, type Transition, type TargetAndTransition } from 'framer-motion';
-import { Crown, Swords, Trophy, History, UserRound, Medal, BookOpen, type LucideIcon } from 'lucide-react';
+import { Crown, Swords, Trophy, History, UserRound, Medal, BookOpen, Megaphone, type LucideIcon } from 'lucide-react';
 
 export type PanelAccentVariant =
   | 'crown'
@@ -8,7 +8,8 @@ export type PanelAccentVariant =
   | 'history'
   | 'user'
   | 'medal'
-  | 'book';
+  | 'book'
+  | 'megaphone';
 
 interface AccentDef {
   Icon: LucideIcon;
@@ -32,6 +33,7 @@ const ACCENTS: Record<PanelAccentVariant, AccentDef> = {
   user: { Icon: UserRound, color: 'text-gold', animate: { scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }, transition: loop(2.6) },
   medal: { Icon: Medal, color: 'text-gold', animate: { rotate: [0, 6, -6, 0], y: [0, -2, 0] }, transition: loop(3.6) },
   book: { Icon: BookOpen, color: 'text-teal', animate: { rotate: [0, -6, 0] }, transition: loop(3.2) },
+  megaphone: { Icon: Megaphone, color: 'text-gold', animate: { rotate: [0, -8, 8, 0], y: [0, -2, 0] }, transition: loop(3.0) },
 };
 
 /**

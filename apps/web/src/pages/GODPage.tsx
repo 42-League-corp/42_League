@@ -34,7 +34,10 @@ import {
   type StatsOverview,
   type StatCount,
   type DayPoint,
+  type AnnouncementData,
+  type AnnouncementKind,
 } from '../lib/api';
+import { ANNOUNCEMENT_KINDS, announcementKindMeta } from '../lib/announcements';
 import type { Game } from '../lib/gameMode';
 import { useGameMode } from '../hooks/useGameMode';
 import { useLeagueData } from '../hooks/useLeagueData';
@@ -45,7 +48,7 @@ import { VersusOverlay as TournVersusOverlay } from '../components/tournois/Vers
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -3063,7 +3066,7 @@ function ManagePanel({
     kind?: 'friendly' | 'official';
     isPrivate?: boolean;
     capacity?: number;
-    format?: 'elimination' | 'pools';
+    format?: 'elimination' | 'pools' | 'league';
   }) => void;
 }) {
   const isReg = detail.status === 'registration';
@@ -3079,7 +3082,7 @@ function ManagePanel({
   const [kind, setKind] = useState<'friendly' | 'official'>(detail.kind);
   const [isPrivate, setIsPrivate] = useState(Boolean(detail.isPrivate));
   const [capacity, setCapacity] = useState(String(detail.capacity));
-  const [format, setFormat] = useState<'elimination' | 'pools'>(detail.format ?? 'elimination');
+  const [format, setFormat] = useState<'elimination' | 'pools' | 'league'>(detail.format ?? 'elimination');
   const [addLogin, setAddLogin] = useState('');
 
   const curFormat = detail.format ?? 'elimination';
@@ -3095,7 +3098,7 @@ function ManagePanel({
       kind?: 'friendly' | 'official';
       isPrivate?: boolean;
       capacity?: number;
-      format?: 'elimination' | 'pools';
+      format?: 'elimination' | 'pools' | 'league';
     } = {};
     if (name.trim() !== detail.name) patch.name = name.trim();
     if (kind !== detail.kind) patch.kind = kind;
@@ -3156,6 +3159,9 @@ function ManagePanel({
               </button>
               <button type="button" onClick={() => setFormat('pools')} className={segBtn(format === 'pools')}>
                 {tr('god.tourn.pools')}
+              </button>
+              <button type="button" onClick={() => setFormat('league')} className={segBtn(format === 'league')}>
+                {tr('god.tourn.league')}
               </button>
               <span className="text-zinc-500 font-mono text-xs ml-2">{tr('god.tourn.capacity')}</span>
               <Input type="number" value={capacity} onChange={setCapacity} className="w-20" />
@@ -3525,7 +3531,7 @@ function TournamentsTab() {
                     </span>
                   </td>
                   <td className="py-2 px-3 text-zinc-400 font-mono text-xs">
-                    {t.format === 'pools' ? tr('god.tourn.pools') : tr('god.tourn.elim')}
+                    {t.format === 'pools' ? tr('god.tourn.pools') : t.format === 'league' ? tr('god.tourn.league') : tr('god.tourn.elim')}
                   </td>
                   <td className="py-2 px-3 text-center tabular-nums text-zinc-300">
                     {(t.entries?.length ?? 0)}/{t.capacity}
@@ -3867,6 +3873,159 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
   );
 }
 
+// ─── Onglet ANNONCES : crée des annonces générales (popup à la connexion) ─────
+function AnnouncementsTab() {
+  const t = useT();
+  const [list, setList] = useState<AnnouncementData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [kind, setKind] = useState<AnnouncementKind>('info');
+  const [creating, setCreating] = useState(false);
+  const [okMsg, setOkMsg] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    api
+      .adminAnnouncements()
+      .then(setList)
+      .catch((e) => setError(e instanceof Error ? e.message : t('god.error')))
+      .finally(() => setLoading(false));
+  }, [t]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleCreate() {
+    setError('');
+    setOkMsg('');
+    if (!title.trim() || !body.trim()) {
+      setError('Titre et message obligatoires.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await api.adminCreateAnnouncement({ title: title.trim(), body: body.trim(), kind });
+      setOkMsg(`Annonce « ${created.title} » publiée — elle poppera à la prochaine connexion de chaque joueur.`);
+      setTitle('');
+      setBody('');
+      setKind('info');
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('god.error'));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Supprimer cette annonce ? (disparaît de la liste publique et des accusés de lecture)')) return;
+    setDeleting(id);
+    setError('');
+    try {
+      await api.adminDeleteAnnouncement(id);
+      load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('god.error'));
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-5">
+      {/* Création */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+        <div className="text-sm font-bold text-zinc-100 tracking-wide">Nouvelle annonce</div>
+        <p className="text-[11px] text-zinc-500 leading-snug">
+          Affichée une seule fois en popup à la prochaine connexion de chaque joueur, puis listée en
+          permanence dans « À propos → Annonces ».
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Titre *</span>
+            <Input value={title} onChange={setTitle} placeholder="ex. Nouvelle saison !" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Type</span>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as AnnouncementKind)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+            >
+              {ANNOUNCEMENT_KINDS.map((k) => (
+                <option key={k} value={k}>{announcementKindMeta(k).label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Message *</span>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={4}
+            placeholder="Le contenu de l'annonce (les retours à la ligne sont conservés)."
+            className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 resize-y"
+          />
+        </label>
+        {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
+        {okMsg && <div className="text-xs text-emerald-400 font-mono">{okMsg}</div>}
+        <div>
+          <Btn onClick={handleCreate} disabled={creating} variant="success">
+            {creating ? '…' : 'Publier l\'annonce'}
+          </Btn>
+        </div>
+      </div>
+
+      {/* Liste */}
+      {loading ? (
+        <div className="text-zinc-500 text-sm font-mono">{t('god.loading')}</div>
+      ) : list.length === 0 ? (
+        <div className="text-zinc-600 text-sm font-mono">Aucune annonce.</div>
+      ) : (
+        <div className="space-y-2">
+          {list.map((a) => {
+            const meta = announcementKindMeta(a.kind);
+            const Icon = meta.Icon;
+            return (
+              <div key={a.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                        style={{ color: meta.accent, background: `${meta.accent}1a`, border: `1px solid ${meta.accent}55` }}
+                      >
+                        <Icon className="w-3 h-3" strokeWidth={2.5} />
+                        {meta.label}
+                      </span>
+                      <span className="text-sm font-bold text-zinc-100">{a.title}</span>
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">{a.body}</p>
+                    <div className="mt-2 flex items-center gap-2 text-[11px] font-mono text-zinc-500">
+                      <span>{fmtDate(a.createdAt)}</span>
+                      {a.createdBy && (<><span className="text-zinc-700">·</span><span>{a.createdBy}</span></>)}
+                      <span className="text-zinc-700">·</span>
+                      <span>👁 {a.seenCount ?? 0} vu(s)</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <Btn onClick={() => handleDelete(a.id)} disabled={deleting === a.id} variant="danger">
+                      {deleting === a.id ? '…' : 'Supprimer'}
+                    </Btn>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'stats' },
   { id: 'users' },
@@ -3880,6 +4039,7 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'audit' },
   { id: 'history' },
   { id: 'tournaments' },
+  { id: 'announcements' },
   { id: 'seasons', superAdminOnly: true },
   { id: 'animations' },
 ];
@@ -4029,6 +4189,7 @@ export function GODPage() {
           {activeTab === 'tournaments' && <TournamentsTab />}
           {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
           {activeTab === 'animations' && <AnimationsTab myLogin={myLogin} />}
+          {activeTab === 'announcements' && <AnnouncementsTab />}
         </motion.div>
       </div>
     </div>

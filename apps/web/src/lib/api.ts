@@ -283,6 +283,28 @@ export interface MatchmakingOpponent {
   imageUrl: string | null;
 }
 
+export type AnnouncementKind = 'info' | 'important' | 'event';
+
+/** Annonce générale (cf. /GOD onglet Annonces + popup + page À propos). */
+export interface AnnouncementData {
+  id: string;
+  title: string;
+  body: string;
+  kind: AnnouncementKind;
+  active: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+  /** Présent uniquement sur la liste admin : nombre de joueurs ayant vu l'annonce. */
+  seenCount?: number;
+}
+
+export interface AnnouncementInput {
+  title: string;
+  body: string;
+  kind?: AnnouncementKind;
+  active?: boolean;
+}
+
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
@@ -307,6 +329,8 @@ export interface MeResponse {
   equippedBanner?: string | null;
   /** Palmarès par saison. */
   palmares?: PalmaresEntry[];
+  /** Annonces générales non encore vues — affichées en popup à la connexion. */
+  unseenAnnouncements?: AnnouncementData[];
   user: {
     login: string;
     firstName?: string | null;
@@ -598,7 +622,8 @@ export interface PalmaresEntry {
 export interface TournamentMatch {
   id: string;
   tournamentId: string;
-  stage?: 'pool' | 'bracket';
+  stage?: 'pool' | 'bracket' | 'league';
+  // stage='pool' : index de poule ; stage='league' : n° de journée.
   poolIndex?: number | null;
   round: number;
   slot: number;
@@ -648,7 +673,7 @@ export interface Tournament {
   capacity: number;
   /** '1v1' classique | '2v2' (babyfoot doubles : chaque entrée = une paire). */
   mode?: '1v1' | '2v2';
-  format?: 'elimination' | 'pools';
+  format?: 'elimination' | 'pools' | 'league';
   game?: Game;
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
   createdByLogin: string;
@@ -1148,7 +1173,7 @@ export const api = {
     kind: 'friendly' | 'official';
     mode?: '1v1' | '2v2';
     partnerLogin?: string;
-    format?: 'elimination' | 'pools';
+    format?: 'elimination' | 'pools' | 'league';
     game?: Game;
     private?: boolean;
     imageUrl?: string;
@@ -1249,6 +1274,25 @@ export const api = {
     request<{ id: string; activeMatchId: string | null }>(
       `/tournaments/${encodeURIComponent(tournamentId)}/matches/${encodeURIComponent(matchId)}/announce`,
       { method: 'POST', body: JSON.stringify({}) },
+    ),
+  // ── Phase de ligue (admin/officiant) ─────────────────────────────────────────
+  // Compose une affiche (joueur A vs joueur B) sur une journée.
+  addLeagueMatch: (tournamentId: string, playerALogin: string, playerBLogin: string, journee: number) =>
+    request<TournamentMatch>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/matches`,
+      { method: 'POST', body: JSON.stringify({ playerALogin, playerBLogin, journee }) },
+    ),
+  // Supprime une affiche de ligue non confirmée.
+  deleteLeagueMatch: (tournamentId: string, matchId: string) =>
+    request<{ id: string; deleted: true }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/matches/${encodeURIComponent(matchId)}`,
+      { method: 'DELETE' },
+    ),
+  // Bascule la ligue en élimination directe : les `qualifyCount` premiers au goal average.
+  finalizeLeague: (tournamentId: string, qualifyCount: number) =>
+    request<{ id: string; finalized: true; qualifyCount: number }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/finalize`,
+      { method: 'POST', body: JSON.stringify({ qualifyCount }) },
     ),
   locations: () => request<Record<string, string>>('/locations'),
   health: () => request<{ ok: boolean }>('/health', {}, { auth: false }),
@@ -1427,7 +1471,7 @@ export const api = {
       kind?: 'friendly' | 'official';
       isPrivate?: boolean;
       capacity?: number;
-      format?: 'elimination' | 'pools';
+      format?: 'elimination' | 'pools' | 'league';
     },
   ) =>
     request<{ id: string; updated: true }>(
@@ -1508,6 +1552,23 @@ export const api = {
     request<{ ok: true }>(`/me/inventory/${encodeURIComponent(id)}/equip`, {
       method: 'POST',
       body: JSON.stringify({ equipped }),
+    }),
+  // ── Annonces générales ────────────────────────────────────────────────────
+  announcements: () => request<AnnouncementData[]>('/announcements'),
+  markAnnouncementsSeen: (ids: string[]) =>
+    request<{ ok: true }>('/announcements/seen', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  adminAnnouncements: () => request<AnnouncementData[]>('/admin/announcements'),
+  adminCreateAnnouncement: (input: AnnouncementInput) =>
+    request<AnnouncementData>('/admin/announcements', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  adminDeleteAnnouncement: (id: string) =>
+    request<{ ok: true }>(`/admin/announcements/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     }),
   adminShopItems: () => request<ShopItemData[]>('/admin/shop/items'),
   adminCreateShopItem: (input: ShopItemInput) =>

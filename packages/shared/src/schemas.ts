@@ -178,6 +178,19 @@ export const ShopItemCreateSchema = z
   });
 export type ShopItemCreateInput = z.infer<typeof ShopItemCreateSchema>;
 
+// ─── Annonces générales (admin → tous les joueurs) ───────────────────────────
+// Une annonce rédigée dans /GOD, affichée une seule fois en popup à la prochaine
+// connexion de chaque joueur, puis listée en permanence dans la page À propos.
+export const AnnouncementKindSchema = z.enum(['info', 'important', 'event']);
+export type AnnouncementKind = z.infer<typeof AnnouncementKindSchema>;
+export const AnnouncementCreateSchema = z.object({
+  title: z.string().trim().min(1, 'titre requis').max(120, 'titre trop long (max 120)'),
+  body: z.string().trim().min(1, 'message requis').max(4000, 'message trop long (max 4000)'),
+  kind: AnnouncementKindSchema.optional(),
+  active: z.boolean().optional(),
+});
+export type AnnouncementCreateInput = z.infer<typeof AnnouncementCreateSchema>;
+
 // ─── Récompense de tournoi officiel ──────────────────────────────────────────
 // Une seule récompense au choix : aucune | coins | cosmétique existant |
 // cosmétique custom créé à la volée (même validation que Shop GOD).
@@ -195,17 +208,20 @@ export const BET_FINAL_MULT_MAX = 10;
 export const CreateTournamentSchema = z
   .object({
     name: z.string().min(2).max(60),
-    // Capacité : puissance de 2 uniquement (8, 16, 32, 64) → bracket toujours plein.
-    // En 1v1 = nombre de joueurs ; en 2v2 = nombre d'ÉQUIPES (donc 2× joueurs).
-    // Les poules s'activent à partir de 12.
-    capacity: z.number().int().min(8).max(64),
+    // Capacité. Élimination/poules : puissance de 2 (8, 16, 32, 64) → bracket plein.
+    // Ligue : nombre libre (min 3) — l'admin compose les affiches, le bracket final
+    // (puissance de 2) est dérivé au moment de la qualification. En 1v1 = nb de
+    // joueurs ; en 2v2 = nombre d'ÉQUIPES (donc 2× joueurs). Poules dès 12.
+    capacity: z.number().int().min(3).max(64),
     kind: z.enum(['friendly', 'official']).default('friendly'),
     // Mode : 1v1 classique, ou 2v2 (babyfoot doubles — chaque inscription est une paire).
     mode: z.enum(['1v1', '2v2']).default('1v1'),
     // 2v2 uniquement : coéquipier du créateur (il s'inscrit avec sa paire à la création).
     partnerLogin: LoginSchema.optional(),
-    // Format : élimination directe, ou phase de poules (puis bracket des qualifiés).
-    format: z.enum(['elimination', 'pools']).default('elimination'),
+    // Format : élimination directe, phase de poules (puis bracket des qualifiés),
+    // ou phase de ligue (affiches composées par l'admin, classement au goal average,
+    // puis bascule en élimination directe des premiers au goal average).
+    format: z.enum(['elimination', 'pools', 'league']).default('elimination'),
     // Discipline du tournoi (babyfoot | smash).
     game: GameSchema.default('babyfoot'),
     // Officiel : multiplicateur final du pari sur le vainqueur (2..10). Défaut 2.
@@ -234,7 +250,9 @@ export const CreateTournamentSchema = z
     // Récompense du vainqueur — réservée aux tournois officiels (cf. refine).
     prize: TournamentPrizeSchema.optional().default({ kind: 'none' }),
   })
-  .refine((d) => (d.capacity & (d.capacity - 1)) === 0, {
+  // Élimination/poules : capacité = puissance de 2 ≥ 8. La ligue échappe à cette
+  // règle (nombre de joueurs libre, min 3 imposé par le champ ci-dessus).
+  .refine((d) => d.format === 'league' || (d.capacity >= 8 && (d.capacity & (d.capacity - 1)) === 0), {
     message: 'la capacité doit être une puissance de 2 (8, 16, 32, 64)',
     path: ['capacity'],
   })
@@ -298,6 +316,37 @@ export const TournamentForceResultSchema = z.object({
 });
 
 export type TournamentForceResultInput = z.infer<typeof TournamentForceResultSchema>;
+
+// ── Phase de ligue ───────────────────────────────────────────────────────────
+// Affiche composée par l'admin : deux participants (logins capitaines en 2v2)
+// distincts, rattachée à une journée (≥ 1).
+export const LeagueMatchCreateSchema = z
+  .object({
+    playerALogin: LoginSchema,
+    playerBLogin: LoginSchema,
+    journee: z.number().int().min(1).max(100),
+  })
+  .refine((d) => d.playerALogin !== d.playerBLogin, {
+    message: 'un match oppose deux participants différents',
+    path: ['playerBLogin'],
+  });
+
+export type LeagueMatchCreateInput = z.infer<typeof LeagueMatchCreateSchema>;
+
+// Bascule de la phase de ligue vers l'élimination directe : nombre de qualifiés
+// (puissance de 2, 2..32) → taille du bracket des premiers au goal average.
+export const LeagueFinalizeSchema = z.object({
+  qualifyCount: z
+    .number()
+    .int()
+    .min(2)
+    .max(32)
+    .refine((n) => (n & (n - 1)) === 0, {
+      message: 'le nombre de qualifiés doit être une puissance de 2 (2, 4, 8, 16, 32)',
+    }),
+});
+
+export type LeagueFinalizeInput = z.infer<typeof LeagueFinalizeSchema>;
 
 export const FeatureRequestSchema = z.object({
   text: z.string().min(10, 'description must be at least 10 characters').max(500),

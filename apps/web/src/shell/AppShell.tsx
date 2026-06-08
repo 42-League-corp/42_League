@@ -8,6 +8,7 @@ import { GameModeSwitch } from '../components/GameModeSwitch';
 import { GameBackdrop } from '../components/GameBackdrop';
 import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
+import { AnnouncementPopup } from '../components/AnnouncementPopup';
 import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
 import { MatchmakingOverlay } from '../components/MatchmakingOverlay';
 import { DuelStrikeOverlay } from '../components/DuelStrikeOverlay';
@@ -42,6 +43,8 @@ export function AppShell({ children }: AppShellProps) {
       {/* Bouton « Tester en mode user » (staging + admins) — bas-gauche */}
       <TesterSwitch />
       <GameOnboarding />
+      {/* Annonces générales (admin) — popup « une seule fois » à la connexion */}
+      <AnnouncementPopup />
       {/* Overlay cinématique de changement d'univers — pointer-events-none */}
       <GameTransitionOverlay />
       {/* Overlay VERSUS global : s'affiche sur n'importe quelle page quand le

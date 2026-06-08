@@ -14,6 +14,7 @@ import {
   ShopItemCreateSchema,
   ShopRaritySchema,
   MAX_BANNER_DATAURL_LEN,
+  AnnouncementCreateSchema,
   betPayout,
   cashPrizeForRounds,
   DEFAULT_BET_FINAL_MULT,
@@ -21,6 +22,8 @@ import {
   BET_FINAL_MULT_MAX,
   TournamentRecordSchema,
   TournamentForceResultSchema,
+  LeagueMatchCreateSchema,
+  LeagueFinalizeSchema,
   SetTitleSchema,
   DeclareOpsSchema,
   FeatureRequestSchema,
@@ -95,6 +98,7 @@ import {
   generateBracket,
   generatePools,
   qualifiersFromPools,
+  leagueQualifiers,
 } from './tournament.js';
 import { isAdmin } from './admins.js';
 import { streamSSE } from 'hono/streaming';
@@ -1015,6 +1019,22 @@ app.get('/me', async (c) => {
   const palmares = user ? await palmaresFor(login) : [];
   const ownedTitlesList = await ownedTitlesFor(login, role, user);
   const cosmetics = await equippedCosmetics(login);
+  // Annonces générales non encore vues par ce joueur → popup « une seule fois ».
+  // On ne montre que celles postées APRÈS la création du compte (un nouvel
+  // inscrit n'a pas à se taper l'historique d'annonces antérieures à son arrivée).
+  const unseenAnnouncements = user
+    ? (
+        await prisma.announcement.findMany({
+          where: {
+            active: true,
+            createdAt: { gt: user.createdAt },
+            seenBy: { none: { userLogin: login } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        })
+      ).map(serializeAnnouncement)
+    : [];
   return c.json({
     login,
     user,
@@ -1037,6 +1057,8 @@ app.get('/me', async (c) => {
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
     consentRequired: consentRequired(user),
     termsVersion: CURRENT_TERMS_VERSION,
+    // Annonces générales à montrer en popup (cf. AnnouncementPopup côté front).
+    unseenAnnouncements,
   });
 });
 
@@ -4230,12 +4252,15 @@ async function assertRegisterablePartner(tx: TxOrPrisma, login: string): Promise
 }
 
 // Génère les matchs au démarrage : phase de poules (format 'pools') ou bracket à
-// élimination directe (format 'elimination', byes inclus si nécessaire).
+// élimination directe (format 'elimination', byes inclus si nécessaire). Le format
+// 'league' ne génère RIEN — l'admin compose les affiches lui-même (cf. route
+// POST /tournaments/:id/league/matches).
 async function launchTournamentMatches(
   tournamentId: string,
   format: string,
   logins: string[],
 ): Promise<void> {
+  if (format === 'league') return;
   if (format === 'pools') await generatePools(tournamentId, logins);
   else await generateBracket(tournamentId, logins);
 }
@@ -4280,6 +4305,14 @@ async function settleConfirmedTournamentMatch(
   // accumule les parieurs crédités (match + plus bas la finale) pour un emit
   // après commit.
   const betWinners = await settleMatchBetsTx(tx, id, winnerLogin);
+
+  // Match de phase de ligue : aucune propagation ni qualification automatique. Le
+  // classement (goal average) est recalculé à l'affichage et la bascule en
+  // élimination directe est déclenchée manuellement par l'admin (route
+  // /league/finalize). On règle juste les paris du match (fait ci-dessus).
+  if (m.stage === 'league') {
+    return { winnerLogin, winners, finished: false, prizeAwarded: false, bracketGenerated: false, betWinners };
+  }
 
   // Match de poule : pas de propagation. Quand toutes les poules sont terminées,
   // on génère le bracket des qualifiés (top 2 par poule, seeding croisé).
@@ -4959,7 +4992,15 @@ app.post('/tournaments/:id/start', async (c) => {
     if (t.status !== 'registration') {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
-    if (t.entries.length !== t.capacity) {
+    // Ligue : démarrage dès 2 inscrits (la ligue n'a pas besoin d'être pleine,
+    // l'admin compose les affiches au fil de l'eau). Autres formats : bracket plein.
+    if (t.format === 'league') {
+      if (t.entries.length < 2) {
+        throw new HTTPException(409, {
+          message: `need at least 2 players (have ${t.entries.length})`,
+        });
+      }
+    } else if (t.entries.length !== t.capacity) {
       throw new HTTPException(409, {
         message: `need exactly ${t.capacity} players (have ${t.entries.length})`,
       });
@@ -4979,6 +5020,190 @@ app.post('/tournaments/:id/start', async (c) => {
     return true;
   });
   return c.json({ id, started: result });
+});
+
+// ── Phase de ligue ───────────────────────────────────────────────────────────
+// Officiant d'un tournoi (admin/superadmin partout, ou créateur d'un tournoi
+// amical) : autorisé à composer/régler la phase de ligue. Lève sinon ; renvoie
+// le tournoi (champs utiles) pour éviter un second findUnique côté appelant.
+async function assertLeagueOfficiant(
+  me: string,
+  id: string,
+): Promise<{ createdByLogin: string; kind: string; format: string; status: string; name: string; game: string }> {
+  const t = await prisma.tournament.findUnique({
+    where: { id },
+    select: { createdByLogin: true, kind: true, format: true, status: true, name: true, game: true },
+  });
+  if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+  const ownerIsFriendlyOrganizer = t.createdByLogin === me && t.kind === 'friendly';
+  if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
+    throw new HTTPException(403, {
+      message: 'admins or the organizer of a friendly tournament only',
+    });
+  }
+  if (t.format !== 'league') {
+    throw new HTTPException(409, { message: "ce tournoi n'est pas une phase de ligue" });
+  }
+  if (t.status !== 'in_progress') {
+    throw new HTTPException(409, { message: `tournament is ${t.status}` });
+  }
+  return t;
+}
+
+// La phase de ligue est « ouverte » (éditable) tant qu'aucun match de bracket
+// n'a été généré (la bascule en élimination directe est irréversible).
+async function leaguePhaseClosed(tx: TxOrPrisma, id: string): Promise<boolean> {
+  const bracket = await tx.tournamentMatch.count({
+    where: { tournamentId: id, stage: 'bracket' },
+  });
+  return bracket > 0;
+}
+
+// Admin/officiant : ajoute une affiche de ligue (joueur A vs joueur B) sur une
+// journée donnée. round=0 + poolIndex=journée + slot global incrémental (réutilise
+// les champs des poules, jamais de collision avec le bracket round≥1).
+app.post('/tournaments/:id/league/matches', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  await assertLeagueOfficiant(me, id);
+  const body = await c.req.json().catch(() => null);
+  const parsed = LeagueMatchCreateSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { playerALogin, playerBLogin, journee } = parsed.data;
+
+  const created = await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, { message: 'la phase de ligue est terminée (bracket généré)' });
+    }
+    const entries = await tx.tournamentEntry.findMany({
+      where: { tournamentId: id },
+      select: { login: true },
+    });
+    const entrySet = new Set(entries.map((e) => e.login));
+    if (!entrySet.has(playerALogin) || !entrySet.has(playerBLogin)) {
+      throw new HTTPException(400, { message: 'les deux participants doivent être inscrits au tournoi' });
+    }
+    const agg = await tx.tournamentMatch.aggregate({
+      where: { tournamentId: id, round: 0 },
+      _max: { slot: true },
+    });
+    const slot = (agg._max.slot ?? -1) + 1;
+    return tx.tournamentMatch.create({
+      data: {
+        id: randomUUID(),
+        tournamentId: id,
+        stage: 'league',
+        poolIndex: journee,
+        round: 0,
+        slot,
+        playerALogin,
+        playerBLogin,
+      },
+    });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json(created, 201);
+});
+
+// Admin/officiant : supprime une affiche de ligue NON confirmée (corrige une
+// erreur de composition). Un match déjà confirmé reste dans l'historique.
+app.delete('/tournaments/:id/league/matches/:matchId', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  await assertLeagueOfficiant(me, id);
+  await prisma.$transaction(async (tx) => {
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id || m.stage !== 'league') {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match déjà confirmé — non supprimable' });
+    }
+    await tx.tournamentMatch.delete({ where: { id: matchId } });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id: matchId, deleted: true });
+});
+
+// Admin/officiant : bascule la phase de ligue en élimination directe. Les
+// `qualifyCount` premiers au goal average sont qualifiés et seedés dans un bracket
+// (le 1er affronte le dernier qualifié). Calqué sur la fin de la phase de poules
+// dans settleConfirmedTournamentMatch : les non-qualifiés voient leurs paris
+// « vainqueur du tournoi » réglés perdants (mise non rendue).
+app.post('/tournaments/:id/league/finalize', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const t = await assertLeagueOfficiant(me, id);
+  const body = await c.req.json().catch(() => null);
+  const parsed = LeagueFinalizeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { qualifyCount } = parsed.data;
+
+  await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, { message: 'la phase de ligue est déjà terminée' });
+    }
+    const leagueMatches = await tx.tournamentMatch.findMany({
+      where: { tournamentId: id, stage: 'league' },
+      select: {
+        poolIndex: true,
+        playerALogin: true,
+        playerBLogin: true,
+        scoreA: true,
+        scoreB: true,
+        winnerLogin: true,
+        confirmedAt: true,
+      },
+    });
+    if (leagueMatches.length === 0) {
+      throw new HTTPException(409, { message: 'aucun match de ligue à classer' });
+    }
+    if (leagueMatches.some((m) => !m.confirmedAt)) {
+      throw new HTTPException(409, { message: 'tous les matchs de ligue doivent être confirmés' });
+    }
+    const qualifiers = leagueQualifiers(leagueMatches, qualifyCount);
+    if (qualifiers.length < qualifyCount) {
+      throw new HTTPException(409, {
+        message: `seulement ${qualifiers.length} joueurs classés (qualifiés demandés : ${qualifyCount})`,
+      });
+    }
+    await generateBracket(id, qualifiers, { preSeeded: true });
+    // Paris progressifs : les non-qualifiés n'ont franchi aucun tour de bracket →
+    // perdus (sinon leurs paris resteraient « open » à jamais).
+    const qualSet = new Set(qualifiers);
+    const allEntries = await tx.tournamentEntry.findMany({
+      where: { tournamentId: id },
+      select: { login: true },
+    });
+    for (const e of allEntries) {
+      if (!qualSet.has(e.login)) {
+        await settleTournamentBetsForPick(tx, id, e.login, 0, 1, DEFAULT_BET_FINAL_MULT);
+      }
+    }
+  });
+
+  void notifyMany(
+    (await prisma.tournamentEntry.findMany({ where: { tournamentId: id }, select: { login: true } })).map(
+      (p) => p.login,
+    ),
+    {
+      type: 'tournament',
+      title: 'Phase de ligue terminée',
+      body: 'Le bracket des qualifiés est prêt — place à l’élimination directe !',
+      link: `/tournaments/${id}`,
+      game: t.game,
+    },
+  );
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: t.createdByLogin,
+    payload: { forced: 'league-finalize', tournamentId: id, qualifyCount },
+  });
+  return c.json({ id, finalized: true, qualifyCount });
 });
 
 // Re-tirage du bracket — le créateur OU un admin relance le tirage au sort tant
@@ -6609,17 +6834,10 @@ const AdminUpdateTournamentSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   kind: z.enum(['friendly', 'official']).optional(),
   isPrivate: z.boolean().optional(),
-  // Puissance de 2 uniquement (8/16/32/64) → bracket toujours plein, jamais d'exempt.
-  capacity: z
-    .number()
-    .int()
-    .min(8)
-    .max(64)
-    .refine((n) => (n & (n - 1)) === 0, {
-      message: 'la capacité doit être une puissance de 2 (8, 16, 32, 64)',
-    })
-    .optional(),
-  format: z.enum(['elimination', 'pools']).optional(),
+  // Élimination/poules : puissance de 2 (8/16/32/64) — vérifié dans le handler
+  // selon le format effectif (la ligue autorise un nombre libre, min 3).
+  capacity: z.number().int().min(3).max(64).optional(),
+  format: z.enum(['elimination', 'pools', 'league']).optional(),
   // Économie (officiels) : multiplicateur final du pari (2..10) + cash-prize du
   // champion (0/null = aucun). Modifiables tant que le tournoi n'est pas terminé.
   betFinalMult: z.number().int().min(BET_FINAL_MULT_MIN).max(BET_FINAL_MULT_MAX).optional(),
@@ -6654,6 +6872,10 @@ app.patch('/admin/tournaments/:id', async (c) => {
       const nextFormat = patch.format ?? t.format;
       if (nextCapacity < t.entries.length) {
         throw new HTTPException(409, { message: `capacité < inscrits (${t.entries.length})` });
+      }
+      // Élimination/poules : capacité = puissance de 2 ≥ 8. La ligue échappe à la règle.
+      if (nextFormat !== 'league' && (nextCapacity < 8 || (nextCapacity & (nextCapacity - 1)) !== 0)) {
+        throw new HTTPException(409, { message: 'la capacité doit être une puissance de 2 (8, 16, 32, 64)' });
       }
       if (nextFormat === 'pools' && nextCapacity < 12) {
         throw new HTTPException(409, { message: 'les poules nécessitent au moins 12 joueurs' });
@@ -7476,6 +7698,95 @@ app.delete('/admin/shop/items/:id', async (c) => {
   await requireAdmin(me);
   const id = c.req.param('id');
   await prisma.shopItem.delete({ where: { id } });
+  return c.json({ ok: true });
+});
+
+// ── Annonces générales (admin → tous les joueurs) ────────────────────────────
+
+function serializeAnnouncement(a: {
+  id: string;
+  title: string;
+  body: string;
+  kind: string;
+  active: boolean;
+  createdByLogin: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: a.id,
+    title: a.title,
+    body: a.body,
+    kind: a.kind,
+    active: a.active,
+    createdBy: a.createdByLogin,
+    createdAt: a.createdAt.toISOString(),
+  };
+}
+
+// GET /announcements — annonces actives (les plus récentes d'abord). Listées en
+// permanence dans la page À propos (« Dernières annonces »).
+app.get('/announcements', async (c) => {
+  await getCurrentLogin(c); // réservé aux connectés
+  const items = await prisma.announcement.findMany({
+    where: { active: true },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+  return c.json(items.map(serializeAnnouncement));
+});
+
+// POST /announcements/seen — accuse réception d'annonces (popup « vu une fois »).
+app.post('/announcements/seen', async (c) => {
+  const login = await getCurrentLogin(c);
+  const body = (await c.req.json().catch(() => null)) as { ids?: unknown } | null;
+  const ids = Array.isArray(body?.ids) ? body!.ids.filter((x): x is string => typeof x === 'string') : [];
+  if (ids.length === 0) return c.json({ ok: true });
+  await prisma.announcementSeen.createMany({
+    data: ids.map((announcementId) => ({ announcementId, userLogin: login })),
+    skipDuplicates: true,
+  });
+  return c.json({ ok: true });
+});
+
+// GET /admin/announcements — liste complète (actives + masquées) avec compteur de vues.
+app.get('/admin/announcements', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const items = await prisma.announcement.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { seenBy: true } } },
+  });
+  return c.json(items.map((a) => ({ ...serializeAnnouncement(a), seenCount: a._count.seenBy })));
+});
+
+// POST /admin/announcements — crée une annonce (poppera à la prochaine connexion).
+app.post('/admin/announcements', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = AnnouncementCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const d = parsed.data;
+  const item = await prisma.announcement.create({
+    data: {
+      title: d.title,
+      body: d.body,
+      kind: d.kind ?? 'info',
+      createdByLogin: me,
+      ...(d.active !== undefined ? { active: d.active } : {}),
+    },
+  });
+  return c.json(serializeAnnouncement(item));
+});
+
+// DELETE /admin/announcements/:id — supprime une annonce (cascade sur les vues).
+app.delete('/admin/announcements/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const id = c.req.param('id');
+  await prisma.announcement.delete({ where: { id } });
   return c.json({ ok: true });
 });
 
