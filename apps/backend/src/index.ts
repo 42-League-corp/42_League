@@ -537,14 +537,33 @@ async function maybeNotifyTop3(login: string, delta: number): Promise<void> {
 async function badgesFor(login: string, role: string): Promise<string[]> {
   const earned = await prisma.userBadge.findMany({
     where: { userLogin: login },
-    select: { code: true },
+    select: { code: true, label: true },
     orderBy: { awardedAt: 'asc' },
   });
   const out: string[] = [];
   if (['throbert', 'abidaux'].includes(login.toLowerCase())) out.push('founder');
   if (role === 'ADMIN') out.push('admin');
-  for (const e of earned) out.push(e.code);
+  // Les badges « libres » (label renseigné) portent leur propre rendu — ils sont
+  // renvoyés à part via customBadgesFor, pas comme codes de catalogue.
+  for (const e of earned) if (!e.label) out.push(e.code);
   return [...new Set(out)];
+}
+
+// Badges « libres » attribués via le /GOD : métadonnées d'affichage portées par la
+// ligne (rendus comme les badges boutique, via la prop `extra` côté front).
+async function customBadgesFor(
+  login: string,
+): Promise<{ code: string; label: string; icon: string; color: string | null }[]> {
+  const rows = await prisma.userBadge.findMany({
+    where: { userLogin: login, label: { not: null } },
+    orderBy: { awardedAt: 'asc' },
+  });
+  return rows.map((r) => ({
+    code: r.code,
+    label: r.label ?? r.code,
+    icon: r.icon ?? 'Award',
+    color: r.color ?? null,
+  }));
 }
 
 // Palmarès d'un joueur : ses classements finaux par saison (récents d'abord).
@@ -1016,6 +1035,7 @@ app.get('/me', async (c) => {
   const user = await prisma.user.findUnique({ where: { login } });
   const role = await getUserRole(login);
   const badges = user ? await badgesFor(login, role) : [];
+  const customBadges = user ? await customBadgesFor(login) : [];
   const palmares = user ? await palmaresFor(login) : [];
   const ownedTitlesList = await ownedTitlesFor(login, role, user);
   const cosmetics = await equippedCosmetics(login);
@@ -1053,6 +1073,7 @@ app.get('/me', async (c) => {
     // pour la barrière staging sans dupliquer la liste blanche.
     stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()) || isTesterLogin(login.toLowerCase()),
     badges,
+    customBadges,
     palmares,
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
     consentRequired: consentRequired(user),
@@ -1454,6 +1475,7 @@ app.get('/users/:login', async (c) => {
   const draws = played.filter((m) => m.winner === 'draw').length;
   const losses = played.length - wins - draws;
   const badges = await badgesFor(login, user.role);
+  const customBadges = await customBadgesFor(login);
   // Statut de suivi du visiteur vis-à-vis de ce profil.
   const follow =
     me === login
@@ -1471,6 +1493,7 @@ app.get('/users/:login', async (c) => {
     draws,
     recent: played,
     badges,
+    customBadges,
     palmares,
     // Solde de League Coins — visible de tous sur la fiche d'un joueur.
     coins: user.leagueCoins ?? 0,
@@ -2520,6 +2543,10 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
     // vaut 1/4 de moins (×0.75ⁿ). S'applique au match entier — gain ET perte.
     deltaA = applyFarmingDecay(update.deltaA, decayFactor);
     deltaB = applyFarmingDecay(update.deltaB, decayFactor);
+    // Consommable « multiplicateur d'ELO » : double le delta final (gain ET perte)
+    // du joueur qui l'avait armé, puis désarme. Une seule conso par joueur réglé.
+    deltaA = await applyEloMultTx(tx, a, deltaA);
+    deltaB = await applyEloMultTx(tx, b, deltaB);
     await tx.user.update({ where: { login: a }, data: ratingUpdate(game, ratingA + deltaA) });
     await tx.user.update({ where: { login: b }, data: ratingUpdate(game, ratingB + deltaB) });
   }
@@ -2860,6 +2887,11 @@ async function settleFfaAsPlayed(tx: Prisma.TransactionClient, p: PendingFfaForS
   const ratings = users.map((u) => readElo(u, 'smash'));
   const deltas = calculateFfaElo(ratings);
 
+  // Consommable x2 ELO : double le delta des participants l'ayant armé, puis désarme.
+  for (let i = 0; i < ordered.length; i++) {
+    deltas[i] = await applyEloMultTx(tx, ordered[i]!.login, deltas[i]!);
+  }
+
   for (let i = 0; i < ordered.length; i++) {
     // ratingUpdate('smash', …) pose le nouvel ELO ET incrémente matchesPlayedSmash.
     await tx.user.update({
@@ -3172,6 +3204,11 @@ async function settleDartsAsPlayed(tx: Prisma.TransactionClient, p: PendingDarts
   const ratings = users.map((u) => readElo(u, 'flechettes'));
   const scored = ordered.map((pp) => startScore - (pp.remaining ?? startScore));
   const deltas = calculateDartsElo(ratings, scored);
+
+  // Consommable x2 ELO : double le delta des participants l'ayant armé, puis désarme.
+  for (let i = 0; i < ordered.length; i++) {
+    deltas[i] = await applyEloMultTx(tx, ordered[i]!.login, deltas[i]!);
+  }
 
   for (let i = 0; i < ordered.length; i++) {
     await tx.user.update({
@@ -5949,6 +5986,22 @@ app.post('/ops', async (c) => {
         message: `${target} a actuellement quelqu'un comme ops`,
       });
     }
+    // Bouclier anti-ops : si cette cible a annulé un de MES ops avec un anti-ops
+    // il y a moins de ANTI_OPS_SHIELD_MS, je ne peux pas la re-cibler.
+    const shielded = await tx.ops.findFirst({
+      where: {
+        ownerLogin: me,
+        targetLogin: target,
+        cancelledByAntiOpsAt: { gt: new Date(now.getTime() - ANTI_OPS_SHIELD_MS) },
+      },
+      orderBy: { cancelledByAntiOpsAt: 'desc' },
+    });
+    if (shielded?.cancelledByAntiOpsAt) {
+      const until = new Date(shielded.cancelledByAntiOpsAt.getTime() + ANTI_OPS_SHIELD_MS);
+      throw new HTTPException(409, {
+        message: `${target} a paré ton dernier OPS — protégé·e jusqu'au ${until.toISOString()}`,
+      });
+    }
     return tx.ops.create({
       data: {
         id: randomUUID(),
@@ -7429,9 +7482,42 @@ app.post('/shop/:id/buy', async (c) => {
     throw new HTTPException(404, { message: 'objet introuvable' });
   }
   const isMysteryBox = item.category === 'mystery_box';
+  const consumableKind = consumableKindOf(item);
   const coins = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
     if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+
+    // Consommable : empilable (quantité), avec cap mensuel d'achats par type.
+    if (consumableKind) {
+      const mk = monthKey(new Date());
+      const cap = CONSUMABLE_MONTHLY_CAP[consumableKind];
+      const monthly = await tx.consumableMonthly.findUnique({
+        where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
+      });
+      if ((monthly?.count ?? 0) >= cap) {
+        throw new HTTPException(409, { message: `cap mensuel atteint pour ce consommable (${cap}/mois)` });
+      }
+      if (user.leagueCoins < item.price) {
+        throw new HTTPException(400, { message: 'solde insuffisant' });
+      }
+      const updated = await tx.user.update({
+        where: { login },
+        data: { leagueCoins: { decrement: item.price } },
+        select: { leagueCoins: true },
+      });
+      await tx.consumableInventory.upsert({
+        where: { userLogin_kind: { userLogin: login, kind: consumableKind } },
+        update: { quantity: { increment: 1 } },
+        create: { userLogin: login, kind: consumableKind, quantity: 1 },
+      });
+      await tx.consumableMonthly.upsert({
+        where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
+        update: { count: { increment: 1 } },
+        create: { userLogin: login, kind: consumableKind, monthKey: mk, count: 1 },
+      });
+      return updated.leagueCoins;
+    }
+
     // La mystery box est consommable (achat répété autorisé) — pas de check doublon.
     if (!isMysteryBox) {
       const already = await tx.shopInventory.findUnique({
@@ -7543,6 +7629,200 @@ app.post('/me/inventory/:id/equip', async (c) => {
 
   emit([login], { type: 'panel:update', payload: {} });
   return c.json({ ok: true });
+});
+
+// ═══ Consommables ═══════════════════════════════════════════════════════════
+// Objets empilables (cf. ConsumableInventory) achetés en League Coins :
+//  - 'anti_ops' : annule l'ops qui te vise. Cap 2/mois, cooldown 2 sem. entre
+//                 usages. À l'usage : l'ops est neutralisé (expiré + marqué), le
+//                 chasseur reprend son cooldown 7j et ne peut pas te re-cibler
+//                 pendant ANTI_OPS_SHIELD_MS (cf. POST /ops).
+//  - 'elo_mult' : arme un x2 (gain ET perte) sur ton prochain score validé. Cap
+//                 mensuel d'achats, pas de cooldown.
+const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult'] as const;
+type ConsumableKind = (typeof CONSUMABLE_KINDS)[number];
+function isConsumableKind(s: string): s is ConsumableKind {
+  return (CONSUMABLE_KINDS as readonly string[]).includes(s);
+}
+const ELO_MULT_FACTOR = 2;
+const ANTI_OPS_MONTHLY_CAP = 2;
+const ELO_MULT_MONTHLY_CAP = 2;
+const ANTI_OPS_USE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 semaines entre usages
+const ANTI_OPS_SHIELD_MS = 7 * 24 * 60 * 60 * 1000; // 1 semaine sans re-ciblage
+const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
+  anti_ops: ANTI_OPS_MONTHLY_CAP,
+  elo_mult: ELO_MULT_MONTHLY_CAP,
+};
+
+// Objets boutique « consommable » seedés (ids stables, comme la mystery box).
+const CONSUMABLE_ITEMS: {
+  id: string;
+  kind: ConsumableKind;
+  name: string;
+  description: string;
+  price: number;
+  rarity: string;
+}[] = [
+  {
+    id: 'consumable-anti-ops',
+    kind: 'anti_ops',
+    name: 'Anti-OPS',
+    description: "Annule l'OPS qui te vise. 2 par mois, 2 semaines de cooldown entre deux usages.",
+    price: 800,
+    rarity: 'epic',
+  },
+  {
+    id: 'consumable-elo-mult',
+    kind: 'elo_mult',
+    name: "Multiplicateur d'ELO",
+    description: 'Ton prochain score validé compte double : gain ×2… mais perte ×2 aussi.',
+    price: 500,
+    rarity: 'rare',
+  },
+];
+
+/** Clé de mois UTC (« 2026-06 ») — partition du cap mensuel des consommables. */
+function monthKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Type de consommable d'un objet boutique (via payload.kind), sinon null. */
+function consumableKindOf(item: { category: string; payload: Prisma.JsonValue | null }): ConsumableKind | null {
+  if (item.category !== 'consumable') return null;
+  const p = item.payload;
+  const kind = p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>).kind : null;
+  return typeof kind === 'string' && isConsumableKind(kind) ? kind : null;
+}
+
+/** Applique et consomme le x2 d'ELO armé d'un joueur, sur son delta final (après
+ *  dégressivité anti-farming). À appeler une seule fois par joueur réglé. */
+async function applyEloMultTx(tx: Prisma.TransactionClient, login: string, delta: number): Promise<number> {
+  if (delta === 0) return delta;
+  const u = await tx.user.findUnique({ where: { login }, select: { eloMultArmed: true } });
+  if (!u?.eloMultArmed) return delta;
+  await tx.user.update({ where: { login }, data: { eloMultArmed: false } });
+  return delta * ELO_MULT_FACTOR;
+}
+
+/** Ajuste (±) la quantité d'un consommable détenu, bornée à 0. Renvoie la qté. */
+async function grantConsumableTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  kind: ConsumableKind,
+  amount: number,
+): Promise<number> {
+  const row = await tx.consumableInventory.upsert({
+    where: { userLogin_kind: { userLogin: login, kind } },
+    update: {},
+    create: { userLogin: login, kind, quantity: 0 },
+  });
+  const next = Math.max(0, row.quantity + amount);
+  await tx.consumableInventory.update({
+    where: { userLogin_kind: { userLogin: login, kind } },
+    data: { quantity: next },
+  });
+  return next;
+}
+
+/** Neutralise l'ops actif qui vise `login` (anti-ops). Renvoie le login du
+ *  chasseur, ou null s'il n'y avait pas d'ops. Le chasseur reprend son cooldown
+ *  (l'ops passe à expiresAt=now) + bouclier de re-ciblage via cancelledByAntiOpsAt. */
+async function cancelOpsTargetingTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  now: Date,
+): Promise<string | null> {
+  const ops = await tx.ops.findFirst({ where: { targetLogin: login, expiresAt: { gt: now } } });
+  if (!ops) return null;
+  await tx.ops.update({
+    where: { id: ops.id },
+    data: { expiresAt: now, cancelledByAntiOpsAt: now },
+  });
+  return ops.ownerLogin;
+}
+
+// GET /me/consumables — stock par type + cap mensuel + état du x2 armé.
+app.get('/me/consumables', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const now = new Date();
+  const mk = monthKey(now);
+  const [rows, monthly, user] = await Promise.all([
+    prisma.consumableInventory.findMany({ where: { userLogin: login } }),
+    prisma.consumableMonthly.findMany({ where: { userLogin: login, monthKey: mk } }),
+    prisma.user.findUnique({ where: { login }, select: { eloMultArmed: true } }),
+  ]);
+  const byKind = new Map(rows.map((r) => [r.kind, r]));
+  const monthByKind = new Map(monthly.map((m) => [m.kind, m.count]));
+  return c.json({
+    eloMultArmed: user?.eloMultArmed ?? false,
+    items: CONSUMABLE_KINDS.map((kind) => {
+      const r = byKind.get(kind);
+      return {
+        kind,
+        quantity: r?.quantity ?? 0,
+        lastUsedAt: r?.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+        monthlyCap: CONSUMABLE_MONTHLY_CAP[kind],
+        monthlyUsed: monthByKind.get(kind) ?? 0,
+      };
+    }),
+  });
+});
+
+// POST /me/consumables/:kind/use — utilise un consommable.
+app.post('/me/consumables/:kind/use', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const kind = c.req.param('kind');
+  if (!isConsumableKind(kind)) throw new HTTPException(404, { message: 'consommable inconnu' });
+  const now = new Date();
+
+  if (kind === 'elo_mult') {
+    await prisma.$transaction(async (tx) => {
+      const row = await tx.consumableInventory.findUnique({
+        where: { userLogin_kind: { userLogin: login, kind } },
+      });
+      if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucun multiplicateur en stock' });
+      const u = await tx.user.findUniqueOrThrow({ where: { login }, select: { eloMultArmed: true } });
+      if (u.eloMultArmed) throw new HTTPException(409, { message: 'un multiplicateur est déjà armé' });
+      await tx.consumableInventory.update({
+        where: { userLogin_kind: { userLogin: login, kind } },
+        data: { quantity: { decrement: 1 }, lastUsedAt: now },
+      });
+      await tx.user.update({ where: { login }, data: { eloMultArmed: true } });
+    });
+    emit([login], { type: 'panel:update', payload: {} });
+    return c.json({ ok: true, armed: true });
+  }
+
+  // anti_ops
+  const hunter = await prisma.$transaction(async (tx) => {
+    const row = await tx.consumableInventory.findUnique({
+      where: { userLogin_kind: { userLogin: login, kind } },
+    });
+    if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucun anti-OPS en stock' });
+    if (row.lastUsedAt && now.getTime() - row.lastUsedAt.getTime() < ANTI_OPS_USE_COOLDOWN_MS) {
+      const next = new Date(row.lastUsedAt.getTime() + ANTI_OPS_USE_COOLDOWN_MS);
+      throw new HTTPException(409, { message: `anti-OPS en cooldown jusqu'au ${next.toISOString()}` });
+    }
+    const owner = await cancelOpsTargetingTx(tx, login, now);
+    if (!owner) throw new HTTPException(409, { message: "aucun OPS ne te vise actuellement" });
+    await tx.consumableInventory.update({
+      where: { userLogin_kind: { userLogin: login, kind } },
+      data: { quantity: { decrement: 1 }, lastUsedAt: now },
+    });
+    return owner;
+  });
+
+  emit([login, hunter], { type: 'ops:update', payload: { reason: 'anti_ops' } });
+  void notify(hunter, {
+    type: 'ops_cancelled',
+    title: `@${login} a paré ton OPS`,
+    body: "Ta cible a utilisé un anti-OPS : tu ne peux plus la cibler pendant 1 semaine.",
+    link: '/profile',
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, cancelled: true });
 });
 
 // ── Boutique : administration du catalogue ──────────────────────────────────
@@ -8557,6 +8837,179 @@ app.post('/admin/shop/grant-item', async (c) => {
   return c.json({ ok: true, login, itemId, equipped: !!equip });
 });
 
+// POST /admin/consumables/grant — ajuste (±) le stock d'un consommable d'un joueur.
+const AdminConsumableGrantSchema = z.object({
+  login: z.string().trim().min(1),
+  kind: z.enum(['anti_ops', 'elo_mult']),
+  amount: z.number().int(),
+});
+app.post('/admin/consumables/grant', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = AdminConsumableGrantSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { login, kind, amount } = parsed.data;
+  const target = await prisma.user.findUnique({ where: { login }, select: { login: true } });
+  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  const quantity = await prisma.$transaction((tx) => grantConsumableTx(tx, login, kind, amount));
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'GRANT_CONSUMABLE',
+    target: login,
+    payload: { kind, amount, quantity },
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, login, kind, quantity });
+});
+
+// POST /admin/consumables/force-use — force l'effet d'un consommable (ignore cap,
+// cooldown et stock) ; décrémente le stock s'il en reste.
+const AdminConsumableUseSchema = z.object({
+  login: z.string().trim().min(1),
+  kind: z.enum(['anti_ops', 'elo_mult']),
+});
+app.post('/admin/consumables/force-use', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const body = await c.req.json().catch(() => null);
+  const parsed = AdminConsumableUseSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { login, kind } = parsed.data;
+  const target = await prisma.user.findUnique({ where: { login }, select: { login: true } });
+  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  const now = new Date();
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Décrémente le stock s'il en reste (force = on applique l'effet quoi qu'il arrive).
+    const row = await tx.consumableInventory.findUnique({
+      where: { userLogin_kind: { userLogin: login, kind } },
+    });
+    if (row && row.quantity > 0) {
+      await tx.consumableInventory.update({
+        where: { userLogin_kind: { userLogin: login, kind } },
+        data: { quantity: { decrement: 1 }, lastUsedAt: now },
+      });
+    }
+    if (kind === 'elo_mult') {
+      await tx.user.update({ where: { login }, data: { eloMultArmed: true } });
+      return { armed: true as const, hunter: null as string | null };
+    }
+    const hunter = await cancelOpsTargetingTx(tx, login, now);
+    return { armed: false as const, hunter };
+  });
+
+  if (result.hunter) {
+    emit([login, result.hunter], { type: 'ops:update', payload: { reason: 'anti_ops' } });
+    void notify(result.hunter, {
+      type: 'ops_cancelled',
+      title: `L'OPS sur @${login} a été annulé`,
+      body: 'Un administrateur a neutralisé ton OPS.',
+      link: '/profile',
+    });
+  }
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'FORCE_CONSUMABLE',
+    target: login,
+    payload: { kind, ...result },
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, login, kind, ...result });
+});
+
+// GET /admin/users/:login/items — état consommables + badges libres + titre d'un joueur.
+app.get('/admin/users/:login/items', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const user = await prisma.user.findUnique({
+    where: { login },
+    select: { title: true, eloMultArmed: true },
+  });
+  if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  const rows = await prisma.consumableInventory.findMany({ where: { userLogin: login } });
+  const byKind = new Map(rows.map((r) => [r.kind, r]));
+  return c.json({
+    login,
+    title: user.title,
+    eloMultArmed: user.eloMultArmed,
+    consumables: CONSUMABLE_KINDS.map((kind) => ({
+      kind,
+      quantity: byKind.get(kind)?.quantity ?? 0,
+      lastUsedAt: byKind.get(kind)?.lastUsedAt?.toISOString() ?? null,
+    })),
+    badges: await customBadgesFor(login),
+  });
+});
+
+// POST /admin/users/:login/badges — attribue un badge « libre » (code + icône + label
+// + couleur) à un joueur. Upsert (idempotent) sur (login, code, game).
+const AdminBadgeSchema = z.object({
+  code: z.string().trim().min(1).max(40),
+  label: z.string().trim().min(1).max(40),
+  icon: z.string().trim().min(1).max(40),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)').optional(),
+  game: z.string().trim().max(20).optional(),
+});
+app.post('/admin/users/:login/badges', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const body = await c.req.json().catch(() => null);
+  const parsed = AdminBadgeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const target = await prisma.user.findUnique({ where: { login }, select: { login: true } });
+  if (!target) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+  const { code, label, icon, color, game } = parsed.data;
+  const g = game ?? '';
+  await prisma.userBadge.upsert({
+    where: { userLogin_code_game: { userLogin: login, code, game: g } },
+    update: { label, icon, color: color ?? null },
+    create: { id: randomUUID(), userLogin: login, code, game: g, label, icon, color: color ?? null },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'GRANT_BADGE',
+    target: login,
+    payload: { code, label, icon, color: color ?? null, game: g },
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  void notify(login, {
+    type: 'badge_awarded',
+    title: 'Nouveau badge débloqué',
+    body: `Tu as reçu le badge « ${label} ».`,
+    link: '/profile',
+  });
+  return c.json({ ok: true, login, code });
+});
+
+// DELETE /admin/users/:login/badges/:code — retire un badge d'un joueur (game via ?game=).
+app.delete('/admin/users/:login/badges/:code', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const code = c.req.param('code');
+  const game = c.req.query('game') ?? '';
+  await prisma.userBadge
+    .delete({ where: { userLogin_code_game: { userLogin: login, code, game } } })
+    .catch(() => {
+      throw new HTTPException(404, { message: 'badge introuvable' });
+    });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'REMOVE_BADGE',
+    target: login,
+    payload: { code, game },
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  return c.json({ ok: true, login, code });
+});
+
 // ── RGPD Art. 5(1)(e) — Purge automatique des logs admin après 24 mois ──
 async function purgeOldAuditLogs(): Promise<void> {
   const cutoff = new Date();
@@ -8639,6 +9092,28 @@ if (process.env.NODE_ENV !== 'test') {
         color: null,
       },
     }).catch((err) => console.error('failed to upsert mystery box', err));
+    // Upsert des consommables — items permanents du shop (ids stables). On rafraîchit
+    // nom/desc/prix/rareté mais on ne touche pas au reste (payload.kind = type).
+    for (const ci of CONSUMABLE_ITEMS) {
+      prisma.shopItem
+        .upsert({
+          where: { id: ci.id },
+          update: { name: ci.name, description: ci.description, price: ci.price, rarity: ci.rarity, category: 'consumable', payload: { kind: ci.kind } },
+          create: {
+            id: ci.id,
+            name: ci.name,
+            description: ci.description,
+            category: 'consumable',
+            price: ci.price,
+            rarity: ci.rarity,
+            active: true,
+            sortOrder: 0,
+            color: null,
+            payload: { kind: ci.kind },
+          },
+        })
+        .catch((err) => console.error(`failed to upsert consumable ${ci.id}`, err));
+    }
     // Seed de données de test — staging uniquement, jamais en prod.
     if (process.env.APP_ENV === 'staging') {
       seedStaging().catch((err) => {

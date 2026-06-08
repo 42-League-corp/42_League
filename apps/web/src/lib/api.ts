@@ -216,7 +216,34 @@ export interface TeamProfile extends BabyfootTeamEntry {
 
 // ─── League Coin · Boutique ───────────────────────────────────────────────────
 
-export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box'; // 'badge' conservé pour rétrocompatibilité inventaire
+export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box' | 'consumable'; // 'badge' conservé pour rétrocompatibilité inventaire
+
+/** Type de consommable (cf. ConsumableInventory backend). */
+export type ConsumableKind = 'anti_ops' | 'elo_mult';
+
+/** État d'un consommable pour le joueur courant (stock + cap mensuel). */
+export interface ConsumableState {
+  kind: ConsumableKind;
+  quantity: number;
+  lastUsedAt: string | null;
+  monthlyCap: number;
+  monthlyUsed: number;
+}
+
+export interface ConsumablesResponse {
+  /** True si un multiplicateur d'ELO est armé pour le prochain score validé. */
+  eloMultArmed: boolean;
+  items: ConsumableState[];
+}
+
+/** État consommables + badges + titre d'un joueur, vu par un admin (/GOD). */
+export interface AdminUserItems {
+  login: string;
+  title: string | null;
+  eloMultArmed: boolean;
+  consumables: { kind: ConsumableKind; quantity: number; lastUsedAt: string | null }[];
+  badges: EquippedBadge[];
+}
 
 /** Rareté d'un objet — pilote la couleur de sa carte (cf. lib/rarity.ts). */
 export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary';
@@ -319,6 +346,8 @@ export interface MeResponse {
   termsVersion?: string;
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Badges « libres » attribués via /GOD (rendu inline comme les badges boutique). */
+  customBadges?: EquippedBadge[];
   /** Titres que le joueur POSSÈDE (sélecteur de titre, cf. setMyTitle). */
   ownedTitles?: OwnedTitle[];
   /** Couleur du titre équipé (item boutique) — applique une teinte au titre affiché. */
@@ -561,6 +590,8 @@ export interface UserProfile {
   recent: PlayedMatch[];
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
   badges?: string[];
+  /** Badges « libres » attribués via /GOD (rendu inline comme les badges boutique). */
+  customBadges?: EquippedBadge[];
   /** Réseau du joueur consulté : ceux qu'il suit (bloc « following »). */
   followingList?: FollowEdge[];
   /** Réseau du joueur consulté : ceux qui le suivent (bloc « followers »). */
@@ -1553,6 +1584,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ equipped }),
     }),
+  // ── Consommables ───────────────────────────────────────────────────────────
+  consumables: () => request<ConsumablesResponse>('/me/consumables'),
+  useConsumable: (kind: ConsumableKind) =>
+    request<{ ok: true; armed?: boolean; cancelled?: boolean }>(
+      `/me/consumables/${encodeURIComponent(kind)}/use`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
   // ── Annonces générales ────────────────────────────────────────────────────
   announcements: () => request<AnnouncementData[]>('/announcements'),
   markAnnouncementsSeen: (ids: string[]) =>
@@ -1595,6 +1633,37 @@ export const api = {
     request<{ ok: true; login: string; itemId: string; equipped: boolean }>(
       '/admin/shop/grant-item',
       { method: 'POST', body: JSON.stringify({ login, itemId, equip }) },
+    ),
+  // ── GOD : consommables & badges d'un joueur ───────────────────────────────
+  /** État consommables + badges + titre d'un joueur (vue admin). */
+  adminUserItems: (login: string) =>
+    request<AdminUserItems>(`/admin/users/${encodeURIComponent(login)}/items`),
+  /** Ajuste (±) le stock d'un consommable d'un joueur. */
+  adminGrantConsumable: (login: string, kind: ConsumableKind, amount: number) =>
+    request<{ ok: true; login: string; kind: ConsumableKind; quantity: number }>(
+      '/admin/consumables/grant',
+      { method: 'POST', body: JSON.stringify({ login, kind, amount }) },
+    ),
+  /** Force l'effet d'un consommable (ignore cap/cooldown/stock). */
+  adminForceConsumable: (login: string, kind: ConsumableKind) =>
+    request<{ ok: true; login: string; kind: ConsumableKind; armed?: boolean; hunter?: string | null }>(
+      '/admin/consumables/force-use',
+      { method: 'POST', body: JSON.stringify({ login, kind }) },
+    ),
+  /** Attribue un badge « libre » (code + icône Lucide + label + couleur) à un joueur. */
+  adminGrantBadge: (
+    login: string,
+    badge: { code: string; label: string; icon: string; color?: string; game?: string },
+  ) =>
+    request<{ ok: true; login: string; code: string }>(
+      `/admin/users/${encodeURIComponent(login)}/badges`,
+      { method: 'POST', body: JSON.stringify(badge) },
+    ),
+  /** Retire un badge d'un joueur. */
+  adminRemoveBadge: (login: string, code: string, game = '') =>
+    request<{ ok: true; login: string; code: string }>(
+      `/admin/users/${encodeURIComponent(login)}/badges/${encodeURIComponent(code)}?game=${encodeURIComponent(game)}`,
+      { method: 'DELETE' },
     ),
   // ── Économie de coins : quêtes hebdo + paris ──────────────────────────────
   quests: () => request<QuestsResponse>('/quests'),

@@ -25,6 +25,7 @@ export const CATEGORY_LABEL: Record<ShopCategory, string> = {
   badge: 'BADGE',
   banner: 'BANNIÈRE',
   mystery_box: 'BOÎTE MYSTÈRE',
+  consumable: 'CONSOMMABLE',
 };
 
 // ── Primitives partagées (langage visuel GODPage) ───────────────────────────

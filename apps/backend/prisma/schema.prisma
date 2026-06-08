@@ -47,6 +47,10 @@ model User {
   tournamentsWonFlechettes Int  @default(0) @map("tournaments_won_flechettes")
   // Porte-monnaie « League Coin » — solde dépensable dans la boutique (cf. ShopItem).
   leagueCoins         Int       @default(0) @map("league_coins")
+  // Consommable « multiplicateur d'ELO » armé : le prochain score validé par ce
+  // joueur double son gain/perte d'ELO (cf. ConsumableInventory, kind 'elo_mult').
+  // Remis à false dès qu'un match est réglé pour lui.
+  eloMultArmed        Boolean   @default(false) @map("elo_mult_armed")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[]  @default(["babyfoot"])
   // Personnages favoris (« mains ») par jeu de combat — ids des rosters front
@@ -104,6 +108,9 @@ model User {
   babyfootTeamsAsP2         BabyfootTeam[]          @relation("babyfootTeamPlayer2")
   // Boutique — cosmétiques possédés par le joueur (titres, bannières…).
   inventory                 ShopInventory[]         @relation("userInventory")
+  // Consommables possédés (anti-ops, multiplicateur d'ELO…) avec quantité.
+  consumables               ConsumableInventory[]   @relation("userConsumables")
+  consumableMonthly         ConsumableMonthly[]     @relation("userConsumableMonthly")
   // Smash FFA (Free-For-All) — déclarations et participations.
   ffaDeclared               PendingFfa[]            @relation("ffaDeclarer")
   ffaPendingParticipant     PendingFfaParticipant[] @relation("ffaPendingParticipant")
@@ -180,6 +187,12 @@ model UserBadge {
   // Discipline liée ('' = badge global, 'babyfoot'/'smash'/'chess' = spécifique).
   // Permet de distinguer un champion babyfoot et un champion chess sur la même saison.
   game      String   @default("") // '' | 'babyfoot' | 'smash' | 'chess'
+  // Badges « libres » attribués depuis le /GOD : métadonnées d'affichage portées
+  // par la ligne elle-même (le code n'est pas dans le catalogue front). Null pour
+  // les badges catalogue/palmarès qui se rendent via le catalogue.
+  label     String?  // libellé affiché
+  icon      String?  // nom d'icône Lucide (ex. 'Crown')
+  color     String?  // couleur d'accent #rrggbb
   awardedAt DateTime @default(now()) @map("awarded_at")
 
   user User @relation("userBadges", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
@@ -267,6 +280,10 @@ model Ops {
   // Nombre de matchs forcés déjà consommés (joués ou refusés) sur cet OPS.
   // La cible ne peut pas refuser tant que forcedUsed < OPS_FORCED_MATCHES (3).
   forcedUsed  Int      @default(0) @map("forced_used")
+  // Renseigné quand la cible a annulé cet ops avec un consommable « anti-ops ».
+  // Sert de bouclier : le chasseur ne peut pas re-cibler cette même cible pendant
+  // ANTI_OPS_SHIELD_MS après cette date (cf. POST /ops).
+  cancelledByAntiOpsAt DateTime? @map("cancelled_by_anti_ops_at")
 
   owner  User @relation("opsOwner", fields: [ownerLogin], references: [login])
   target User @relation("opsTarget", fields: [targetLogin], references: [login])
@@ -653,6 +670,10 @@ enum AdminAction {
   DELETE_TOURNAMENT
   IMPERSONATE_TESTER
   SYNC_ELO_FROM_PROD
+  GRANT_CONSUMABLE
+  FORCE_CONSUMABLE
+  GRANT_BADGE
+  REMOVE_BADGE
 }
 
 model AdminAuditLog {
@@ -716,6 +737,38 @@ model ShopInventory {
   @@id([userLogin, itemId])
   @@index([userLogin])
   @@map("shop_inventory")
+}
+
+// Inventaire de consommables d'un joueur (anti-ops, multiplicateur d'ELO…).
+// Contrairement aux cosmétiques (ShopInventory, unique par objet), un consommable
+// est empilable : `quantity` exemplaires détenus. `lastUsedAt` sert au cooldown
+// entre deux utilisations (anti-ops : ANTI_OPS_USE_COOLDOWN_MS).
+model ConsumableInventory {
+  userLogin  String    @map("user_login")
+  kind       String // 'anti_ops' | 'elo_mult'
+  quantity   Int       @default(0)
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user User @relation("userConsumables", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userLogin, kind])
+  @@index([userLogin])
+  @@map("consumable_inventory")
+}
+
+// Compteur d'achats de consommables par mois (cap mensuel par type). `monthKey`
+// au format "2026-06". Une ligne par (joueur, type, mois).
+model ConsumableMonthly {
+  userLogin String @map("user_login")
+  kind      String
+  monthKey  String @map("month_key")
+  count     Int    @default(0)
+
+  user User @relation("userConsumableMonthly", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userLogin, kind, monthKey])
+  @@index([userLogin])
+  @@map("consumable_monthly")
 }
 
 // ─── Matchmaking ───────────────────────────────────────────────────────────────

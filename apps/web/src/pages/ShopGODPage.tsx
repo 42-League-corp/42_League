@@ -69,6 +69,7 @@ const CATEGORY_BADGE: Record<ShopCategory, string> = {
   badge: 'bg-fuchsia-400/15 text-fuchsia-400',
   banner: 'bg-violet-400/15 text-violet-400',
   mystery_box: 'bg-purple-400/15 text-purple-400',
+  consumable: 'bg-teal-400/15 text-teal-400',
 };
 
 function CategoryBadge({ category }: { category: ShopCategory }) {

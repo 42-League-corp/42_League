@@ -13,6 +13,8 @@ import {
   ArrowDown,
   PackageOpen,
   Eye,
+  ShieldBan,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
@@ -41,7 +43,7 @@ const SORT_KEYS: SortKey[] = ['name', 'price', 'rarity'];
 const EQUIPPABLE: ShopCategory[] = ['title', 'banner'];
 
 /** Ordre d'affichage stable des catégories dans la barre de filtres. */
-const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'mystery_box'];
+const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'consumable', 'mystery_box'];
 
 /** Catégories masquées de la boutique (achat impossible). */
 const HIDDEN_CATS: ShopCategory[] = ['badge'];
@@ -266,6 +268,16 @@ function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: st
       {item.category === 'mystery_box' && (
         <div className="relative flex flex-col items-center gap-2">
           <PackageOpen className="w-10 h-10 text-purple-300 drop-shadow" strokeWidth={1.6} />
+        </div>
+      )}
+
+      {item.category === 'consumable' && (
+        <div className="relative flex flex-col items-center gap-2">
+          {p.kind === 'anti_ops' ? (
+            <ShieldBan className="w-10 h-10 text-teal-300 drop-shadow" strokeWidth={1.6} />
+          ) : (
+            <Zap className="w-10 h-10 text-teal-300 drop-shadow" strokeWidth={1.6} />
+          )}
         </div>
       )}
     </div>

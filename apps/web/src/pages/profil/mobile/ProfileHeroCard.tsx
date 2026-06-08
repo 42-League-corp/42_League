@@ -37,6 +37,8 @@ interface ProfileHeroCardProps {
   /** Cosmétiques équipés du joueur affiché (sinon ceux de `me` quand isMe). */
   titleColor?: string | null;
   equippedBadge?: MeResponse['equippedBadge'];
+  /** Badges « libres » (GOD) du joueur affiché — rendus en plus des badges catalogue. */
+  customBadges?: MeResponse['customBadges'];
   equippedBanner?: string | null;
   /** Hôte 42 si le joueur est actuellement connecté sur un PC du cluster. */
   onlineHost?: string;
@@ -56,6 +58,7 @@ export function ProfileHeroCard({
   isMe = true,
   titleColor: titleColorProp,
   equippedBadge: equippedBadgeProp,
+  customBadges: customBadgesProp,
   equippedBanner: equippedBannerProp,
   onlineHost,
   coins: coinsProp,
@@ -71,6 +74,7 @@ export function ProfileHeroCard({
   // Cosmétiques équipés : props (autre joueur) sinon ceux de `me` (profil perso).
   const titleColor = titleColorProp ?? (isMe ? me?.titleColor : null) ?? null;
   const equippedBadge = equippedBadgeProp ?? (isMe ? me?.equippedBadge : null) ?? null;
+  const customBadges = customBadgesProp ?? (isMe ? me?.customBadges : []) ?? [];
   const equippedBanner = equippedBannerProp ?? (isMe ? me?.equippedBanner : null) ?? null;
   const user = userProp ?? me?.user;
   const badges = badgesProp ?? me?.badges;
@@ -217,7 +221,7 @@ export function ProfileHeroCard({
               <h2 className="text-xl font-extrabold text-text-strong tracking-tight truncate min-w-0">
                 {realName ?? <span className="font-mono font-bold text-muted-2">@{user.login}</span>}
               </h2>
-              {((badges && badges.length > 0) || equippedBadge) && (
+              {((badges && badges.length > 0) || equippedBadge || customBadges.length > 0) && (
                 <div className="flex-shrink-0">
                   {/* Desktop : badges EN GRAND avec libellé (plus de place).
                       Mobile : pastilles icône-seule (label dans la modale) → le nom
@@ -225,7 +229,7 @@ export function ProfileHeroCard({
                       la modale avec le reste des badges. */}
                   <BadgesRow
                     codes={badges ?? []}
-                    extra={equippedBadge ? [equippedBadge] : []}
+                    extra={[...(equippedBadge ? [equippedBadge] : []), ...customBadges]}
                     size="md"
                     iconOnly={isMobile}
                     max={isMobile ? 3 : 4}

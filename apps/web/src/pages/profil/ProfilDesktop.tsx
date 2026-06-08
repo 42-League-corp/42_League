@@ -19,6 +19,7 @@ import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
+import { InventoryPanel } from './InventoryPanel';
 import { FavoriteCharsRow } from '../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../lib/chars';
@@ -198,9 +199,13 @@ export function ProfilDesktop() {
               <div className="font-display text-3xl font-black text-text-strong truncate tracking-tight min-w-0">
                 {realName ?? <span className="font-mono text-2xl font-bold text-muted-2">@{u.login}</span>}
               </div>
-              {((me.badges && me.badges.length > 0) || equippedBadge) && (
+              {((me.badges && me.badges.length > 0) || equippedBadge || (me.customBadges?.length ?? 0) > 0) && (
                 <div className="flex-shrink-0">
-                  <BadgesRow codes={me.badges ?? []} extra={equippedBadge ? [equippedBadge] : []} size="md" />
+                  <BadgesRow
+                    codes={me.badges ?? []}
+                    extra={[...(equippedBadge ? [equippedBadge] : []), ...(me.customBadges ?? [])]}
+                    size="md"
+                  />
                 </div>
               )}
             </div>
@@ -296,6 +301,11 @@ export function ProfilDesktop() {
       {/* Following / Followers (style GitHub) */}
       <div className="mt-4">
         <FollowLists />
+      </div>
+
+      {/* Inventaire : consommables (anti-OPS, multiplicateur d'ELO) */}
+      <div className="mt-4">
+        <InventoryPanel />
       </div>
 
       {/* Mes Équipes 2v2 — retiré du desktop (visible sur mobile uniquement) */}

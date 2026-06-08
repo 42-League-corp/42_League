@@ -36,7 +36,10 @@ import {
   type DayPoint,
   type AnnouncementData,
   type AnnouncementKind,
+  type AdminUserItems,
+  type ConsumableKind,
 } from '../lib/api';
+import { BADGE_ICONS } from '../lib/badgeIcons';
 import { ANNOUNCEMENT_KINDS, announcementKindMeta } from '../lib/announcements';
 import type { Game } from '../lib/gameMode';
 import { useGameMode } from '../hooks/useGameMode';
@@ -48,7 +51,7 @@ import { VersusOverlay as TournVersusOverlay } from '../components/tournois/Vers
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements' | 'items';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -4026,6 +4029,174 @@ function AnnouncementsTab() {
   );
 }
 
+const CONSUMABLE_LABEL: Record<ConsumableKind, string> = {
+  anti_ops: 'Anti-OPS',
+  elo_mult: "Multiplicateur d'ELO",
+};
+
+/** Onglet GOD : gestion des consommables, badges libres et titre d'un joueur. */
+function ItemsAdminTab() {
+  const [login, setLogin] = useState('');
+  const [data, setData] = useState<AdminUserItems | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  // Formulaire de badge libre.
+  const [bCode, setBCode] = useState('');
+  const [bLabel, setBLabel] = useState('');
+  const [bIcon, setBIcon] = useState('Award');
+  const [bColor, setBColor] = useState('#ffc94a');
+
+  const iconNames = Object.keys(BADGE_ICONS);
+  const PreviewIcon = BADGE_ICONS[bIcon] ?? BADGE_ICONS.Award!;
+
+  const flash = (m: string) => { setMsg(m); setErr(null); };
+  const fail = (e: unknown) => { setErr(e instanceof Error ? e.message : String(e)); setMsg(null); };
+
+  const load = useCallback(async (who: string) => {
+    const l = who.trim();
+    if (!l) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const d = await api.adminUserItems(l);
+      setData(d);
+      setTitle(d.title ?? '');
+    } catch (e) {
+      setData(null);
+      fail(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reload = () => data && load(data.login);
+
+  const grant = async (kind: ConsumableKind, amount: number) => {
+    if (!data) return;
+    try { await api.adminGrantConsumable(data.login, kind, amount); flash(`${CONSUMABLE_LABEL[kind]} ${amount >= 0 ? '+' : ''}${amount}`); await load(data.login); } catch (e) { fail(e); }
+  };
+  const force = async (kind: ConsumableKind) => {
+    if (!data) return;
+    try { await api.adminForceConsumable(data.login, kind); flash(`Effet « ${CONSUMABLE_LABEL[kind]} » forcé`); await load(data.login); } catch (e) { fail(e); }
+  };
+  const saveTitle = async () => {
+    if (!data) return;
+    try { await api.setUserTitle(data.login, title.trim() || null); flash('Titre mis à jour'); await load(data.login); } catch (e) { fail(e); }
+  };
+  const addBadge = async () => {
+    if (!data) return;
+    try {
+      await api.adminGrantBadge(data.login, { code: bCode.trim() || bLabel.trim().toLowerCase().replace(/\s+/g, '_'), label: bLabel.trim(), icon: bIcon, color: bColor });
+      flash('Badge attribué');
+      setBCode(''); setBLabel('');
+      await load(data.login);
+    } catch (e) { fail(e); }
+  };
+  const removeBadge = async (code: string) => {
+    if (!data) return;
+    try { await api.adminRemoveBadge(data.login, code); flash('Badge retiré'); await load(data.login); } catch (e) { fail(e); }
+  };
+
+  return (
+    <div className="p-4">
+      <Section title="Joueur">
+        <div className="flex items-center gap-2">
+          <Input value={login} onChange={setLogin} placeholder="login" className="w-64" />
+          <Btn onClick={() => load(login)} disabled={loading || !login.trim()}>
+            {loading ? '…' : 'Charger'}
+          </Btn>
+          {data && <Btn variant="ghost" onClick={reload}>↻</Btn>}
+        </div>
+        {msg && <div className="mt-2 text-xs text-emerald-400">{msg}</div>}
+        {err && <div className="mt-2 text-xs text-red-400">{err}</div>}
+      </Section>
+
+      {data && (
+        <>
+          <Section title="Titre">
+            <div className="flex items-center gap-2">
+              <Input value={title} onChange={setTitle} placeholder="(aucun)" className="w-72" />
+              <Btn variant="success" onClick={saveTitle}>Appliquer</Btn>
+              <Btn variant="ghost" onClick={() => { setTitle(''); }}>Vider</Btn>
+            </div>
+          </Section>
+
+          <Section title="Consommables">
+            <div className="space-y-2">
+              {data.consumables.map((c) => (
+                <div key={c.kind} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-zinc-300 w-44">{CONSUMABLE_LABEL[c.kind]}</span>
+                  <span className="text-sm font-bold text-zinc-100 tabular-nums w-10 text-center">×{c.quantity}</span>
+                  <Btn onClick={() => grant(c.kind, 1)}>+1</Btn>
+                  <Btn variant="danger" onClick={() => grant(c.kind, -1)}>-1</Btn>
+                  <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
+                  {c.kind === 'elo_mult' && data.eloMultArmed && (
+                    <span className="text-xs text-amber-400">armé</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Badges libres">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {data.badges.length === 0 && <span className="text-xs text-zinc-500">aucun badge libre</span>}
+              {data.badges.map((b) => {
+                const Icon = BADGE_ICONS[b.icon] ?? BADGE_ICONS.Award!;
+                return (
+                  <span
+                    key={b.code}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border"
+                    style={{ color: b.color ?? '#a89880', borderColor: `${b.color ?? '#a89880'}55`, background: `${b.color ?? '#a89880'}1a` }}
+                  >
+                    <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    {b.label}
+                    <button onClick={() => removeBadge(b.code)} className="ml-1 text-red-400 hover:text-red-300 cursor-pointer" aria-label="retirer">✕</button>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-end gap-2 border-t border-zinc-800 pt-3">
+              <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-zinc-500">
+                Label
+                <Input value={bLabel} onChange={setBLabel} placeholder="ex. Légende" className="w-40" />
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-zinc-500">
+                Code (optionnel)
+                <Input value={bCode} onChange={setBCode} placeholder="auto" className="w-32" />
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-zinc-500">
+                Icône
+                <select
+                  value={bIcon}
+                  onChange={(e) => setBIcon(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+                >
+                  {iconNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-zinc-500">
+                Couleur
+                <input type="color" value={bColor} onChange={(e) => setBColor(e.target.value)} className="w-12 h-9 bg-zinc-800 border border-zinc-700 rounded cursor-pointer" />
+              </label>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border self-end"
+                style={{ color: bColor, borderColor: `${bColor}55`, background: `${bColor}1a` }}
+              >
+                <PreviewIcon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                {bLabel || 'aperçu'}
+              </span>
+              <Btn variant="success" onClick={addBadge} disabled={!bLabel.trim()}>Attribuer</Btn>
+            </div>
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'stats' },
   { id: 'users' },
@@ -4040,6 +4211,7 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'history' },
   { id: 'tournaments' },
   { id: 'announcements' },
+  { id: 'items' },
   { id: 'seasons', superAdminOnly: true },
   { id: 'animations' },
 ];
@@ -4190,6 +4362,7 @@ export function GODPage() {
           {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
           {activeTab === 'animations' && <AnimationsTab myLogin={myLogin} />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
+          {activeTab === 'items' && <ItemsAdminTab />}
         </motion.div>
       </div>
     </div>

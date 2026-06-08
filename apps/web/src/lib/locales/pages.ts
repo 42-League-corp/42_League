@@ -37,6 +37,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tab.stats': 'STATS',
     'god.tab.animations': 'ANIMATIONS',
     'god.tab.announcements': 'ANNONCES',
+    'god.tab.items': 'INVENTAIRES',
     // Onglet STATS
     'god.stats.days': '{n}j',
     'god.stats.allGames': 'Tous les jeux',
@@ -525,6 +526,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tab.stats': 'STATS',
     'god.tab.animations': 'ANIMATIONS',
     'god.tab.announcements': 'ANNOUNCEMENTS',
+    'god.tab.items': 'INVENTORIES',
     'god.stats.days': '{n}d',
     'god.stats.allGames': 'All games',
     'god.stats.window': 'over {n} days',
@@ -991,6 +993,7 @@ export const dict: Record<Lang, Dict> = {
     'god.tab.stats': 'STATS',
     'god.tab.animations': 'ANIMACIONES',
     'god.tab.announcements': 'ANUNCIOS',
+    'god.tab.items': 'INVENTARIOS',
     'god.stats.days': '{n}d',
     'god.stats.allGames': 'Todos los juegos',
     'god.stats.window': 'en {n} días',
