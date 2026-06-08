@@ -94,15 +94,17 @@ export function GameTransitionOverlay() {
   const [active, setActive] = useState(false);
   const [displayedGame, setDisplayedGame] = useState<Game>(game);
 
+  // Désactivé : la cinématique principale est maintenant pilotée par
+  // UniverseTransition (les blocs du HUD se dispersent pour révéler la
+  // backdrop 4K). L'ancien flash plein écran masquait justement la révélation.
   useEffect(() => {
     if (prevGameRef.current === game) return;
     prevGameRef.current = game;
     setDisplayedGame(game);
-    setActive(true);
-    // 480ms total : entrée punch (120ms) + symbol spring + sortie éclair (150ms)
-    const t = setTimeout(() => setActive(false), 480);
-    return () => clearTimeout(t);
   }, [game]);
+  void setActive;
+  void active;
+  return null;
 
   const u = UNIVERSE[displayedGame];
 
