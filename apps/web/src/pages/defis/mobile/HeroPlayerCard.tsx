@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Crown, Flame, MapPin, Trophy, Zap, Cog } from 'lucide-react';
+import { Flame, MapPin, Trophy, Zap, Cog } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
@@ -155,7 +155,7 @@ export function HeroPlayerCard() {
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
-          className={`absolute top-3 left-3 z-20 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
+          className={`absolute top-3 left-3 z-20 flex items-center justify-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
             isTop1
               ? 'metal-plate-gold shadow-gold-glow'
               : isTop3
@@ -165,7 +165,6 @@ export function HeroPlayerCard() {
                   : 'bg-bg-1/80 text-muted-2 border border-border backdrop-blur'
           }`}
         >
-          {isTop1 && <Crown className="w-3 h-3" strokeWidth={2.5} />}
           <span>#{stats.rank}</span>
         </motion.div>
       )}
