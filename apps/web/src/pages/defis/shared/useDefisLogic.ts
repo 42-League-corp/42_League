@@ -83,10 +83,20 @@ export function useDefisLogic(): DefisLogic {
     const waiting: PendingMatch[] = [];
     for (const p of pending) {
       if (p.mode === '2v2') {
-        // 2v2 : l'équipe adverse (opponent ou son coéquipier) confirme ; le
-        // déclarant et son coéquipier sont en attente.
-        if (p.opponentLogin === myLogin || p.partner2Login === myLogin) toConfirm.push(p);
-        else if (p.declarerLogin === myLogin || p.partner1Login === myLogin) waiting.push(p);
+        // 2v2 : les 3 NON-déclarants (coéquipier du déclarant + les 2 adversaires)
+        // confirment chacun leur présence — c'est l'anti-farming du back, qui exige
+        // les 3 validations pour régler le match. Un joueur qui a déjà confirmé, et
+        // le déclarant lui-même, passent en simple attente.
+        const iConfirmed =
+          (p.partner1Login === myLogin && p.partner1Confirmed) ||
+          (p.opponentLogin === myLogin && p.opp1Confirmed) ||
+          (p.partner2Login === myLogin && p.opp2Confirmed);
+        const iAmNonDeclarer =
+          p.partner1Login === myLogin ||
+          p.opponentLogin === myLogin ||
+          p.partner2Login === myLogin;
+        if (iAmNonDeclarer && !iConfirmed) toConfirm.push(p);
+        else if (p.declarerLogin === myLogin || iAmNonDeclarer) waiting.push(p);
       } else if (p.opponentLogin === myLogin) toConfirm.push(p);
       else if (p.declarerLogin === myLogin) waiting.push(p);
     }
