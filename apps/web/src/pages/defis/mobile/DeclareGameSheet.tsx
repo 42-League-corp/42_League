@@ -71,7 +71,7 @@ export function DeclareGameSheet({
         recentOpponents.find((p) => p.login === partnerLogin);
       onNewTeam({
         teamId: result.myTeamId,
-        teamElo: Math.round(
+        teamElo: result.myTeamElo ?? Math.round(
           Math.max(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.65 +
           Math.min(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.35,
         ),
