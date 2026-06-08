@@ -8315,14 +8315,14 @@ if (process.env.NODE_ENV !== 'test') {
     // Upsert de la mystery box — item permanent du shop, non créable via GOD panel.
     prisma.shopItem.upsert({
       where: { id: 'mystery-box' },
-      update: {},
+      update: { rarity: 'common' },
       create: {
         id: 'mystery-box',
         name: 'Boîte Mystère',
-        description: 'Contenu inconnu... mais le prix se paie en ELO.',
+        description: null,
         category: 'mystery_box',
         price: 200,
-        rarity: 'epic',
+        rarity: 'common',
         active: true,
         sortOrder: 0,
         color: null,

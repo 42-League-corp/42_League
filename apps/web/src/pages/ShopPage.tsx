@@ -12,7 +12,6 @@ import {
   ArrowUp,
   ArrowDown,
   PackageOpen,
-  TrendingDown,
   type LucideIcon,
 } from 'lucide-react';
 import { Panel } from '../components/Panel';
@@ -265,10 +264,6 @@ function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: st
       {item.category === 'mystery_box' && (
         <div className="relative flex flex-col items-center gap-2">
           <PackageOpen className="w-10 h-10 text-purple-300 drop-shadow" strokeWidth={1.6} />
-          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-red-400">
-            <TrendingDown className="w-3.5 h-3.5" strokeWidth={2.5} />
-            -10 ELO
-          </span>
         </div>
       )}
     </div>
@@ -585,18 +580,10 @@ export function ShopPage() {
                   <ShopItemVisual item={item} rarityHex={rk.hex} />
 
                   <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
-                    <div className="flex flex-col gap-0.5">
-                      <CoinAmount
-                        value={item.price}
-                        className="font-gaming text-lg font-extrabold text-text-strong"
-                      />
-                      {item.category === 'mystery_box' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-red-400 uppercase tracking-wide">
-                          <TrendingDown className="w-3 h-3" strokeWidth={2.5} />
-                          {t('shop.mysteryBox.eloPenalty')}
-                        </span>
-                      )}
-                    </div>
+                    <CoinAmount
+                      value={item.price}
+                      className="font-gaming text-lg font-extrabold text-text-strong"
+                    />
 
                     {isOwned ? (
                       showEquip ? (
