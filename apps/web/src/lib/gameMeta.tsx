@@ -82,8 +82,8 @@ export const GAME_META: Record<Game, GameMeta> = {
     bgColor: 'rgba(20,184,166,0.10)',
     glowColor: 'rgba(20,184,166,0.45)',
     button: { from: '#6fe3d6', via: '#14b8a6', to: '#0a7064', text: '#04241f', border: 'rgba(95,224,210,0.6)', glow: 'rgba(20,184,166,0.4)' },
-    icon: (_sel, size = 20) => (
-      <img src="/flechette.png" alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
+    icon: (sel, size = 20) => (
+      <img src={sel ? '/flechette.png' : '/gray%20flechette.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
 };
