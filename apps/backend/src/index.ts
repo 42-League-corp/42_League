@@ -7206,20 +7206,24 @@ app.post('/shop/:id/buy', async (c) => {
   if (!item || !item.active) {
     throw new HTTPException(404, { message: 'objet introuvable' });
   }
+  const isMysteryBox = item.category === 'mystery_box';
   const coins = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
     if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
-    const already = await tx.shopInventory.findUnique({
-      where: { userLogin_itemId: { userLogin: login, itemId } },
-    });
-    if (already) throw new HTTPException(409, { message: 'objet déjà possédé' });
+    // La mystery box est consommable (achat répété autorisé) — pas de check doublon.
+    if (!isMysteryBox) {
+      const already = await tx.shopInventory.findUnique({
+        where: { userLogin_itemId: { userLogin: login, itemId } },
+      });
+      if (already) throw new HTTPException(409, { message: 'objet déjà possédé' });
+    }
     if (user.leagueCoins < item.price) {
       throw new HTTPException(400, { message: 'solde insuffisant' });
     }
     const updateData: Parameters<typeof tx.user.update>[0]['data'] = {
       leagueCoins: { decrement: item.price },
     };
-    if (item.category === 'mystery_box') {
+    if (isMysteryBox) {
       updateData.elo = { decrement: 10 };
     }
     const updated = await tx.user.update({
@@ -7227,7 +7231,9 @@ app.post('/shop/:id/buy', async (c) => {
       data: updateData,
       select: { leagueCoins: true },
     });
-    await tx.shopInventory.create({ data: { userLogin: login, itemId } });
+    if (!isMysteryBox) {
+      await tx.shopInventory.create({ data: { userLogin: login, itemId } });
+    }
     return updated.leagueCoins;
   });
 
@@ -8306,6 +8312,22 @@ const port = Number(process.env.PORT ?? 3000);
 if (process.env.NODE_ENV !== 'test') {
   serve({ fetch: app.fetch, port }, (info) => {
     console.log(`42 League backend listening on http://localhost:${info.port}`);
+    // Upsert de la mystery box — item permanent du shop, non créable via GOD panel.
+    prisma.shopItem.upsert({
+      where: { id: 'mystery-box' },
+      update: {},
+      create: {
+        id: 'mystery-box',
+        name: 'Boîte Mystère',
+        description: 'Contenu inconnu... mais le prix se paie en ELO.',
+        category: 'mystery_box',
+        price: 200,
+        rarity: 'epic',
+        active: true,
+        sortOrder: 0,
+        color: null,
+      },
+    }).catch((err) => console.error('failed to upsert mystery box', err));
     // Seed de données de test — staging uniquement, jamais en prod.
     if (process.env.APP_ENV === 'staging') {
       seedStaging().catch((err) => {

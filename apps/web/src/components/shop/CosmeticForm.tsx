@@ -17,7 +17,7 @@ export const BANNER_H = 512;
 // Cap d'octets côté client (le serveur revérifie) — évite les data-URL énormes.
 export const BANNER_MAX_BYTES = 700_000;
 
-export const CATEGORIES: ShopCategory[] = ['title', 'banner', 'mystery_box'];
+export const CATEGORIES: ShopCategory[] = ['title', 'banner', 'badge'];
 
 export const CATEGORY_LABEL: Record<ShopCategory, string> = {
   title: 'TITRE',
