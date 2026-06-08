@@ -268,6 +268,27 @@ export function qualifiersFromPools(matches: PoolMatchLite[], qualifyPerPool = 2
 }
 
 /**
+ * Classement d'une phase de ligue (un seul tableau, tous les matchs confondus).
+ * Tri AU GOAL AVERAGE : différence de buts, puis buts marqués, puis victoires —
+ * contrairement aux poules qui priorisent les victoires.
+ */
+export function leagueStandings(matches: PoolMatchLite[]): PoolStanding[] {
+  const rows = poolStandings(matches);
+  rows.sort((x, y) => y.diff - x.diff || y.goalsFor - x.goalsFor || y.wins - x.wins);
+  return rows;
+}
+
+/**
+ * Qualifiés de la phase de ligue : les `qualifyCount` premiers au goal average,
+ * déjà ordonnés par seed (1er = tête de série) pour `generateBracket({preSeeded})`.
+ */
+export function leagueQualifiers(matches: PoolMatchLite[], qualifyCount: number): string[] {
+  return leagueStandings(matches)
+    .slice(0, qualifyCount)
+    .map((s) => s.login);
+}
+
+/**
  * Après confirmation d'un match de bracket, propage le gagnant au match du tour
  * suivant. Retourne `isFinal` quand il s'agit du dernier round (la finale).
  *
