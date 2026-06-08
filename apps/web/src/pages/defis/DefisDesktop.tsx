@@ -295,7 +295,7 @@ function HeroCTAs({
         recentOpponents.find((p) => p.login === partnerLogin);
       setCelebration({
         teamId: result.myTeamId,
-        teamElo: Math.round(
+        teamElo: result.myTeamElo ?? Math.round(
           Math.max(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.65 +
           Math.min(myElo ?? 1000, partnerEntry?.elo ?? 1000) * 0.35,
         ),
@@ -886,6 +886,26 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
     }
   };
 
+  // 2v2 : confirmation de présence (pas de re-saisie de score). Le settlement ne
+  // se déclenche que lorsque les 3 non-déclarants ont confirmé.
+  const handleConfirm2v2 = async () => {
+    setBusy(true);
+    try {
+      const res = await api.confirm2v2Match(match.id);
+      if ('status' in res && res.status === 'waiting') {
+        flash.show(`${res.confirmed}/3 joueurs ont confirmé — en attente des autres`);
+        setBusy(false);
+      } else {
+        flash.show(t('defis.matchConfirmed'));
+        setResolved(true);
+        await onDone();
+      }
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+      setBusy(false);
+    }
+  };
+
   const handleContestSubmit = async (reason: 'never_played' | 'wrong_score', message: string) => {
     setContesting(false);
     setBusy(true);
@@ -902,6 +922,9 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 
   if (resolved) return null;
 
+  const is2v2 = match.mode === '2v2';
+  const confirmed2v2 = [match.partner1Confirmed, match.opp1Confirmed, match.opp2Confirmed].filter(Boolean).length;
+
   return (
     <>
       <div className="relative rounded-xl p-3 border border-gold/40 bg-gold/[0.05] animate-pop flex flex-wrap items-center gap-2.5">
@@ -910,18 +933,36 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
           {match.declarerLogin}
         </PlayerLink>
         <span className="text-muted-2 text-sm">{t('defis.declared')}</span>
+        {is2v2 && (
+          <>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+              2 vs 2
+            </span>
+            <span className="text-[11px] font-semibold">
+              <span className="text-gold">{match.declarerLogin} &amp; {match.partner1Login}</span>
+              <span className="text-muted-2"> vs </span>
+              <span>{match.opponentLogin} &amp; {match.partner2Login}</span>
+            </span>
+          </>
+        )}
         <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
           {match.scoreDeclarer}
           <span className="text-muted mx-1">–</span>
           {match.scoreOpponent}
         </span>
-        <GameTag game={match.game} />
-        <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{t('defis.themYou')}</span>
-        <span className="text-[11px] text-muted-2 hidden sm:inline">
-          → {t('defis.youHave')} {iWon ? t('defis.won') : t('defis.lost')}
-        </span>
+        {is2v2 ? (
+          <span className="text-[10px] font-bold text-muted">{confirmed2v2}/3 ✓</span>
+        ) : (
+          <>
+            <GameTag game={match.game} />
+            <span className="text-[10px] text-muted bg-bg-2 px-1.5 py-0.5 rounded">{t('defis.themYou')}</span>
+            <span className="text-[11px] text-muted-2 hidden sm:inline">
+              → {t('defis.youHave')} {iWon ? t('defis.won') : t('defis.lost')}
+            </span>
+          </>
+        )}
         <div className="ml-auto flex gap-2">
-          <Button size="sm" loading={busy} onClick={handleConfirm}>{t('defis.confirmCheck')}</Button>
+          <Button size="sm" loading={busy} onClick={is2v2 ? handleConfirm2v2 : handleConfirm}>{t('defis.confirmCheck')}</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
             className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
             {t('defis.contest')}
@@ -943,6 +984,44 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   const t = useT();
+  // 2v2 : on attend la validation des 3 autres joueurs — on affiche la
+  // composition complète (mon duo vs duo adverse) + l'avancée des confirmations.
+  if (match.mode === '2v2') {
+    const confirmed = [match.partner1Confirmed, match.opp1Confirmed, match.opp2Confirmed].filter(Boolean).length;
+    return (
+      <div className="rounded-xl p-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm border border-border/50 bg-white/[0.02]">
+        <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+          2 vs 2
+        </span>
+        <span className="font-semibold">
+          <PlayerLink login={match.declarerLogin} className="text-gold">{match.declarerLogin}</PlayerLink>
+          <span className="text-muted-2"> &amp; </span>
+          {match.partner1Login && (
+            <PlayerLink login={match.partner1Login} className="text-gold">{match.partner1Login}</PlayerLink>
+          )}
+        </span>
+        <span className="text-muted-2 text-xs">vs</span>
+        <span className="font-semibold">
+          <PlayerLink login={match.opponentLogin}>{match.opponentLogin}</PlayerLink>
+          <span className="text-muted-2"> &amp; </span>
+          {match.partner2Login && <PlayerLink login={match.partner2Login}>{match.partner2Login}</PlayerLink>}
+        </span>
+        <span className="font-mono font-extrabold tabular-nums text-text-strong">
+          {match.scoreDeclarer}
+          <span className="text-muted mx-1">–</span>
+          {match.scoreOpponent}
+        </span>
+        <span className="text-[10px] font-bold text-muted">{confirmed}/3 ✓</span>
+        <span className="ml-auto text-[10px] text-muted italic">{t('defis.waitingConfirmEllipsis')}</span>
+        <button type="button" onClick={onCancel}
+          className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 transition-colors"
+          title={t('defis.cancel')} aria-label={t('defis.cancel')}>
+          <X className="w-4 h-4" strokeWidth={2.5} />
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
       <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
@@ -1329,7 +1408,20 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span aria-hidden>{KIND_ICON[kind]}</span>
         <span className="text-muted-2 text-[11px]">{KIND_LABEL[kind]}</span>
-        <PlayerLink login={opponent} className="font-semibold text-sm">{opponent}</PlayerLink>
+        {challenge.mode === '2v2' ? (
+          <>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+              2 vs 2
+            </span>
+            <span className="text-[11px] font-semibold">
+              <span className="text-gold">{challenge.challengerLogin} &amp; {challenge.partnerLogin}</span>
+              <span className="text-muted-2"> vs </span>
+              <span>{challenge.opponentLogin} &amp; {challenge.opponentPartnerLogin}</span>
+            </span>
+          </>
+        ) : (
+          <PlayerLink login={opponent} className="font-semibold text-sm">{opponent}</PlayerLink>
+        )}
         {/* Game badge proéminent */}
         <GameTag game={challenge.game} />
         <span className={`text-[11px] ml-auto ${when.late ? 'text-red' : 'text-muted-2'}`}>{when.text}</span>
