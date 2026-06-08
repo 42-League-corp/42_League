@@ -59,7 +59,7 @@ export function MobileShell({ children }: MobileShellProps) {
             ref={mainRef}
             className="flex-1 min-w-0 w-full px-4 pt-3 overflow-x-hidden overflow-y-auto overscroll-contain relative z-[1] scrollbar-none"
             style={{
-              paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 8px)',
+              paddingBottom: 'calc(52px + env(safe-area-inset-bottom) + 8px)',
             }}
           >
             <UniverseTransition>

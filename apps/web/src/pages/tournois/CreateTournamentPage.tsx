@@ -78,11 +78,15 @@ export function CreateTournamentPage() {
   };
 
   return (
-    // pb généreux : le padding-bottom du conteneur scrollable (<main>) est ignoré
-    // en fin de scroll par Chrome/Safari mobile → c'est le padding propre de la
-    // page qui doit dégager la tab bar fixe (60px + safe-area), sinon le bouton du
-    // bas passe derrière.
-    <div className="max-w-sm mx-auto flex flex-col gap-8 pb-[calc(5rem_+_env(safe-area-inset-bottom))]">
+    // Mobile : overlay contenu AU-DESSUS de la tab bar, se terminant AVANT elle,
+    // avec scroll interne — le bouton « Créer » n'est jamais caché derrière la barre.
+    // Desktop (sm+) : page normale dans le flux du shell.
+    <div
+      className="fixed inset-x-0 top-0 z-[60] flex flex-col bg-bg-0 sm:static sm:z-auto sm:bg-transparent sm:block"
+      style={{ bottom: 'calc(52px + env(safe-area-inset-bottom))' }}
+    >
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:overflow-visible sm:p-0">
+        <div className="max-w-sm mx-auto flex flex-col gap-8 pb-8">
 
       {/* ── Back ── */}
       <button
@@ -417,6 +421,8 @@ export function CreateTournamentPage() {
           </p>
         </motion.div>
 
+        </div>
+        </div>
       </div>
     </div>
   );

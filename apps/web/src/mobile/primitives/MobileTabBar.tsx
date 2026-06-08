@@ -88,7 +88,7 @@ export function MobileTabBar() {
         />
       )}
 
-      <div className="flex h-[60px] items-stretch">
+      <div className="flex h-[52px] items-stretch">
         {TABS.map((tab, i) => {
           const active = i === idx;
           const showBadge = tab.to === '/challenges' && pendingCount > 0;
