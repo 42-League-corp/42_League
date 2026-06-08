@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Swords,
   Trophy,
@@ -86,6 +86,28 @@ export function DesktopShell({ children }: DesktopShellProps) {
       <aside className="relative flex flex-col w-64 h-dvh z-20 no-select">
         {/* Fond + grille HUD */}
         <div className="absolute inset-0 bg-gradient-to-b from-bg-1 via-bg-1/95 to-bg-0 hud-grid" />
+
+        {/* Image prop du jeu actif — flotte doucement en fond de sidebar */}
+        <div className="absolute inset-x-0 bottom-0 h-[62%] flex items-end justify-center pointer-events-none overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={game}
+              src={`/universe/${game}-prop.png`}
+              alt=""
+              aria-hidden
+              draggable={false}
+              className="h-full w-auto select-none mix-blend-screen"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.18, y: [0, -10, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{
+                opacity: { duration: 0.6 },
+                y: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
+              }}
+            />
+          </AnimatePresence>
+        </div>
+
         {/* Bordure droite « tube laiton » */}
         <div className="absolute top-0 bottom-0 right-0 w-[3px] brass-pipe pointer-events-none" />
         {/* Rivet décoratif */}
