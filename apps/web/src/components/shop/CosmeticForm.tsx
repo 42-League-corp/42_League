@@ -17,12 +17,13 @@ export const BANNER_H = 512;
 // Cap d'octets côté client (le serveur revérifie) — évite les data-URL énormes.
 export const BANNER_MAX_BYTES = 700_000;
 
-export const CATEGORIES: ShopCategory[] = ['title', 'badge', 'banner'];
+export const CATEGORIES: ShopCategory[] = ['title', 'banner', 'mystery_box'];
 
 export const CATEGORY_LABEL: Record<ShopCategory, string> = {
   title: 'TITRE',
   badge: 'BADGE',
   banner: 'BANNIÈRE',
+  mystery_box: 'BOÎTE MYSTÈRE',
 };
 
 // ── Primitives partagées (langage visuel GODPage) ───────────────────────────

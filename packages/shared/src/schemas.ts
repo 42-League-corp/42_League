@@ -175,13 +175,6 @@ export const ShopItemCreateSchema = z
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
       }
     }
-    if (d.category === 'badge') {
-      const code = d.payload && typeof d.payload.code === 'string' ? d.payload.code : '';
-      const label = d.payload && typeof d.payload.label === 'string' ? d.payload.label : '';
-      if (!code || !label) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'badge : code et label requis' });
-      }
-    }
   });
 export type ShopItemCreateInput = z.infer<typeof ShopItemCreateSchema>;
 
