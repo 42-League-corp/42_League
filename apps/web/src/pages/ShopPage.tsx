@@ -11,6 +11,8 @@ import {
   Gem,
   ArrowUp,
   ArrowDown,
+  PackageOpen,
+  TrendingDown,
   type LucideIcon,
 } from 'lucide-react';
 import { Panel } from '../components/Panel';
@@ -34,11 +36,14 @@ type SortKey = 'name' | 'price' | 'rarity';
 type SortDir = 'asc' | 'desc';
 const SORT_KEYS: SortKey[] = ['name', 'price', 'rarity'];
 
-/** Catégories pour lesquelles « équiper » a du sens (titre / bannière / badge actifs). */
-const EQUIPPABLE: ShopCategory[] = ['title', 'banner', 'badge'];
+/** Catégories pour lesquelles « équiper » a du sens (titre / bannière actifs). */
+const EQUIPPABLE: ShopCategory[] = ['title', 'banner'];
 
 /** Ordre d'affichage stable des catégories dans la barre de filtres. */
-const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'badge'];
+const CATEGORY_ORDER: ShopCategory[] = ['title', 'banner', 'mystery_box'];
+
+/** Catégories masquées de la boutique (achat impossible). */
+const HIDDEN_CATS: ShopCategory[] = ['badge'];
 
 /** Nombre minimum de cases affichées : la grille est comblée par des cartes
  *  placeholder « Bientôt » pour qu'elle paraisse toujours pleine, même quand le
@@ -256,6 +261,16 @@ function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: st
           {badgeLabel}
         </span>
       )}
+
+      {item.category === 'mystery_box' && (
+        <div className="relative flex flex-col items-center gap-2">
+          <PackageOpen className="w-10 h-10 text-purple-300 drop-shadow" strokeWidth={1.6} />
+          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-red-400">
+            <TrendingDown className="w-3.5 h-3.5" strokeWidth={2.5} />
+            -10 ELO
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -389,11 +404,13 @@ export function ShopPage() {
   const catLabel = (c: ShopCategory) => t(`shop.cat.${c}`);
   const rarityLabel = (r: Rarity) => t(`shop.rarity.${r}`);
 
+  const visibleItems = items.filter((it) => !HIDDEN_CATS.includes(it.category));
+
   /** Catégories réellement présentes dans le catalogue, dans un ordre stable,
    *  pour ne proposer comme filtre que des onglets non vides. */
-  const presentCats = CATEGORY_ORDER.filter((c) => items.some((it) => it.category === c));
+  const presentCats = CATEGORY_ORDER.filter((c) => visibleItems.some((it) => it.category === c));
   const filteredItems =
-    activeCat === 'all' ? items : items.filter((it) => it.category === activeCat);
+    activeCat === 'all' ? visibleItems : visibleItems.filter((it) => it.category === activeCat);
 
   /** Tri appliqué au catalogue filtré. La comparaison se fait toujours en ordre
    *  croissant « naturel », puis on inverse selon `sortDir`. */
@@ -436,7 +453,7 @@ export function ShopPage() {
       <EarnGuide />
 
       {/* ── Barres de filtres : catégorie + tri ────────────────────────── */}
-      {!loading && items.length > 0 && (
+      {!loading && visibleItems.length > 0 && (
         <div className="space-y-2.5">
           {/* Filtres par catégorie */}
           {presentCats.length > 1 && (
@@ -568,10 +585,18 @@ export function ShopPage() {
                   <ShopItemVisual item={item} rarityHex={rk.hex} />
 
                   <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
-                    <CoinAmount
-                      value={item.price}
-                      className="font-gaming text-lg font-extrabold text-text-strong"
-                    />
+                    <div className="flex flex-col gap-0.5">
+                      <CoinAmount
+                        value={item.price}
+                        className="font-gaming text-lg font-extrabold text-text-strong"
+                      />
+                      {item.category === 'mystery_box' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-red-400 uppercase tracking-wide">
+                          <TrendingDown className="w-3 h-3" strokeWidth={2.5} />
+                          {t('shop.mysteryBox.eloPenalty')}
+                        </span>
+                      )}
+                    </div>
 
                     {isOwned ? (
                       showEquip ? (
@@ -619,7 +644,7 @@ export function ShopPage() {
             );
           })}
           {activeCat === 'all' &&
-            Array.from({ length: Math.max(0, MIN_TILES - items.length) }).map((_, i) => {
+            Array.from({ length: Math.max(0, MIN_TILES - visibleItems.length) }).map((_, i) => {
             const cat = PLACEHOLDER_CATS[i % PLACEHOLDER_CATS.length]!;
             return (
               <PlaceholderCard

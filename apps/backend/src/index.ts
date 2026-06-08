@@ -7216,9 +7216,15 @@ app.post('/shop/:id/buy', async (c) => {
     if (user.leagueCoins < item.price) {
       throw new HTTPException(400, { message: 'solde insuffisant' });
     }
+    const updateData: Parameters<typeof tx.user.update>[0]['data'] = {
+      leagueCoins: { decrement: item.price },
+    };
+    if (item.category === 'mystery_box') {
+      updateData.elo = { decrement: 10 };
+    }
     const updated = await tx.user.update({
       where: { login },
-      data: { leagueCoins: { decrement: item.price } },
+      data: updateData,
       select: { leagueCoins: true },
     });
     await tx.shopInventory.create({ data: { userLogin: login, itemId } });

@@ -216,7 +216,7 @@ export interface TeamProfile extends BabyfootTeamEntry {
 
 // ─── League Coin · Boutique ───────────────────────────────────────────────────
 
-export type ShopCategory = 'title' | 'banner' | 'badge';
+export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box'; // 'badge' conservé pour rétrocompatibilité inventaire
 
 /** Rareté d'un objet — pilote la couleur de sa carte (cf. lib/rarity.ts). */
 export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary';
