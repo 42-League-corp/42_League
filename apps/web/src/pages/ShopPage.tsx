@@ -12,8 +12,10 @@ import {
   ArrowUp,
   ArrowDown,
   PackageOpen,
+  Eye,
   type LucideIcon,
 } from 'lucide-react';
+import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
 import { Panel } from '../components/Panel';
 import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
@@ -317,6 +319,8 @@ export function ShopPage() {
   const [activeCat, setActiveCat] = useState<ShopCategory | 'all'>('all');
   const [sortKey, setSortKey] = useState<SortKey>('rarity');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  // Objet en cours de prévisualisation sur la carte de profil (modal).
+  const [preview, setPreview] = useState<ShopItemData | null>(null);
 
   /** Clic sur un critère de tri : si déjà actif, on inverse le sens ; sinon on
    *  bascule sur ce critère avec un sens par défaut (rareté/prix décroissants,
@@ -585,6 +589,20 @@ export function ShopPage() {
                       className="font-gaming text-lg font-extrabold text-text-strong"
                     />
 
+                    <div className="flex items-center gap-1.5">
+                    {/* Aperçu : uniquement pour les cosmétiques visibles sur le profil */}
+                    {EQUIPPABLE.includes(item.category) && (
+                      <button
+                        type="button"
+                        onClick={() => setPreview(item)}
+                        title={t('shop.preview.title')}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wide border border-border/60 bg-bg-1 text-muted-2 hover:text-gold hover:border-gold/40 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        <span className="hidden sm:inline">{t('shop.preview')}</span>
+                      </button>
+                    )}
+
                     {isOwned ? (
                       showEquip ? (
                         <button
@@ -625,6 +643,7 @@ export function ShopPage() {
                             : t('shop.insufficient')}
                       </button>
                     )}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -643,6 +662,11 @@ export function ShopPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Aperçu du cosmétique appliqué sur la carte de profil */}
+      {preview && me && (
+        <ProfilePreviewModal item={preview} me={me} onClose={() => setPreview(null)} />
       )}
     </div>
   );
