@@ -209,54 +209,104 @@ export function DefisMobile() {
           <section>
             <SectionHeader title={t('defis.waitingConfirm')} />
             <div className="space-y-2">
-              {pendingWaiting.map((p) => (
-                <motion.div
-                  key={p.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group"
-                >
-                  {/* Silhouette trophée à gauche */}
-                  <div className="relative flex-shrink-0 w-9 h-9 rounded-lg metal-plate flex items-center justify-center">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="w-5 h-5 text-gold/70 group-hover:text-gold transition-colors"
-                      fill="currentColor"
-                      aria-hidden
-                    >
-                      <path d="M7 4h10v2h3a1 1 0 0 1 1 1v2c0 2.2-1.8 4-4 4h-.3c-.7 1.7-2.1 3-3.7 3.4V19h3v2H8v-2h3v-2.6c-1.6-.4-3-1.7-3.7-3.4H7c-2.2 0-4-1.8-4-4V7a1 1 0 0 1 1-1h3V4Zm0 4H5v1c0 1.1.9 2 2 2V8Zm10 0v3c1.1 0 2-.9 2-2V8h-2Z" />
-                    </svg>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-muted-2 uppercase tracking-[0.12em] font-bold">
-                      {t('defis.waitingFor')}
-                    </div>
-                    <div className="font-display font-bold text-text-strong truncate text-sm tracking-wide">
-                      {p.opponentLogin}
-                    </div>
-                  </div>
-
-                  <div className="font-display tabular-nums font-black text-text-strong text-sm flex items-center gap-1">
-                    <span className={p.scoreDeclarer > p.scoreOpponent ? 'text-gold' : 'text-muted-2'}>
-                      {p.scoreDeclarer}
-                    </span>
-                    <span className="text-muted mx-0.5">–</span>
-                    <span className={p.scoreOpponent > p.scoreDeclarer ? 'text-gold' : 'text-red'}>
-                      {p.scoreOpponent}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => cancelDeclaration(p)}
-                    aria-label={t('defis.cancelDeclarationAria')}
-                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 active:scale-95 transition-colors"
+              {pendingWaiting.map((p) =>
+                p.mode === '2v2' ? (
+                  // 2v2 : on attend la validation des 3 autres — composition
+                  // complète (mon duo vs duo adverse) + avancée des confirmations.
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative card-hud px-4 py-3 text-xs hover-glow group"
                   >
-                    <X className="w-4 h-4" strokeWidth={2.5} />
-                  </button>
-                </motion.div>
-              ))}
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-[0.14em] bg-red/15 text-red border border-red/30">
+                        2 vs 2
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-display tabular-nums font-black text-text-strong text-sm flex items-center gap-1">
+                          <span className={p.scoreDeclarer > p.scoreOpponent ? 'text-gold' : 'text-muted-2'}>
+                            {p.scoreDeclarer}
+                          </span>
+                          <span className="text-muted mx-0.5">–</span>
+                          <span className={p.scoreOpponent > p.scoreDeclarer ? 'text-gold' : 'text-red'}>
+                            {p.scoreOpponent}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => cancelDeclaration(p)}
+                          aria-label={t('defis.cancelDeclarationAria')}
+                          className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 active:scale-95 transition-colors"
+                        >
+                          <X className="w-4 h-4" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] font-semibold text-text-strong text-center leading-relaxed">
+                      <span className="text-gold">
+                        {p.declarerLogin} &amp; {p.partner1Login}
+                      </span>
+                      <span className="text-muted-2"> vs </span>
+                      <span>
+                        {p.opponentLogin} &amp; {p.partner2Login}
+                      </span>
+                    </div>
+
+                    <div className="text-[9px] text-muted-2 uppercase tracking-[0.14em] font-bold text-center mt-1.5">
+                      {[p.partner1Confirmed, p.opp1Confirmed, p.opp2Confirmed].filter(Boolean).length}/3 confirmations
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group"
+                  >
+                    {/* Silhouette trophée à gauche */}
+                    <div className="relative flex-shrink-0 w-9 h-9 rounded-lg metal-plate flex items-center justify-center">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-5 h-5 text-gold/70 group-hover:text-gold transition-colors"
+                        fill="currentColor"
+                        aria-hidden
+                      >
+                        <path d="M7 4h10v2h3a1 1 0 0 1 1 1v2c0 2.2-1.8 4-4 4h-.3c-.7 1.7-2.1 3-3.7 3.4V19h3v2H8v-2h3v-2.6c-1.6-.4-3-1.7-3.7-3.4H7c-2.2 0-4-1.8-4-4V7a1 1 0 0 1 1-1h3V4Zm0 4H5v1c0 1.1.9 2 2 2V8Zm10 0v3c1.1 0 2-.9 2-2V8h-2Z" />
+                      </svg>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] text-muted-2 uppercase tracking-[0.12em] font-bold">
+                        {t('defis.waitingFor')}
+                      </div>
+                      <div className="font-display font-bold text-text-strong truncate text-sm tracking-wide">
+                        {p.opponentLogin}
+                      </div>
+                    </div>
+
+                    <div className="font-display tabular-nums font-black text-text-strong text-sm flex items-center gap-1">
+                      <span className={p.scoreDeclarer > p.scoreOpponent ? 'text-gold' : 'text-muted-2'}>
+                        {p.scoreDeclarer}
+                      </span>
+                      <span className="text-muted mx-0.5">–</span>
+                      <span className={p.scoreOpponent > p.scoreDeclarer ? 'text-gold' : 'text-red'}>
+                        {p.scoreOpponent}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => cancelDeclaration(p)}
+                      aria-label={t('defis.cancelDeclarationAria')}
+                      className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-2 hover:text-red hover:bg-red/10 active:scale-95 transition-colors"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </motion.div>
+                ),
+              )}
             </div>
           </section>
         )}
