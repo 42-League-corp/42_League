@@ -152,7 +152,6 @@ export function CreateTournamentPage() {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void submit()}
             placeholder={t('tournois.createPage.namePlaceholder')}
-            autoFocus
             maxLength={60}
             className="w-full px-4 py-4 bg-bg-1 border-2 border-border rounded-2xl text-base font-semibold focus:border-teal outline-none text-text-strong placeholder:text-muted/50 transition-all allow-select"
           />

@@ -145,29 +145,33 @@ export function HeroPlayerCard() {
         />
       )}
 
+      {/* Rank badge en haut à gauche (à l'opposé du cog). Enfant direct de la
+          carte — comme le cog — pour que `top/left` soit ancré au coin de la
+          carte et non à l'intérieur du conteneur de contenu centré (sinon le
+          badge se retrouvait mal positionné). z-20 → au-dessus des couches déco
+          ET du contenu (z-10). */}
+      {stats.rank > 0 && (
+        <motion.div
+          initial={{ scale: 0, rotate: -20 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
+          className={`absolute top-3 left-3 z-20 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
+            isTop1
+              ? 'metal-plate-gold shadow-gold-glow'
+              : isTop3
+                ? 'bg-bg-1/80 text-gold border border-gold/50 backdrop-blur'
+                : isTop10
+                  ? 'bg-bg-1/80 text-gold border border-gold/30 backdrop-blur'
+                  : 'bg-bg-1/80 text-muted-2 border border-border backdrop-blur'
+          }`}
+        >
+          {isTop1 && <Crown className="w-3 h-3" strokeWidth={2.5} />}
+          <span>#{stats.rank}</span>
+        </motion.div>
+      )}
+
       {/* CONTENU */}
       <div className="relative z-10 px-5 pt-5 pb-4 flex flex-col items-center text-center">
-        {/* Rank badge top-left (à l'opposé du cog) */}
-        {stats.rank > 0 && (
-          <motion.div
-            initial={{ scale: 0, rotate: -20 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
-            className={`absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-xs font-extrabold tabular-nums tracking-wide ${
-              isTop1
-                ? 'metal-plate-gold shadow-gold-glow'
-                : isTop3
-                  ? 'bg-bg-1/80 text-gold border border-gold/50 backdrop-blur'
-                  : isTop10
-                    ? 'bg-bg-1/80 text-gold border border-gold/30 backdrop-blur'
-                    : 'bg-bg-1/80 text-muted-2 border border-border backdrop-blur'
-            }`}
-          >
-            {isTop1 && <Crown className="w-3 h-3" strokeWidth={2.5} />}
-            <span>#{stats.rank}</span>
-          </motion.div>
-        )}
-
         {/* Avatar XL avec ring */}
         <div className="relative mb-3 mt-2">
           <div
