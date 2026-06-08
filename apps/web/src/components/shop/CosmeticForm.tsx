@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { UploadCloud, Gem } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { UploadCloud, Gem, Crop, X } from 'lucide-react';
 import { type ShopCategory, type ShopItemData, type ShopItemInput, type ShopRarity } from '../../lib/api';
 import { BADGE_ICON_NAMES, badgeIcon } from '../../lib/badgeIcons';
 import { RARITY, RARITY_ORDER, rarityOf } from '../../lib/rarity';
@@ -10,8 +10,9 @@ import { RARITY, RARITY_ORDER, rarityOf } from '../../lib/rarity';
 // (cosmétique custom créé inline). Mêmes champs, même aperçu, mêmes validations.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Dimensions EXACTES exigées pour une bannière (fond de la carte profil). Une image
-// déposée qui ne fait pas pile cette taille est REFUSÉE (aucun recadrage).
+// Dimensions de SORTIE d'une bannière (fond de la carte profil). Une image déposée
+// qui ne fait pas pile cette taille n'est plus refusée : on ouvre un recadreur
+// (zoom + déplacement) qui produit exactement BANNER_W×BANNER_H.
 export const BANNER_W = 1024;
 export const BANNER_H = 512;
 // Cap d'octets côté client (le serveur revérifie) — évite les data-URL énormes.
@@ -175,11 +176,191 @@ export function buildInput(f: FormState): ShopItemInput {
   };
 }
 
-// ── Dropzone bannière (taille EXACTE obligatoire) ────────────────────────────
+// ── Recadreur bannière (zoom + déplacement → sortie BANNER_W×BANNER_H) ────────
+
+// Cap large pour le fichier source lu en mémoire (la sortie est recompressée
+// ensuite sous BANNER_MAX_BYTES). Évite de charger des fichiers démesurés.
+const BANNER_SRC_MAX_BYTES = 30_000_000;
+
+/**
+ * Modal de recadrage : l'admin déplace (drag) et zoome l'image source dans un
+ * cadre 2:1 ; on exporte la portion visible en JPEG BANNER_W×BANNER_H, en
+ * baissant la qualité jusqu'à passer sous le cap d'octets.
+ */
+function BannerCropper({ src, onCancel, onConfirm }: { src: string; onCancel: () => void; onConfirm: (dataUrl: string) => void }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const imgElRef = useRef<HTMLImageElement | null>(null);
+  const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  const [frameW, setFrameW] = useState(0);
+  const [zoom, setZoom] = useState(1); // multiplicateur au-dessus du scale "cover"
+  const [offset, setOffset] = useState({ x: 0, y: 0 }); // px affichés (coin haut-gauche image vs cadre)
+  const [err, setErr] = useState('');
+
+  // Mesure la largeur réelle du cadre (l'aspect-ratio fixe la hauteur).
+  useEffect(() => {
+    const measure = () => setFrameW(frameRef.current?.clientWidth ?? 0);
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  // Charge l'image source pour connaître sa taille naturelle.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      imgElRef.current = img;
+      setNat({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => setErr('Image illisible.');
+    img.src = src;
+  }, [src]);
+
+  const frameH = frameW / 2; // cadre 2:1
+  const baseScale = nat && frameW ? Math.max(frameW / nat.w, frameH / nat.h) : 1; // "cover"
+  const scale = baseScale * zoom;
+  const dispW = nat ? nat.w * scale : 0;
+  const dispH = nat ? nat.h * scale : 0;
+
+  // Contraint l'offset pour que l'image couvre toujours tout le cadre.
+  const clamp = useCallback(
+    (o: { x: number; y: number }) => ({
+      x: Math.min(0, Math.max(frameW - dispW, o.x)),
+      y: Math.min(0, Math.max(frameH - dispH, o.y)),
+    }),
+    [frameW, frameH, dispW, dispH],
+  );
+
+  // Recentre à l'ouverture / au resize (réinitialise aussi le zoom).
+  useEffect(() => {
+    if (!nat || !frameW) return;
+    const bs = Math.max(frameW / nat.w, frameH / nat.h);
+    setOffset({ x: (frameW - nat.w * bs) / 2, y: (frameH - nat.h * bs) / 2 });
+    setZoom(1);
+  }, [nat, frameW, frameH]);
+
+  // Reclamp dès que le zoom change (l'image grandit/rétrécit).
+  useEffect(() => {
+    setOffset((o) => clamp(o));
+  }, [clamp]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { px: e.clientX, py: e.clientY, ox: offset.x, oy: offset.y };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    setOffset(clamp({ x: d.ox + (e.clientX - d.px), y: d.oy + (e.clientY - d.py) }));
+  };
+  const endDrag = () => {
+    dragRef.current = null;
+  };
+
+  const handleConfirm = () => {
+    const img = imgElRef.current;
+    if (!img || !nat || !frameW) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = BANNER_W;
+    canvas.height = BANNER_H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setErr('Canvas indisponible.');
+      return;
+    }
+    const k = BANNER_W / frameW; // px cadre → px canvas
+    ctx.drawImage(img, offset.x * k, offset.y * k, dispW * k, dispH * k);
+    // Export sous le cap d'octets : JPEG à qualité dégressive.
+    let q = 0.92;
+    let out = canvas.toDataURL('image/jpeg', q);
+    while (out.length > BANNER_MAX_BYTES && q > 0.4) {
+      q -= 0.12;
+      out = canvas.toDataURL('image/jpeg', q);
+    }
+    if (out.length > BANNER_MAX_BYTES) {
+      setErr('Image trop lourde même après compression — réduis le zoom ou choisis une autre image.');
+      return;
+    }
+    onConfirm(out);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" onClick={onCancel}>
+      <div
+        className="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 p-4 flex flex-col gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-mono uppercase tracking-widest text-zinc-300">Recadrer la bannière</span>
+          <button type="button" onClick={onCancel} className="text-zinc-500 hover:text-zinc-200">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div
+          ref={frameRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className="relative w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 select-none touch-none cursor-grab active:cursor-grabbing"
+          style={{ aspectRatio: `${BANNER_W} / ${BANNER_H}` }}
+        >
+          {nat && (
+            <img
+              src={src}
+              alt=""
+              draggable={false}
+              style={{ position: 'absolute', left: offset.x, top: offset.y, width: dispW, height: dispH, maxWidth: 'none' }}
+            />
+          )}
+        </div>
+
+        <label className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+          Zoom
+          <input
+            type="range"
+            min={1}
+            max={4}
+            step={0.01}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="flex-1 accent-violet-400"
+          />
+        </label>
+
+        <span className="text-[10px] text-zinc-600 font-mono">
+          Glisse pour déplacer, le curseur pour zoomer. Sortie {BANNER_W}×{BANNER_H}px.
+        </span>
+        {err && <div className="text-xs text-red-400 font-mono">{err}</div>}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded px-3 py-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 border border-zinc-700"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="rounded px-3 py-1.5 text-xs font-mono text-white bg-violet-600 hover:bg-violet-500"
+          >
+            Valider le recadrage
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Dropzone bannière (recadrage si la taille ne tombe pas pile) ──────────────
 
 export function BannerDropzone({ value, onChange }: { value: string; onChange: (dataUrl: string) => void }) {
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [cropSrc, setCropSrc] = useState(''); // source en cours de recadrage (ouvre le modal)
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
@@ -189,22 +370,22 @@ export function BannerDropzone({ value, onChange }: { value: string; onChange: (
         setError('Fichier non-image refusé.');
         return;
       }
+      if (file.size > BANNER_SRC_MAX_BYTES) {
+        setError(`Fichier trop lourd (max ~${Math.round(BANNER_SRC_MAX_BYTES / 1_000_000)} Mo).`);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-        if (dataUrl.length > BANNER_MAX_BYTES) {
-          setError(`Image trop lourde (max ~${Math.round(BANNER_MAX_BYTES / 1000)} Ko).`);
-          return;
-        }
         const img = new Image();
         img.onload = () => {
-          if (img.naturalWidth !== BANNER_W || img.naturalHeight !== BANNER_H) {
-            setError(
-              `Image refusée : doit faire exactement ${BANNER_W}×${BANNER_H}px (reçu ${img.naturalWidth}×${img.naturalHeight}).`,
-            );
+          // Taille pile bonne ET pas trop lourde → on garde l'image telle quelle.
+          if (img.naturalWidth === BANNER_W && img.naturalHeight === BANNER_H && dataUrl.length <= BANNER_MAX_BYTES) {
+            onChange(dataUrl);
             return;
           }
-          onChange(dataUrl);
+          // Sinon (trop grande, mauvais ratio, trop lourde) → recadrage.
+          setCropSrc(dataUrl);
         };
         img.onerror = () => setError('Image illisible.');
         img.src = dataUrl;
@@ -236,9 +417,11 @@ export function BannerDropzone({ value, onChange }: { value: string; onChange: (
       >
         <UploadCloud className="w-6 h-6 text-zinc-400" />
         <span className="text-xs text-zinc-400 font-mono text-center">
-          Glisse une image <span className="text-zinc-200">{BANNER_W}×{BANNER_H}px</span> ou clique pour choisir
+          Glisse une image (toute taille) ou clique pour choisir
         </span>
-        <span className="text-[10px] text-zinc-600 font-mono">Taille exacte obligatoire — sinon refusée.</span>
+        <span className="text-[10px] text-zinc-600 font-mono">
+          Si elle ne fait pas {BANNER_W}×{BANNER_H}px, tu pourras la recadrer.
+        </span>
         <input
           ref={inputRef}
           type="file"
@@ -252,7 +435,29 @@ export function BannerDropzone({ value, onChange }: { value: string; onChange: (
         />
       </div>
       {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
-      {value && <div className="text-[10px] text-emerald-400 font-mono">✓ Image valide ({BANNER_W}×{BANNER_H}).</div>}
+      {value && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-emerald-400 font-mono">✓ Image prête ({BANNER_W}×{BANNER_H}).</span>
+          <button
+            type="button"
+            onClick={() => setCropSrc(value)}
+            className="inline-flex items-center gap-1 text-[10px] font-mono text-violet-300 hover:text-violet-200"
+          >
+            <Crop className="w-3 h-3" />
+            Recadrer
+          </button>
+        </div>
+      )}
+      {cropSrc && (
+        <BannerCropper
+          src={cropSrc}
+          onCancel={() => setCropSrc('')}
+          onConfirm={(dataUrl) => {
+            onChange(dataUrl);
+            setCropSrc('');
+          }}
+        />
+      )}
     </div>
   );
 }
