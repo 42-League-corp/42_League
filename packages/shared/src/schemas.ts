@@ -155,7 +155,7 @@ export const ShopItemCreateSchema = z
   .object({
     name: z.string().trim().min(1),
     description: z.string().nullish(),
-    category: z.enum(['title', 'banner', 'badge']),
+    category: z.enum(['title', 'banner', 'badge', 'consumable']),
     color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'couleur invalide (format #rrggbb)')
@@ -173,6 +173,12 @@ export const ShopItemCreateSchema = z
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
       } else if (img.length > MAX_BANNER_DATAURL_LEN) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+      }
+    }
+    if (d.category === 'consumable') {
+      const kind = d.payload && typeof d.payload.kind === 'string' ? d.payload.kind : '';
+      if (kind !== 'anti_ops' && kind !== 'elo_mult') {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind doit être 'anti_ops' ou 'elo_mult'" });
       }
     }
   });
