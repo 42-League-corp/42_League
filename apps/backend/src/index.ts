@@ -1501,24 +1501,28 @@ app.get('/teams/leaderboard', async (c) => {
       matchesAsTeamB: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
     },
   });
-  const enriched = teams.map((t) => {
-    const wins =
-      t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
-      t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
-    const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
-    return {
-      id: t.id,
-      player1Login: t.player1Login,
-      player2Login: t.player2Login,
-      elo: t.elo,
-      name: t.name,
-      createdAt: t.createdAt,
-      wins,
-      losses: total - wins,
-      player1ImageUrl: t.player1.imageUrl,
-      player2ImageUrl: t.player2.imageUrl,
-    };
-  });
+  const enriched = teams
+    .map((t) => {
+      const wins =
+        t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
+        t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
+      const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
+      return {
+        id: t.id,
+        player1Login: t.player1Login,
+        player2Login: t.player2Login,
+        elo: t.elo,
+        name: t.name,
+        createdAt: t.createdAt,
+        wins,
+        losses: total - wins,
+        player1ImageUrl: t.player1.imageUrl,
+        player2ImageUrl: t.player2.imageUrl,
+      };
+    })
+    // Exclut les duos sans aucun match validé (créés à la déclaration, pas encore
+    // joués) — ils ne polluent pas le classement tant qu'ils n'ont rien disputé.
+    .filter((t) => t.wins + t.losses > 0);
   enriched.sort((a, b) => b.elo - a.elo);
   return c.json(enriched.map((t, i) => ({ rank: i + 1, ...t })));
 });
@@ -2279,18 +2283,38 @@ app.post('/matches/2v2', async (c) => {
     refId: pending.id,
   });
 
-  // Aperçu de l'équipe du déclarant (le duo n'est créé qu'à la validation).
+  // Équipe du déclarant : matérialisée DÈS la déclaration — le duo existe
+  // immédiatement (page d'équipe nommable tout de suite, célébration « nouveau
+  // duo » fiable). Le duo adverse, lui, n'est créé qu'à la validation (settle).
+  // L'ELO et les stats d'équipe ne comptent que les matchs VALIDÉS : une équipe
+  // fraîchement créée reste hors classement tant qu'elle n'a pas joué (cf. le
+  // filtre sur /teams/leaderboard).
   const [tp1, tp2] = canonicalTeamLogins(me, partnerLogin);
   const existingTeam = await prisma.babyfootTeam.findUnique({
     where: { player1Login_player2Login: { player1Login: tp1, player2Login: tp2 } },
-    select: { id: true },
+    select: { id: true, elo: true },
   });
+  let myTeam = existingTeam;
+  if (!myTeam) {
+    const [meUser, partnerUser] = await Promise.all([
+      prisma.user.findUniqueOrThrow({ where: { login: me } }),
+      prisma.user.findUniqueOrThrow({ where: { login: partnerLogin } }),
+    ]);
+    myTeam = await upsertBabyfootTeam(
+      prisma,
+      me,
+      readElo(meUser, 'babyfoot'),
+      partnerLogin,
+      readElo(partnerUser, 'babyfoot'),
+    );
+  }
   return c.json(
     {
       id: pending.id,
       status: 'pending',
-      myTeamId: existingTeam?.id ?? '',
+      myTeamId: myTeam.id,
       myTeamIsNew: !existingTeam,
+      myTeamElo: myTeam.elo,
     },
     201,
   );
