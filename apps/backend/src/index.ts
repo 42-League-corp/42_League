@@ -856,14 +856,14 @@ if (process.env.NODE_ENV !== 'test') {
   // Le plafond compte TOUT (GET inclus), or un seul refresh = ~12 requêtes
   // parallèles (/me + 11 domaines), +3 à chaque switch de jeu, + pollers/SSE :
   // 120/min se vidait en quelques refreshs et verrouillait l'app entière pendant
-  // 60 s. 600/min laisse respirer un usage humain intense (refreshs, plusieurs
-  // matchs par heure, navigation) tout en stoppant un vrai flood (script/DoS).
+  // 60 s. 12 000/min (plafond très large) laisse passer tout usage humain, même
+  // intense/multi-onglets, et ne sert plus que de garde-fou anti-flood (script/DoS).
   // L'escalade reste sur l'auth (brute-force) et les écritures (spam de mutations).
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600, key: bySubject, progressive: false, skip: orAdmin() }));
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 12_000, key: bySubject, progressive: false, skip: orAdmin() }));
 
   // Auth : protège l'échange OAuth contre le brute-force. Pré-auth → clé par IP.
   app.use('/auth/*', rateLimit({
-    name: 'auth', windowMs: 15 * 60_000, max: 50,
+    name: 'auth', windowMs: 15 * 60_000, max: 1000,
     skip: (c) => c.req.path === '/auth/stream-token',
   }));
 
@@ -874,21 +874,21 @@ if (process.env.NODE_ENV !== 'test') {
   // avec pénalité progressive si on le pulvérise. Par joueur (sinon le quota
   // serait partagé par tout le campus derrière le NAT). Admins exemptés.
   // NB : `/matches` couvre TOUS les 1v1 (babyfoot/smash/chess/sf) → plafond large.
-  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 3600_000, max: 40, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 3600_000, max: 800, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
   // `/matches` est un matcher EXACT → ne couvre pas `/matches/ffa`. Quota dédié à
   // la déclaration FFA (la liste GET est exemptée via `!isMutation`).
-  app.use('/matches/ffa', rateLimit({ name: 'ffa-declare',       windowMs: 3600_000, max: 40, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 3600_000, max: 30, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 3600_000, max: 15, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/matches/ffa', rateLimit({ name: 'ffa-declare',       windowMs: 3600_000, max: 800, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 3600_000, max: 600, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 3600_000, max: 300, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
 
   // Écriture générale (mutations restantes), par joueur. Admins exemptés.
-  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 60, key: bySubject, skip: orAdmin((c) => !isMutation(c)) });
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 1200, key: bySubject, skip: orAdmin((c) => !isMutation(c)) });
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
   // Télémétrie d'usage : envois groupés et peu fréquents (cf. lib/analytics côté web),
   // mais on borne quand même les abus. Les admins sont exemptés (tests).
-  app.use('/analytics/*', rateLimit({ name: 'analytics', windowMs: 60_000, max: 60, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/analytics/*', rateLimit({ name: 'analytics', windowMs: 60_000, max: 1200, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
 }
 
 // =========================================================================
