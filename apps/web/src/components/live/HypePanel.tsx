@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { PanelTitle } from './StandingsPanel';
+import { PanelTitle } from './LivePanel';
 import type { LiveTournament } from '../../lib/api';
 import { teamLabelOf, type TightMatch } from '../../lib/liveTournament';
 

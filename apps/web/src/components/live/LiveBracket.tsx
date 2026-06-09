@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Avatar } from '../Avatar';
-import { PanelTitle } from './StandingsPanel';
+import { PanelTitle } from './LivePanel';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
 import { avatarMap } from '../../lib/liveTournament';
 
