@@ -73,6 +73,24 @@ export async function logAdminAction(c: Context, params: LogParams): Promise<voi
   });
 }
 
+/**
+ * Notifie Discord d'une erreur client (page TV live notamment) en fire-and-forget.
+ * Réutilise le webhook d'audit. Ignoré en staging (canal réel) et si pas de webhook.
+ * Le texte est tronqué et ne doit contenir AUCUNE donnée personnelle (l'appelant
+ * passe un message déjà assaini). Toute erreur d'envoi est avalée.
+ */
+export async function notifyClientError(text: string): Promise<void> {
+  if (process.env.APP_ENV === 'staging') return;
+  const url = process.env.DISCORD_AUDIT_WEBHOOK_URL;
+  if (!url) return;
+  const content = `🐞 **client-error** — ${text}`.slice(0, 1800);
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+  });
+}
+
 async function notifyDiscord(action: AdminAction): Promise<void> {
   // En staging, on ne notifie pas Discord : les admins testent des actions
   // fictives et les notifications pollueraient le canal de sécurité réel.
