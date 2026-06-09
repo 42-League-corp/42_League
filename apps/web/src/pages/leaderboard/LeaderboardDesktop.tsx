@@ -425,7 +425,7 @@ export function LeaderboardDesktop() {
     <div>
       {!viewingPast && <LeaderboardBanner />}
 
-      {top3.length === 3 && (
+      {activeTab !== 'teams' && top3.length === 3 && (
         <DesktopPodium top3={top3} statsByLogin={podiumStats} past={viewingPast} />
       )}
 

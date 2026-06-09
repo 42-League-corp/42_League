@@ -986,7 +986,9 @@ function LeagueMatrix({
   t: (k: string) => string;
 }) {
   if (teams.length < 2) return null;
-  const short = (login: string) => login.slice(0, 5);
+  // Libellé d'équipe abrégé : les deux membres (capitaine & binôme) tronqués,
+  // joints par « & » — en 2v2 on voit les deux joueurs, pas juste le capitaine.
+  const short = (tm: LeagueTeam) => tm.members.map((m) => m.slice(0, 5)).join(' & ');
   const fmt = (m: TournamentMatch | undefined, rowCap: string) => {
     if (!m) return null;
     if (m.scoreA == null || m.scoreB == null) return { text: '·', tone: 'pending' as const };
@@ -1003,17 +1005,26 @@ function LeagueMatrix({
             <tr>
               <th className="p-1" />
               {teams.map((tm) => (
-                <th key={tm.captain} className="p-1 font-mono text-muted-2 font-semibold">{short(tm.captain)}</th>
+                <th key={tm.captain} className="p-1 font-mono text-muted-2 font-semibold whitespace-nowrap">{short(tm)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {teams.map((row) => (
               <tr key={row.captain}>
-                <th className="p-1 font-mono text-muted-2 font-semibold text-right whitespace-nowrap">{short(row.captain)}</th>
+                <th className="p-1 font-mono text-muted-2 font-semibold text-right whitespace-nowrap">{short(row)}</th>
                 {teams.map((col) => {
+                  // Match impossible : une équipe ne peut pas s'affronter elle-même
+                  // (diagonale) → croix rouge.
                   if (row.captain === col.captain) {
-                    return <td key={col.captain} className="bg-bg-2/60 border border-border/30 w-10 h-9" />;
+                    return (
+                      <td
+                        key={col.captain}
+                        className="bg-bg-2/60 border border-border/30 w-10 h-9 text-center align-middle text-red/50 font-bold"
+                      >
+                        ✗
+                      </td>
+                    );
                   }
                   const ms = matches.filter(
                     (m) =>
@@ -1024,11 +1035,17 @@ function LeagueMatrix({
                   const retour = ms.find((m) => (m.poolIndex ?? 0) === 1);
                   const a = fmt(aller, row.captain);
                   const r = fmt(retour, row.captain);
+                  // Match « fait » : toutes les manches programmées entre ces deux
+                  // équipes ont un score → tick vert en coin de cellule.
+                  const done = ms.length > 0 && ms.every((m) => m.scoreA != null && m.scoreB != null);
                   return (
                     <td
                       key={col.captain}
-                      className={`w-10 h-9 text-center border border-border/30 ${aller ? '' : 'bg-amber-500/[0.07]'}`}
+                      className={`relative w-10 h-9 text-center border border-border/30 ${aller ? '' : 'bg-amber-500/[0.07]'}`}
                     >
+                      {done && (
+                        <span className="absolute top-0 right-0.5 text-[#7fd66e] text-[8px] leading-none">✓</span>
+                      )}
                       <div className="flex flex-col leading-tight">
                         <span className={matrixTone(a?.tone)}>{a?.text ?? '·'}</span>
                         {retour && <span className={matrixTone(r?.tone)}>{r?.text ?? '·'}</span>}
@@ -1492,6 +1509,23 @@ function BracketMatch({
 
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
   const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
+  // Un match 2v2 oppose des ÉQUIPES, mais le match ne porte que le login du
+  // capitaine. On retrouve le binôme depuis les entrées pour afficher les DEUX
+  // membres (lignes du match + saisie de score).
+  const teamOf = (login: string | null): MatchTeam | null => {
+    if (!login) return null;
+    const e = (tournament.entries ?? []).find((en) => en.login === login);
+    return {
+      captain: login,
+      captainImageUrl: e?.user?.imageUrl ?? null,
+      partner: e?.partnerLogin ?? null,
+      partnerImageUrl: e?.partner?.imageUrl ?? null,
+    };
+  };
+  const teamA = teamOf(match.playerALogin);
+  const teamB = teamOf(match.playerBLogin);
+  const labelA = teamLabel(teamA, t('tournois.match.playerA'));
+  const labelB = teamLabel(teamB, t('tournois.match.playerB'));
   const iAmIn = !!(myLogin && (match.playerALogin === myLogin || match.playerBLogin === myLogin));
   const recorded = match.recordedByLogin != null && match.scoreA != null && match.scoreB != null;
   const iRecorded = recorded && match.recordedByLogin === myLogin;
@@ -1630,8 +1664,8 @@ function BracketMatch({
         match.confirmedAt ? 'border-teal/40' : 'border-border'
       }`}
     >
-      <PlayerRow login={match.playerALogin} score={match.scoreA} winner={winnerA} />
-      <PlayerRow login={match.playerBLogin} score={match.scoreB} winner={winnerB} />
+      <PlayerRow team={teamA} score={match.scoreA} winner={winnerA} />
+      <PlayerRow team={teamB} score={match.scoreB} winner={winnerB} />
 
       {/* ── Pile-ou-face partagé ──
           Le LANCER (rotation + annonce du gagnant) s'affiche EN GRAND, centré sur
@@ -1689,8 +1723,9 @@ function BracketMatch({
 
       {canRecord && recording && (
         <RecordBracketForm
-          match={match}
           game={tournament.game ?? 'babyfoot'}
+          labelA={labelA}
+          labelB={labelB}
           onSubmit={handleRecordSubmit}
           onCancel={() => setRecording(false)}
         />
@@ -1718,8 +1753,9 @@ function BracketMatch({
       {canEditConfirmed && (
         editing ? (
           <RecordBracketForm
-            match={match}
             game={tournament.game ?? 'babyfoot'}
+            labelA={labelA}
+            labelB={labelB}
             onSubmit={handleEditSubmit}
             onCancel={() => setEditing(false)}
           />
@@ -1737,12 +1773,26 @@ function BracketMatch({
   );
 }
 
+// Une équipe vue depuis un match : capitaine + coéquipier éventuel (avec PP).
+type MatchTeam = {
+  captain: string;
+  captainImageUrl: string | null;
+  partner: string | null;
+  partnerImageUrl: string | null;
+};
+
+// Libellé texte d'une équipe (capitaine + binôme), pour les boutons de saisie.
+function teamLabel(team: MatchTeam | null, fallback: string): string {
+  if (!team) return fallback;
+  return team.partner ? `${team.captain} + ${team.partner}` : team.captain;
+}
+
 function PlayerRow({
-  login,
+  team,
   score,
   winner,
 }: {
-  login: string | null;
+  team: MatchTeam | null;
   score: number | null;
   winner: boolean;
 }) {
@@ -1752,11 +1802,19 @@ function PlayerRow({
         winner ? 'text-text-strong font-bold' : 'text-text'
       }`}
     >
-      {login ? (
-        <PlayerLink login={login} className="text-sm truncate min-w-0">
-          <Avatar login={login} imageUrl={null} size="xs" />
-          <span className="truncate">{login}</span>
-        </PlayerLink>
+      {team ? (
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <PlayerLink login={team.captain} className="text-sm truncate min-w-0">
+            <Avatar login={team.captain} imageUrl={team.captainImageUrl} size="xs" />
+            <span className="truncate">{team.captain}</span>
+          </PlayerLink>
+          {team.partner && (
+            <PlayerLink login={team.partner} className="text-xs text-muted-2 truncate min-w-0">
+              <Avatar login={team.partner} imageUrl={team.partnerImageUrl} size="xs" />
+              <span className="truncate">{team.partner}</span>
+            </PlayerLink>
+          )}
+        </div>
       ) : (
         <span className="text-sm text-muted">?</span>
       )}
@@ -1768,13 +1826,16 @@ function PlayerRow({
 }
 
 function RecordBracketForm({
-  match,
   game,
+  labelA,
+  labelB,
   onSubmit,
   onCancel,
 }: {
-  match: TournamentMatch;
   game: Game;
+  // Libellés d'équipe (capitaine + binôme en 2v2), affichés au lieu du seul login.
+  labelA: string;
+  labelB: string;
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -1804,10 +1865,10 @@ function RecordBracketForm({
         <div className="text-xs text-muted text-center">{t('tournois.match.whoWon')}</div>
         <div className="grid grid-cols-2 gap-2">
           <OutcomeButton kind="win" onClick={() => pick('a')}>
-            {match.playerALogin ?? t('tournois.match.playerA')}
+            {labelA}
           </OutcomeButton>
           <OutcomeButton kind="win" onClick={() => pick('b')}>
-            {match.playerBLogin ?? t('tournois.match.playerB')}
+            {labelB}
           </OutcomeButton>
         </div>
         <Button size="sm" variant="ghost" onClick={onCancel} className="w-full">{t('tournois.match.cancel')}</Button>
@@ -1815,8 +1876,7 @@ function RecordBracketForm({
     );
   }
 
-  const loserLabel =
-    winner === 'a' ? (match.playerBLogin ?? t('tournois.match.playerB')) : (match.playerALogin ?? t('tournois.match.playerA'));
+  const loserLabel = winner === 'a' ? labelB : labelA;
 
   // Set (Smash / Street Fighter) : score du set en games (vainqueur 2 ou 3, perdant strictement moins).
   if (game === 'smash' || game === 'streetfighter') {

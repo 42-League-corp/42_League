@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Swords } from 'lucide-react';
 import { StaggerList, StaggerItem } from '../../mobile/motion/StaggerList';
 import { PlayerLink } from '../../components/PlayerLink';
+import { TeamPodium } from './TeamPodium';
 import { api, type BabyfootTeamEntry, type LeaderboardEntry } from '../../lib/api';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
@@ -195,13 +196,22 @@ export function TeamLeaderboard() {
     return <EmptyTeams />;
   }
 
+  // Top 3 → podium « duo », le reste (rang 4+) → liste.
+  const podium = enriched.slice(0, 3);
+  const rest = enriched.slice(3);
+
   return (
-    <StaggerList className="space-y-2" stagger={0.04}>
-      {enriched.map((entry, idx) => (
-        <StaggerItem key={entry.id}>
-          <TeamCard entry={entry} isTop={idx < 3} />
-        </StaggerItem>
-      ))}
-    </StaggerList>
+    <div>
+      <TeamPodium top3={podium} />
+      {rest.length > 0 && (
+        <StaggerList className="space-y-2" stagger={0.04}>
+          {rest.map((entry) => (
+            <StaggerItem key={entry.id}>
+              <TeamCard entry={entry} isTop={false} />
+            </StaggerItem>
+          ))}
+        </StaggerList>
+      )}
+    </div>
   );
 }

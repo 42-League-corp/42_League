@@ -5,12 +5,14 @@ import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useEloBoostRemaining } from '../../components/EloBoost';
 import { SectionHeader } from './shared/SectionHeader';
+import { getGame, type Game } from '../../lib/gameMode';
+import { GAMES, GAME_META } from '../../lib/gameMeta';
 
 /**
  * Inventaire des consommables du joueur (profil). Affiche le stock, le cap mensuel
  * et un bouton « utiliser » par type, avec gestion du cooldown (anti-OPS) et de
  * l'état « armé » (multiplicateur d'ELO). La « Main du Destin » (force_duel) ouvre
- * un sélecteur de deux joueurs à opposer plutôt qu'un effet immédiat.
+ * un sélecteur de deux joueurs + une discipline à imposer plutôt qu'un effet immédiat.
  */
 const META: Record<ConsumableKind, { label: string; desc: string; Icon: ComponentType<LucideProps>; color: string }> = {
   anti_ops: {
@@ -27,7 +29,7 @@ const META: Record<ConsumableKind, { label: string; desc: string; Icon: Componen
   },
   force_duel: {
     label: 'Main du Destin',
-    desc: 'Désigne deux joueurs et force-les à un duel babyfoot inéluctable.',
+    desc: 'Désigne deux joueurs et la discipline, et force-les à un duel inéluctable.',
     Icon: Swords,
     color: '#b07bff',
   },
@@ -55,8 +57,9 @@ export function InventoryPanel() {
   const { refresh, leaderboard, me } = useLeagueData();
   const [data, setData] = useState<ConsumablesResponse | null>(null);
   const [busy, setBusy] = useState<ConsumableKind | null>(null);
-  // Sélecteur « Main du Destin » : null = fermé, sinon les deux logins en cours.
-  const [duelPicker, setDuelPicker] = useState<{ p1: string; p2: string } | null>(null);
+  // Sélecteur « Main du Destin » : null = fermé, sinon les deux logins + la
+  // discipline imposée en cours de saisie.
+  const [duelPicker, setDuelPicker] = useState<{ p1: string; p2: string; game: Game } | null>(null);
   // Fenêtre de boost « EN FEU » en cours (décompte vivant) pour le multiplicateur d'ELO.
   const boost = useEloBoostRemaining(data?.eloMultUntil ?? null);
 
@@ -97,15 +100,15 @@ export function InventoryPanel() {
 
   const launchDuel = useCallback(async () => {
     if (!duelPicker) return;
-    const { p1, p2 } = duelPicker;
+    const { p1, p2, game } = duelPicker;
     if (!p1 || !p2 || p1 === p2) {
       show('Choisis deux joueurs différents.', 'error');
       return;
     }
     setBusy('force_duel');
     try {
-      await api.useConsumable('force_duel', { player1: p1, player2: p2 });
-      show(`Le destin a parlé : @${p1} vs @${p2} en babyfoot.`);
+      await api.useConsumable('force_duel', { player1: p1, player2: p2, game });
+      show(`Le destin a parlé : @${p1} vs @${p2} en ${GAME_META[game].label}.`);
       setDuelPicker(null);
       await load();
       void refresh();
@@ -168,7 +171,7 @@ export function InventoryPanel() {
                 type="button"
                 disabled={disabled}
                 onClick={() =>
-                  c.kind === 'force_duel' ? setDuelPicker({ p1: '', p2: '' }) : void use(c.kind)
+                  c.kind === 'force_duel' ? setDuelPicker({ p1: '', p2: '', game: getGame() }) : void use(c.kind)
                 }
                 className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-all disabled:opacity-40 ${
                   disabled ? 'bg-bg-1 border border-border/60 text-muted' : 'text-bg-0'
@@ -210,8 +213,40 @@ export function InventoryPanel() {
               </button>
             </div>
             <p className="text-[11px] text-muted-2 leading-snug mb-4">
-              Désigne deux joueurs : un duel babyfoot inéluctable apparaîtra dans leurs défis. Ils ne pourront pas le refuser.
+              Désigne deux joueurs et la discipline : un duel inéluctable apparaîtra dans leurs défis. Ils ne pourront pas le refuser.
             </p>
+            <div className="mb-3">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wide">Discipline</span>
+              <div className="mt-1 grid grid-cols-5 gap-1.5">
+                {GAMES.map((g) => {
+                  const gm = GAME_META[g];
+                  const on = duelPicker.game === g;
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setDuelPicker((d) => (d ? { ...d, game: g } : d))}
+                      title={gm.label}
+                      aria-pressed={on}
+                      className="flex flex-col items-center gap-1 rounded-lg border px-1 py-2 transition-all"
+                      style={{
+                        borderColor: on ? gm.color : 'rgba(255,255,255,0.10)',
+                        background: on ? gm.bgColor : 'transparent',
+                        boxShadow: on ? `0 0 0 1px ${gm.color}55` : undefined,
+                      }}
+                    >
+                      <span style={{ color: gm.color }}>{gm.icon(on, 22)}</span>
+                      <span
+                        className="text-[9px] font-bold leading-none truncate w-full text-center"
+                        style={{ color: on ? gm.color : '#7d6e54' }}
+                      >
+                        {gm.shortLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="space-y-3">
               {(['p1', 'p2'] as const).map((slot, i) => (
                 <label key={slot} className="block">

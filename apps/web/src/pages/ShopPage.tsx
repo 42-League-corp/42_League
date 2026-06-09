@@ -318,10 +318,13 @@ function PlaceholderCard({ category, label, soon }: { category: ShopCategory; la
 }
 
 /**
- * Cache mémoire (durée de vie du module) du dernier état chargé de la boutique.
- * Sert à un affichage *instantané* à la réouverture : on réhydrate l'UI depuis
- * ce snapshot puis on rafraîchit en arrière-plan (stale-while-revalidate), au
- * lieu de repartir d'un skeleton à chaque visite. Mis à jour à chaque `load()`.
+ * Cache du dernier état chargé de la boutique. Sert à un affichage *instantané*
+ * à la réouverture : on réhydrate l'UI depuis ce snapshot puis on rafraîchit en
+ * arrière-plan (stale-while-revalidate), au lieu de repartir d'un skeleton.
+ *
+ * Persisté dans `localStorage` (et pas seulement en mémoire de module) pour que
+ * l'affichage reste instantané même après un rechargement complet de la page
+ * (F5, premier rendu, navigation directe) — pas seulement entre navigations SPA.
  */
 type ShopSnapshot = {
   coins: number;
@@ -330,7 +333,29 @@ type ShopSnapshot = {
   equipped: string[];
   monthly: Record<string, { used: number; cap: number }>;
 };
-let shopCache: ShopSnapshot | null = null;
+
+const SHOP_CACHE_KEY = 'shop:snapshot:v1';
+
+/** Lit le snapshot persisté (localStorage). Tolère l'absence/corruption. */
+function readShopCache(): ShopSnapshot | null {
+  try {
+    const raw = localStorage.getItem(SHOP_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as ShopSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persiste le snapshot. Échec silencieux (quota, mode privé…). */
+function writeShopCache(snap: ShopSnapshot): void {
+  try {
+    localStorage.setItem(SHOP_CACHE_KEY, JSON.stringify(snap));
+  } catch {
+    /* non bloquant : le cache n'est qu'une optimisation d'affichage */
+  }
+}
+
+let shopCache: ShopSnapshot | null = readShopCache();
 
 export function ShopPage() {
   const t = useT();
@@ -387,6 +412,7 @@ export function ShopPage() {
         ),
       };
       shopCache = snap;
+      writeShopCache(snap);
       setCoins(snap.coins);
       setItems(snap.items);
       setOwned(new Set(snap.owned));

@@ -8047,9 +8047,10 @@ app.post('/me/inventory/:id/equip', async (c) => {
 //  - 'elo_mult' : « EN FEU ». À l'usage, ouvre une fenêtre de 6 h pendant laquelle
 //                 chaque score validé double gain ET perte d'ELO. Activation limitée
 //                 à 1 par semaine ISO. Achat empilable (cap mensuel) pour stocker.
-//  - 'force_duel' : « marionnettiste ». Désigne DEUX joueurs et les force à
-//                 s'affronter en babyfoot — un défi déjà accepté (inéluctable,
-//                 impossible à refuser) apparaît dans leurs duels. Cap 1/mois.
+//  - 'force_duel' : « marionnettiste ». Désigne DEUX joueurs + une discipline
+//                 (au choix) et les force à s'affronter — un défi déjà accepté
+//                 (inéluctable, impossible à refuser) apparaît dans leurs duels.
+//                 Cap 1/mois.
 const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel'] as const;
 type ConsumableKind = (typeof CONSUMABLE_KINDS)[number];
 function isConsumableKind(s: string): s is ConsumableKind {
@@ -8065,8 +8066,9 @@ function isEloMultActive(u: { eloMultUntil: Date | null }, now: Date = new Date(
 const ANTI_OPS_MONTHLY_CAP = 2;
 const ELO_MULT_MONTHLY_CAP = 6;
 const FORCE_DUEL_MONTHLY_CAP = 1;
-// Discipline imposée par le duel forcé (1v1 phare, le plus robuste).
-const FORCE_DUEL_GAME = 'babyfoot';
+// Discipline par défaut du duel forcé si l'instigateur n'en choisit pas (babyfoot,
+// 1v1 phare). L'instigateur peut imposer n'importe quelle discipline à l'usage.
+const FORCE_DUEL_DEFAULT_GAME = 'babyfoot';
 const ANTI_OPS_USE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 semaines entre usages
 const ANTI_OPS_SHIELD_MS = 7 * 24 * 60 * 60 * 1000; // 1 semaine sans re-ciblage
 const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
@@ -8105,7 +8107,7 @@ const CONSUMABLE_ITEMS: {
     kind: 'force_duel',
     name: 'Main du Destin',
     description:
-      'Désigne deux joueurs et force-les à s’affronter en babyfoot : un défi inéluctable apparaît dans leurs duels, impossible à refuser. 1 par mois.',
+      'Désigne deux joueurs et la discipline de ton choix, et force-les à s’affronter : un défi inéluctable apparaît dans leurs duels, impossible à refuser. 1 par mois.',
     price: 2500,
     rarity: 'epic',
   },
@@ -8171,10 +8173,12 @@ async function cancelOpsTargetingTx(
   return ops.ownerLogin;
 }
 
-// Corps du POST .../force_duel/use : les deux joueurs désignés (marionnettiste).
+// Corps du POST .../force_duel/use : les deux joueurs désignés (marionnettiste)
+// et la discipline imposée (optionnelle → babyfoot par défaut, normalisée plus bas).
 const ForceDuelUseSchema = z.object({
   player1: z.string().trim().min(1),
   player2: z.string().trim().min(1),
+  game: z.string().trim().optional(),
 });
 
 // GET /me/consumables — stock par type + cap mensuel + état du x2 armé.
@@ -8216,10 +8220,11 @@ app.post('/me/consumables/:kind/use', async (c) => {
   if (!isConsumableKind(kind)) throw new HTTPException(404, { message: 'consommable inconnu' });
   const now = new Date();
 
-  // ── Main du Destin : force deux joueurs désignés à s'affronter en babyfoot. ──
-  // Le défi est créé DÉJÀ accepté (status 'accepted') → inéluctable : ni refus ni
-  // annulation possibles (ces transitions exigent 'pending'). L'acheteur n'est pas
-  // partie au duel ; il est l'instigateur (mentionné dans les notifications).
+  // ── Main du Destin : force deux joueurs désignés à s'affronter dans la ──
+  // discipline choisie par l'instigateur (babyfoot par défaut). Le défi est créé
+  // DÉJÀ accepté (status 'accepted') → inéluctable : ni refus ni annulation
+  // possibles (ces transitions exigent 'pending'). L'acheteur n'est pas partie au
+  // duel ; il est l'instigateur (mentionné dans les notifications).
   if (kind === 'force_duel') {
     const body = await c.req.json().catch(() => null);
     const parsed = ForceDuelUseSchema.safeParse(body);
@@ -8228,6 +8233,9 @@ app.post('/me/consumables/:kind/use', async (c) => {
     if (player1 === player2) {
       throw new HTTPException(400, { message: 'choisis deux joueurs différents' });
     }
+    // Discipline imposée : normalisée sur une discipline valide (défaut babyfoot).
+    const game = parseGameId(parsed.data.game ?? FORCE_DUEL_DEFAULT_GAME);
+    const gameLabel = getGameDef(game).label;
     await assertTargetable(player1);
     await assertTargetable(player2);
 
@@ -8246,7 +8254,7 @@ app.post('/me/consumables/:kind/use', async (c) => {
           challengerLogin: player1,
           opponentLogin: player2,
           status: 'accepted',
-          game: FORCE_DUEL_GAME,
+          game,
           scheduledAt: now,
           decidedAt: now,
         },
@@ -8257,9 +8265,9 @@ app.post('/me/consumables/:kind/use', async (c) => {
     void notifyMany([player1, player2], {
       type: 'challenge_received',
       title: `La Main du Destin vous oppose`,
-      body: `@${login} vous force à un duel : @${player1} vs @${player2} en babyfoot.`,
-      link: `/challenges?game=${encodeURIComponent(FORCE_DUEL_GAME)}`,
-      game: FORCE_DUEL_GAME,
+      body: `@${login} vous force à un duel : @${player1} vs @${player2} en ${gameLabel}.`,
+      link: `/challenges?game=${encodeURIComponent(game)}`,
+      game,
       refId: challenge.id,
     });
     emit([login], { type: 'panel:update', payload: {} });

@@ -1604,7 +1604,7 @@ export const api = {
     }),
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
-  useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string }) =>
+  useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string; game?: Game }) =>
     request<{ ok: true; until?: string; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
       `/me/consumables/${encodeURIComponent(kind)}/use`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },
