@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Panel } from '../../components/Panel';
 import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { ProfileHeroCard } from './mobile/ProfileHeroCard';
+import { PlayerReactionOverlay } from '../../components/PlayerReactionOverlay';
 import { ProfilHistory } from './shared/ProfilHistory';
 import { OpsCard } from './mobile/OpsCard';
 import { MyTeamsSection } from './mobile/MyTeamsSection';
@@ -54,6 +55,10 @@ export function ProfilMobile() {
       <div key={game} className="space-y-5">
         {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
         <ProfileHeroCard stats={stats} onlineHost={myLogin ? locations.get(myLogin) : undefined} />
+
+        {/* Réaction meme contextuelle (série de défaites → « offre ton ELO ? »,
+            série de victoires → « calme-toi le sweat »). Cf. lib/playerReactions. */}
+        <PlayerReactionOverlay signals={stats} />
 
         {/* Onglets : profil · quêtes hebdo · paris */}
         <RankingScopeToggle<ProfilTab>
