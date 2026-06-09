@@ -715,10 +715,26 @@ const HARDCODED_SUPERADMINS = new Set(['abidaux', 'throbert']);
 const ROLE_WEIGHT: Record<string, number> = { USER: 0, MODERATOR: 1, ADMIN: 2, SUPERADMIN: 3 };
 type UsersSortKey = 'login' | 'role' | 'elo' | 'matches' | 'dodges' | 'trophies' | 'status' | 'campus';
 
+// Accès ELO/matchs/trophées par discipline — permet d'afficher dans la table users
+// le classement du mode sélectionné (et pas seulement le babyfoot 1v1).
+const USER_GAME_STATS: Record<Game, {
+  elo: (u: AdminUser) => number;
+  matches: (u: AdminUser) => number;
+  trophies: (u: AdminUser) => number;
+}> = {
+  babyfoot: { elo: (u) => u.elo, matches: (u) => u.matchesPlayed, trophies: (u) => u.tournamentsWon },
+  smash: { elo: (u) => u.eloSmash ?? 1000, matches: (u) => u.matchesPlayedSmash ?? 0, trophies: (u) => u.tournamentsWonSmash ?? 0 },
+  chess: { elo: (u) => u.eloChess ?? 1000, matches: (u) => u.matchesPlayedChess ?? 0, trophies: (u) => u.tournamentsWonChess ?? 0 },
+  streetfighter: { elo: (u) => u.eloSf ?? 1000, matches: (u) => u.matchesPlayedSf ?? 0, trophies: (u) => u.tournamentsWonSf ?? 0 },
+  flechettes: { elo: (u) => u.eloFlechettes ?? 1000, matches: (u) => u.matchesPlayedFlechettes ?? 0, trophies: (u) => u.tournamentsWonFlechettes ?? 0 },
+};
+
 function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  // Discipline dont on affiche l'ELO/matchs/trophées dans la table.
+  const [statGame, setStatGame] = useState<Game>('babyfoot');
   const [pending, setPending] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
   const [showReset, setShowReset] = useState(false);
@@ -755,10 +771,10 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
       switch (k) {
         case 'login': return u.login.toLowerCase();
         case 'role': return ROLE_WEIGHT[u.role] ?? 0;
-        case 'elo': return u.elo;
-        case 'matches': return u.matchesPlayed;
+        case 'elo': return USER_GAME_STATS[statGame].elo(u);
+        case 'matches': return USER_GAME_STATS[statGame].matches(u);
         case 'dodges': return u.dodgeCount;
-        case 'trophies': return u.tournamentsWon;
+        case 'trophies': return USER_GAME_STATS[statGame].trophies(u);
         case 'status': return u.bannedAt ? 1 : 0;
         case 'campus': return (u.campus ?? '').toLowerCase();
         default: return 0;
@@ -909,9 +925,21 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
 
       {confirmNode}
 
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <Input value={filter} onChange={setFilter} placeholder={t('god.users.filter')} className="w-64" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.users.count')}</span>
+        {/* Discipline affichée dans les colonnes ELO / matchs / 🏆. */}
+        <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+          <span style={{ color: GAME_META[statGame].color }}>●</span>
+          ELO du mode
+          <select
+            value={statGame}
+            onChange={(e) => setStatGame(e.target.value as Game)}
+            className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500/60"
+          >
+            {GAMES.map((g) => <option key={g} value={g}>{t(`game.${g}`)}</option>)}
+          </select>
+        </label>
       </div>
 
       <SudoBar
@@ -973,10 +1001,10 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                       </div>
                     </td>
                     <td className="py-2 px-3"><GameModeBadges user={u} /></td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{u.elo}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.matchesPlayed}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{USER_GAME_STATS[statGame].elo(u)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].matches(u)}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.dodgeCount}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.tournamentsWon}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].trophies(u)}</td>
                     <td className="py-2 px-3"><StatusBadge banned={!!u.bannedAt} /></td>
                     <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
                     <td className="py-2 px-3">

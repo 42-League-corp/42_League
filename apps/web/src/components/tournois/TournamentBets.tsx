@@ -142,6 +142,8 @@ export function TournamentBets({
     if (!isInProgress) return [] as TournamentMatch[];
     return (tournament.matches ?? []).filter((m) => {
       if (!m.playerALogin || !m.playerBLogin) return false;
+      // Pile-ou-face lancé → marché fermé (le match va commencer).
+      if (m.tossAt) return false;
       if (m.confirmedAt || m.recordedAt || m.betsLockedAt) return false;
       const players = [...teamOf(m.playerALogin), ...teamOf(m.playerBLogin)];
       return !myLogin || !players.includes(myLogin);
