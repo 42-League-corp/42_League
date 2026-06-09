@@ -19,13 +19,15 @@ import {
   upcomingDuels,
 } from '../lib/liveTournament';
 import { LiveHeader } from '../components/live/LiveHeader';
-import { StandingsPanel } from '../components/live/StandingsPanel';
+import { EnjeuxPanel } from '../components/live/EnjeuxPanel';
 import { FeaturedMatch } from '../components/live/FeaturedMatch';
 import { RecentResults } from '../components/live/RecentResults';
 import { LiveBracket } from '../components/live/LiveBracket';
 import { UpcomingDuels } from '../components/live/UpcomingDuels';
 import { HypePanel } from '../components/live/HypePanel';
 import { LiveDock } from '../components/live/LiveDock';
+import { BetsTicker } from '../components/live/BetsTicker';
+import { LiveOverlays } from '../components/live/LiveOverlays';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Écran TV plein écran de suivi live d'un tournoi. Sans scroll, tout doit tenir.
@@ -157,14 +159,17 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
       data-game={data.game ?? 'babyfoot'}
       className="fixed inset-0 bg-bg-0 text-text overflow-hidden flex flex-col font-sans select-none"
     >
+      {/* Cinématiques temps réel (pile-ou-face, écran VERSUS) déclenchées par l'admin. */}
+      <LiveOverlays data={data} />
+
       <LiveHeader tournament={data} phase={phase} />
 
       <main
         className="flex-1 grid min-h-0 gap-[1vh] p-[1vh]"
-        style={{ gridTemplateColumns: '22% 1fr 23%' }}
+        style={{ gridTemplateColumns: '23% 1fr 23%' }}
       >
-        {/* Gauche : classement général */}
-        <StandingsPanel standings={standings} tournament={data} matches={data.matches ?? []} />
+        {/* Gauche : classement au goal average + enjeux */}
+        <EnjeuxPanel standings={standings} tournament={data} matches={data.matches ?? []} />
 
         {/* Centre : match en avant + (résultats | arbre) */}
         <div className="grid min-h-0 gap-[1vh]" style={{ gridTemplateRows: '1.55fr 1fr' }}>
@@ -202,6 +207,11 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
           <HypePanel tight={tight} tournament={data} />
         </div>
       </main>
+
+      {/* Bandeau défilant de toutes les mises. */}
+      <div className="h-[5vh] shrink-0 border-t border-border/60 bg-bg-1/80">
+        <BetsTicker bets={data.bets ?? []} />
+      </div>
 
       <LiveDock tournament={data} phase={phase} />
 
