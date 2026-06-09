@@ -5418,15 +5418,18 @@ app.post('/tournaments/:id/join', async (c) => {
     if (loginEngaged(t.entries, me)) {
       throw new HTTPException(409, { message: 'already registered' });
     }
-    if (t.entries.length >= t.capacity) {
+    // Ligue : la capacité est une cible indicative, pas un plafond → on peut s'inscrire
+    // au-delà du nombre déclaré. Les autres formats (bracket/poules) restent plafonnés.
+    if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournament is full' });
     }
     await tx.tournamentEntry.create({
       data: { tournamentId: id, login: me, partnerLogin: partner },
     });
-    // Auto-start if full
+    // Auto-démarrage quand le tournoi est plein — sauf en ligue, démarrée MANUELLEMENT
+    // par l'organisateur (il compose les affiches au fil de l'eau).
     const newCount = t.entries.length + 1;
-    if (newCount === t.capacity) {
+    if (t.format !== 'league' && newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), me];
       await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
@@ -5506,12 +5509,14 @@ app.post('/tournaments/:id/add-player', async (c) => {
     if (loginEngaged(t.entries, login)) {
       throw new HTTPException(409, { message: 'joueur déjà inscrit' });
     }
-    if (t.entries.length >= t.capacity) {
+    // Ligue : pas de plafond (cible indicative) → l'orga peut ajouter au-delà du nombre déclaré.
+    if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
     await tx.tournamentEntry.create({ data: { tournamentId: id, login, partnerLogin: partner } });
+    // Ligue : pas d'auto-démarrage (lancement manuel par l'organisateur).
     const newCount = t.entries.length + 1;
-    if (newCount === t.capacity) {
+    if (t.format !== 'league' && newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), login];
       await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
@@ -5572,7 +5577,8 @@ app.post('/tournaments/:id/invite', async (c) => {
     if (t.entries.some((e) => e.login === inviteeLogin)) {
       throw new HTTPException(409, { message: 'joueur déjà inscrit' });
     }
-    if (t.entries.length >= t.capacity) {
+    // Ligue : capacité indicative, on peut inviter au-delà du nombre déclaré.
+    if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
     // Idempotent : si une invitation est déjà en attente, on la renvoie.
@@ -5628,7 +5634,8 @@ app.post('/tournaments/:id/invites/:inviteId/accept', async (c) => {
     if (t.status !== 'registration') {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
-    if (t.entries.length >= t.capacity) {
+    // Ligue : capacité indicative, l'inscription au-delà du nombre déclaré est permise.
+    if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
     if (t.entries.some((e) => e.login === me)) {
@@ -5646,8 +5653,9 @@ app.post('/tournaments/:id/invites/:inviteId/accept', async (c) => {
     });
     await tx.tournamentEntry.create({ data: { tournamentId: id, login: me } });
 
+    // Ligue : pas d'auto-démarrage (lancement manuel par l'organisateur).
     const newCount = t.entries.length + 1;
-    if (newCount === t.capacity) {
+    if (t.format !== 'league' && newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), me];
       await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
@@ -5728,8 +5736,8 @@ app.post('/tournaments/:id/start', async (c) => {
       include: { entries: true },
     });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me) {
-      throw new HTTPException(403, { message: 'only the organizer can start' });
+    if (t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: 'only the organizer or an admin can start' });
     }
     if (t.status !== 'registration') {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
@@ -7683,8 +7691,9 @@ app.post('/admin/tournaments/:id/invites/:inviteId/force-accept', async (c) => {
     }
     await tx.tournamentEntry.create({ data: { tournamentId: id, login: invite.inviteeLogin } });
 
+    // Ligue : pas d'auto-démarrage (lancement manuel par l'organisateur).
     const newCount = t.entries.length + 1;
-    if (newCount === t.capacity) {
+    if (t.format !== 'league' && newCount === t.capacity) {
       const logins = [...t.entries.map((e) => e.login), invite.inviteeLogin];
       await launchTournamentMatches(id, t.format, logins);
       await tx.tournament.update({
@@ -7926,7 +7935,8 @@ app.post('/admin/tournaments/:id/players', async (c) => {
     if (t.entries.some((e) => e.login === login)) {
       throw new HTTPException(409, { message: 'joueur déjà inscrit' });
     }
-    if (t.entries.length >= t.capacity) {
+    // Ligue : capacité indicative, inscription au-delà du nombre déclaré permise.
+    if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
     // Idempotent : invitation déjà en attente → on la renvoie ; après un refus,

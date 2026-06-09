@@ -151,6 +151,13 @@ export function TournoiDetailPage() {
   // 2v2 : je suis inscrit si je suis capitaine OU coéquipier d'une entrée.
   const iAmIn = !!tournament.entries?.some((e) => e.login === myLogin || e.partnerLogin === myLogin);
   const entriesCount = tournament.entries?.length ?? 0;
+  // Ligue : la capacité est une cible indicative — on peut inscrire au-delà du nombre
+  // déclaré et l'organisateur lance MANUELLEMENT dès 2 inscrits (pas d'auto-démarrage).
+  const isLeagueReg = tournament.format === 'league';
+  // Place encore disponible (toujours vrai en ligue : capacité non plafonnante).
+  const hasFreeSlot = isLeagueReg || entriesCount < tournament.capacity;
+  // Conditions pour afficher le bouton « Lancer » à l'organisateur.
+  const canStartNow = isLeagueReg ? entriesCount >= 2 : entriesCount === tournament.capacity;
   // Re-tirage possible tant que le 1er match n'a pas démarré : tournoi en cours,
   // aucun match désigné/joué (les byes auto-confirmés ne comptent pas).
   const anyMatchStarted = (tournament.matches ?? []).some(
@@ -270,7 +277,9 @@ export function TournoiDetailPage() {
     : tournament.format === 'league' ? t('tournois.detail.league')
     : '';
   const modeLabel = is2v2 ? ` · ${t('tournois.detail.mode2v2')}` : '';
-  const sub = `${kindLabel}${visLabel}${formatLabel}${modeLabel} · ${entriesCount}/${tournament.capacity} · ${t(STATUS_KEY[tournament.status])}`;
+  // Ligue : capacité indicative → on affiche le nombre d'inscrits, pas « X/capacité ».
+  const countLabel = isLeagueReg ? `${entriesCount} inscrit${entriesCount > 1 ? 's' : ''}` : `${entriesCount}/${tournament.capacity}`;
+  const sub = `${kindLabel}${visLabel}${formatLabel}${modeLabel} · ${countLabel} · ${t(STATUS_KEY[tournament.status])}`;
 
   const handleLeave = async () => {
     const ok = await confirm({
@@ -359,7 +368,7 @@ export function TournoiDetailPage() {
         <div className="flex items-center gap-3 text-[11px] text-muted-2 font-mono uppercase tracking-wide">
           <span>{cockpitMode}</span>
           <span className="text-border">·</span>
-          <span>{entriesCount}/{tournament.capacity}</span>
+          <span>{countLabel}</span>
           {tournament.kind === 'official' && (
             <>
               <span className="text-border">·</span>
@@ -473,7 +482,7 @@ export function TournoiDetailPage() {
             </div>
           )}
           <div className="flex flex-wrap gap-2 mb-4">
-            {!is2v2 && !iAmIn && entriesCount < tournament.capacity &&
+            {!is2v2 && !iAmIn && hasFreeSlot &&
               (!tournament.isPrivate || isOrganizer || isAdmin) && (
               <Button onClick={() => runAction(() => api.joinTournament(tournament.id), t('tournois.flash.registered'))}>
                 {t('tournois.detail.join')}
@@ -482,7 +491,7 @@ export function TournoiDetailPage() {
             {iAmIn && (
               <Button variant="ghost" onClick={handleLeave}>{t('tournois.detail.leave')}</Button>
             )}
-            {isOrganizer && entriesCount === tournament.capacity && (
+            {(isOrganizer || isAdmin) && canStartNow && (
               <Button onClick={() => runAction(() => api.startTournament(tournament.id), t('tournois.flash.started'))}>
                 {t('tournois.detail.start')}
               </Button>
@@ -493,7 +502,7 @@ export function TournoiDetailPage() {
           </div>
 
           {/* 2v2 : je rejoins avec mon coéquipier (sélecteur + bouton). */}
-          {is2v2 && !iAmIn && entriesCount < tournament.capacity &&
+          {is2v2 && !iAmIn && hasFreeSlot &&
             (!tournament.isPrivate || isOrganizer || isAdmin) && (
             <div className="mb-4 p-3 rounded-xl border border-teal/25 bg-teal/[0.05]">
               <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
@@ -537,7 +546,7 @@ export function TournoiDetailPage() {
           )}
 
           {/* 2v2 : l'organisateur ajoute directement une équipe (pas d'invitations). */}
-          {is2v2 && (isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
+          {is2v2 && (isOrganizer || isAdmin) && hasFreeSlot && (
             <div className="mb-4 p-3 rounded-xl border border-teal/20 bg-bg-2/30">
               <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
                 {t('tournois.detail.addTeam')}
@@ -569,7 +578,7 @@ export function TournoiDetailPage() {
           )}
 
           {/* Section invitation (organisateur / admin) — 1v1 uniquement */}
-          {!is2v2 && (isOrganizer || isAdmin) && entriesCount < tournament.capacity && (
+          {!is2v2 && (isOrganizer || isAdmin) && hasFreeSlot && (
             <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
               <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
                 {t('tournois.detail.invite.title')}
@@ -659,18 +668,30 @@ export function TournoiDetailPage() {
                 )}
               </div>
             ))}
-            {Array.from({ length: tournament.capacity - entriesCount }).map((_, i) => (
-              <div
-                key={`slot-${i}`}
-                className="flex items-center gap-2.5 p-2.5 border border-dashed border-muted/40 bg-bg-2/20 rounded opacity-50"
-              >
-                <div className="w-11 h-11 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-lg font-bold">
-                  ?
+            {/* Ligue : pas de slots fantômes (la capacité n'est qu'indicative). Autres
+                formats : on matérialise les places restantes jusqu'à la capacité. */}
+            {!isLeagueReg &&
+              Array.from({ length: Math.max(0, tournament.capacity - entriesCount) }).map((_, i) => (
+                <div
+                  key={`slot-${i}`}
+                  className="flex items-center gap-2.5 p-2.5 border border-dashed border-muted/40 bg-bg-2/20 rounded opacity-50"
+                >
+                  <div className="w-11 h-11 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-lg font-bold">
+                    ?
+                  </div>
+                  <div className="text-muted text-sm font-semibold">{t('tournois.detail.freeSlot')}</div>
                 </div>
-                <div className="text-muted text-sm font-semibold">{t('tournois.detail.freeSlot')}</div>
-              </div>
-            ))}
+              ))}
           </div>
+
+          {/* Ligue : rappel que l'on inscrit librement puis on lance à la main. */}
+          {isLeagueReg && (isOrganizer || isAdmin) && (
+            <p className="mt-3 text-[11px] text-muted-2 text-center">
+              {entriesCount < 2
+                ? 'Ligue — inscris au moins 2 joueurs, tu pourras lancer le tournoi quand tu veux.'
+                : `Ligue — ${entriesCount} inscrit${entriesCount > 1 ? 's' : ''}. Ajoute autant de joueurs que tu veux, puis lance le tournoi.`}
+            </p>
+          )}
         </>
       )}
 

@@ -255,7 +255,9 @@ function TournoiCard({ t }: { t: Tournament }) {
   const count = t.entries?.length ?? 0;
   const art = tournamentArt(t.id);
   const cover = safeImageUrl(t.imageUrl);
-  const fillPct = Math.min(100, Math.round((count / t.capacity) * 100));
+  // Ligue : capacité indicative (on peut dépasser) → barre/pourcentage masqués.
+  const isLeague = t.format === 'league';
+  const fillPct = Math.min(100, Math.round((count / Math.max(1, t.capacity)) * 100));
   const isOfficial = t.kind === 'official';
   return (
     <Link
@@ -327,16 +329,18 @@ function TournoiCard({ t }: { t: Tournament }) {
         {/* Progress bar (inscriptions/en cours) */}
         {(t.status === 'registration' || t.status === 'in_progress') && (
           <div className="mb-1.5">
-            <div className="h-1 rounded-full bg-bg-0/60 overflow-hidden mb-1">
-              <div className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold"
-                style={{ width: `${fillPct}%` }} />
-            </div>
+            {!isLeague && (
+              <div className="h-1 rounded-full bg-bg-0/60 overflow-hidden mb-1">
+                <div className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold"
+                  style={{ width: `${fillPct}%` }} />
+              </div>
+            )}
             <div className="flex items-center justify-between text-[9px] text-muted-2">
               <span className="flex items-center gap-1">
                 <Users className="w-2.5 h-2.5" strokeWidth={2.5} />
-                {count}/{t.capacity}
+                {isLeague ? `${count} inscrit${count > 1 ? 's' : ''}` : `${count}/${t.capacity}`}
               </span>
-              {t.status === 'registration' && <span>{fillPct}%</span>}
+              {t.status === 'registration' && !isLeague && <span>{fillPct}%</span>}
             </div>
           </div>
         )}
