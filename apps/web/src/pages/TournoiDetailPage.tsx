@@ -21,6 +21,7 @@ import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
+import { tournamentEloReward, TOURNAMENT_ELO_WINNER } from '@42-league/shared';
 
 // Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
 const GAME_ACCENT: Record<Game, string> = {
@@ -674,6 +675,14 @@ interface Standing {
   diff: number;
 }
 
+// Équipe d'un championnat de ligue : un duo (2v2) résolu, ou un joueur seul. La clé
+// d'identité dans les matchs est le `captain` (les TournamentMatch ne référencent
+// que les capitaines ; le coéquipier vient de TournamentEntry.partnerLogin).
+interface LeagueTeam {
+  captain: string;
+  members: string[];
+}
+
 // Classement (miroir des helpers serveur) à partir des matchs confirmés.
 //  - 'pool'   : victoires → différence de buts → buts marqués (poolStandings)
 //  - 'league' : différence de buts (goal average) → buts marqués → victoires (leagueStandings)
@@ -741,14 +750,15 @@ function PoolsAndBracket({
     bracketMatchesFlat,
     totalBracketRounds,
     poolsComplete,
-    leagueDays,
+    leagueMatches,
+    leagueTeams,
     leagueStandings,
     leagueComplete,
     leagueCount,
   } = useMemo(() => {
     const all = tournament.matches ?? [];
     const poolMatches = all.filter((m) => m.stage === 'pool');
-    const leagueMatches = all.filter((m) => m.stage === 'league');
+    const lgMatches = all.filter((m) => m.stage === 'league');
     const bracketMatches = all.filter((m) => (m.stage ?? 'bracket') === 'bracket');
 
     // Poules regroupées par index.
@@ -768,19 +778,18 @@ function PoolsAndBracket({
       }));
     const complete = poolMatches.length > 0 && poolMatches.every((m) => m.confirmedAt);
 
-    // Ligue : matchs groupés par journée (poolIndex), un seul classement au goal average.
-    const byDay = new Map<number, TournamentMatch[]>();
-    for (const m of leagueMatches) {
-      const d = m.poolIndex ?? 1;
-      const arr = byDay.get(d) ?? [];
-      arr.push(m);
-      byDay.set(d, arr);
-    }
-    const days = [...byDay.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([day, matches]) => ({ day, matches: [...matches].sort((a, b) => a.slot - b.slot) }));
-    const lgStandings = computeStandings(leagueMatches, 'league');
-    const lgComplete = leagueMatches.length > 0 && leagueMatches.every((m) => m.confirmedAt);
+    // Ligue (championnat) : plus de notion de journée. Liste plate triée (aller
+    // d'abord, retour ensuite, puis ordre de création), classement unique au goal
+    // average, et liste d'ÉQUIPES (duos résolus en 2v2) pour la matrice qui-vs-qui.
+    const lgSorted = [...lgMatches].sort(
+      (a, b) => (a.poolIndex ?? 0) - (b.poolIndex ?? 0) || a.slot - b.slot,
+    );
+    const teams: LeagueTeam[] = (tournament.entries ?? []).map((e) => ({
+      captain: e.login,
+      members: e.partnerLogin ? [e.login, e.partnerLogin] : [e.login],
+    }));
+    const lgStandings = computeStandings(lgMatches, 'league');
+    const lgComplete = lgMatches.length > 0 && lgMatches.every((m) => m.confirmedAt);
 
     // Bracket : nombre de rounds = round max réel (byes/poules font diverger la capacité).
     const total = bracketMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
@@ -790,12 +799,13 @@ function PoolsAndBracket({
       bracketMatchesFlat: bracketMatches,
       totalBracketRounds: total,
       poolsComplete: complete,
-      leagueDays: days,
+      leagueMatches: lgSorted,
+      leagueTeams: teams,
       leagueStandings: lgStandings,
       leagueComplete: lgComplete,
-      leagueCount: leagueMatches.length,
+      leagueCount: lgMatches.length,
     };
-  }, [tournament.matches]);
+  }, [tournament.matches, tournament.entries]);
 
   const hasPools = poolGroups.length > 0;
   const hasBracket = totalBracketRounds > 0;
@@ -843,7 +853,8 @@ function PoolsAndBracket({
       {isLeague && (
         <LeagueSection
           tournament={tournament}
-          days={leagueDays}
+          matches={leagueMatches}
+          teams={leagueTeams}
           standings={leagueStandings}
           complete={leagueComplete}
           matchCount={leagueCount}
@@ -948,9 +959,97 @@ function PoolsAndBracket({
 // (composer les affiches, supprimer une affiche non confirmée, basculer en phase
 // finale). Une fois le bracket généré (bascule effectuée), `editable` passe à false
 // et la section devient un historique en lecture seule.
+// Libellé d'une équipe de ligue : « capitaine » (1v1) ou « capitaine + coéquipier » (2v2).
+function leagueTeamLabel(team: LeagueTeam): string {
+  return team.members.length > 1 ? `${team.captain} + ${team.members[1]}` : team.captain;
+}
+
+// Classe de couleur d'une cellule de matrice selon l'issue (vue de l'équipe-ligne).
+function matrixTone(tone?: 'win' | 'loss' | 'pending'): string {
+  return tone === 'win'
+    ? 'text-[#7fd66e] font-bold'
+    : tone === 'loss'
+      ? 'text-red'
+      : 'text-muted-2';
+}
+
+// Matrice « qui-vs-qui » : grille équipes × équipes. Chaque cellule montre l'aller
+// (haut) et, le cas échéant, le retour (bas), vus du côté de l'équipe-ligne. Les
+// paires non encore programmées (aucun aller) sont teintées en ambre (#5/#6).
+function LeagueMatrix({
+  teams,
+  matches,
+  t,
+}: {
+  teams: LeagueTeam[];
+  matches: TournamentMatch[];
+  t: (k: string) => string;
+}) {
+  if (teams.length < 2) return null;
+  const short = (login: string) => login.slice(0, 5);
+  const fmt = (m: TournamentMatch | undefined, rowCap: string) => {
+    if (!m) return null;
+    if (m.scoreA == null || m.scoreB == null) return { text: '·', tone: 'pending' as const };
+    const rowIsA = m.playerALogin === rowCap;
+    const rs = rowIsA ? m.scoreA : m.scoreB;
+    const cs = rowIsA ? m.scoreB : m.scoreA;
+    return { text: `${rs}-${cs}`, tone: m.winnerLogin === rowCap ? ('win' as const) : ('loss' as const) };
+  };
+  return (
+    <div className="mb-4">
+      <div className="overflow-x-auto">
+        <table className="text-[10px] border-collapse mx-auto">
+          <thead>
+            <tr>
+              <th className="p-1" />
+              {teams.map((tm) => (
+                <th key={tm.captain} className="p-1 font-mono text-muted-2 font-semibold">{short(tm.captain)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {teams.map((row) => (
+              <tr key={row.captain}>
+                <th className="p-1 font-mono text-muted-2 font-semibold text-right whitespace-nowrap">{short(row.captain)}</th>
+                {teams.map((col) => {
+                  if (row.captain === col.captain) {
+                    return <td key={col.captain} className="bg-bg-2/60 border border-border/30 w-10 h-9" />;
+                  }
+                  const ms = matches.filter(
+                    (m) =>
+                      (m.playerALogin === row.captain && m.playerBLogin === col.captain) ||
+                      (m.playerALogin === col.captain && m.playerBLogin === row.captain),
+                  );
+                  const aller = ms.find((m) => (m.poolIndex ?? 0) === 0);
+                  const retour = ms.find((m) => (m.poolIndex ?? 0) === 1);
+                  const a = fmt(aller, row.captain);
+                  const r = fmt(retour, row.captain);
+                  return (
+                    <td
+                      key={col.captain}
+                      className={`w-10 h-9 text-center border border-border/30 ${aller ? '' : 'bg-amber-500/[0.07]'}`}
+                    >
+                      <div className="flex flex-col leading-tight">
+                        <span className={matrixTone(a?.tone)}>{a?.text ?? '·'}</span>
+                        {retour && <span className={matrixTone(r?.tone)}>{r?.text ?? '·'}</span>}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-muted-2 mt-1.5 text-center">{t('tournois.league.matrixHint')}</p>
+    </div>
+  );
+}
+
 function LeagueSection({
   tournament,
-  days,
+  matches,
+  teams,
   standings,
   complete,
   matchCount,
@@ -961,7 +1060,8 @@ function LeagueSection({
   onChange,
 }: {
   tournament: Tournament;
-  days: { day: number; matches: TournamentMatch[] }[];
+  matches: TournamentMatch[];
+  teams: LeagueTeam[];
   standings: Standing[];
   complete: boolean;
   matchCount: number;
@@ -974,16 +1074,18 @@ function LeagueSection({
   const t = useT();
   const flash = useFlash();
   const confirm = useConfirm();
-  // Affiches déjà confirmées sont conservées ; seules les non confirmées sont supprimables.
-  const entries = tournament.entries ?? [];
-  const lastDay = days.length ? days[days.length - 1]!.day : 1;
-  const [journee, setJournee] = useState(lastDay);
-  const [playerA, setPlayerA] = useState('');
-  const [playerB, setPlayerB] = useState('');
+  // Affiche : deux équipes (logins capitaines) + manche (aller/retour).
+  const [teamA, setTeamA] = useState('');
+  const [teamB, setTeamB] = useState('');
+  const [leg, setLeg] = useState<0 | 1>(0);
   const [adding, setAdding] = useState(false);
   // Nombre de qualifiés (puissance de 2) — défaut : plus grande puissance de 2 ≤ classés.
   const [qualifyCount, setQualifyCount] = useState(() => largestPow2AtMost(standings.length || 2));
   const [finalizing, setFinalizing] = useState(false);
+
+  // Matchs séparés par manche (aller / retour) pour l'affichage en sections.
+  const allerMatches = matches.filter((m) => (m.poolIndex ?? 0) === 0);
+  const retourMatches = matches.filter((m) => (m.poolIndex ?? 0) === 1);
 
   // Choix possibles de qualifiés : puissances de 2 de 2 jusqu'au nombre de classés.
   const qualifyChoices: number[] = [];
@@ -992,16 +1094,34 @@ function LeagueSection({
     ? qualifyCount
     : qualifyChoices[qualifyChoices.length - 1] ?? 2;
 
+  // ── Gains projetés (temps réel) ──
+  // Bonus Elo minimal sécurisé en se qualifiant (palier qualification d'un format
+  // ligue), et bonus du champion (TOURNAMENT_ELO_WINNER). Recalculé à chaque score.
+  const projectedRounds = Math.max(1, Math.round(Math.log2(effectiveQualify)));
+  const securedQualElo = tournamentEloReward({
+    format: 'league',
+    qualified: true,
+    bracketRoundsWon: 0,
+    totalBracketRounds: projectedRounds,
+  });
+  // Libellé du prix unique au champion (officiels) : coins ou cosmétique.
+  const championPrize =
+    tournament.kind === 'official' && tournament.prizeKind && tournament.prizeKind !== 'none'
+      ? tournament.prizeKind === 'coins'
+        ? t('tournois.league.gainCoins').replace('{n}', String(tournament.prizeCoins ?? 0))
+        : (tournament.prizeItem?.name ?? t('tournois.field.prize'))
+      : null;
+
   const handleAdd = async () => {
-    if (!playerA || !playerB || playerA === playerB) {
+    if (!teamA || !teamB || teamA === teamB) {
       flash.show(t('tournois.league.pickTwo'), 'error');
       return;
     }
     setAdding(true);
     try {
-      await api.addLeagueMatch(tournament.id, playerA, playerB, journee);
-      setPlayerA('');
-      setPlayerB('');
+      await api.addLeagueMatch(tournament.id, teamA, teamB, leg);
+      setTeamA('');
+      setTeamB('');
       flash.show(t('tournois.league.matchAdded'));
       await onChange();
     } catch (err) {
@@ -1060,16 +1180,20 @@ function LeagueSection({
                 <th className="text-left font-semibold py-1.5">{t('tournois.pool.col.player')}</th>
                 <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.played')}</th>
                 <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.wins')}</th>
-                <th className="text-center font-semibold py-1.5 pr-3">{t('tournois.pool.col.diff')}</th>
+                <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.diff')}</th>
+                <th className="text-right font-semibold py-1.5 pr-3">{t('tournois.league.col.gains')}</th>
               </tr>
             </thead>
             <tbody>
               {standings.map((s, i) => {
                 const qualified = editable && i < effectiveQualify;
+                const isMine = teams.some((tm) => tm.captain === s.login && tm.members.includes(myLogin ?? ''));
                 return (
                   <tr
                     key={s.login}
-                    className={`border-b border-border/20 last:border-0 ${qualified ? 'bg-teal/5' : ''}`}
+                    className={`border-b border-border/20 last:border-0 ${
+                      isMine ? 'bg-gold/10' : qualified ? 'bg-teal/5' : ''
+                    }`}
                   >
                     <td className="py-1.5 pl-3">
                       <span className={`inline-flex w-4 justify-center font-bold ${qualified ? 'text-teal' : 'text-muted-2'}`}>
@@ -1083,10 +1207,24 @@ function LeagueSection({
                     </td>
                     <td className="py-1.5 text-center tabular-nums text-muted-2">{s.played}</td>
                     <td className="py-1.5 text-center tabular-nums font-bold">{s.wins}</td>
-                    <td className="py-1.5 text-center tabular-nums pr-3">
+                    <td className="py-1.5 text-center tabular-nums">
                       <span className={s.diff > 0 ? 'text-[#7fd66e]' : s.diff < 0 ? 'text-red' : ''}>
                         {s.diff > 0 ? `+${s.diff}` : s.diff}
                       </span>
+                    </td>
+                    <td className="py-1.5 pr-3 text-right whitespace-nowrap">
+                      {!qualified ? (
+                        <span className="text-muted-2 text-[11px]">{t('tournois.league.gainNone')}</span>
+                      ) : i === 0 ? (
+                        <span className="text-gold font-bold text-[11px]" title={championPrize ?? undefined}>
+                          🏆 +{TOURNAMENT_ELO_WINNER}
+                          {championPrize ? ` · ${championPrize}` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-teal text-[11px] font-semibold">
+                          {t('tournois.league.gainQualified').replace('{n}', String(securedQualElo))}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1098,71 +1236,76 @@ function LeagueSection({
         <p className="text-[11px] text-muted-2 mb-4">{t('tournois.league.noMatchesYet')}</p>
       )}
 
-      {/* Outils admin : composer une affiche + supprimer (tant que la ligue est éditable). */}
+      {/* Matrice qui-vs-qui : repère visuel des confrontations jouées / à jouer. */}
+      {teams.length >= 2 && <LeagueMatrix teams={teams} matches={matches} t={t} />}
+
+      {/* Outils admin : composer une affiche (équipe vs équipe + manche). */}
       {canManage && editable && (
         <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30 space-y-2.5">
           <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold">
             {t('tournois.league.addMatch')}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[11px] text-muted-2 uppercase tracking-wider font-semibold">
-              {t('tournois.league.matchday')}
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={journee}
-              onChange={(e) => setJournee(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-              className="w-16 px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none tabular-nums"
-            />
-            <Button size="sm" variant="ghost" onClick={() => setJournee(lastDay + 1)}>
-              {t('tournois.league.newMatchday')}
-            </Button>
+          {/* Manche : aller (défaut) ou retour (retour = 2e confrontation d'une paire). */}
+          <div className="flex items-center gap-1.5">
+            {([0, 1] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLeg(l)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                  leg === l ? 'bg-gold/20 text-gold ring-1 ring-gold/50' : 'bg-bg-1 text-muted-2'
+                }`}
+              >
+                {l === 0 ? t('tournois.league.legFirst') : t('tournois.league.legReturn')}
+              </button>
+            ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
-              value={playerA}
-              onChange={(e) => setPlayerA(e.target.value)}
+              value={teamA}
+              onChange={(e) => setTeamA(e.target.value)}
               className="flex-1 min-w-[8rem] px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none"
             >
-              <option value="">{t('tournois.league.pickPlayer')}</option>
-              {entries.map((e) => (
-                <option key={e.login} value={e.login} disabled={e.login === playerB}>
-                  {e.login}
+              <option value="">{t('tournois.league.pickTeam')}</option>
+              {teams.map((tm) => (
+                <option key={tm.captain} value={tm.captain} disabled={tm.captain === teamB}>
+                  {leagueTeamLabel(tm)}
                 </option>
               ))}
             </select>
             <span className="text-muted-2 text-xs font-bold">vs</span>
             <select
-              value={playerB}
-              onChange={(e) => setPlayerB(e.target.value)}
+              value={teamB}
+              onChange={(e) => setTeamB(e.target.value)}
               className="flex-1 min-w-[8rem] px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none"
             >
-              <option value="">{t('tournois.league.pickPlayer')}</option>
-              {entries.map((e) => (
-                <option key={e.login} value={e.login} disabled={e.login === playerA}>
-                  {e.login}
+              <option value="">{t('tournois.league.pickTeam')}</option>
+              {teams.map((tm) => (
+                <option key={tm.captain} value={tm.captain} disabled={tm.captain === teamA}>
+                  {leagueTeamLabel(tm)}
                 </option>
               ))}
             </select>
-            <Button size="sm" loading={adding} onClick={handleAdd} disabled={!playerA || !playerB}>
+            <Button size="sm" loading={adding} onClick={handleAdd} disabled={!teamA || !teamB}>
               {t('tournois.league.add')}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Historique par journée. */}
-      {days.length > 0 && (
+      {/* Matchs par manche (aller puis retour). Pas de notion de journée. */}
+      {matches.length > 0 && (
         <div className="space-y-4">
-          {days.map((d) => (
-            <div key={d.day} className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
+          {([
+            { leg: 0 as const, label: t('tournois.league.legFirst'), list: allerMatches },
+            { leg: 1 as const, label: t('tournois.league.legReturn'), list: retourMatches },
+          ]).filter((g) => g.list.length > 0).map((g) => (
+            <div key={g.leg} className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
               <div className="px-3 py-2 bg-bg-2/60 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-text-strong">
-                {t('tournois.league.matchdayLabel').replace('{n}', String(d.day))}
+                {g.label}
               </div>
               <div className="p-2.5 space-y-2">
-                {d.matches.map((m) => (
+                {g.list.map((m) => (
                   <div key={m.id} className="relative">
                     {canManage && editable && !m.confirmedAt && (
                       <button
@@ -1335,6 +1478,8 @@ function BracketMatch({
   const confirm = useConfirm();
   const t = useT();
   const [recording, setRecording] = useState(false);
+  // Édition admin d'un score de ligue DÉJÀ confirmé (correction d'erreur de saisie).
+  const [editing, setEditing] = useState(false);
   // Pile-ou-face : true entre le clic et l'arrivée du résultat (via reload SSE).
   const [flipping, setFlipping] = useState(false);
   // Révélation différée du résultat : on laisse la pièce se poser et on garde le
@@ -1364,11 +1509,12 @@ function BracketMatch({
   // ── Pile-ou-face : uniquement pour les matchs de bracket prêts ──────────────
   // Plus de choix d'avantage dans l'appli (réglé « dans la vraie vie ») : le
   // tirage désigne juste le gagnant, puis on passe direct à la saisie du score.
-  const isBracket = (match.stage ?? 'bracket') === 'bracket';
+  // Pile-ou-face : matchs de bracket ET de ligue (championnat).
+  const tossEligible = (match.stage ?? 'bracket') === 'bracket' || match.stage === 'league';
   const tossDone = match.tossWinnerLogin != null;
   // Le duel (pile-ou-face) précède la saisie : actif tant que le toss n'est pas
   // tranché ET révélé (on garde l'annonce du gagnant à l'écran un instant).
-  const duelPending = isBracket && canRecord && !recorded && (!tossDone || !tossRevealed);
+  const duelPending = tossEligible && canRecord && !recorded && (!tossDone || !tossRevealed);
   const tossWinnerName = match.tossWinnerLogin ?? '';
   // PP du vainqueur du tirage (révélée à l'atterrissage de la pièce).
   const tossWinnerImageUrl = match.tossWinnerLogin
@@ -1462,6 +1608,22 @@ function BracketMatch({
     }
   };
 
+  // Édition admin d'un score de ligue confirmé : réécrit le score (le classement se
+  // recalcule, les paris du match sont re-réglés côté serveur si le vainqueur change).
+  const handleEditSubmit = async (scoreA: number, scoreB: number) => {
+    try {
+      await api.editLeagueScore(tournament.id, match.id, scoreA, scoreB);
+      flash.show(t('tournois.flash.scoreConfirmed'));
+      setEditing(false);
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+  // L'officiant peut corriger un match de LIGUE déjà confirmé (erreur de saisie).
+  const canEditConfirmed =
+    canOfficiate && match.stage === 'league' && !!match.confirmedAt && tournament.status === 'in_progress';
+
   return (
     <div
       className={`p-2.5 border rounded bg-bg-2/50 ${
@@ -1550,6 +1712,26 @@ function BracketMatch({
             <Button size="sm" variant="ghost" onClick={handleReject}>{t('tournois.match.reject')}</Button>
           </div>
         </div>
+      )}
+
+      {/* Correction admin d'un score de ligue confirmé (erreur de saisie). */}
+      {canEditConfirmed && (
+        editing ? (
+          <RecordBracketForm
+            match={match}
+            game={tournament.game ?? 'babyfoot'}
+            onSubmit={handleEditSubmit}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="mt-2 w-full text-[11px] font-semibold text-muted-2 hover:text-text-strong border border-border/60 hover:border-gold/40 rounded-lg py-1.5 transition-colors"
+          >
+            {t('tournois.league.editScore')}
+          </button>
+        )
       )}
     </div>
   );

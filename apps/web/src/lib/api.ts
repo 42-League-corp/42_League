@@ -1318,11 +1318,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify({}) },
     ),
   // ── Phase de ligue (admin/officiant) ─────────────────────────────────────────
-  // Compose une affiche (joueur A vs joueur B) sur une journée.
-  addLeagueMatch: (tournamentId: string, playerALogin: string, playerBLogin: string, journee: number) =>
+  // Compose une affiche (équipe A vs équipe B, logins capitaines). `leg` = manche :
+  // 0 = aller (défaut), 1 = retour (autorisé seulement si l'aller existe déjà).
+  addLeagueMatch: (tournamentId: string, playerALogin: string, playerBLogin: string, leg: 0 | 1 = 0) =>
     request<TournamentMatch>(
       `/tournaments/${encodeURIComponent(tournamentId)}/league/matches`,
-      { method: 'POST', body: JSON.stringify({ playerALogin, playerBLogin, journee }) },
+      { method: 'POST', body: JSON.stringify({ playerALogin, playerBLogin, leg }) },
+    ),
+  // Édite le score d'un match de ligue DÉJÀ CONFIRMÉ (correction admin/officiant).
+  editLeagueScore: (tournamentId: string, matchId: string, scoreA: number, scoreB: number) =>
+    request<{ id: string; edited: true }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/matches/${encodeURIComponent(matchId)}/edit-score`,
+      { method: 'POST', body: JSON.stringify({ scoreA, scoreB }) },
     ),
   // Supprime une affiche de ligue non confirmée.
   deleteLeagueMatch: (tournamentId: string, matchId: string) =>
