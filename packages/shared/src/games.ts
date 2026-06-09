@@ -217,16 +217,22 @@ export function validateTournamentScore(
   game: GameId,
   scoreA: number,
   scoreB: number,
-  opts?: { freeGoals?: boolean },
+  opts?: { freeGoals?: boolean; allowDraw?: boolean },
 ): string | null {
-  if (scoreA === scoreB) return 'il faut un vainqueur (pas de match nul en tournoi)';
+  const scoring = getGameDef(game).scoring;
+  // Le nul n'est autorisé qu'avec allowDraw (phase de ligue, classement au goal
+  // average) ET en discipline « aux buts ». Partout ailleurs il faut un vainqueur :
+  // en élimination directe pour propager, et en sets/binaire le format est décisif.
+  if (scoreA === scoreB && !(scoring === 'goals' && opts?.allowDraw)) {
+    return 'il faut un vainqueur (pas de match nul)';
+  }
   const hi = Math.max(scoreA, scoreB);
   const lo = Math.min(scoreA, scoreB);
-  switch (getGameDef(game).scoring) {
+  switch (scoring) {
     case 'goals':
-      // Phase de ligue (goal average) : score libre des deux camps — on exige
-      // seulement un vainqueur et aucun but négatif. Sinon (bracket/poules) le
-      // vainqueur atteint 10 (le perdant est déjà borné -10..9).
+      // Score libre des deux camps (freeGoals : ligue ET phase finale) — on exige
+      // seulement des buts positifs (un éventuel nul est déjà filtré ci-dessus selon
+      // allowDraw). Sinon (poules) le vainqueur atteint 10 (le perdant borné -10..9).
       if (opts?.freeGoals) return lo >= 0 ? null : 'score de buts négatif invalide';
       return hi === 10 ? null : 'un camp doit atteindre 10 buts';
     case 'binary':

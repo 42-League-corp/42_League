@@ -138,7 +138,7 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
     const extras: Standing[] = (data.entries ?? [])
       .filter((e) => !seen.has(e.login))
       .sort((a, b) => (b.user?.elo ?? 0) - (a.user?.elo ?? 0))
-      .map((e) => ({ login: e.login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 }));
+      .map((e) => ({ login: e.login, played: 0, wins: 0, draws: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 }));
     return [...base, ...extras];
   }, [data]);
 

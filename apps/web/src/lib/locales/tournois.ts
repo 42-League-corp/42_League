@@ -271,7 +271,8 @@ export const dict: Record<Lang, Dict> = {
     'tournois.match.winner': 'Vainqueur',
     'tournois.match.loserScore': 'Score de',
     'tournois.match.finalScore': 'Score final de chaque équipe',
-    'tournois.match.noTie': 'Pas de match nul en tournoi',
+    'tournois.match.noTie': 'Il faut un vainqueur en phase finale',
+    'tournois.match.draw': 'Match nul',
 
     // Confirmations / flash détail
     'tournois.confirm.leave.title': 'Quitter ce tournoi ?',
@@ -556,7 +557,8 @@ export const dict: Record<Lang, Dict> = {
     'tournois.match.winner': 'Winner',
     'tournois.match.loserScore': 'Score of',
     'tournois.match.finalScore': 'Final score of each team',
-    'tournois.match.noTie': 'No draws in a tournament',
+    'tournois.match.noTie': 'A winner is required in the final phase',
+    'tournois.match.draw': 'Draw',
 
     'tournois.confirm.leave.title': 'Leave this tournament?',
     'tournois.confirm.leave.message': 'You withdraw from registration.',
@@ -840,7 +842,8 @@ export const dict: Record<Lang, Dict> = {
     'tournois.match.winner': 'Ganador',
     'tournois.match.loserScore': 'Marcador de',
     'tournois.match.finalScore': 'Marcador final de cada equipo',
-    'tournois.match.noTie': 'No hay empates en un torneo',
+    'tournois.match.noTie': 'Se requiere un ganador en la fase final',
+    'tournois.match.draw': 'Empate',
 
     'tournois.confirm.leave.title': '¿Salir de este torneo?',
     'tournois.confirm.leave.message': 'Te retiras de las inscripciones.',

@@ -5,6 +5,7 @@ export interface Standing {
   login: string;
   played: number;
   wins: number;
+  draws: number;
   goalsFor: number;
   goalsAgainst: number;
   diff: number;
@@ -27,7 +28,7 @@ export function computeStandings(
   const ensure = (login: string): Standing => {
     let s = table.get(login);
     if (!s) {
-      s = { login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 };
+      s = { login, played: 0, wins: 0, draws: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 };
       table.set(login, s);
     }
     return s;
@@ -44,6 +45,12 @@ export function computeStandings(
     b.goalsAgainst += m.scoreA;
     if (m.winnerLogin === m.playerALogin) a.wins++;
     else if (m.winnerLogin === m.playerBLogin) b.wins++;
+    else if (m.confirmedAt) {
+      // Match nul confirmé (autorisé en ligue) : pas de vainqueur. On exclut les
+      // matchs saisis mais non encore confirmés (winnerLogin null transitoire).
+      a.draws++;
+      b.draws++;
+    }
   }
   const rows = [...table.values()];
   for (const r of rows) r.diff = r.goalsFor - r.goalsAgainst;
@@ -84,7 +91,7 @@ export function poolStandings(matches: TournamentMatch[]): PoolStanding[] {
       for (const login of [m.playerALogin, m.playerBLogin]) {
         if (login && !seen.has(login)) {
           seen.add(login);
-          base.push({ login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 });
+          base.push({ login, played: 0, wins: 0, draws: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 });
         }
       }
     }
@@ -98,14 +105,13 @@ export function poolStandings(matches: TournamentMatch[]): PoolStanding[] {
  * défaite `'L'`) sur ses matchs confirmés, du plus ancien au plus récent. Sert à
  * dessiner une mini-sparkline de tendance sur la page live.
  */
-export function formOf(login: string, matches: TournamentMatch[]): Array<'W' | 'L'> {
+export function formOf(login: string, matches: TournamentMatch[]): Array<'W' | 'L' | 'D'> {
   return matches
     .filter(
       (m) =>
         m.confirmedAt &&
-        m.winnerLogin &&
         (m.playerALogin === login || m.playerBLogin === login),
     )
     .sort((a, b) => (a.confirmedAt ?? '').localeCompare(b.confirmedAt ?? ''))
-    .map((m) => (m.winnerLogin === login ? 'W' : 'L'));
+    .map((m) => (m.winnerLogin == null ? 'D' : m.winnerLogin === login ? 'W' : 'L'));
 }

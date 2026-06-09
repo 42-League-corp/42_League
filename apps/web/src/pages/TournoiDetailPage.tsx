@@ -1034,12 +1034,14 @@ function leagueTeamLabel(team: LeagueTeam): string {
 }
 
 // Classe de couleur d'une cellule de matrice selon l'issue (vue de l'équipe-ligne).
-function matrixTone(tone?: 'win' | 'loss' | 'pending'): string {
+function matrixTone(tone?: 'win' | 'loss' | 'draw' | 'pending'): string {
   return tone === 'win'
     ? 'text-[#7fd66e] font-bold'
     : tone === 'loss'
       ? 'text-red'
-      : 'text-muted-2';
+      : tone === 'draw'
+        ? 'text-steel-light font-semibold'
+        : 'text-muted-2';
 }
 
 // Matrice « qui-vs-qui » : grille équipes × équipes. Chaque cellule montre l'aller
@@ -1064,7 +1066,16 @@ function LeagueMatrix({
     const rowIsA = m.playerALogin === rowCap;
     const rs = rowIsA ? m.scoreA : m.scoreB;
     const cs = rowIsA ? m.scoreB : m.scoreA;
-    return { text: `${rs}-${cs}`, tone: m.winnerLogin === rowCap ? ('win' as const) : ('loss' as const) };
+    // Nul (winnerLogin null) une fois confirmé ; sinon (saisi non confirmé) en attente.
+    const tone =
+      m.winnerLogin == null
+        ? m.confirmedAt
+          ? ('draw' as const)
+          : ('pending' as const)
+        : m.winnerLogin === rowCap
+          ? ('win' as const)
+          : ('loss' as const);
+    return { text: `${rs}-${cs}`, tone };
   };
   return (
     <div className="mb-4">
@@ -2004,7 +2015,8 @@ function BracketMatch({
           game={tournament.game ?? 'babyfoot'}
           labelA={labelA}
           labelB={labelB}
-          freeScores={match.stage === 'league'}
+          freeScores={match.stage === 'league' || match.stage === 'bracket'}
+          allowDraw={match.stage === 'league'}
           onSubmit={handleRecordSubmit}
           onCancel={() => setRecording(false)}
         />
@@ -2036,6 +2048,7 @@ function BracketMatch({
             labelA={labelA}
             labelB={labelB}
             freeScores
+            allowDraw
             onSubmit={handleEditSubmit}
             onCancel={() => setEditing(false)}
           />
@@ -2110,6 +2123,7 @@ function RecordBracketForm({
   labelA,
   labelB,
   freeScores = false,
+  allowDraw = false,
   onSubmit,
   onCancel,
 }: {
@@ -2117,8 +2131,10 @@ function RecordBracketForm({
   // Libellés d'équipe (capitaine + binôme en 2v2), affichés au lieu du seul login.
   labelA: string;
   labelB: string;
-  // Phase de ligue (babyfoot) : saisie libre des deux scores (goal average).
+  // Saisie libre des deux scores (babyfoot) — utilisée en ligue ET en phase finale.
   freeScores?: boolean;
+  // Nul autorisé (ligue, goal average) ; en finale il faut un vainqueur.
+  allowDraw?: boolean;
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -2139,11 +2155,13 @@ function RecordBracketForm({
     }
   };
 
-  // Ligue babyfoot (classement au goal average) : on saisit librement le score
-  // des DEUX camps, chaque champ étiqueté avec son équipe — pas d'étape « qui a
-  // gagné », le vainqueur se déduit du score le plus élevé.
+  // Babyfoot : on saisit librement le score des DEUX camps, chaque champ étiqueté
+  // avec son équipe — pas d'étape « qui a gagné », le vainqueur se déduit du score
+  // le plus élevé. Le nul n'est permis qu'en ligue (allowDraw) ; en finale on doit
+  // départager.
   if (freeScores && game === 'babyfoot') {
     const tie = freeA === freeB;
+    const blockTie = tie && !allowDraw;
     const row = (label: string, value: number, onChange: (v: number) => void) => (
       <div className="flex items-center gap-2">
         <div className="w-24 shrink-0 text-right text-xs font-semibold text-text truncate">{label}</div>
@@ -2158,9 +2176,12 @@ function RecordBracketForm({
         <div className="text-xs text-muted text-center">{t('tournois.match.finalScore')}</div>
         {row(labelA, freeA, setFreeA)}
         {row(labelB, freeB, setFreeB)}
-        {tie && <div className="text-[11px] text-center text-red-400">{t('tournois.match.noTie')}</div>}
+        {blockTie && <div className="text-[11px] text-center text-red-400">{t('tournois.match.noTie')}</div>}
+        {tie && allowDraw && (
+          <div className="text-[11px] text-center text-muted-2">{t('tournois.match.draw')}</div>
+        )}
         <div className="flex gap-1.5 pt-1">
-          <Button size="sm" loading={busy} disabled={tie} onClick={() => send(freeA, freeB)} className="flex-1">
+          <Button size="sm" loading={busy} disabled={blockTie} onClick={() => send(freeA, freeB)} className="flex-1">
             OK
           </Button>
           <Button size="sm" variant="ghost" onClick={onCancel} className="flex-none">×</Button>

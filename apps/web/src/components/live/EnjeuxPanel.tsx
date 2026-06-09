@@ -272,7 +272,7 @@ function StandingRow({
   elo: number | undefined;
   avatarUrl: string | null;
   partner: string | null;
-  form: Array<'W' | 'L'>;
+  form: Array<'W' | 'L' | 'D'>;
   enjeu: Enjeu;
   compact?: boolean;
 }) {
