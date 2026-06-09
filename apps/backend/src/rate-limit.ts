@@ -69,7 +69,11 @@ export interface RateLimitOptions {
 
 export function rateLimit(opts: RateLimitOptions) {
   ensureSweeper();
-  const progressive = opts.progressive ?? true;
+  // Pénalité progressive DÉSACTIVÉE par défaut : on ne veut plus AUCUN ban qui
+  // escalade (« blocked for Xs »), insupportable en usage normal. Au pire, un flood
+  // réel reçoit un 429 « slow down » transitoire qui se purge à la fin de la fenêtre.
+  // À n'activer (progressive: true) que pour un cas précis qui le justifierait.
+  const progressive = opts.progressive ?? false;
 
   if (!bucketStores.has(opts.name)) bucketStores.set(opts.name, new Map());
   const store = bucketStores.get(opts.name)!;
