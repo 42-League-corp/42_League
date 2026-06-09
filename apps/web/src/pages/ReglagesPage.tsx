@@ -172,6 +172,21 @@ export function ReglagesPage() {
           </Link>
         </div>
 
+        {/* À propos */}
+        <div className="border-t border-gold/20 pt-5">
+          <div className="font-gaming text-xs font-extrabold uppercase tracking-[0.18em] text-gold mb-3 flex items-center gap-2">
+            <span className="inline-block w-1 h-3 bg-gradient-to-b from-gold to-gold-dim rounded-sm" />
+            {t('settings.about.title')}
+          </div>
+          <Link
+            to="/about"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-2 hover:text-gold transition-colors"
+          >
+            <span className="inline-block w-1 h-1 rounded-full bg-gold/60" />
+            {t('settings.about.link')}
+          </Link>
+        </div>
+
         {/* Version */}
         <div className="border-t border-gold/10 pt-4 flex items-center justify-between">
           <span className="font-gaming text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold/50">

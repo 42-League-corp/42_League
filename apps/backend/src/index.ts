@@ -849,12 +849,16 @@ if (process.env.NODE_ENV !== 'test') {
     return `ip:${clientIp(c)}`;
   };
 
-  // Backstop global (120/min par joueur). Les admins sont exemptés. Pas de
-  // pénalité progressive : un burst de navigation (refresh = ~10 requêtes) ne
-  // doit jamais déclencher un ban croissant — au pire un 429 qui se purge à la
-  // fin de la fenêtre de 60 s. L'escalade reste sur l'auth (brute-force) et les
-  // écritures (spam de mutations).
-  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 120, key: bySubject, progressive: false, skip: orAdmin() }));
+  // Backstop global (600/min par joueur). Les admins sont exemptés. Pas de
+  // pénalité progressive : un burst de navigation ne doit jamais déclencher un
+  // ban croissant — au pire un 429 qui se purge à la fin de la fenêtre de 60 s.
+  // Le plafond compte TOUT (GET inclus), or un seul refresh = ~12 requêtes
+  // parallèles (/me + 11 domaines), +3 à chaque switch de jeu, + pollers/SSE :
+  // 120/min se vidait en quelques refreshs et verrouillait l'app entière pendant
+  // 60 s. 600/min laisse respirer un usage humain intense (refreshs, plusieurs
+  // matchs par heure, navigation) tout en stoppant un vrai flood (script/DoS).
+  // L'escalade reste sur l'auth (brute-force) et les écritures (spam de mutations).
+  app.use('*', rateLimit({ name: 'global', windowMs: 60_000, max: 600, key: bySubject, progressive: false, skip: orAdmin() }));
 
   // Auth : protège l'échange OAuth contre le brute-force. Pré-auth → clé par IP.
   app.use('/auth/*', rateLimit({
@@ -862,17 +866,22 @@ if (process.env.NODE_ENV !== 'test') {
     skip: (c) => c.req.path === '/auth/stream-token',
   }));
 
-  // Quotas par action (24 h) — pénalités progressives en cas de spam. Par joueur
-  // (sinon le quota serait partagé par tout le campus). Admins exemptés.
-  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  // Quotas par action — fenêtres HORAIRES (et non 24 h) : un joueur actif peut
+  // enchaîner plusieurs matchs par heure dans différents jeux, et le quota se
+  // recharge en ≤ 1 h au lieu de verrouiller pour le reste de la journée. Le
+  // plafond reste un garde-fou anti-spam (déclarations bidon qui faussent l'Elo),
+  // avec pénalité progressive si on le pulvérise. Par joueur (sinon le quota
+  // serait partagé par tout le campus derrière le NAT). Admins exemptés.
+  // NB : `/matches` couvre TOUS les 1v1 (babyfoot/smash/chess/sf) → plafond large.
+  app.use('/matches',     rateLimit({ name: 'matches-declare',   windowMs: 3600_000, max: 40, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
   // `/matches` est un matcher EXACT → ne couvre pas `/matches/ffa`. Quota dédié à
   // la déclaration FFA (la liste GET est exemptée via `!isMutation`).
-  app.use('/matches/ffa', rateLimit({ name: 'ffa-declare',       windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 24 * 3600_000, max: 10, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
-  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 24 * 3600_000, max: 5,  key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/matches/ffa', rateLimit({ name: 'ffa-declare',       windowMs: 3600_000, max: 40, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/challenges',  rateLimit({ name: 'challenges-create', windowMs: 3600_000, max: 30, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  app.use('/tournaments', rateLimit({ name: 'tournaments-create',windowMs: 3600_000, max: 15, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
 
   // Écriture générale (mutations restantes), par joueur. Admins exemptés.
-  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 30, key: bySubject, skip: orAdmin((c) => !isMutation(c)) });
+  const writeLimiter = rateLimit({ name: 'write', windowMs: 60_000, max: 60, key: bySubject, skip: orAdmin((c) => !isMutation(c)) });
   for (const path of ['/matches/*', '/challenges/*', '/tournaments/*', '/ops', '/feature-requests', '/bug-reports']) {
     app.use(path, writeLimiter);
   }
@@ -2040,11 +2049,14 @@ app.post('/seasons/:id/activate', async (c) => {
 // Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
 // Comptes présents en prod mais absents de staging → créés avec une identité
 // minimale (rôle USER) pour que le classement staging reflète la prod.
+// NB : la prod peut tourner sur un schéma EN RETARD sur develop. On se limite donc
+// au dénominateur commun des colonnes réellement présentes en prod aujourd'hui —
+// PAS de first_name/last_name ni des colonnes fléchettes (absentes en prod). Sinon
+// `findMany` plante (« column users.first_name does not exist »). Les disciplines
+// manquantes en prod prennent simplement leur défaut côté staging (Elo 1000).
 const PROD_ELO_SELECT = {
   login: true,
   ftId: true,
-  firstName: true,
-  lastName: true,
   campus: true,
   imageUrl: true,
   title: true,
@@ -2062,9 +2074,6 @@ const PROD_ELO_SELECT = {
   eloSf: true,
   matchesPlayedSf: true,
   tournamentsWonSf: true,
-  eloFlechettes: true,
-  matchesPlayedFlechettes: true,
-  tournamentsWonFlechettes: true,
 } satisfies Prisma.UserSelect;
 
 app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
@@ -2113,9 +2122,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         eloSf: u.eloSf,
         matchesPlayedSf: u.matchesPlayedSf,
         tournamentsWonSf: u.tournamentsWonSf,
-        eloFlechettes: u.eloFlechettes,
-        matchesPlayedFlechettes: u.matchesPlayedFlechettes,
-        tournamentsWonFlechettes: u.tournamentsWonFlechettes,
+        // Fléchettes : absentes de la prod (schéma en retard) → non copiées, le
+        // staging garde son défaut (Elo 1000) pour cette discipline.
       };
       try {
         const existing = await prisma.user.findUnique({
@@ -2131,8 +2139,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
             data: {
               login: u.login,
               ftId: u.ftId,
-              firstName: u.firstName,
-              lastName: u.lastName,
+              // firstName/lastName absents en prod → laissés null (le nom pourra
+              // être backfillé via l'API 42, cf. backfillMissingProfiles).
               campus: u.campus,
               imageUrl: u.imageUrl,
               title: u.title,

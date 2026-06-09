@@ -4143,18 +4143,12 @@ function ItemsAdminTab() {
                   <span className="text-sm font-bold text-zinc-100 tabular-nums w-10 text-center">×{c.quantity}</span>
                   <Btn onClick={() => grant(c.kind, 1)}>+1</Btn>
                   <Btn variant="danger" onClick={() => grant(c.kind, -1)}>-1</Btn>
-<<<<<<< Updated upstream
                   {/* La Main du Destin exige deux cibles : pas de « forçage » admin sans contexte. */}
                   {c.kind !== 'force_duel' && (
                     <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
                   )}
-                  {c.kind === 'elo_mult' && data.eloMultArmed && (
-                    <span className="text-xs text-amber-400">armé</span>
-=======
-                  <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
                   {c.kind === 'elo_mult' && data.eloMultUntil && new Date(data.eloMultUntil) > new Date() && (
                     <span className="text-xs text-orange-400">en feu</span>
->>>>>>> Stashed changes
                   )}
                 </div>
               ))}

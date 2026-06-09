@@ -1,10 +1,5 @@
-<<<<<<< Updated upstream
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
-import { ShieldBan, Zap, Swords, Loader2, Check, X, type LucideProps } from 'lucide-react';
-=======
-import { useCallback, useEffect, useState, type ComponentType } from 'react';
-import { ShieldBan, Flame, Loader2, Check, type LucideProps } from 'lucide-react';
->>>>>>> Stashed changes
+import { ShieldBan, Swords, Flame, Loader2, Check, X, type LucideProps } from 'lucide-react';
 import { api, type ConsumablesResponse, type ConsumableKind, type ConsumableState } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -60,19 +55,16 @@ export function InventoryPanel() {
   const { refresh, leaderboard, me } = useLeagueData();
   const [data, setData] = useState<ConsumablesResponse | null>(null);
   const [busy, setBusy] = useState<ConsumableKind | null>(null);
-<<<<<<< Updated upstream
   // Sélecteur « Main du Destin » : null = fermé, sinon les deux logins en cours.
   const [duelPicker, setDuelPicker] = useState<{ p1: string; p2: string } | null>(null);
+  // Fenêtre de boost « EN FEU » en cours (décompte vivant) pour le multiplicateur d'ELO.
+  const boost = useEloBoostRemaining(data?.eloMultUntil ?? null);
 
   const myLogin = me?.login ?? null;
   const others = useMemo(
     () => leaderboard.filter((u) => u.login !== myLogin),
     [leaderboard, myLogin],
   );
-=======
-  // Fenêtre de boost « EN FEU » en cours (décompte vivant) pour le multiplicateur d'ELO.
-  const boost = useEloBoostRemaining(data?.eloMultUntil ?? null);
->>>>>>> Stashed changes
 
   const load = useCallback(async () => {
     try {

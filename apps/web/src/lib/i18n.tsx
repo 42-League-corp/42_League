@@ -221,6 +221,9 @@ const fr: Dict = {
   'settings.gdpr.deleting': 'Suppression en cours…',
   'settings.gdpr.deleted': 'Suppression programmée. Tu as 30 jours pour revenir : reconnecte-toi pour tout annuler. À bientôt.',
 
+  'settings.about.title': 'À propos',
+  'settings.about.link': 'Règles, technique & équipe',
+
   'login.privacy': 'En te connectant, tu acceptes notre',
   'login.privacyLink': 'politique de confidentialité',
 
@@ -431,6 +434,9 @@ const en: Dict = {
   'settings.gdpr.deleting': 'Deleting…',
   'settings.gdpr.deleted': 'Deletion scheduled. You have 30 days to come back: log in again to cancel. See you.',
 
+  'settings.about.title': 'About',
+  'settings.about.link': 'Rules, tech & team',
+
   'login.privacy': 'By signing in, you accept our',
   'login.privacyLink': 'privacy policy',
 
@@ -636,6 +642,9 @@ const es: Dict = {
   'settings.gdpr.exporting': 'Exportando…',
   'settings.gdpr.deleting': 'Eliminando…',
   'settings.gdpr.deleted': 'Eliminación programada. Tienes 30 días para volver: inicia sesión de nuevo para cancelar. Hasta pronto.',
+
+  'settings.about.title': 'Acerca de',
+  'settings.about.link': 'Reglas, técnica y equipo',
 
   'login.privacy': 'Al iniciar sesión, aceptas nuestra',
   'login.privacyLink': 'política de privacidad',
