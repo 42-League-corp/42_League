@@ -8603,6 +8603,28 @@ app.get('/shop', async (c) => {
 
 // POST /shop/:id/buy — achète un objet. Re-vérifie solde & possession dans une
 // transaction pour éviter les doubles achats / soldes négatifs.
+// ── « Apôtre de Sheldon » : objet spécial reconnu par son nom (insensible à la
+// casse et aux accents). À l'achat il DONNE 300 coins au lieu de coûter, ne peut
+// être acheté qu'une fois, et s'auto-équipe verrouillé 1 semaine (impossible à
+// déséquiper avant, ni de lui substituer un autre objet de sa catégorie).
+const SHELDON_REWARD = 300;
+const SHELDON_LOCK_MS = 7 * 24 * 60 * 60 * 1000;
+function isSheldonApostle(item: { name: string }): boolean {
+  return item.name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .includes('sheldon');
+}
+/** Chaîne de titre portée par un item 'title' (payload.title), sinon null. */
+function titleOfItem(item: { category: string; payload: Prisma.JsonValue | null }): string | null {
+  if (item.category !== 'title' || !item.payload || typeof item.payload !== 'object' || Array.isArray(item.payload)) {
+    return null;
+  }
+  const t = (item.payload as Record<string, unknown>).title;
+  return typeof t === 'string' ? t : null;
+}
+
 app.post('/shop/:id/buy', async (c) => {
   const login = await getCurrentLogin(c);
   await getOrCreateUser(login);
@@ -8613,6 +8635,7 @@ app.post('/shop/:id/buy', async (c) => {
     throw new HTTPException(404, { message: 'objet introuvable' });
   }
   const isMysteryBox = item.category === 'mystery_box';
+  const isSheldon = isSheldonApostle(item);
   const consumableKind = consumableKindOf(item);
   const coins = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
@@ -8655,6 +8678,25 @@ app.post('/shop/:id/buy', async (c) => {
         where: { userLogin_itemId: { userLogin: login, itemId } },
       });
       if (already) throw new HTTPException(409, { message: 'objet déjà possédé' });
+    }
+    // Apôtre de Sheldon : achat « cadeau » — DONNE 300 coins (aucun coût, aucun
+    // check de solde), achetable une seule fois (dédoublonnage ci-dessus),
+    // auto-équipé et verrouillé 1 semaine (cf. POST /me/inventory/:id/equip).
+    if (isSheldon) {
+      const updated = await tx.user.update({
+        where: { login },
+        data: { leagueCoins: { increment: SHELDON_REWARD } },
+        select: { leagueCoins: true },
+      });
+      // Auto-équipement : un seul objet équipé par catégorie → on déséquipe les autres.
+      await tx.shopInventory.updateMany({
+        where: { userLogin: login, equipped: true, item: { category: item.category } },
+        data: { equipped: false },
+      });
+      await tx.shopInventory.create({ data: { userLogin: login, itemId, equipped: true } });
+      const titleStr = titleOfItem(item);
+      if (titleStr) await tx.user.update({ where: { login }, data: { title: titleStr } });
+      return updated.leagueCoins;
     }
     if (user.leagueCoins < item.price) {
       throw new HTTPException(400, { message: 'solde insuffisant' });
@@ -8718,6 +8760,29 @@ app.post('/me/inventory/:id/equip', async (c) => {
     include: { item: true },
   });
   if (!row) throw new HTTPException(404, { message: 'objet non possédé' });
+
+  // Verrou « Apôtre de Sheldon » : tant qu'il est équipé depuis moins d'une
+  // semaine, on ne peut NI le déséquiper, NI équiper un autre objet de SA
+  // catégorie (qui le déséquiperait par la règle « un seul équipé par catégorie »).
+  const nowEquip = new Date();
+  const equippedRows = await prisma.shopInventory.findMany({
+    where: { userLogin: login, equipped: true },
+    include: { item: true },
+  });
+  const lockedSheldon = equippedRows.find(
+    (r) => isSheldonApostle(r.item) && r.acquiredAt.getTime() + SHELDON_LOCK_MS > nowEquip.getTime(),
+  );
+  if (lockedSheldon) {
+    const until = new Date(lockedSheldon.acquiredAt.getTime() + SHELDON_LOCK_MS).toISOString();
+    if (lockedSheldon.itemId === itemId && !equipped) {
+      throw new HTTPException(409, { message: `l'Apôtre de Sheldon reste équipé jusqu'au ${until}` });
+    }
+    if (lockedSheldon.itemId !== itemId && equipped && row.item.category === lockedSheldon.item.category) {
+      throw new HTTPException(409, {
+        message: `impossible de changer de ${row.item.category} tant que l'Apôtre de Sheldon est équipé (jusqu'au ${until})`,
+      });
+    }
+  }
 
   const category = row.item.category;
   // Le payload titre porte la chaîne à appliquer sur user.title.
