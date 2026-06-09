@@ -234,6 +234,7 @@ export const dict: Record<Lang, Dict> = {
     'tournois.detail.entrants': 'Inscrits',
     'tournois.detail.freeSlot': 'Place libre',
     'tournois.detail.winner': '🏆 VAINQUEUR',
+    'tournois.victory.title': 'Champion du tournoi',
     'tournois.detail.deleteTournament': 'Supprimer le tournoi',
 
     // Bracket / poules
@@ -518,6 +519,7 @@ export const dict: Record<Lang, Dict> = {
     'tournois.detail.entrants': 'Entrants',
     'tournois.detail.freeSlot': 'Free slot',
     'tournois.detail.winner': '🏆 WINNER',
+    'tournois.victory.title': 'Tournament champion',
     'tournois.detail.deleteTournament': 'Delete the tournament',
 
     'tournois.bracket.round': 'ROUND {n}',
@@ -799,6 +801,7 @@ export const dict: Record<Lang, Dict> = {
     'tournois.detail.entrants': 'Inscritos',
     'tournois.detail.freeSlot': 'Plaza libre',
     'tournois.detail.winner': '🏆 GANADOR',
+    'tournois.victory.title': 'Campeón del torneo',
     'tournois.detail.deleteTournament': 'Eliminar el torneo',
 
     'tournois.bracket.round': 'RONDA {n}',

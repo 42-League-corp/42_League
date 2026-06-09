@@ -13,6 +13,7 @@ import BracketTree from '../components/tournois/BracketTree';
 import CoinFlip from '../components/tournois/CoinFlip';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import { VersusOverlay, type VersusFighter } from '../components/tournois/VersusOverlay';
+import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
 import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
@@ -66,6 +67,7 @@ export function TournoiDetailPage() {
   const [addPartner, setAddPartner] = useState<LeaderboardEntry | null>(null);
   // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
   const [showCeremony, setShowCeremony] = useState(false);
+  const [showVictory, setShowVictory] = useState(false);
   // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
   const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const prevStatusRef = useRef<Tournament['status'] | null>(null);
@@ -85,6 +87,10 @@ export function TournoiDetailPage() {
       // Détecte la transition registration → in_progress pendant qu'on est sur la page.
       if (prevStatusRef.current === 'registration' && fresh.status === 'in_progress') {
         setShowCeremony(true);
+      }
+      // Transition vers la fin : célébration du champion (une fois, en live).
+      if (prevStatusRef.current === 'in_progress' && fresh.status === 'finished' && fresh.winner) {
+        setShowVictory(true);
       }
       prevStatusRef.current = fresh.status;
       // Match suivant désigné : si activeMatchId vient de changer vers un match,
@@ -400,6 +406,16 @@ export function TournoiDetailPage() {
         b={versusMatch ? versusFighter(versusMatch.playerBLogin) : null}
         accent={gameAccent(tournament.game)}
         onDone={() => setVersusMatchId(null)}
+        t={t}
+      />
+
+      {/* Célébration du champion à la fin du tournoi (in_progress → finished). */}
+      <VictoryOverlay
+        open={showVictory}
+        champion={tournament.winner ?? null}
+        tournamentName={tournament.name}
+        accent={gameAccent(tournament.game)}
+        onDone={() => setShowVictory(false)}
         t={t}
       />
 

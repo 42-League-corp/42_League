@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CoinFlipOverlay } from '../tournois/CoinFlipOverlay';
 import { VersusOverlay, type VersusFighter } from '../tournois/VersusOverlay';
+import { VictoryOverlay } from '../tournois/VictoryOverlay';
 import { useT } from '../../lib/i18n';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
 import { avatarMap } from '../../lib/liveTournament';
@@ -34,10 +35,12 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
   // ── Détection des transitions ───────────────────────────────────────────────
   const initedRef = useRef(false);
   const prevActiveRef = useRef<string | null>(null);
+  const prevStatusRef = useRef<LiveTournament['status'] | null>(null);
   const prevTossRef = useRef<Map<string, string>>(new Map()); // matchId → tossAt
 
   const [versus, setVersus] = useState<{ a: VersusFighter | null; b: VersusFighter | null } | null>(null);
   const [toss, setToss] = useState<TossState | null>(null);
+  const [victory, setVictory] = useState(false);
 
   useEffect(() => {
     const matches = data.matches ?? [];
@@ -48,9 +51,16 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
     if (!initedRef.current) {
       initedRef.current = true;
       prevActiveRef.current = data.activeMatchId ?? null;
+      prevStatusRef.current = data.status;
       prevTossRef.current = tossNow;
       return;
     }
+
+    // Fin du tournoi : célébration du champion (une fois, en live).
+    if (prevStatusRef.current === 'in_progress' && data.status === 'finished' && data.winner) {
+      setVictory(true);
+    }
+    prevStatusRef.current = data.status;
 
     // Nouveau pile-ou-face : un match dont le tossAt vient d'apparaître/changer.
     let freshToss: TournamentMatch | null = null;
@@ -112,6 +122,14 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
         winnerName={toss && !toss.flipping ? toss.winnerLogin : undefined}
         winnerLogin={toss && !toss.flipping ? toss.winnerLogin : undefined}
         winnerImageUrl={toss?.winnerImageUrl ?? null}
+        t={t}
+      />
+      <VictoryOverlay
+        open={victory}
+        champion={data.winner ?? null}
+        tournamentName={data.name}
+        accent={accent}
+        onDone={() => setVictory(false)}
         t={t}
       />
     </>
