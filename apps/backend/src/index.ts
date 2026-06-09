@@ -112,7 +112,7 @@ import { streamSSE } from 'hono/streaming';
 import { bodyLimit } from 'hono/body-limit';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
 import { issueStreamToken, issueToken, verifyStreamToken, verifyToken } from './tokens.js';
-import { logAdminAction } from './audit.js';
+import { logAdminAction, notifyClientError } from './audit.js';
 import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
@@ -891,6 +891,10 @@ if (process.env.NODE_ENV !== 'test') {
   // Télémétrie d'usage : envois groupés et peu fréquents (cf. lib/analytics côté web),
   // mais on borne quand même les abus. Les admins sont exemptés (tests).
   app.use('/analytics/*', rateLimit({ name: 'analytics', windowMs: 60_000, max: 1200, key: bySubject, skip: orAdmin((c) => !isMutation(c)) }));
+  // Remontée d'erreurs client (écran TV live surtout) → Discord. Bornée serré pour
+  // éviter qu'une boucle d'erreur ne spamme le webhook. Pas d'exemption admin (la TV
+  // est souvent connectée en admin et c'est justement là qu'on veut limiter).
+  app.use('/client-errors', rateLimit({ name: 'client-errors', windowMs: 60_000, max: 30, key: bySubject }));
 }
 
 // =========================================================================
@@ -5055,9 +5059,11 @@ app.get('/tournaments', async (c) => {
   return c.json(visible);
 });
 
-app.get('/tournaments/:id', async (c) => {
-  const me = await getCurrentLogin(c);
-  const id = c.req.param('id');
+// Charge un tournoi mis en forme pour un spectateur (entries + coéquipiers résolus,
+// invites filtrées selon le rôle), en appliquant la règle de visibilité des tournois
+// privés. Lève une HTTPException 404 si introuvable ou non visible. Partagé par
+// GET /tournaments/:id et GET /tournaments/:id/live.
+async function loadTournamentForViewer(me: string, id: string) {
   const tournament = await prisma.tournament.findUnique({
     where: { id },
     include: {
@@ -5129,12 +5135,40 @@ app.get('/tournaments/:id', async (c) => {
   }
   // Filtrer les invites visibles selon le rôle :
   // l'organisateur et les admins voient tout ; les autres ne voient que leur propre invite.
-  const isOrganizer = tournament.createdByLogin === me;
-  const visibleInvites =
-    isOrganizer || isAdmin(me)
-      ? tournament.invites
-      : tournament.invites.filter((inv) => inv.inviteeLogin === me);
-  return c.json({ ...tournament, entries: entriesOut, invites: visibleInvites });
+  const isOrganizer = tournament.createdByLogin === me || isAdmin(me);
+  const visibleInvites = isOrganizer
+    ? tournament.invites
+    : tournament.invites.filter((inv) => inv.inviteeLogin === me);
+  return { ...tournament, entries: entriesOut, invites: visibleInvites };
+}
+
+app.get('/tournaments/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  const out = await loadTournamentForViewer(me, c.req.param('id'));
+  return c.json(out);
+});
+
+// Variante « écran TV / live » : même charge utile que /:id, plus la cagnotte des
+// paris « vainqueur du tournoi » agrégée par participant (betPool) → la page live en
+// dérive la « HYPE » de chaque duel. Tous statuts confondus (un tournoi en cours a ses
+// paris figés mais le volume engagé reste un bon proxy d'engouement).
+app.get('/tournaments/:id/live', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const out = await loadTournamentForViewer(me, id);
+  const bets = await prisma.bet.groupBy({
+    by: ['choiceLogin'],
+    where: { tournamentId: id, targetType: 'tournament' },
+    _sum: { stake: true },
+  });
+  const betPool: Record<string, number> = {};
+  let betTotalCoins = 0;
+  for (const b of bets) {
+    const s = b._sum.stake ?? 0;
+    betPool[b.choiceLogin] = s;
+    betTotalCoins += s;
+  }
+  return c.json({ ...out, betPool, betTotalCoins });
 });
 
 app.post('/tournaments', async (c) => {
@@ -6579,6 +6613,33 @@ app.patch('/feature-requests/:id/status', async (c) => {
     data: { status: parsed.data.status },
   }).catch(() => { throw new HTTPException(404, { message: 'feature request not found' }); });
   return c.json(fr);
+});
+
+/* ============ REMONTÉE D'ERREURS CLIENT (écran TV live) → DISCORD ============ */
+
+const ClientErrorSchema = z.object({
+  message: z.string().min(1).max(500),
+  context: z.string().max(200).optional(),
+  stack: z.string().max(2000).optional(),
+});
+
+// Reçoit une erreur survenue côté client (page TV live notamment) et la relaie sur
+// Discord en fire-and-forget. Authentifié + rate-limité (cf. middleware). Aucun retour
+// d'info exploitable : on renvoie toujours 204 même si le webhook échoue, pour ne
+// jamais transformer une erreur front en seconde erreur visible.
+app.post('/client-errors', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = ClientErrorSchema.safeParse(body);
+  if (!parsed.success) {
+    // Corps invalide : on n'échoue pas bruyamment (le front est déjà en erreur).
+    return c.json({ ok: false });
+  }
+  const { message, context, stack } = parsed.data;
+  const where = context ? ` _(${context.slice(0, 120)})_` : '';
+  const firstStack = stack ? `\n\`\`\`${stack.split('\n').slice(0, 3).join('\n').slice(0, 600)}\`\`\`` : '';
+  void notifyClientError(`\`${me}\`${where} — ${message}${firstStack}`).catch(() => {});
+  return c.json({ ok: true });
 });
 
 /* ============ BUG REPORTS (boîte à tickets) ============ */
@@ -9605,6 +9666,8 @@ app.post('/bets', async (c) => {
     return { bet, balance: u.leagueCoins - stake };
   });
   emit([me], { type: 'panel:update', payload: {} });
+  // La cagnotte change → l'écran TV live recalcule la « HYPE » des duels en direct.
+  broadcast({ type: 'tournament:update', payload: {} });
   return c.json({ bet: result.bet, coins: result.balance }, 201);
 });
 
