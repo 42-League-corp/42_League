@@ -14,7 +14,6 @@ import { SectionHeader } from './profil/shared/SectionHeader';
 import { computeProfilStats } from './profil/shared/useProfilLogic';
 import {
   api,
-  type OpsUserResponse,
   type UserProfile,
   type FollowPrefs,
 } from '../lib/api';
@@ -36,7 +35,6 @@ export function PlayerPage() {
   const confirm = useConfirm();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [opsForPlayer, setOpsForPlayer] = useState<OpsUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [titleDraft, setTitleDraft] = useState('');
   const [following, setFollowing] = useState(false);
@@ -45,12 +43,8 @@ export function PlayerPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, ops] = await Promise.all([
-        api.userProfile(login),
-        api.opsForUser(login).catch(() => null),
-      ]);
+      const p = await api.userProfile(login);
       setProfile(p);
-      setOpsForPlayer(ops);
       setTitleDraft(p.user.title ?? '');
       setFollowing(!!p.following);
       setFollowPrefs(p.followPrefs ?? null);
@@ -220,7 +214,6 @@ export function PlayerPage() {
         playerLogin={p.user.login}
         isMe={isMe}
         opsMe={opsMe}
-        opsForPlayer={opsForPlayer}
         onDeclared={async () => {
           await load();
           await refresh();
@@ -311,7 +304,6 @@ interface DeclareOpsBoxProps {
   playerLogin: string;
   isMe: boolean;
   opsMe: ReturnType<typeof useLeagueData>['opsMe'];
-  opsForPlayer: OpsUserResponse | null;
   onDeclared: () => Promise<void>;
   confirm: ReturnType<typeof useConfirm>;
   flash: ReturnType<typeof useFlash>;
@@ -321,7 +313,6 @@ function DeclareOpsBox({
   playerLogin,
   isMe,
   opsMe,
-  opsForPlayer,
   onDeclared,
   confirm,
   flash,
@@ -349,15 +340,11 @@ function DeclareOpsBox({
   } else if (opsMe?.canDeclareAt) {
     reasons.push(t('ops.cooldown').replace('{time}', fmtCountdown(opsMe.canDeclareAt)));
   }
-  if (opsForPlayer?.targetedBy && opsForPlayer.targetedBy.ownerLogin !== undefined) {
-    reasons.push(
-      t('ops.targetTaken')
-        .replace('{player}', playerLogin)
-        .replace('{owner}', opsForPlayer.targetedBy.ownerLogin),
-    );
-  }
-  // NB : on n'empêche plus de cibler un joueur qui traque déjà quelqu'un.
-  // Être traqueur (owns un ops actif) ne le protège pas d'être ciblé en retour.
+  // NB : une cible peut être l'ops de plusieurs traqueurs à la fois — qu'elle
+  // soit déjà ciblée par quelqu'un d'autre ne nous empêche pas de la cibler.
+  // De même, traquer quelqu'un (owns un ops actif) ne la protège pas d'être
+  // ciblée en retour. Les seuls vrais blocages restent côté traqueur : avoir
+  // déjà un ops actif, ou être en cooldown (gérés ci-dessus).
 
   if (reasons.length > 0) {
     return (

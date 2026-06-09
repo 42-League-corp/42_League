@@ -7077,18 +7077,15 @@ app.post('/ops', async (c) => {
         });
       }
     }
-    const targetTargeted = await tx.ops.findFirst({
-      where: { targetLogin: target, expiresAt: { gt: now }, endedAt: null },
-    });
-    if (targetTargeted) {
-      throw new HTTPException(409, {
-        message: `${target} est déjà l'ops de quelqu'un d'autre`,
-      });
-    }
-    // NB : on autorise volontairement à cibler quelqu'un qui traque déjà
-    // quelqu'un d'autre. Être traqueur (owner d'un ops actif) ne protège pas
-    // d'être ciblé en retour. La seule limite côté traqueur reste « un seul
-    // ops actif à la fois » (ownerActive ci-dessus).
+    // NB : une même cible peut être l'ops de PLUSIEURS traqueurs à la fois — on
+    // ne bloque plus une cible déjà ciblée par quelqu'un d'autre. Toute la
+    // mécanique de défi forcé / pénalité / paris est indexée sur le COUPLE
+    // (ownerLogin, targetLogin), donc les ops concurrents sur une même victime
+    // ne se mélangent pas. La seule limite côté traqueur reste « un seul ops
+    // actif à la fois » (ownerActive ci-dessus), ce qui garantit aussi qu'un
+    // même couple (traqueur, cible) n'a jamais deux ops actifs en parallèle.
+    // On autorise donc aussi à cibler quelqu'un qui traque déjà quelqu'un :
+    // être traqueur ne protège pas d'être ciblé en retour.
     // Bouclier anti-ops : si cette cible a annulé un de MES ops avec un anti-ops
     // il y a moins de ANTI_OPS_SHIELD_MS, je ne peux pas la re-cibler.
     const shielded = await tx.ops.findFirst({
@@ -9828,16 +9825,12 @@ app.get('/bets', async (c) => {
         ops: { select: { ownerLogin: true, targetLogin: true } },
       },
     }),
-    // Tournois ouverts aux paris : UNIQUEMENT en cours (plus pendant l'inscription),
-    // vainqueur inconnu, et AVANT le premier résultat — dès qu'un match est confirmé
-    // le marché se ferme (on ne parie qu'au tout début, sur le vainqueur). Le pari
-    // est verrouillé dès qu'il est posé (aucune modif — cf. garde anti-doublon).
+    // Tournois ouverts aux paris : pendant l'INSCRIPTION, tant que l'admin n'a pas
+    // lancé le tournoi. Dès le lancement (status 'in_progress') le marché se ferme
+    // — on parie sur le vainqueur avant le coup d'envoi. Le pari est verrouillé dès
+    // qu'il est posé (aucune modif — cf. garde anti-doublon).
     prisma.tournament.findMany({
-      where: {
-        status: 'in_progress',
-        winnerLogin: null,
-        matches: { none: { confirmedAt: { not: null } } },
-      },
+      where: { status: 'registration' },
       orderBy: { createdAt: 'desc' },
       include: { entries: { select: { login: true } } },
     }),
@@ -9929,21 +9922,14 @@ app.post('/bets', async (c) => {
   const result = await prisma.$transaction(async (tx) => {
     const tour = await tx.tournament.findUnique({
       where: { id: tournamentId },
-      include: {
-        entries: { select: { login: true } },
-        // Un seul match confirmé suffit à fermer les paris (cf. garde « au début »).
-        matches: { where: { confirmedAt: { not: null } }, select: { id: true }, take: 1 },
-      },
+      include: { entries: { select: { login: true } } },
     });
     if (!tour) throw new HTTPException(404, { message: 'tournoi introuvable' });
-    // Paris ouverts uniquement quand le tournoi est EN COURS : pas pendant
-    // l'inscription (bracket pas encore figé), pas après (vainqueur connu).
-    if (tour.status !== 'in_progress') {
-      throw new HTTPException(409, { message: 'les paris sont fermés sur ce tournoi' });
-    }
-    // On ne parie qu'AU DÉBUT : dès qu'un match est confirmé (1er résultat), fermé.
-    if (tour.matches.length > 0) {
-      throw new HTTPException(409, { message: 'les paris sont fermés : le tournoi a déjà commencé' });
+    // Paris ouverts uniquement pendant l'INSCRIPTION : dès que l'admin lance le
+    // tournoi (status 'in_progress'), le marché se ferme — on parie sur le
+    // vainqueur avant le coup d'envoi.
+    if (tour.status !== 'registration') {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le tournoi est déjà lancé' });
     }
 
     // Un participant ne peut pas parier sur le tournoi auquel il joue (il en
