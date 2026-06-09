@@ -7,6 +7,7 @@ import { Panel } from '../components/Panel';
 import { Avatar } from '../components/Avatar';
 import { PlayerLink } from '../components/PlayerLink';
 import { TournamentCup } from '../components/TournamentCup';
+import { BadgeChip } from '../components/Badges';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
 import {
@@ -361,11 +362,15 @@ function GoatHero({ player, isMe }: { player: GoatPlayer; isMe: boolean }) {
             <div className="text-[9px] font-extrabold uppercase tracking-[0.24em] text-gold mb-1">
               🐐 {t('goat.sub')} {isMe && `· ${t('common.toi')}`}
             </div>
-            <PlayerLink login={entry.login} className="block max-w-full">
-              <span className="block truncate font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
-                {displayName(entry)}
-              </span>
-            </PlayerLink>
+            <div className="flex items-center gap-2 min-w-0">
+              <PlayerLink login={entry.login} className="block min-w-0">
+                <span className="block truncate font-display text-2xl sm:text-3xl font-black text-text-strong leading-none">
+                  {displayName(entry)}
+                </span>
+              </PlayerLink>
+              {/* Badge G.O.A.T — actif d'office sur le #1 (récompense du statut). */}
+              <BadgeChip code="goat" size="sm" />
+            </div>
             <div className="text-xs text-muted-2 mt-1">@{entry.login} · #{entry.rank} ELO</div>
           </div>
           {/* Score GOAT */}

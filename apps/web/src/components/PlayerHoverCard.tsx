@@ -4,6 +4,7 @@ import { Flame, Snowflake } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { OnlineBadge } from './OnlineBadge';
 import { RankedBadge } from './RankedBadge';
+import { BadgeChip } from './Badges';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { computePlayerStats } from '../lib/playerStats';
 
@@ -79,8 +80,11 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
           )}
         </div>
         <div className="min-w-0">
-          <div className="font-extrabold text-text-strong text-sm truncate">
-            {realName ?? <span className="font-mono text-muted-2">@{login}</span>}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-extrabold text-text-strong text-sm truncate">
+              {realName ?? <span className="font-mono text-muted-2">@{login}</span>}
+            </span>
+            {entry?.badges?.includes('goat') && <BadgeChip code="goat" size="xs" iconOnly />}
           </div>
           {realName && <div className="text-[10px] text-muted-2 truncate">@{login}</div>}
           {onlineHost && <OnlineBadge host={onlineHost} className="mt-0.5" />}

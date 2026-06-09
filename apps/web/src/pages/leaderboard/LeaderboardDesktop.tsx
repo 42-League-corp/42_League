@@ -9,6 +9,7 @@ import { OnlineBadge } from '../../components/OnlineBadge';
 import { Tooltip } from '../../components/Tooltip';
 import { WinRateBar } from '../../components/WinRateBar';
 import { RankBadge } from '../../components/RankBadge';
+import { BadgeChip } from '../../components/Badges';
 import { DesktopPodium } from './DesktopPodium';
 import { LeaderboardBanner } from '../../components/LeaderboardBanner';
 import { LeaderboardScatter, RankingViewToggle, GradesNavButton, type RankingView, type LeaderboardScatterHandle } from './LeaderboardScatter';
@@ -549,6 +550,9 @@ export function LeaderboardDesktop() {
                           <span className="truncate max-w-[120px] sm:max-w-[150px] font-semibold">
                             {u.login}
                           </span>
+                          {u.badges?.includes('goat') && (
+                            <BadgeChip code="goat" size="xs" iconOnly />
+                          )}
                           {isMe && (
                             <span className="text-[8px] font-extrabold text-[#1a1100] metal-plate-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider ml-1">
                               {t('lb.me')}

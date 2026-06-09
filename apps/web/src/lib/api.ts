@@ -29,6 +29,10 @@ export interface LeaderboardEntry {
   title?: string | null;
   dodgeCount?: number;
   tournamentsWon?: number;
+  /** Codes de badges de catalogue (cf. lib/badges.ts) — dont 'goat' pour le #1
+   *  du classement G.O.A.T de la discipline. Sert à afficher le badge dans les
+   *  listes (classement, hover) sans appel par joueur. */
+  badges?: string[];
   /** Persos favoris du joueur (épinglés en haut du picker de déclaration). */
   favSmash?: string[];
   favSf?: string[];
@@ -219,7 +223,7 @@ export interface TeamProfile extends BabyfootTeamEntry {
 export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box' | 'consumable'; // 'badge' conservé pour rétrocompatibilité inventaire
 
 /** Type de consommable (cf. ConsumableInventory backend). */
-export type ConsumableKind = 'anti_ops' | 'elo_mult';
+export type ConsumableKind = 'anti_ops' | 'elo_mult' | 'force_duel';
 
 /** État d'un consommable pour le joueur courant (stock + cap mensuel). */
 export interface ConsumableState {
@@ -1586,10 +1590,10 @@ export const api = {
     }),
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
-  useConsumable: (kind: ConsumableKind) =>
-    request<{ ok: true; armed?: boolean; cancelled?: boolean }>(
+  useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string }) =>
+    request<{ ok: true; armed?: boolean; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
       `/me/consumables/${encodeURIComponent(kind)}/use`,
-      { method: 'POST', body: JSON.stringify({}) },
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
     ),
   // ── Annonces générales ────────────────────────────────────────────────────
   announcements: () => request<AnnouncementData[]>('/announcements'),

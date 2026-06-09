@@ -21,8 +21,6 @@ export interface TitleContext {
   badges?: string[];
   /** Total des tournois gagnés, toutes disciplines confondues. */
   tournamentsWon?: number;
-  /** Rang du joueur dans sa discipline principale (1 = premier). */
-  rank?: number | null;
 }
 
 /**
@@ -34,7 +32,10 @@ export interface TitleContext {
  *  - login 'abidaux'          → Visionnaire      (titre nominatif fondateur)
  *  - badge 'season_champion'  → Champion
  *  - tournamentsWon > 0       → Vainqueur de tournoi
- *  - rank === 1               → G.O.A.T
+ *
+ * NB : le statut G.O.A.T (#1 du classement all-time) ne donne plus un TITRE mais
+ * un BADGE `goat`, attribué automatiquement côté backend (cf. badgesFor) au #1 du
+ * classement GOAT de sa discipline — affiché partout, y compris sur la page GOAT.
  *
  * NB : le badge 'founder' reste attribué aux fondateurs (cf. backend), mais ne
  * donne plus de titre générique « Fondateur » — chaque fondateur a son titre propre.
@@ -50,7 +51,6 @@ export function ownedTitles(ctx: TitleContext): OwnedTitle[] {
 
   if (badges.includes('season_champion')) out.push({ key: 'champion', label: 'Champion' });
   if ((ctx.tournamentsWon ?? 0) > 0) out.push({ key: 'tournament_winner', label: 'Vainqueur de tournoi' });
-  if (ctx.rank === 1) out.push({ key: 'goat', label: 'G.O.A.T' });
 
   // Dédup par key (au cas où une future règle produirait des doublons).
   const seen = new Set<string>();

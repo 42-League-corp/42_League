@@ -57,18 +57,18 @@ export function BadgeChip({
   if (iconOnly) {
     const boxCls = size === 'xs' ? 'w-5 h-5' : size === 'md' ? 'w-7 h-7' : 'w-6 h-6';
     const iconCls = size === 'xs' ? 'w-3 h-3' : size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5';
-    return (
-      <motion.button
-        type="button"
-        onClick={onClick}
-        title={b.label}
-        aria-label={b.label}
-        className={`inline-flex items-center justify-center rounded-full border shrink-0 ${boxCls}`}
-        style={commonStyle}
-        {...sheen}
-      >
-        <Icon className={iconCls} strokeWidth={2.6} />
+    const cls = `inline-flex items-center justify-center rounded-full border shrink-0 ${boxCls}`;
+    const inner = <Icon className={iconCls} strokeWidth={2.6} />;
+    // Sans onClick : pastille NON interactive (span) — autorise l'imbrication dans
+    // un lien/bouton (lignes de classement, hover-card) sans HTML invalide.
+    return onClick ? (
+      <motion.button type="button" onClick={onClick} title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+        {inner}
       </motion.button>
+    ) : (
+      <motion.span role="img" title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+        {inner}
+      </motion.span>
     );
   }
 
@@ -79,19 +79,21 @@ export function BadgeChip({
         ? 'text-xs px-3 py-1.5 gap-1.5'
         : 'text-[10px] px-2 py-0.5 gap-1';
   const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-4 h-4' : 'w-3 h-3';
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      title={b.label}
-      aria-label={b.label}
-      className={`inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`}
-      style={commonStyle}
-      {...sheen}
-    >
+  const cls = `inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`;
+  const inner = (
+    <>
       <Icon className={iconCls} strokeWidth={2.6} />
       {b.label}
+    </>
+  );
+  return onClick ? (
+    <motion.button type="button" onClick={onClick} title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+      {inner}
     </motion.button>
+  ) : (
+    <motion.span role="img" title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+      {inner}
+    </motion.span>
   );
 }
 

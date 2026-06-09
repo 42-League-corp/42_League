@@ -8,6 +8,7 @@ import { RivetCorners } from '../../../mobile/primitives/RivetCorners';
 import type { LeaderboardEntry, Ops } from '../../../lib/api';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 import { WinRateBar } from '../../../components/WinRateBar';
+import { BadgeChip } from '../../../components/Badges';
 import { useT } from '../../../lib/i18n';
 
 interface PlayerRankCardProps {
@@ -100,6 +101,7 @@ export function PlayerRankCard({
           <span className="font-extrabold text-text-strong truncate text-sm">
             {entry.login}
           </span>
+          {entry.badges?.includes('goat') && <BadgeChip code="goat" size="xs" iconOnly />}
           {isMe && (
             <span className="text-[8px] font-extrabold text-[#1a1100] metal-plate-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
               {t('lb.me')}

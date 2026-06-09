@@ -1,4 +1,4 @@
-import { Crown, ShieldCheck, FlaskConical, Trophy, Award, type LucideIcon } from 'lucide-react';
+import { Crown, ShieldCheck, FlaskConical, Trophy, Award, Star, type LucideIcon } from 'lucide-react';
 
 export interface BadgeDef {
   label: string;
@@ -14,6 +14,12 @@ export interface BadgeDef {
  * libellé, la couleur et l'icône.
  */
 export const BADGE_CATALOG: Record<string, BadgeDef> = {
+  goat: {
+    label: 'G.O.A.T',
+    description: 'N°1 du classement G.O.A.T — le meilleur joueur de tous les temps de sa discipline.',
+    color: '#ffd24a',
+    icon: Star,
+  },
   founder: {
     label: 'Founder',
     description: "À l'origine de 42 League — du premier commit au déploiement.",
