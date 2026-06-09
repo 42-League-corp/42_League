@@ -5193,19 +5193,44 @@ app.get('/tournaments/:id/live', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
   const out = await loadTournamentForViewer(me, id);
-  const bets = await prisma.bet.groupBy({
+  const grouped = await prisma.bet.groupBy({
     by: ['choiceLogin'],
     where: { tournamentId: id, targetType: 'tournament' },
     _sum: { stake: true },
   });
   const betPool: Record<string, number> = {};
   let betTotalCoins = 0;
-  for (const b of bets) {
+  for (const b of grouped) {
     const s = b._sum.stake ?? 0;
     betPool[b.choiceLogin] = s;
     betTotalCoins += s;
   }
-  return c.json({ ...out, betPool, betTotalCoins });
+  // Liste des mises pour le bandeau défilant de l'écran TV (les plus récentes
+  // d'abord, bornée). Les paris de tournoi sont publics au sein de la ligue (aspect
+  // social/jeu) — on n'expose que login parieur + avatar + pronostic + mise.
+  const betRows = await prisma.bet.findMany({
+    where: { tournamentId: id, targetType: 'tournament' },
+    orderBy: { createdAt: 'desc' },
+    take: 60,
+    select: {
+      id: true,
+      stake: true,
+      status: true,
+      choiceLogin: true,
+      createdAt: true,
+      bettor: { select: { login: true, imageUrl: true } },
+    },
+  });
+  const bets = betRows.map((b) => ({
+    id: b.id,
+    bettor: b.bettor.login,
+    bettorImageUrl: b.bettor.imageUrl,
+    choice: b.choiceLogin,
+    stake: b.stake,
+    status: b.status,
+    createdAt: b.createdAt,
+  }));
+  return c.json({ ...out, betPool, betTotalCoins, bets });
 });
 
 app.post('/tournaments', async (c) => {
