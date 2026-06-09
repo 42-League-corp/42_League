@@ -943,6 +943,17 @@ export interface PlaceOpsBetInput {
   choiceLogin: string;
   stake: number;
 }
+/**
+ * Valeur sentinelle de `choiceLogin` pour parier sur le NUL d'un match (ligue
+ * uniquement). Doit rester identique à DRAW_CHOICE côté backend.
+ */
+export const DRAW_CHOICE = '__draw__';
+/** Pari sur l'issue d'un MATCH de tournoi : `choiceLogin` = un joueur ou DRAW_CHOICE (nul). */
+export interface PlaceMatchBetInput {
+  matchId: string;
+  choiceLogin: string;
+  stake: number;
+}
 
 /** Stats de contributions git d'un membre (lignes ajoutées / supprimées / net). */
 export interface ContributorStat {
@@ -1344,6 +1355,19 @@ export const api = {
     request<{ id: string; added: string; status: string }>(
       `/tournaments/${encodeURIComponent(id)}/add-player`,
       { method: 'POST', body: JSON.stringify(partnerLogin ? { login, partnerLogin } : { login }) },
+    ),
+  // Organisateur/admin : retire un inscrit (en 2v2 = tout le duo) pendant l'inscription.
+  removeTournamentPlayer: (id: string, login: string) =>
+    request<{ id: string; removed: string }>(
+      `/tournaments/${encodeURIComponent(id)}/remove-player`,
+      { method: 'POST', body: JSON.stringify({ login }) },
+    ),
+  // Officiant : revient en phase d'inscription depuis une ligue en cours (si aucun
+  // match démarré ni bracket généré). Efface les affiches, rembourse les paris.
+  reopenLeagueRegistration: (id: string) =>
+    request<{ id: string; reopened: true }>(
+      `/tournaments/${encodeURIComponent(id)}/league/reopen`,
+      { method: 'POST', body: JSON.stringify({}) },
     ),
   startTournament: (id: string) =>
     request<{ id: string; started: true }>(
@@ -1815,6 +1839,11 @@ export const api = {
     }),
   placeOpsBet: (input: PlaceOpsBetInput) =>
     request<{ bet: { id: string }; coins: number }>('/bets/ops', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  placeMatchBet: (input: PlaceMatchBetInput) =>
+    request<{ bet: { id: string }; coins: number }>('/bets/match', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

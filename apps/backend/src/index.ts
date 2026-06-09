@@ -4970,8 +4970,8 @@ async function settleConfirmedTournamentMatch(
   });
   // Règlement des paris placés sur CE match (cote fixe ×2). `betWinners`
   // accumule les parieurs crédités (match + plus bas la finale) pour un emit
-  // après commit.
-  const betWinners = await settleMatchBetsTx(tx, id, winnerLogin);
+  // après commit. (On règle par l'id du MATCH, pas du tournoi.)
+  const betWinners = await settleMatchBetsTx(tx, m.id, winnerLogin);
 
   // Match de phase de ligue : aucune propagation ni qualification automatique. Le
   // classement (goal average) est recalculé à l'affichage et la bascule en
@@ -5727,6 +5727,46 @@ app.post('/tournaments/:id/leave', async (c) => {
   return c.json({ id, left: true });
 });
 
+// Organisateur/admin : retire un inscrit (en 2v2, l'inscription EST l'équipe → tout
+// le duo est retiré) en cas d'erreur de saisie. Uniquement en phase d'inscription.
+// `login` = login du CAPITAINE (clé de l'inscription). Rembourse les paris ouverts
+// placés sur ce pronostic (vainqueur) pour ne pas piéger une mise sur un absent.
+app.post('/tournaments/:id/remove-player', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const login = typeof body?.login === 'string' ? body.login : '';
+  if (!login) throw new HTTPException(400, { message: 'login requis' });
+  const refunded = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: "seul l'organisateur ou un admin peut retirer un inscrit" });
+    }
+    if (t.status !== 'registration') {
+      throw new HTTPException(409, { message: 'retrait possible uniquement pendant l’inscription' });
+    }
+    const entry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login } },
+    });
+    if (!entry) throw new HTTPException(404, { message: 'inscrit introuvable' });
+    // Rembourse les paris vainqueur ouverts placés sur cette équipe (capitaine).
+    const r = await refundBetsTx(tx, {
+      targetType: 'tournament',
+      tournamentId: id,
+      choiceLogin: login,
+      status: 'open',
+    });
+    await tx.tournamentEntry.delete({
+      where: { tournamentId_login: { tournamentId: id, login } },
+    });
+    return r;
+  });
+  if (refunded.length) emit(refunded, { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, removed: login });
+});
+
 app.post('/tournaments/:id/start', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
@@ -6195,6 +6235,47 @@ app.post('/tournaments/:id/league/undo-finalize', async (c) => {
 // Les byes du 1er tour (auto-confirmés à la génération) ne comptent pas. On efface
 // les matchs et on régénère depuis les inscrits avec un nouveau mélange aléatoire.
 // La diffusion `tournament:update` est assurée par le middleware sur /tournaments/*.
+// Officiant : REVENIR EN PHASE D'INSCRIPTION depuis une ligue en cours (corriger la
+// composition des inscrits). Possible UNIQUEMENT si aucun match n'a démarré (aucun
+// score saisi/confirmé, aucun toss) et que la phase finale (bracket) n'a pas été
+// générée. Supprime toutes les affiches, rembourse les paris ouverts, repasse en
+// 'registration' (on pourra ajouter/retirer des inscrits puis relancer).
+app.post('/tournaments/:id/league/reopen', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  await assertLeagueOfficiant(me, id); // ligue + in_progress + droits (admin/orga amical)
+  const refunded = await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, {
+        message: 'la phase finale est déjà générée — reviens d’abord en arrière sur la finale',
+      });
+    }
+    const started = await tx.tournamentMatch.count({
+      where: {
+        tournamentId: id,
+        OR: [{ confirmedAt: { not: null } }, { recordedAt: { not: null } }, { tossAt: { not: null } }],
+      },
+    });
+    if (started > 0) {
+      throw new HTTPException(409, {
+        message: 'des matchs ont déjà commencé — impossible de revenir à l’inscription',
+      });
+    }
+    // La compo va changer → on rembourse tous les paris ouverts (vainqueur + matchs)
+    // puis on efface les affiches et on rouvre les inscriptions.
+    const r = await refundOpenBetsForTournamentTx(tx, id);
+    await tx.tournamentMatch.deleteMany({ where: { tournamentId: id } });
+    await tx.tournament.update({
+      where: { id },
+      data: { status: 'registration', startedAt: null, activeMatchId: null },
+    });
+    return r;
+  });
+  if (refunded.length) emit(refunded, { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, reopened: true });
+});
+
 app.post('/tournaments/:id/reshuffle', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
@@ -6225,6 +6306,11 @@ app.post('/tournaments/:id/reshuffle', async (c) => {
   }
   // generateBracket/generatePools écrivent via le client global → on supprime puis
   // régénère hors transaction (même contrainte que /start). Action manuelle et rare.
+  // Les affiches étant régénérées, on rembourse d'abord les paris match ouverts.
+  const reBettors = await prisma.$transaction((tx) =>
+    refundBetsTx(tx, { targetType: 'match', tournamentId: id, status: 'open' }),
+  );
+  if (reBettors.length) emit(reBettors, { type: 'panel:update', payload: {} });
   await prisma.tournamentMatch.deleteMany({ where: { tournamentId: id } });
   await launchTournamentMatches(id, t.format, t.entries.map((e) => e.login));
   return c.json({ id, reshuffled: true });
@@ -9616,9 +9702,40 @@ async function settleBetsTx(
   return credited;
 }
 
-/** Règle les paris sur un match de bracket précis. */
-function settleMatchBetsTx(tx: Prisma.TransactionClient, matchId: string, winnerLogin: string | null) {
-  return settleBetsTx(tx, { targetType: 'match', matchId }, winnerLogin);
+// Pronostic « match nul » : valeur sentinelle stockée dans Bet.choiceLogin (les
+// logins 42 ne contiennent jamais ce motif). Permet de parier sur l'issue d'un
+// match — victoire joueur A / NUL / victoire joueur B — sans migration.
+const DRAW_CHOICE = '__draw__';
+
+/**
+ * Règle les paris sur l'ISSUE d'un match de tournoi (cote fixe ×2). Contrairement
+ * aux paris « vainqueur du tournoi », le NUL est ici un pronostic VALIDE : un pari
+ * sur le nul (choiceLogin === DRAW_CHOICE) gagne quand le match est nul
+ * (winnerLogin === null, ligue uniquement). Un mauvais pronostic est perdu (pas de
+ * remboursement — le remboursement reste réservé aux annulations, cf. refundBetsTx).
+ */
+async function settleMatchBetsTx(
+  tx: Prisma.TransactionClient,
+  matchId: string,
+  winnerLogin: string | null,
+): Promise<string[]> {
+  const open = await tx.bet.findMany({ where: { targetType: 'match', matchId, status: 'open' } });
+  const credited: string[] = [];
+  const now = new Date();
+  for (const b of open) {
+    const won =
+      b.choiceLogin === DRAW_CHOICE ? winnerLogin === null : b.choiceLogin === winnerLogin;
+    const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : 0;
+    if (payout > 0) {
+      await grantCoinsTx(tx, b.bettorLogin, payout);
+      credited.push(b.bettorLogin);
+    }
+    await tx.bet.update({
+      where: { id: b.id },
+      data: { status: won ? 'won' : 'lost', payout, settledAt: now },
+    });
+  }
+  return credited;
 }
 
 /**
@@ -10047,6 +10164,80 @@ app.post('/bets/ops', async (c) => {
     return { bet, balance: u.leagueCoins - stake };
   });
   emit([me], { type: 'panel:update', payload: {} });
+  return c.json({ bet: result.bet, coins: result.balance }, 201);
+});
+
+// Pari sur l'ISSUE d'un MATCH de tournoi : victoire joueur A / NUL / victoire
+// joueur B. `choiceLogin` = login d'un des deux joueurs, ou DRAW_CHOICE pour le nul
+// (ligue uniquement). Marché ouvert tant que le match n'a pas démarré (aucun score
+// saisi) ; réglé au confirm du match (settleMatchBetsTx). Cote fixe ×2.
+const PlaceMatchBetSchema = z.object({
+  matchId: z.string().min(1),
+  choiceLogin: z.string().min(1),
+  stake: z.number().int().positive(),
+});
+
+app.post('/bets/match', async (c) => {
+  const me = await getCurrentLogin(c);
+  const body = await c.req.json().catch(() => null);
+  const parsed = PlaceMatchBetSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { matchId, choiceLogin, stake } = parsed.data;
+  const result = await prisma.$transaction(async (tx) => {
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m) throw new HTTPException(404, { message: 'match introuvable' });
+    const tour = await tx.tournament.findUnique({
+      where: { id: m.tournamentId },
+      select: { status: true },
+    });
+    if (!tour || tour.status !== 'in_progress') {
+      throw new HTTPException(409, { message: 'les paris sont fermés : tournoi non démarré ou terminé' });
+    }
+    if (!m.playerALogin || !m.playerBLogin) {
+      throw new HTTPException(409, { message: 'match pas encore défini (tour précédent en attente)' });
+    }
+    // Marché ouvert tant qu'aucun score n'a été saisi/confirmé (betsLockedAt posé
+    // dès la 1re saisie → le score est exposé, on ne parie plus).
+    if (m.betsLockedAt || m.recordedAt || m.confirmedAt) {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le match a déjà commencé' });
+    }
+    const isDraw = choiceLogin === DRAW_CHOICE;
+    if (isDraw && m.stage !== 'league') {
+      throw new HTTPException(400, { message: 'le nul n’est possible qu’en phase de ligue' });
+    }
+    if (!isDraw && choiceLogin !== m.playerALogin && choiceLogin !== m.playerBLogin) {
+      throw new HTTPException(400, { message: 'le pronostic doit être un des deux joueurs (ou le nul)' });
+    }
+    // Les deux joueurs du match (et leurs coéquipiers en 2v2) ne parient pas dessus.
+    const partners = await tournamentPartnerMap(tx, m.tournamentId);
+    const players = [
+      ...teamMembersOf(m.playerALogin, partners),
+      ...teamMembersOf(m.playerBLogin, partners),
+    ];
+    if (players.includes(me)) {
+      throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre match' });
+    }
+    const dup = await tx.bet.findFirst({ where: { bettorLogin: me, status: 'open', matchId } });
+    if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur ce match' });
+    const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
+    if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+    if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
+    await grantCoinsTx(tx, me, -stake);
+    const bet = await tx.bet.create({
+      data: {
+        id: randomUUID(),
+        bettorLogin: me,
+        targetType: 'match',
+        tournamentId: m.tournamentId,
+        matchId,
+        choiceLogin,
+        stake,
+      },
+    });
+    return { bet, balance: u.leagueCoins - stake };
+  });
+  emit([me], { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
   return c.json({ bet: result.bet, coins: result.balance }, 201);
 });
 

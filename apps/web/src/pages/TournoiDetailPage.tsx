@@ -16,6 +16,7 @@ import { VersusOverlay, type VersusFighter } from '../components/tournois/Versus
 import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
+import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
@@ -65,6 +66,7 @@ export function TournoiDetailPage() {
   const [addCaptain, setAddCaptain] = useState<LeaderboardEntry | null>(null);
   const [addPartner, setAddPartner] = useState<LeaderboardEntry | null>(null);
   // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
+  const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const [showCeremony, setShowCeremony] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
   // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
@@ -322,6 +324,36 @@ export function TournoiDetailPage() {
     if (!ok) return;
     await runAction(() => api.reshuffleTournament(tournament.id), t('tournois.flash.reshuffled'));
     setShowCeremony(true);
+  };
+
+  // Organisateur/admin : retire un inscrit (en 2v2 = tout le duo) en cas d'erreur,
+  // pendant l'inscription. `login` = capitaine de l'inscription.
+  const handleRemovePlayer = async (login: string, partnerLogin?: string | null) => {
+    const who = partnerLogin ? `@${login} & @${partnerLogin}` : `@${login}`;
+    const ok = await confirm({
+      title: 'Retirer cet inscrit ?',
+      message: `${who} sera retiré de ce tournoi.`,
+      confirmLabel: 'Retirer',
+      cancelLabel: 'Annuler',
+      danger: true,
+    });
+    if (!ok) return;
+    await runAction(() => api.removeTournamentPlayer(tournament.id, login), 'Inscrit retiré');
+  };
+
+  // Officiant : revient en phase d'inscription depuis une ligue en cours (avant tout
+  // match joué). Efface les affiches et rembourse les paris ouverts.
+  const handleReopenRegistration = async () => {
+    const ok = await confirm({
+      title: 'Revenir en phase d’inscription ?',
+      message:
+        'Les affiches de la ligue seront effacées et les paris ouverts remboursés. Tu pourras modifier les inscrits puis relancer. Possible uniquement si aucun match n’a démarré.',
+      confirmLabel: 'Revenir à l’inscription',
+      cancelLabel: 'Annuler',
+      danger: true,
+    });
+    if (!ok) return;
+    await runAction(() => api.reopenLeagueRegistration(tournament.id), 'Retour en phase d’inscription');
   };
 
   // ── Salle de contrôle : méta de pilotage partagées avec l'écran TV live ──
@@ -664,6 +696,17 @@ export function TournoiDetailPage() {
                     </div>
                   </PlayerLink>
                 )}
+                {(isOrganizer || isAdmin) && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePlayer(e.login, e.partnerLogin)}
+                    title="Retirer cet inscrit"
+                    aria-label="Retirer cet inscrit"
+                    className="shrink-0 w-7 h-7 rounded-lg border border-red/30 bg-red/10 text-red text-sm font-bold tap-transparent hover:bg-red/20"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
             {/* Ligue : pas de slots fantômes (la capacité n'est qu'indicative). Autres
@@ -708,13 +751,17 @@ export function TournoiDetailPage() {
         // passe au-dessus pour garder les commandes à portée).
         <div className="grid xl:grid-cols-[1fr_300px] gap-5 items-start">
           <div className="min-w-0 order-2 xl:order-1">
-            <PoolsAndBracket
-              tournament={tournament}
-              myLogin={myLogin ?? null}
-              canManage={isOrganizer || isAdmin}
-              canOfficiate={canOfficiate}
-              onChange={refreshSilent}
-            />
+            {tournament.status === 'in_progress' && detailTab === 'bets' ? (
+              <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
+            ) : (
+              <PoolsAndBracket
+                tournament={tournament}
+                myLogin={myLogin ?? null}
+                canManage={isOrganizer || isAdmin}
+                canOfficiate={canOfficiate}
+                onChange={refreshSilent}
+              />
+            )}
           </div>
 
           <aside className="order-1 xl:order-2 flex flex-col gap-3 xl:sticky xl:top-2">
@@ -730,6 +777,24 @@ export function TournoiDetailPage() {
               </div>
             )}
 
+            {/* Onglets (tournoi en cours) : suivre le bracket/la ligue, ou parier
+                sur l'issue des matchs à venir. Visible par tout le monde. */}
+            {tournament.status === 'in_progress' && (
+              <div className="rounded-xl border border-border/60 bg-bg-2/40 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+                  {t('tournois.detail.tournament')}
+                </div>
+                <RankingScopeToggle<'bracket' | 'bets'>
+                  value={detailTab}
+                  onChange={setDetailTab}
+                  choices={[
+                    { value: 'bracket', label: t('tournois.tab.bracket') },
+                    { value: 'bets', label: t('tournois.tab.bets') },
+                  ]}
+                />
+              </div>
+            )}
+
             {tournament.status === 'in_progress' && (isOrganizer || isAdmin) && (
               <div className="rounded-xl border border-red/20 bg-red/[0.04] p-3 flex flex-col gap-2">
                 <div className="text-[10px] uppercase tracking-wider text-red/80 font-extrabold">
@@ -738,6 +803,11 @@ export function TournoiDetailPage() {
                 {canReshuffle && (
                   <Button size="sm" variant="ghost" onClick={handleReshuffle} className="w-full">
                     {t('tournois.detail.reshuffle')}
+                  </Button>
+                )}
+                {isLeagueReg && (
+                  <Button size="sm" variant="ghost" onClick={handleReopenRegistration} className="w-full">
+                    Revenir à l’inscription
                   </Button>
                 )}
                 <Button size="sm" variant="danger" onClick={handleCancel} className="w-full">
