@@ -32,6 +32,7 @@ const ACTION_EMOJI: Record<AdminAction, string> = {
   FORCE_CONSUMABLE: '⚡',
   GRANT_BADGE: '🎖️',
   REMOVE_BADGE: '🚫',
+  RESET_OPS_COOLDOWN: '⏱️',
 };
 
 function extractIp(c: Context): string | null {

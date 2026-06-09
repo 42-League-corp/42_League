@@ -59,6 +59,10 @@ model User {
   // de la dernière activation (limite : une activation par semaine).
   eloMultUntil        DateTime? @map("elo_mult_until")
   eloMultWeekKey      String?   @map("elo_mult_week_key")
+  // Reset admin du cooldown d'ops (cf. POST /admin/ops/:login/reset-cooldown).
+  // Quand renseigné, tout ops dont `expiresAt` <= cette date est ignoré pour le
+  // calcul du cooldown (POST /ops & GET /ops/me) : le joueur peut re-déclarer.
+  opsCooldownResetAt  DateTime? @map("ops_cooldown_reset_at")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[]  @default(["babyfoot"])
   // Personnages favoris (« mains ») par jeu de combat — ids des rosters front
@@ -704,6 +708,7 @@ enum AdminAction {
   FORCE_CONSUMABLE
   GRANT_BADGE
   REMOVE_BADGE
+  RESET_OPS_COOLDOWN
 }
 
 model AdminAuditLog {

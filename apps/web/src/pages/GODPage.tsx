@@ -831,6 +831,11 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     await withPending(login, () => api.adminBanUser(login));
   }
 
+  async function resetOpsCooldown(login: string) {
+    if (!(await confirmOrSudo(t('god.users.confirmResetCooldown').replace('{login}', login), t('god.users.confirmResetCooldownLabel')))) return;
+    await withPending(login, () => api.adminResetOpsCooldown(login));
+  }
+
   async function bulkDelete() {
     const ids = [...selected].filter((l) => deletableLogins.includes(l));
     if (ids.length === 0) return;
@@ -1014,6 +1019,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                             : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">{t('god.users.ban')}</Btn>
                           }
                           <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
+                          <Btn onClick={() => resetOpsCooldown(u.login)} disabled={pending === u.login} variant="ghost" className="border border-red-500/40 text-red-400">{t('god.users.resetCooldown')}</Btn>
                           {myRole === 'SUPERADMIN' && (IS_STAGING || u.ftId === null) && (
                             <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">{t('god.users.deleteBtn')}</Btn>
                           )}

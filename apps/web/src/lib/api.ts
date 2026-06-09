@@ -413,7 +413,7 @@ export interface MeResponse {
 export const MODERATOR_PERMISSION_KEYS = [
   'canBan', 'canEditStats', 'canDeleteMatches', 'canEditMatches',
   'canDeletePendingMatches', 'canDeleteRejectedMatches', 'canDeleteChallenges',
-  'canDeleteOps', 'canDeleteTournaments', 'canViewSuspicious', 'canViewAuditLog', 'canViewHistory',
+  'canDeleteOps', 'canResetOpsCooldown', 'canDeleteTournaments', 'canViewSuspicious', 'canViewAuditLog', 'canViewHistory',
 ] as const;
 
 export type ModeratorPermissionKey = (typeof MODERATOR_PERMISSION_KEYS)[number];
@@ -427,6 +427,7 @@ export const MODERATOR_PERMISSION_LABELS: Record<ModeratorPermissionKey, string>
   canDeleteRejectedMatches: 'Voir + supprimer rejets',
   canDeleteChallenges: 'Supprimer défis',
   canDeleteOps: 'Supprimer OPS',
+  canResetOpsCooldown: 'Réinitialiser cooldown OPS',
   canDeleteTournaments: 'Supprimer tournois',
   canViewSuspicious: 'Voir alertes',
   canViewAuditLog: 'Voir audit log',
@@ -1568,6 +1569,11 @@ export const api = {
     request<{ id: string; deleted: true }>(`/admin/rejected-matches/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminDeleteOps: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/ops/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminResetOpsCooldown: (login: string) =>
+    request<{ login: string; cooldownReset: true; resetAt: string | null }>(
+      `/admin/ops/${encodeURIComponent(login)}/reset-cooldown`,
+      { method: 'POST' },
+    ),
   adminDeleteTournament: (id: string) =>
     request<{ id: string; deleted: true }>(`/admin/tournaments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminForceTournamentAccept: (tournamentId: string, inviteId: string) =>

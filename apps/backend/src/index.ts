@@ -182,6 +182,7 @@ const MODERATOR_PERMISSIONS = [
   'canDeleteRejectedMatches',// GET + DELETE /admin/rejected-matches
   'canDeleteChallenges',     // DELETE /admin/challenges/:id
   'canDeleteOps',            // DELETE /admin/ops/:id
+  'canResetOpsCooldown',     // POST   /admin/ops/:login/reset-cooldown
   'canDeleteTournaments',    // DELETE /admin/tournaments/:id
   'canViewSuspicious',       // GET /admin/suspicious
   'canViewAuditLog',         // GET /admin/audit-log
@@ -6811,7 +6812,7 @@ app.get('/ops/me', async (c) => {
   const me = await getCurrentLogin(c);
   const now = new Date();
   const cooldownThreshold = new Date(now.getTime() - OPS_COOLDOWN_MS);
-  const [activeAsOwner, lastAsOwner, activeAsTarget] = await Promise.all([
+  const [activeAsOwner, lastAsOwner, activeAsTarget, meUser] = await Promise.all([
     prisma.ops.findFirst({
       where: { ownerLogin: me, expiresAt: { gt: now } },
       include: { target: { select: { login: true, imageUrl: true } } },
@@ -6824,11 +6825,18 @@ app.get('/ops/me', async (c) => {
       where: { targetLogin: me, expiresAt: { gt: now } },
       include: { owner: { select: { login: true, imageUrl: true } } },
     }),
+    prisma.user.findUnique({ where: { login: me }, select: { opsCooldownResetAt: true } }),
   ]);
+  // Un reset admin neutralise le cooldown des ops terminés avant la date de reset.
+  const reset = meUser?.opsCooldownResetAt ?? null;
   let canDeclareAt: Date | null = null;
   if (activeAsOwner) {
     canDeclareAt = new Date(activeAsOwner.expiresAt.getTime() + OPS_COOLDOWN_MS);
-  } else if (lastAsOwner && lastAsOwner.expiresAt > cooldownThreshold) {
+  } else if (
+    lastAsOwner &&
+    lastAsOwner.expiresAt > cooldownThreshold &&
+    (!reset || lastAsOwner.expiresAt > reset)
+  ) {
     canDeclareAt = new Date(lastAsOwner.expiresAt.getTime() + OPS_COOLDOWN_MS);
   }
   return c.json({
@@ -6866,8 +6874,16 @@ app.post('/ops', async (c) => {
         message: `tu as déjà un ops actif (${ownerActive.targetLogin}) jusqu'au ${ownerActive.expiresAt.toISOString()}`,
       });
     }
+    // Un reset admin (opsCooldownResetAt) neutralise le cooldown des ops terminés
+    // avant cette date : on relève le seuil au max(cooldownThreshold, reset).
+    const meUser = await tx.user.findUnique({
+      where: { login: me },
+      select: { opsCooldownResetAt: true },
+    });
+    const reset = meUser?.opsCooldownResetAt ?? null;
+    const cooldownFloor = reset && reset > cooldownThreshold ? reset : cooldownThreshold;
     const ownerCooldown = await tx.ops.findFirst({
-      where: { ownerLogin: me, expiresAt: { gt: cooldownThreshold } },
+      where: { ownerLogin: me, expiresAt: { gt: cooldownFloor } },
       orderBy: { expiresAt: 'desc' },
     });
     if (ownerCooldown) {
@@ -7388,6 +7404,30 @@ app.delete('/admin/ops/:id', async (c) => {
     payload: { id, ownerLogin: row.ownerLogin, targetLogin: row.targetLogin },
   });
   return c.json({ id, deleted: true });
+});
+
+// Reset du cooldown d'ops d'un joueur : pose opsCooldownResetAt = now, ce qui
+// neutralise le cooldown hérité de tous ses ops déjà terminés. Le joueur peut
+// re-déclarer un ops immédiatement (sauf s'il en a déjà un actif — limite
+// « un seul à la fois » inchangée).
+app.post('/admin/ops/:login/reset-cooldown', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requirePerm(me, 'canResetOpsCooldown');
+  const login = c.req.param('login');
+  const now = new Date();
+  const user = await prisma.user
+    .update({ where: { login }, data: { opsCooldownResetAt: now } })
+    .catch(() => {
+      throw new HTTPException(404, { message: 'user not found' });
+    });
+  emit([login], { type: 'ops:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me, actorRole: await getUserRole(me),
+    action: 'RESET_OPS_COOLDOWN',
+    target: login,
+    payload: { login, resetAt: now.toISOString() },
+  });
+  return c.json({ login, cooldownReset: true, resetAt: user.opsCooldownResetAt });
 });
 
 // Suppression d'un tournoi par un admin (n'importe quel statut, y compris terminé).
