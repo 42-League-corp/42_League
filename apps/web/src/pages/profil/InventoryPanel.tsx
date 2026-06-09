@@ -1,8 +1,14 @@
+<<<<<<< Updated upstream
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { ShieldBan, Zap, Swords, Loader2, Check, X, type LucideProps } from 'lucide-react';
+=======
+import { useCallback, useEffect, useState, type ComponentType } from 'react';
+import { ShieldBan, Flame, Loader2, Check, type LucideProps } from 'lucide-react';
+>>>>>>> Stashed changes
 import { api, type ConsumablesResponse, type ConsumableKind, type ConsumableState } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useEloBoostRemaining } from '../../components/EloBoost';
 import { SectionHeader } from './shared/SectionHeader';
 
 /**
@@ -19,10 +25,10 @@ const META: Record<ConsumableKind, { label: string; desc: string; Icon: Componen
     color: '#2dd4bf',
   },
   elo_mult: {
-    label: "Multiplicateur d'ELO",
-    desc: 'Ton prochain score validé compte double : gain ×2… et perte ×2 aussi.',
-    Icon: Zap,
-    color: '#fbbf24',
+    label: 'ELO ×2 — EN FEU',
+    desc: 'À utiliser quand tu es en feu : 6 h où chaque score compte double (gain ×2, perte ×2). 1 activation / semaine.',
+    Icon: Flame,
+    color: '#ff7a18',
   },
   force_duel: {
     label: 'Main du Destin',
@@ -54,6 +60,7 @@ export function InventoryPanel() {
   const { refresh, leaderboard, me } = useLeagueData();
   const [data, setData] = useState<ConsumablesResponse | null>(null);
   const [busy, setBusy] = useState<ConsumableKind | null>(null);
+<<<<<<< Updated upstream
   // Sélecteur « Main du Destin » : null = fermé, sinon les deux logins en cours.
   const [duelPicker, setDuelPicker] = useState<{ p1: string; p2: string } | null>(null);
 
@@ -62,6 +69,10 @@ export function InventoryPanel() {
     () => leaderboard.filter((u) => u.login !== myLogin),
     [leaderboard, myLogin],
   );
+=======
+  // Fenêtre de boost « EN FEU » en cours (décompte vivant) pour le multiplicateur d'ELO.
+  const boost = useEloBoostRemaining(data?.eloMultUntil ?? null);
+>>>>>>> Stashed changes
 
   const load = useCallback(async () => {
     try {
@@ -80,7 +91,7 @@ export function InventoryPanel() {
       setBusy(kind);
       try {
         await api.useConsumable(kind);
-        show(kind === 'anti_ops' ? 'OPS annulé !' : 'Multiplicateur armé pour ton prochain score.');
+        show(kind === 'anti_ops' ? 'OPS annulé !' : 'Tu es EN FEU ! ELO ×2 pendant 6 h.');
         await load();
         void refresh();
       } catch (err) {
@@ -123,9 +134,11 @@ export function InventoryPanel() {
           const meta = META[c.kind];
           const Icon = meta.Icon;
           const left = cooldownLeft(c);
-          const armed = c.kind === 'elo_mult' && data.eloMultArmed;
+          const isElo = c.kind === 'elo_mult';
+          const boosted = isElo && boost.active;
+          const weekTaken = isElo && data.eloMultWeekTaken;
           const empty = c.quantity < 1;
-          const disabled = busy === c.kind || empty || left > 0 || armed;
+          const disabled = busy === c.kind || empty || left > 0 || boosted || weekTaken;
           return (
             <div
               key={c.kind}
@@ -154,7 +167,8 @@ export function InventoryPanel() {
                     {Math.max(0, c.monthlyCap - c.monthlyUsed)}/{c.monthlyCap}
                   </span>{' '}
                   par mois
-                  {armed && <span className="ml-2 text-gold font-bold">· armé</span>}
+                  {boosted && <span className="ml-2 font-bold tabular-nums" style={{ color: meta.color }}>· EN FEU {boost.hms}</span>}
+                  {!boosted && weekTaken && <span className="ml-2 text-muted font-bold">· activé cette semaine</span>}
                   {left > 0 && <span className="ml-2 text-red font-bold">· cooldown {fmtLeft(left)}</span>}
                 </div>
               </div>
@@ -171,10 +185,10 @@ export function InventoryPanel() {
               >
                 {busy === c.kind ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.5} />
-                ) : armed ? (
+                ) : boosted ? (
                   <Check className="w-3.5 h-3.5" strokeWidth={3} />
                 ) : null}
-                {armed ? 'Armé' : 'Utiliser'}
+                {boosted ? 'En feu' : weekTaken ? 'Cette semaine' : 'Utiliser'}
               </button>
             </div>
           );

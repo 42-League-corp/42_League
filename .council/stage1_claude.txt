@@ -1,0 +1,22 @@
+Permission nécessaire. Voici exactement ce que je veux modifier — 4 lignes dans `UniverseTransition.tsx` :
+
+**Ligne 26** : `EXIT_DUR = 360` → `380` (retour au timing plus punchy de l'ancien)
+
+**Ligne 150** : exit distance `46vw/46vh` → `60vw/60vh` + scale `0.9` → `0.72` + Z `150px` → `200px`
+
+**Ligne 178** : enter distance `26vw/26vh` → `38vw/38vh` + Z `-240px` → `-320px` + scale `0.86` → `0.78`
+
+---
+
+### Pourquoi ça conviendrait aux deux
+
+| | Ton mate (avant) | Toi (maintenant) | Terrain d'entente |
+|---|---|---|---|
+| Distance | 70vw — très loin | 46vw — discret | **60vw — clairement visible** |
+| Scale | 0.4 — rétrécit fort | 0.9 — quasi rien | **0.72 — drama lisible** |
+| Profondeur | 2D plate | 3D subtile | **3D amplifiée (Z 200px)** |
+| Feeling | Explosion | Élégance | **Explosion élégante** |
+
+Les blocs partiront bien loin (ton mate le voit) mais avec la profondeur 3D qui pivote (toi tu gardes le premium). Le retour arrive de plus profond en Z (-320px) donc la recomposition est plus spectaculaire que maintenant, tout en restant raffinée.
+
+Dis-moi si tu veux que j'applique ces 4 changements.

@@ -370,6 +370,9 @@ const PUBLIC_USER_OMIT = [
   'deletionScheduledAt',
   'termsAcceptedAt',
   'termsVersion',
+  // Semaine d'activation du boost ELO ×2 — interne (la limite hebdo). `eloMultUntil`
+  // reste public : les autres voient qu'un joueur est « en feu » sur sa fiche.
+  'eloMultWeekKey',
 ] as const;
 
 /** Retire les champs sensibles d'un objet User avant sérialisation publique. */
@@ -7815,8 +7818,9 @@ app.post('/me/inventory/:id/equip', async (c) => {
 //                 usages. À l'usage : l'ops est neutralisé (expiré + marqué), le
 //                 chasseur reprend son cooldown 7j et ne peut pas te re-cibler
 //                 pendant ANTI_OPS_SHIELD_MS (cf. POST /ops).
-//  - 'elo_mult' : arme un x2 (gain ET perte) sur ton prochain score validé. Cap
-//                 mensuel d'achats, pas de cooldown.
+//  - 'elo_mult' : « EN FEU ». À l'usage, ouvre une fenêtre de 6 h pendant laquelle
+//                 chaque score validé double gain ET perte d'ELO. Activation limitée
+//                 à 1 par semaine ISO. Achat empilable (cap mensuel) pour stocker.
 //  - 'force_duel' : « marionnettiste ». Désigne DEUX joueurs et les force à
 //                 s'affronter en babyfoot — un défi déjà accepté (inéluctable,
 //                 impossible à refuser) apparaît dans leurs duels. Cap 1/mois.
@@ -7826,6 +7830,12 @@ function isConsumableKind(s: string): s is ConsumableKind {
   return (CONSUMABLE_KINDS as readonly string[]).includes(s);
 }
 const ELO_MULT_FACTOR = 2;
+// Durée de la fenêtre de boost « EN FEU » ouverte à l'activation du multiplicateur.
+const ELO_MULT_DURATION_MS = 6 * 60 * 60 * 1000; // 6 heures
+/** Le joueur est-il « en feu » (fenêtre de boost ELO ×2 encore ouverte) ? */
+function isEloMultActive(u: { eloMultUntil: Date | null }, now: Date = new Date()): boolean {
+  return u.eloMultUntil != null && u.eloMultUntil.getTime() > now.getTime();
+}
 const ANTI_OPS_MONTHLY_CAP = 2;
 const ELO_MULT_MONTHLY_CAP = 6;
 const FORCE_DUEL_MONTHLY_CAP = 1;
@@ -7859,8 +7869,8 @@ const CONSUMABLE_ITEMS: {
   {
     id: 'consumable-elo-mult',
     kind: 'elo_mult',
-    name: "Multiplicateur d'ELO",
-    description: 'Ton prochain score validé compte double : gain ×2… mais perte ×2 aussi.',
+    name: 'ELO ×2 — EN FEU',
+    description: 'À utiliser quand tu es en feu : 6 h de boost où chaque score compte double — gain ×2 (et perte ×2). 1 activation par semaine.',
     price: 500,
     rarity: 'rare',
   },
@@ -7888,14 +7898,14 @@ function consumableKindOf(item: { category: string; payload: Prisma.JsonValue | 
   return typeof kind === 'string' && isConsumableKind(kind) ? kind : null;
 }
 
-/** Applique et consomme le x2 d'ELO armé d'un joueur, sur son delta final (après
- *  dégressivité anti-farming). À appeler une seule fois par joueur réglé. */
+/** Applique le x2 d'ELO « EN FEU » sur le delta final d'un joueur (après
+ *  dégressivité anti-farming), si sa fenêtre de boost est ouverte. La fenêtre
+ *  n'est PAS consommée : elle reste active jusqu'à `eloMultUntil` (tous les scores
+ *  des 6 h sont doublés). Gain ET perte sont doublés. */
 async function applyEloMultTx(tx: Prisma.TransactionClient, login: string, delta: number): Promise<number> {
   if (delta === 0) return delta;
-  const u = await tx.user.findUnique({ where: { login }, select: { eloMultArmed: true } });
-  if (!u?.eloMultArmed) return delta;
-  await tx.user.update({ where: { login }, data: { eloMultArmed: false } });
-  return delta * ELO_MULT_FACTOR;
+  const u = await tx.user.findUnique({ where: { login }, select: { eloMultUntil: true } });
+  return u && isEloMultActive(u) ? delta * ELO_MULT_FACTOR : delta;
 }
 
 /** Ajuste (±) la quantité d'un consommable détenu, bornée à 0. Renvoie la qté. */
@@ -7950,12 +7960,15 @@ app.get('/me/consumables', async (c) => {
   const [rows, monthly, user] = await Promise.all([
     prisma.consumableInventory.findMany({ where: { userLogin: login } }),
     prisma.consumableMonthly.findMany({ where: { userLogin: login, monthKey: mk } }),
-    prisma.user.findUnique({ where: { login }, select: { eloMultArmed: true } }),
+    prisma.user.findUnique({ where: { login }, select: { eloMultUntil: true, eloMultWeekKey: true } }),
   ]);
   const byKind = new Map(rows.map((r) => [r.kind, r]));
   const monthByKind = new Map(monthly.map((m) => [m.kind, m.count]));
   return c.json({
-    eloMultArmed: user?.eloMultArmed ?? false,
+    // Fenêtre de boost « EN FEU » en cours (null/passé = pas en feu) + si l'activation
+    // hebdomadaire a déjà été consommée cette semaine ISO.
+    eloMultUntil: user?.eloMultUntil ? user.eloMultUntil.toISOString() : null,
+    eloMultWeekTaken: !!user?.eloMultWeekKey && user.eloMultWeekKey === isoWeekKey(now),
     items: CONSUMABLE_KINDS.map((kind) => {
       const r = byKind.get(kind);
       return {
@@ -8028,21 +8041,34 @@ app.post('/me/consumables/:kind/use', async (c) => {
   }
 
   if (kind === 'elo_mult') {
-    await prisma.$transaction(async (tx) => {
+    const until = await prisma.$transaction(async (tx) => {
       const row = await tx.consumableInventory.findUnique({
         where: { userLogin_kind: { userLogin: login, kind } },
       });
       if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucun multiplicateur en stock' });
-      const u = await tx.user.findUniqueOrThrow({ where: { login }, select: { eloMultArmed: true } });
-      if (u.eloMultArmed) throw new HTTPException(409, { message: 'un multiplicateur est déjà armé' });
+      const u = await tx.user.findUniqueOrThrow({
+        where: { login },
+        select: { eloMultUntil: true, eloMultWeekKey: true },
+      });
+      // Déjà en feu → on ne ré-ouvre pas une fenêtre par-dessus.
+      if (isEloMultActive(u, now)) throw new HTTPException(409, { message: 'tu es déjà en feu' });
+      // Une seule activation par semaine ISO.
+      if (u.eloMultWeekKey === isoWeekKey(now)) {
+        throw new HTTPException(409, { message: 'déjà activé cette semaine — reviens la semaine prochaine' });
+      }
+      const eloMultUntil = new Date(now.getTime() + ELO_MULT_DURATION_MS);
       await tx.consumableInventory.update({
         where: { userLogin_kind: { userLogin: login, kind } },
         data: { quantity: { decrement: 1 }, lastUsedAt: now },
       });
-      await tx.user.update({ where: { login }, data: { eloMultArmed: true } });
+      await tx.user.update({
+        where: { login },
+        data: { eloMultUntil, eloMultWeekKey: isoWeekKey(now) },
+      });
+      return eloMultUntil;
     });
     emit([login], { type: 'panel:update', payload: {} });
-    return c.json({ ok: true, armed: true });
+    return c.json({ ok: true, until: until.toISOString() });
   }
 
   // anti_ops
@@ -9149,7 +9175,11 @@ app.post('/admin/consumables/force-use', async (c) => {
       });
     }
     if (kind === 'elo_mult') {
-      await tx.user.update({ where: { login }, data: { eloMultArmed: true } });
+      // Force : ouvre la fenêtre de 6 h (ignore la limite hebdo) et mémorise la semaine.
+      await tx.user.update({
+        where: { login },
+        data: { eloMultUntil: new Date(now.getTime() + ELO_MULT_DURATION_MS), eloMultWeekKey: isoWeekKey(now) },
+      });
       return { armed: true as const, hunter: null as string | null };
     }
     const hunter = await cancelOpsTargetingTx(tx, login, now);
@@ -9183,7 +9213,7 @@ app.get('/admin/users/:login/items', async (c) => {
   const login = c.req.param('login');
   const user = await prisma.user.findUnique({
     where: { login },
-    select: { title: true, eloMultArmed: true },
+    select: { title: true, eloMultUntil: true },
   });
   if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
   const rows = await prisma.consumableInventory.findMany({ where: { userLogin: login } });
@@ -9191,7 +9221,7 @@ app.get('/admin/users/:login/items', async (c) => {
   return c.json({
     login,
     title: user.title,
-    eloMultArmed: user.eloMultArmed,
+    eloMultUntil: user.eloMultUntil ? user.eloMultUntil.toISOString() : null,
     consumables: CONSUMABLE_KINDS.map((kind) => ({
       kind,
       quantity: byKind.get(kind)?.quantity ?? 0,

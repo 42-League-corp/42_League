@@ -6,6 +6,13 @@
   /* Accent piloté par variable : OR par défaut (babyfoot). Les classes Tailwind
      text-gold / bg-gold / border-gold / text-teal … consomment ces canaux RGB. */
   :root {
+    /* L'app est en thème sombre permanent. Sans cette déclaration, le navigateur
+       traite la page comme « light » et peint ses surfaces par défaut (overscroll,
+       safe-area du home indicator, bande révélée pendant la rétraction de la barre
+       d'URL) en BLANC en mode clair / NOIR en mode sombre → bande parasite en bas
+       sur mobile (Safari iOS, Chrome Android), en navigateur comme en PWA. */
+    color-scheme: dark;
+
     --accent-gold: 255 201 74; /* #ffc94a */
     --accent-gold-dim: 224 168 42; /* #e0a82a */
     --accent-gold-deep: 138 99 16; /* #8a6310 */
@@ -542,6 +549,73 @@
   @media (prefers-reduced-motion: reduce) {
     .animate-backdrop-in {
       animation: backdrop-in 0.4s ease both;
+    }
+  }
+
+  /* ─── « EN FEU » — boost ELO ×2 (cf. components/EloBoost.tsx) ──────────── */
+
+  /* Braise qui monte en scintillant, avec une légère dérive horizontale. La
+     durée et le délai sont posés en inline-style (un par particule). */
+  .elo-ember {
+    animation-name: elo-ember-rise;
+    animation-timing-function: ease-out;
+    animation-iteration-count: infinite;
+    opacity: 0;
+  }
+  @keyframes elo-ember-rise {
+    0% {
+      transform: translate3d(0, 0, 0) scale(0.6);
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate3d(var(--ember-drift, 0px), -120px, 0) scale(1.05);
+      opacity: 0;
+    }
+  }
+
+  /* Léchée de flammes : ondulation verticale + variation d'opacité. */
+  .elo-fire-flicker {
+    animation: elo-fire-flicker 1.5s ease-in-out infinite;
+    transform-origin: bottom center;
+  }
+  @keyframes elo-fire-flicker {
+    0%,
+    100% {
+      transform: scaleY(1);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scaleY(1.12);
+      opacity: 1;
+    }
+  }
+
+  /* Petit balancement de l'icône flamme du badge. */
+  .elo-flame-bob {
+    animation: elo-flame-bob 1.6s ease-in-out infinite;
+    transform-origin: bottom center;
+  }
+  @keyframes elo-flame-bob {
+    0%,
+    100% {
+      transform: rotate(-6deg) scale(1);
+    }
+    50% {
+      transform: rotate(6deg) scale(1.12);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .elo-ember,
+    .elo-fire-flicker,
+    .elo-flame-bob {
+      animation: none;
     }
   }
 
