@@ -1,0 +1,11 @@
+Agit comme un exert UI Animation,
+
+A propos de l'animations entre les changements de jeux,
+
+L'animation peut être encore peut être de vivant ?
+
+Mon mate préferais comme c'était avant. Moi je prefere comme c'est là.
+
+Analyse comment c'était avant, comment c'est maintenant, et reflechis a ce qui ca donne au site, quelle ambiance ca donne le dynamisme, beauté simplicité etc...
+
+Recherche quelles animations possible et trouve un terrain d'entente, un truc qui conviendrait a nous 2. Regarde les commits pour voir comment c'était avant le changement d'animmations (fait tôt ce matin / hier soir)

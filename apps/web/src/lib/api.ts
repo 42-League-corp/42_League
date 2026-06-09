@@ -235,8 +235,10 @@ export interface ConsumableState {
 }
 
 export interface ConsumablesResponse {
-  /** True si un multiplicateur d'ELO est armé pour le prochain score validé. */
-  eloMultArmed: boolean;
+  /** Fin de la fenêtre de boost « EN FEU » (ISO) — null/passé = pas en feu. */
+  eloMultUntil: string | null;
+  /** True si l'activation hebdomadaire du boost a déjà été consommée cette semaine. */
+  eloMultWeekTaken: boolean;
   items: ConsumableState[];
 }
 
@@ -244,7 +246,8 @@ export interface ConsumablesResponse {
 export interface AdminUserItems {
   login: string;
   title: string | null;
-  eloMultArmed: boolean;
+  /** Fin de la fenêtre de boost « EN FEU » du joueur (ISO) — null = pas en feu. */
+  eloMultUntil: string | null;
   consumables: { kind: ConsumableKind; quantity: number; lastUsedAt: string | null }[];
   badges: EquippedBadge[];
 }
@@ -391,6 +394,8 @@ export interface MeResponse {
     favSmash?: string[];
     favSf?: string[];
     onboardedAt?: string | null;
+    /** Fin de la fenêtre de boost « EN FEU » (ELO ×2) — null/passé = pas en feu. */
+    eloMultUntil?: string | null;
   } | null;
 }
 
@@ -587,6 +592,8 @@ export interface UserProfile {
     favSmash?: string[];
     favSf?: string[];
     createdAt: string;
+    /** Fin de la fenêtre de boost « EN FEU » (ELO ×2) — null/passé = pas en feu. */
+    eloMultUntil?: string | null;
   };
   rank: number | null;
   wins: number;
@@ -1591,7 +1598,7 @@ export const api = {
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
   useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string }) =>
-    request<{ ok: true; armed?: boolean; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
+    request<{ ok: true; until?: string; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
       `/me/consumables/${encodeURIComponent(kind)}/use`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },
     ),

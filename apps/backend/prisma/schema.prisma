@@ -47,10 +47,12 @@ model User {
   tournamentsWonFlechettes Int  @default(0) @map("tournaments_won_flechettes")
   // Porte-monnaie « League Coin » — solde dépensable dans la boutique (cf. ShopItem).
   leagueCoins         Int       @default(0) @map("league_coins")
-  // Consommable « multiplicateur d'ELO » armé : le prochain score validé par ce
-  // joueur double son gain/perte d'ELO (cf. ConsumableInventory, kind 'elo_mult').
-  // Remis à false dès qu'un match est réglé pour lui.
-  eloMultArmed        Boolean   @default(false) @map("elo_mult_armed")
+  // Consommable « ELO ×2 » (kind 'elo_mult', cf. ConsumableInventory) — « EN FEU ».
+  // `eloMultUntil` = fin de la fenêtre de boost : tant qu'elle est dans le futur,
+  // chaque score validé double gain ET perte d'ELO. `eloMultWeekKey` = semaine ISO
+  // de la dernière activation (limite : une activation par semaine).
+  eloMultUntil        DateTime? @map("elo_mult_until")
+  eloMultWeekKey      String?   @map("elo_mult_week_key")
   // Modes auxquels le joueur adhère (apparaît dans les stats/classements du mode).
   games               String[]  @default(["babyfoot"])
   // Personnages favoris (« mains ») par jeu de combat — ids des rosters front

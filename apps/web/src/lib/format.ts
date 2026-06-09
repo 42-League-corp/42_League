@@ -50,6 +50,22 @@ export function fmtCountdown(iso: string): string {
   return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
 }
 
+/**
+ * Clé de semaine ISO 8601 (« 2026-W23 ») — identique au calcul serveur. Sert à
+ * détecter côté client qu'un achat hebdomadaire (ex. boost « ELO ×2 ») a déjà été
+ * consommé cette semaine, sans aller-retour réseau.
+ */
+export function isoWeekKey(d: Date = new Date()): string {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7; // lundi=0 … dimanche=6
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  const week = 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
 export function isoLocalNowPlusMinutes(mins: number): string {
   const d = new Date(Date.now() + mins * 60_000);
   const pad = (n: number) => String(n).padStart(2, '0');

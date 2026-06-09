@@ -120,34 +120,6 @@ function GameBackdropImpl() {
           transition: 'opacity 320ms ease',
         }}
       />
-
-      {/* Props latéraux desktop only (2xl+). */}
-      <img
-        src={ART[game].prop}
-        alt=""
-        draggable={false}
-        loading="lazy"
-        decoding="async"
-        className="absolute left-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 select-none mix-blend-screen 2xl:block"
-        style={{
-          opacity: revealed ? 0.22 : 0.1,
-          filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))',
-          transition: 'opacity 300ms ease',
-        }}
-      />
-      <img
-        src={ART[game].prop}
-        alt=""
-        draggable={false}
-        loading="lazy"
-        decoding="async"
-        className="absolute right-2 top-1/2 hidden h-[58vh] max-h-[640px] w-auto -translate-y-1/2 -scale-x-100 select-none mix-blend-screen 2xl:block"
-        style={{
-          opacity: revealed ? 0.22 : 0.1,
-          filter: 'blur(1px) drop-shadow(0 0 28px rgba(255,201,74,0.18))',
-          transition: 'opacity 300ms ease',
-        }}
-      />
     </div>
   );
 }

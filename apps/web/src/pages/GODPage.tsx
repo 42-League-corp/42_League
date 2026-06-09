@@ -4147,8 +4147,8 @@ function ItemsAdminTab() {
                   {c.kind !== 'force_duel' && (
                     <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
                   )}
-                  {c.kind === 'elo_mult' && data.eloMultArmed && (
-                    <span className="text-xs text-amber-400">armé</span>
+                  {c.kind === 'elo_mult' && data.eloMultUntil && new Date(data.eloMultUntil) > new Date() && (
+                    <span className="text-xs text-orange-400">en feu</span>
                   )}
                 </div>
               ))}
