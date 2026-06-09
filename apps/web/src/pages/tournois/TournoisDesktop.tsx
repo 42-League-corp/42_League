@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '../../components/Panel';
@@ -18,6 +19,7 @@ import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useIsMobile } from '../../hooks/useViewport';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useFlash } from '../../hooks/useFlash';
 import { useScrollRoot } from '../../shell/scrollRoot';
@@ -356,6 +358,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   useEscapeKey(true, onClose);
   const flash = useFlash();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { game } = useGameMode();
   const { leaderboard, me, locations } = useLeagueData();
   const t = useT();
@@ -408,14 +411,28 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
     }
   };
 
-  return (
+  // Rendu via portail sur <body> : sur mobile, ce modal est monté à l'intérieur de
+  // PageTransition (framer-motion applique un `transform`), ce qui piège le
+  // `position: fixed` dans le contexte du <main> (z-1) → le modal passait SOUS la
+  // tab bar (z-40) et son bas se cachait derrière la nav. Le portail l'extrait du
+  // conteneur transformé : `fixed inset-0 z-50` couvre alors le vrai viewport et
+  // repasse au-dessus de la tab bar. Sur desktop, comportement identique à avant.
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm">
       <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-        className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
+        className="relative w-full max-w-lg flex flex-col rounded-2xl border border-gold/25 bg-bg-1 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.8)] overflow-hidden"
+        // Hauteur max : sur mobile on borne au viewport dynamique RÉEL (dvh, suit la
+        // barre d'URL) moins la safe-area, pour que le bas (les boutons) reste
+        // toujours visible et atteignable au scroll. Sur desktop, 90vh classique.
+        style={{
+          maxHeight: isMobile
+            ? 'calc(100dvh - env(safe-area-inset-bottom) - 24px)'
+            : '90vh',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-3 px-5 py-4 border-b border-gold/15 bg-bg-2/40 shrink-0">
@@ -574,7 +591,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
         </div>
       </motion.div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
