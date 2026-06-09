@@ -876,7 +876,7 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
   const t = useT();
   const flash = useFlash();
   const { isOpsDuel } = useOpsStatus();
-  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin);
+  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin, match.declaredAt);
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resolved, setResolved] = useState(false);
@@ -997,7 +997,7 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   const t = useT();
   const { isOpsDuel } = useOpsStatus();
-  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin);
+  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin, match.declaredAt);
   // 2v2 : on attend la validation des 3 autres joueurs — on affiche la
   // composition complète (mon duo vs duo adverse) + l'avancée des confirmations.
   if (match.mode === '2v2') {
@@ -1412,7 +1412,7 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline, onA
   const t = useT();
   const { isOpsDuel } = useOpsStatus();
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
-  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin);
+  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin, challenge.createdAt);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const [recording, setRecording] = useState(false);
   const cancelState = challengeCancelState(challenge, myLogin);

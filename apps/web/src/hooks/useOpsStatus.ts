@@ -23,13 +23,20 @@ export interface OpsStatus {
    */
   isOpsWith: (login: string | null | undefined) => boolean;
   /**
-   * `true` UNIQUEMENT pour un vrai duel d'ops : la confrontation entre le traqueur
-   * et sa cible. Le couple {a, b} doit être exactement {moi, mon adversaire d'ops}.
-   * Plus strict que `isOpsWith` : un match qui ne fait que *contenir* un participant
-   * d'ops (sans m'opposer à lui) ne clignote pas. C'est le test à utiliser sur les
-   * cartes de défi/match.
+   * `true` UNIQUEMENT pour un vrai MATCH FORCÉ d'ops — l'un des (max 3) duels que le
+   * traqueur impose à sa cible. Trois conditions, toutes requises :
+   *   1. le couple {a, b} est exactement {traqueur, cible} de mon ops actif ;
+   *   2. le quota de 3 matchs forcés n'est pas épuisé (`forcedUsed < 3`) ;
+   *   3. le duel est NÉ pendant l'ops (`createdAt >= ops.declaredAt`) — un ancien
+   *      défi qui existait déjà avec cette personne AVANT la déclaration ne compte pas.
+   * Sans `createdAt`, la condition de date est ignorée (ne pas l'omettre sur les
+   * cartes de défi/match : c'est ce qui empêche les anciens défis de clignoter).
    */
-  isOpsDuel: (a: string | null | undefined, b: string | null | undefined) => boolean;
+  isOpsDuel: (
+    a: string | null | undefined,
+    b: string | null | undefined,
+    createdAt?: string | null,
+  ) => boolean;
 }
 
 /**
@@ -64,12 +71,32 @@ export function useOpsStatus(): OpsStatus {
       forcedLeftAsTarget: left(hunter),
       forcedLeftAsHunter: left(prey),
       isOpsWith,
-      // Vrai duel d'ops = le couple m'oppose, moi, à mon adversaire d'ops. On exige
-      // qu'un côté soit moi ET l'autre un login d'ops — sinon un simple match qui
-      // « touche » un participant d'ops (sans me concerner) clignoterait à tort.
-      isOpsDuel: (a, b) =>
-        !!myLogin &&
-        ((a === myLogin && isOpsWith(b)) || (b === myLogin && isOpsWith(a))),
+      // Match forcé d'ops = un des (max 3) duels que le traqueur impose à sa cible.
+      // On exige le couple exact {traqueur, cible}, un quota non épuisé, et — si
+      // l'appelant fournit la date — un duel né PENDANT l'ops. Sinon les anciens
+      // défis déjà existants avec cette personne clignoteraient à tort.
+      isOpsDuel: (a, b, createdAt) => {
+        if (!myLogin) return false;
+        // L'ops actif (ma proie ou mon traqueur) dont {a, b} = {owner, target}.
+        const link = (o: Ops | null): Ops | null =>
+          o &&
+          ((a === o.ownerLogin && b === o.targetLogin) ||
+            (a === o.targetLogin && b === o.ownerLogin))
+            ? o
+            : null;
+        const o = link(prey) ?? link(hunter);
+        if (!o) return false;
+        // Quota épuisé : les 3 matchs forcés sont passés → plus rien ne clignote.
+        if ((o.forcedUsed ?? 0) >= OPS_FORCED_MATCHES) return false;
+        // Duel antérieur à la déclaration d'ops → simple ancien défi, pas un forcé.
+        if (
+          createdAt != null &&
+          new Date(createdAt).getTime() < new Date(o.declaredAt).getTime()
+        ) {
+          return false;
+        }
+        return true;
+      },
     };
   }, [opsMe, myLogin]);
 }

@@ -325,14 +325,16 @@
         0 0 22px rgba(255, 45, 85, 0.55);
     }
   }
-  /* Badge explicite « DUEL D'OPS » épinglé dans le coin haut-droit (à l'intérieur
-     du cadre pour ne jamais être rogné par un overflow-hidden), pour préciser de
-     quoi il s'agit en plus de l'animation. */
+  /* Badge explicite « DUEL D'OPS » épinglé en HAUT-CENTRE (à l'intérieur du cadre
+     pour ne jamais être rogné par un overflow-hidden), pour préciser de quoi il
+     s'agit en plus de l'animation. Centré et non plus dans le coin haut-droit : là
+     il recouvrait le bouton « Refuser » des cartes de défi. */
   .ops-duel::after {
     content: '⚔ DUEL D\'OPS';
     position: absolute;
     top: 5px;
-    right: 8px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 2;
     padding: 1px 7px;
     border-radius: 9999px;

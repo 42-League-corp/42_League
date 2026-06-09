@@ -69,7 +69,7 @@ export function ChallengeMobileCard({
   const { isOpsDuel } = useOpsStatus();
   const opponent =
     challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
-  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin);
+  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin, challenge.createdAt);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const tone = KIND_TONE[kind];
   const cancelState = challengeCancelState(challenge, myLogin);

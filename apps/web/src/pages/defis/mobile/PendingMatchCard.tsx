@@ -57,7 +57,7 @@ export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardPro
   const t = useT();
   const flash = useFlash();
   const { isOpsDuel } = useOpsStatus();
-  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin);
+  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin, match.declaredAt);
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
   // Dès qu'on a tranché (confirmé/contesté avec succès), la carte se retire
