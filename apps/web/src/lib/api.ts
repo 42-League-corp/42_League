@@ -715,6 +715,8 @@ export interface TournamentEntry {
   login: string;
   /** 2v2 : coéquipier du capitaine (`login`). Null/absent en 1v1. */
   partnerLogin?: string | null;
+  /** 2v2 : nom d'équipe optionnel (affiché à la place de « @cap & @partner »). */
+  teamName?: string | null;
   joinedAt: string;
   user?: { login: string; imageUrl: string | null; elo: number };
   /** 2v2 : utilisateur coéquipier résolu (avatar/elo) pour l'affichage des paires. */
@@ -743,6 +745,8 @@ export interface Tournament {
   game?: Game;
   status: 'registration' | 'in_progress' | 'finished' | 'cancelled';
   createdByLogin: string;
+  /** Co-organisateurs : tous les droits d'organisation, comme le créateur. */
+  coOrganizers?: string[];
   winnerLogin: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -1323,11 +1327,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  // En 2v2, `partnerLogin` engage la paire (joueur + coéquipier).
-  joinTournament: (id: string, partnerLogin?: string) =>
+  // En 2v2, `partnerLogin` engage la paire (joueur + coéquipier) ; `teamName` optionnel.
+  joinTournament: (id: string, partnerLogin?: string, teamName?: string) =>
     request<{ id: string; status: string }>(
       `/tournaments/${encodeURIComponent(id)}/join`,
-      { method: 'POST', body: JSON.stringify(partnerLogin ? { partnerLogin } : {}) },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(partnerLogin ? { partnerLogin } : {}),
+          ...(teamName ? { teamName } : {}),
+        }),
+      },
     ),
   leaveTournament: (id: string) =>
     request<{ id: string; left: true }>(
@@ -1351,10 +1361,29 @@ export const api = {
       { method: 'POST', body: JSON.stringify({}) },
     ),
   // Organisateur/admin : ajoute directement un joueur (1v1) ou une paire (2v2).
-  addTournamentPlayer: (id: string, login: string, partnerLogin?: string) =>
+  addTournamentPlayer: (id: string, login: string, partnerLogin?: string, teamName?: string) =>
     request<{ id: string; added: string; status: string }>(
       `/tournaments/${encodeURIComponent(id)}/add-player`,
-      { method: 'POST', body: JSON.stringify(partnerLogin ? { login, partnerLogin } : { login }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          login,
+          ...(partnerLogin ? { partnerLogin } : {}),
+          ...(teamName ? { teamName } : {}),
+        }),
+      },
+    ),
+  // 2v2 : (re)nomme une équipe (capitaine = `login`). Membre/organisateur/admin.
+  setTournamentTeamName: (id: string, login: string, teamName: string) =>
+    request<{ id: string; login: string; teamName: string | null }>(
+      `/tournaments/${encodeURIComponent(id)}/team-name`,
+      { method: 'POST', body: JSON.stringify({ login, teamName }) },
+    ),
+  // Créateur/admin : ajoute ou retire un co-organisateur (tous les droits).
+  manageTournamentOrganizer: (id: string, login: string, action: 'add' | 'remove') =>
+    request<{ id: string; coOrganizers: string[] }>(
+      `/tournaments/${encodeURIComponent(id)}/organizers`,
+      { method: 'POST', body: JSON.stringify({ login, action }) },
     ),
   // Organisateur/admin : retire un inscrit (en 2v2 = tout le duo) pendant l'inscription.
   removeTournamentPlayer: (id: string, login: string) =>
