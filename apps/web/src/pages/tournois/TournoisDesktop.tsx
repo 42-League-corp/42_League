@@ -368,6 +368,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   // Mode 1v1 / 2v2 — le 2v2 (doubles) est réservé au babyfoot (cf. backend).
   const [mode, setMode] = useState<'1v1' | '2v2'>('1v1');
   const [partner, setPartner] = useState<LeaderboardEntry | null>(null);
+  // L'organisateur participe-t-il à son propre tournoi ? Décoché par défaut.
+  const [selfJoin, setSelfJoin] = useState(false);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [format, setFormat] = useState<'elimination' | 'pools' | 'league'>('elimination');
   const [imageUrl, setImageUrl] = useState('');
@@ -381,6 +383,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
   const effectiveFormat = isLeague ? 'league' : poolsAllowed ? format : 'elimination';
   // 2v2 uniquement en babyfoot ; partout ailleurs on force le 1v1.
   const teamMode = game === 'babyfoot' && mode === '2v2';
+  // Coéquipier requis uniquement si l'organisateur participe à un 2v2.
+  const needsPartner = teamMode && selfJoin;
   // Coéquipiers candidats : tous les joueurs sauf moi (le créateur).
   const partnerCandidates = leaderboard.filter((p) => p.login !== me?.user?.login);
 
@@ -388,7 +392,7 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
     const n = name.trim();
     if (n.length < 2) { flash.show(t('tournois.flash.nameRequired'), 'error'); return; }
     if (capacity < (isLeague ? 3 : 6)) { flash.show(t('tournois.flash.capacityMin'), 'error'); return; }
-    if (teamMode && !partner) { flash.show(t('tournois.create.needPartner'), 'error'); return; }
+    if (needsPartner && !partner) { flash.show(t('tournois.create.needPartner'), 'error'); return; }
     setBusy(true);
     try {
       const img = imageUrl.trim();
@@ -397,7 +401,8 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
       const tNew = await api.createTournament({
         name: n, capacity, kind, format: effectiveFormat, game,
         mode: teamMode ? '2v2' : '1v1',
-        partnerLogin: teamMode ? partner!.login : undefined,
+        selfJoin,
+        partnerLogin: needsPartner ? partner!.login : undefined,
         private: visibility === 'private',
         prize: prizePayload,
         ...(img ? { imageUrl: img } : {}),
@@ -478,8 +483,29 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               />
             </Field>
           )}
-          {/* Coéquipier (2v2) — le créateur engage sa paire dès la création. */}
-          {teamMode && (
+          {/* L'organisateur participe-t-il ? Décoché par défaut : créer n'oblige pas à jouer. */}
+          <Field label={t('tournois.field.selfJoin')} hint={t('tournois.field.selfJoin.hint')}>
+            <button
+              type="button"
+              onClick={() => setSelfJoin((v) => { if (v) setPartner(null); return !v; })}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-extrabold uppercase tracking-wider transition-all duration-200 ${
+                selfJoin
+                  ? 'bg-gradient-to-b from-gold/25 to-gold/10 text-gold border-gold/40 shadow-[inset_0_1px_0_rgba(255,247,228,0.18)]'
+                  : 'text-muted-2 border-border hover:text-gold/90'
+              }`}
+            >
+              <span className={`grid place-items-center w-4 h-4 rounded border ${selfJoin ? 'border-gold bg-gold/25' : 'border-border'}`}>
+                {selfJoin && (
+                  <svg className="w-3 h-3" viewBox="0 0 20 20" fill="none">
+                    <path d="M5 10.5l3.5 3.5L15 6.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              {t('tournois.field.selfJoin')}
+            </button>
+          </Field>
+          {/* Coéquipier (2v2) — le créateur engage sa paire (seulement s'il participe). */}
+          {needsPartner && (
             <Field label={t('tournois.field.partner')}>
               <PlayerSearch
                 players={partnerCandidates}
@@ -493,6 +519,28 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
               />
             </Field>
           )}
+          {/* Format choisi AVANT le nombre de joueurs : il conditionne les capacités
+              proposées (paliers en puissance de 2 vs nombre libre en ligue). */}
+          <Field label={t('tournois.field.format')} hint={
+            isLeague ? t('tournois.field.format.hint.league')
+            : poolsAllowed
+            ? effectiveFormat === 'pools' ? t('tournois.field.format.hint.pools') : t('tournois.field.format.hint.elim')
+            : t('tournois.field.format.hint.minpools').replace('{n}', String(POOLS_MIN))
+          }>
+            <Pills<'elimination' | 'pools' | 'league'> value={effectiveFormat}
+              onChange={(v) => {
+                if (v === 'pools' && !poolsAllowed) { flash.show(t('tournois.flash.poolsMin').replace('{n}', String(POOLS_MIN)), 'error'); return; }
+                // En quittant la ligue, recale une capacité libre vers une puissance de 2 valide.
+                if (v !== 'league' && (capacity < 8 || (capacity & (capacity - 1)) !== 0)) setCapacity(8);
+                setFormat(v);
+              }}
+              choices={[
+                { value: 'elimination', label: t('tournois.field.format.elim') },
+                { value: 'pools', label: poolsAllowed ? t('tournois.field.format.pools') : t('tournois.field.format.pools.locked') },
+                { value: 'league', label: t('tournois.field.format.league') },
+              ]}
+            />
+          </Field>
           {/* Élimination/poules : capacités en puissances de 2 uniquement → bracket
               toujours plein, jamais de joueur exempt au 1er tour. Ligue : nombre libre
               (l'admin compose les affiches). En 2v2 = nombre d'équipes. */}
@@ -552,26 +600,6 @@ function CreateTournamentModal({ isAdmin, initialKind, onClose, onCreated }: {
           <Field label={t('tournois.field.visibility')} hint={visibility === 'private' ? t('tournois.field.visibility.hint.private') : t('tournois.field.visibility.hint.public')}>
             <Pills<'public' | 'private'> value={visibility} onChange={setVisibility}
               choices={[{ value: 'public', label: t('tournois.field.visibility.public') }, { value: 'private', label: t('tournois.field.visibility.private') }]}
-            />
-          </Field>
-          <Field label={t('tournois.field.format')} hint={
-            isLeague ? t('tournois.field.format.hint.league')
-            : poolsAllowed
-            ? effectiveFormat === 'pools' ? t('tournois.field.format.hint.pools') : t('tournois.field.format.hint.elim')
-            : t('tournois.field.format.hint.minpools').replace('{n}', String(POOLS_MIN))
-          }>
-            <Pills<'elimination' | 'pools' | 'league'> value={effectiveFormat}
-              onChange={(v) => {
-                if (v === 'pools' && !poolsAllowed) { flash.show(t('tournois.flash.poolsMin').replace('{n}', String(POOLS_MIN)), 'error'); return; }
-                // En quittant la ligue, recale une capacité libre vers une puissance de 2 valide.
-                if (v !== 'league' && (capacity < 8 || (capacity & (capacity - 1)) !== 0)) setCapacity(8);
-                setFormat(v);
-              }}
-              choices={[
-                { value: 'elimination', label: t('tournois.field.format.elim') },
-                { value: 'pools', label: poolsAllowed ? t('tournois.field.format.pools') : t('tournois.field.format.pools.locked') },
-                { value: 'league', label: t('tournois.field.format.league') },
-              ]}
             />
           </Field>
           <Field label={t('tournois.field.cover')} hint={t('tournois.field.cover.hint')}>
