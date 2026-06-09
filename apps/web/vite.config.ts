@@ -85,27 +85,20 @@ export default defineConfig(({ mode }) => {
                 expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
               },
             },
-            {
-              // Avatars 42 — NetworkFirst : on privilégie TOUJOURS le réseau,
-              // donc une pp fraîche à chaque chargement (comme un Ctrl+Shift+R),
-              // le cache ne servant plus que de filet hors-ligne.
-              // Pourquoi pas CacheFirst/SWR : les pp 42 sont chargées en <img>
-              // cross-origin → réponses OPAQUES (status 0). Une opaque ne permet
-              // pas de distinguer succès d'échec/fetch partiel, donc une pp cassée
-              // se faisait cacher puis re-servir → photo absente au simple Ctrl+R,
-              // récupérée seulement au Ctrl+Shift+R qui bypass le SW. En
-              // NetworkFirst en ligne on refait toujours la requête d'abord :
-              // plus jamais de pp qui disparaît. cacheName bumpé v2→v3 pour
-              // repartir d'un cache propre côté clients déjà empoisonnés.
-              urlPattern: /^https:\/\/cdn\.intra\.42\.fr\//,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'avatars-42-v3',
-                networkTimeoutSeconds: 4,
-                cacheableResponse: { statuses: [0, 200] },
-                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              },
-            },
+            // ⚠️ NE PAS remettre de règle runtimeCaching sur cdn.intra.42.fr.
+            // Les avatars 42 ne DOIVENT PAS être interceptés par le SW : dès que
+            // le SW refait le fetch lui-même (quelle que soit la stratégie —
+            // CacheFirst, SWR, NetworkFirst), la requête réémise vers le CDN 42
+            // casse (Referer/Sec-Fetch altérés → 403 anti-hotlink → réponse
+            // opaque vide → onError → pp absente). Symptôme : la photo
+            // disparaissait au Ctrl+R (SW actif) et revenait au Ctrl+Shift+R
+            // (SW bypassé), y compris en navigation privée (donc pas un cache
+            // périmé : l'interception elle-même est le bug). En l'absence de
+            // règle, Workbox ne fait pas respondWith() pour ces URLs → la
+            // requête part en NATIF (Referer intact) à chaque chargement, comme
+            // un hard reload. Le cache HTTP du navigateur gère la perf via les
+            // en-têtes du CDN. Filet anti-hoquet transitoire : réessai dans
+            // Avatar.tsx (suffixe _r=).
           ],
         },
       }),
