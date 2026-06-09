@@ -118,6 +118,7 @@ export async function api<T = any>(
 export const get = <T = any>(path: string, opts?: ApiOpts) => api<T>('GET', path, opts);
 export const post = <T = any>(path: string, opts?: ApiOpts) => api<T>('POST', path, opts);
 export const put = <T = any>(path: string, opts?: ApiOpts) => api<T>('PUT', path, opts);
+export const patch = <T = any>(path: string, opts?: ApiOpts) => api<T>('PATCH', path, opts);
 export const del = <T = any>(path: string, opts?: ApiOpts) => api<T>('DELETE', path, opts);
 
 /** Date ISO future (pour scheduledAt des défis). */

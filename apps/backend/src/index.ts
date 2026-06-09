@@ -24,6 +24,7 @@ import {
   TournamentRecordSchema,
   TournamentForceResultSchema,
   LeagueMatchCreateSchema,
+  TournamentEditScoreSchema,
   LeagueFinalizeSchema,
   SetTitleSchema,
   DeclareOpsSchema,
@@ -1628,44 +1629,157 @@ app.get('/leaderboard', async (c) => {
   );
 });
 
+// ── Helpers équipes Babyfoot 2v2 ──────────────────────────────────────────────
+// Inclusions communes pour enrichir une BabyfootTeam : avatars dénormalisés +
+// matchs 2v2 validés (bilan wins/losses). Partagé par le classement, la liste
+// « mes équipes » et le profil d'un duo.
+const TEAM_ENTRY_INCLUDE = {
+  player1: { select: { imageUrl: true } },
+  player2: { select: { imageUrl: true } },
+  matchesAsTeamA: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
+  matchesAsTeamB: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
+} satisfies Prisma.BabyfootTeamInclude;
+
+type TeamWithCounts = Prisma.BabyfootTeamGetPayload<{ include: typeof TEAM_ENTRY_INCLUDE }>;
+
+/** Transforme une BabyfootTeam (avec inclusions) en entrée enrichie, sans rang. */
+function enrichTeamEntry(t: TeamWithCounts) {
+  const wins =
+    t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
+    t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
+  const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
+  return {
+    id: t.id,
+    player1Login: t.player1Login,
+    player2Login: t.player2Login,
+    elo: t.elo,
+    name: t.name,
+    createdAt: t.createdAt,
+    wins,
+    losses: total - wins,
+    player1ImageUrl: t.player1.imageUrl,
+    player2ImageUrl: t.player2.imageUrl,
+  };
+}
+
+/**
+ * Construit la table teamId → rang : duos classés par ELO décroissant, ceux
+ * sans aucun match validé exclus (cohérent avec le classement public).
+ */
+async function loadTeamRankMap(): Promise<Map<string, number>> {
+  const all = await prisma.babyfootTeam.findMany({ take: MAX_PUBLIC_LIST, include: TEAM_ENTRY_INCLUDE });
+  const ranked = all
+    .map(enrichTeamEntry)
+    .filter((t) => t.wins + t.losses > 0)
+    .sort((a, b) => b.elo - a.elo);
+  return new Map(ranked.map((t, i) => [t.id, i + 1]));
+}
+
 // ── Classement des équipes Babyfoot 2v2 ───────────────────────────────────────
 // Renvoie tous les duos avec leur bilan 2v2 (elo / wins / losses / rang), enrichi
 // des avatars des deux joueurs. Alimente le classement équipes + les trophées 2v2.
 app.get('/teams/leaderboard', async (c) => {
   await getCurrentLogin(c);
-  const teams = await prisma.babyfootTeam.findMany({
-    take: MAX_PUBLIC_LIST,
-    include: {
-      player1: { select: { imageUrl: true } },
-      player2: { select: { imageUrl: true } },
-      matchesAsTeamA: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
-      matchesAsTeamB: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
-    },
-  });
+  const teams = await prisma.babyfootTeam.findMany({ take: MAX_PUBLIC_LIST, include: TEAM_ENTRY_INCLUDE });
   const enriched = teams
-    .map((t) => {
-      const wins =
-        t.matchesAsTeamA.filter((m) => m.winner === 'A').length +
-        t.matchesAsTeamB.filter((m) => m.winner === 'B').length;
-      const total = t.matchesAsTeamA.length + t.matchesAsTeamB.length;
-      return {
-        id: t.id,
-        player1Login: t.player1Login,
-        player2Login: t.player2Login,
-        elo: t.elo,
-        name: t.name,
-        createdAt: t.createdAt,
-        wins,
-        losses: total - wins,
-        player1ImageUrl: t.player1.imageUrl,
-        player2ImageUrl: t.player2.imageUrl,
-      };
-    })
+    .map(enrichTeamEntry)
     // Exclut les duos sans aucun match validé (créés à la déclaration, pas encore
     // joués) — ils ne polluent pas le classement tant qu'ils n'ont rien disputé.
     .filter((t) => t.wins + t.losses > 0);
   enriched.sort((a, b) => b.elo - a.elo);
   return c.json(enriched.map((t, i) => ({ rank: i + 1, ...t })));
+});
+
+// ── Mes équipes : tous les duos auxquels appartient un joueur ──────────────────
+// Inclut les duos fraîchement créés (0 match) — c'est CE qui permet à la page
+// /teams d'afficher une équipe dès qu'un 2v2 est déclaré. Les duos non classés
+// (sans match validé) reçoivent un rang fictif les plaçant en fin de liste.
+app.get('/teams', async (c) => {
+  await getCurrentLogin(c);
+  const login = c.req.query('login');
+  if (!login) throw new HTTPException(400, { message: 'login query param required' });
+  const [mine, rankMap] = await Promise.all([
+    prisma.babyfootTeam.findMany({
+      where: { OR: [{ player1Login: login }, { player2Login: login }] },
+      include: TEAM_ENTRY_INCLUDE,
+    }),
+    loadTeamRankMap(),
+  ]);
+  const unrankedRank = rankMap.size + 1;
+  const entries = mine
+    .map(enrichTeamEntry)
+    .map((t) => ({ rank: rankMap.get(t.id) ?? unrankedRank, ...t }))
+    .sort((a, b) => a.rank - b.rank);
+  return c.json(entries);
+});
+
+// ── Profil d'un duo : bilan + historique ELO d'équipe ─────────────────────────
+app.get('/teams/:teamId', async (c) => {
+  await getCurrentLogin(c);
+  const teamId = c.req.param('teamId');
+  const team = await prisma.babyfootTeam.findUnique({ where: { id: teamId }, include: TEAM_ENTRY_INCLUDE });
+  if (!team) throw new HTTPException(404, { message: 'team not found' });
+
+  const base = enrichTeamEntry(team);
+  const rankMap = await loadTeamRankMap();
+  const rank = rankMap.get(team.id) ?? rankMap.size + 1;
+
+  // Historique ELO d'équipe : reconstruit à partir des deltas d'équipe persistés.
+  // On part de l'ELO courant et on remonte la somme des deltas pour retrouver le
+  // point de départ, puis on rejoue en avant. Les matchs antérieurs à la
+  // persistance des deltas (team_delta_* NULL) comptent pour 0 — trajectoire
+  // intermédiaire dégradée, mais le dernier point égale toujours l'ELO réel.
+  const matches = await prisma.playedMatch.findMany({
+    where: { mode: '2v2', countedForElo: true, OR: [{ teamAId: team.id }, { teamBId: team.id }] },
+    orderBy: { playedAt: 'asc' },
+    select: {
+      playedAt: true, winner: true, scoreA: true, scoreB: true, teamAId: true,
+      playerALogin: true, playerA2Login: true, playerBLogin: true, playerB2Login: true,
+      teamDeltaA: true, teamDeltaB: true,
+    },
+  });
+  const totalDelta = matches.reduce(
+    (s, m) => s + ((m.teamAId === team.id ? m.teamDeltaA : m.teamDeltaB) ?? 0),
+    0,
+  );
+  let running = base.elo - totalDelta;
+  const eloHistory = matches.map((m) => {
+    const isA = m.teamAId === team.id;
+    const delta = (isA ? m.teamDeltaA : m.teamDeltaB) ?? 0;
+    running += delta;
+    return {
+      elo: running,
+      delta,
+      playedAt: m.playedAt,
+      won: isA ? m.winner === 'A' : m.winner === 'B',
+      scoreTeam: isA ? m.scoreA : m.scoreB,
+      scoreOpponent: isA ? m.scoreB : m.scoreA,
+      opponentPlayer1Login: isA ? m.playerBLogin : m.playerALogin,
+      opponentPlayer2Login: (isA ? m.playerB2Login : m.playerA2Login) ?? '',
+    };
+  });
+
+  return c.json({ rank, ...base, eloHistory });
+});
+
+// ── Renommer un duo (réservé aux deux membres) ────────────────────────────────
+const TeamNameSchema = z.object({ name: z.string().trim().min(1).max(30) });
+app.patch('/teams/:teamId/name', async (c) => {
+  const me = await getCurrentLogin(c);
+  const teamId = c.req.param('teamId');
+  const parsed = TeamNameSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const team = await prisma.babyfootTeam.findUnique({ where: { id: teamId } });
+  if (!team) throw new HTTPException(404, { message: 'team not found' });
+  if (team.player1Login !== me && team.player2Login !== me) {
+    throw new HTTPException(403, { message: 'seuls les membres du duo peuvent le renommer' });
+  }
+  const updated = await prisma.babyfootTeam.update({
+    where: { id: teamId },
+    data: { name: parsed.data.name },
+    select: { id: true, player1Login: true, player2Login: true, elo: true, name: true, createdAt: true },
+  });
+  return c.json(updated);
 });
 
 // ── Notifications in-app ──────────────────────────────────────────────────
@@ -2536,12 +2650,16 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
   const decayFactor = farmingDecayFactor(sameDayPriorCount(priors, p.declaredAt));
 
   let dA1 = 0, dA2 = 0, dB1 = 0, dB2 = 0;
+  // Deltas des entités BabyfootTeam (Calcul A) — persistés pour l'historique du duo.
+  let tdA = 0, tdB = 0;
   if (countsForElo) {
     const r = await applyElo2v2(tx, { winner, sideA, sideB });
     dA1 = r.individual.deltaA1;
     dA2 = r.individual.deltaA2;
     dB1 = r.individual.deltaB1;
     dB2 = r.individual.deltaB2;
+    tdA = r.team.deltaA;
+    tdB = r.team.deltaB;
   }
 
   await tx.pendingMatch.delete({ where: { id: p.id } });
@@ -2563,6 +2681,8 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
       deltaB: dB1,
       deltaA2: dA2,
       deltaB2: dB2,
+      teamDeltaA: tdA,
+      teamDeltaB: tdB,
       teamAId: teamA.id,
       teamBId: teamB.id,
       seasonId: activeSeason?.id ?? null,
@@ -5302,7 +5422,7 @@ app.post('/tournaments/:id/league/matches', async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = LeagueMatchCreateSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  const { playerALogin, playerBLogin, journee } = parsed.data;
+  const { playerALogin, playerBLogin, leg } = parsed.data;
 
   const created = await prisma.$transaction(async (tx) => {
     if (await leaguePhaseClosed(tx, id)) {
@@ -5316,6 +5436,33 @@ app.post('/tournaments/:id/league/matches', async (c) => {
     if (!entrySet.has(playerALogin) || !entrySet.has(playerBLogin)) {
       throw new HTTPException(400, { message: 'les deux participants doivent être inscrits au tournoi' });
     }
+    // 2v2 : les deux camps ne doivent pas appartenir au MÊME duo (un capitaine ne
+    // peut pas affronter son propre coéquipier).
+    const partners = await tournamentPartnerMap(tx, id);
+    if (teamMembersOf(playerALogin, partners).includes(playerBLogin)) {
+      throw new HTTPException(400, { message: 'les deux camps appartiennent au même duo' });
+    }
+    // Affiches déjà composées entre cette paire (peu importe le sens A/B). poolIndex
+    // porte la manche : 0 = aller, 1 = retour.
+    const between = await tx.tournamentMatch.findMany({
+      where: {
+        tournamentId: id,
+        stage: 'league',
+        OR: [
+          { playerALogin, playerBLogin },
+          { playerALogin: playerBLogin, playerBLogin: playerALogin },
+        ],
+      },
+      select: { poolIndex: true },
+    });
+    if (between.some((b) => (b.poolIndex ?? 0) === leg)) {
+      throw new HTTPException(409, {
+        message: leg === 0 ? 'cette affiche (aller) existe déjà' : 'le retour de cette affiche existe déjà',
+      });
+    }
+    if (leg === 1 && !between.some((b) => (b.poolIndex ?? 0) === 0)) {
+      throw new HTTPException(409, { message: "ajoute d'abord le match aller avant son retour" });
+    }
     const agg = await tx.tournamentMatch.aggregate({
       where: { tournamentId: id, round: 0 },
       _max: { slot: true },
@@ -5326,7 +5473,7 @@ app.post('/tournaments/:id/league/matches', async (c) => {
         id: randomUUID(),
         tournamentId: id,
         stage: 'league',
-        poolIndex: journee,
+        poolIndex: leg,
         round: 0,
         slot,
         playerALogin,
@@ -5357,6 +5504,70 @@ app.delete('/tournaments/:id/league/matches/:matchId', async (c) => {
   });
   broadcast({ type: 'tournament:update', payload: {} });
   return c.json({ id: matchId, deleted: true });
+});
+
+// Admin/officiant : ÉDITE le score d'un match de ligue DÉJÀ CONFIRMÉ (correction
+// d'une erreur de saisie). Un match de ligue ne touche pas l'ELO réel → on met
+// simplement à jour score + vainqueur, et le classement se recalcule à l'affichage.
+// Si le vainqueur CHANGE, les paris du match sont re-réglés : on annule les gains
+// déjà versés (débit clampé à 0) puis on règle pour le nouveau vainqueur. Possible
+// tant que la phase de ligue est ouverte (pas encore basculée en bracket).
+app.post('/tournaments/:id/league/matches/:matchId/edit-score', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const matchId = c.req.param('matchId');
+  await assertLeagueOfficiant(me, id);
+  const body = await c.req.json().catch(() => null);
+  const parsed = TournamentEditScoreSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { scoreA, scoreB } = parsed.data;
+
+  const affected = await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, { message: 'la phase de ligue est terminée (bracket généré)' });
+    }
+    const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.tournamentId !== id || m.stage !== 'league') {
+      throw new HTTPException(404, { message: 'match not found' });
+    }
+    if (!m.confirmedAt) {
+      throw new HTTPException(409, { message: 'match non confirmé — utilise la saisie de score' });
+    }
+    if (!m.playerALogin || !m.playerBLogin) {
+      throw new HTTPException(409, { message: 'match sans joueurs' });
+    }
+    const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    if (scoreErr) throw new HTTPException(400, { message: scoreErr });
+
+    const newWinner = scoreA > scoreB ? m.playerALogin : m.playerBLogin;
+    const winnerChanged = newWinner !== m.winnerLogin;
+    await tx.tournamentMatch.update({
+      where: { id: matchId },
+      data: { scoreA, scoreB, winnerLogin: newWinner, recordedByLogin: me, recordedAt: new Date() },
+    });
+    if (!winnerChanged) return [] as string[];
+    // Reverse des paris déjà réglés sur ce match (débit du gain, retour à 'open'),
+    // puis règlement pour le nouveau vainqueur. `touched` = parieurs dont le solde bouge.
+    const touched = new Set<string>();
+    const settled = await tx.bet.findMany({
+      where: { targetType: 'match', matchId, status: { in: ['won', 'lost'] } },
+    });
+    for (const b of settled) {
+      if (b.payout > 0) {
+        await grantCoinsTx(tx, b.bettorLogin, -b.payout);
+        touched.add(b.bettorLogin);
+      }
+      await tx.bet.update({ where: { id: b.id }, data: { status: 'open', payout: 0, settledAt: null } });
+    }
+    for (const w of await settleMatchBetsTx(tx, matchId, newWinner)) touched.add(w);
+    return [...touched];
+  });
+  // Soldes des parieurs impactés mis à jour après commit.
+  if (affected.length) emit(affected, { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  return c.json({ id: matchId, edited: true });
 });
 
 // Admin/officiant : bascule la phase de ligue en élimination directe. Les
@@ -5691,8 +5902,8 @@ app.post('/tournaments/:id/matches/:matchId/toss', async (c) => {
     if (!m || m.tournamentId !== id) {
       throw new HTTPException(404, { message: 'match not found' });
     }
-    if (m.stage !== 'bracket') {
-      throw new HTTPException(409, { message: 'le pile-ou-face ne concerne que le bracket' });
+    if (m.stage !== 'bracket' && m.stage !== 'league') {
+      throw new HTTPException(409, { message: 'le pile-ou-face concerne le bracket et la ligue' });
     }
     if (!m.playerALogin || !m.playerBLogin) {
       throw new HTTPException(409, {
@@ -5807,8 +6018,8 @@ app.post('/tournaments/:id/matches/:matchId/announce', async (c) => {
     if (!m || m.tournamentId !== id) {
       throw new HTTPException(404, { message: 'match not found' });
     }
-    if (m.stage !== 'bracket') {
-      throw new HTTPException(409, { message: 'on ne peut désigner qu’un match de bracket' });
+    if (m.stage !== 'bracket' && m.stage !== 'league') {
+      throw new HTTPException(409, { message: 'on ne peut désigner qu’un match de bracket ou de ligue' });
     }
     if (!m.playerALogin || !m.playerBLogin) {
       throw new HTTPException(409, { message: 'match has no players yet (previous round pending)' });

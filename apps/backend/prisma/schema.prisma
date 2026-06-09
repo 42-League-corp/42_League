@@ -507,6 +507,11 @@ model PlayedMatch {
   playerB2Login String?  @map("player_b2_login")
   deltaA2       Int?     @map("delta_a2")
   deltaB2       Int?     @map("delta_b2")
+  // Variations ELO des ENTITÉS BabyfootTeam (Calcul A) — distinctes des deltas
+  // individuels ci-dessus. Servent à reconstruire l'historique ELO d'un duo
+  // sur sa page profil. NULL pour les matchs 1v1 / autres jeux.
+  teamDeltaA    Int?     @map("team_delta_a")
+  teamDeltaB    Int?     @map("team_delta_b")
   teamAId       String?  @map("team_a_id")
   teamBId       String?  @map("team_b_id")
 

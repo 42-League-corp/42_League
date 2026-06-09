@@ -325,12 +325,13 @@ export type TournamentForceResultInput = z.infer<typeof TournamentForceResultSch
 
 // ── Phase de ligue ───────────────────────────────────────────────────────────
 // Affiche composée par l'admin : deux participants (logins capitaines en 2v2)
-// distincts, rattachée à une journée (≥ 1).
+// distincts. `leg` = manche : 0 = aller (défaut), 1 = retour. Le retour n'est
+// autorisé que si l'aller entre la même paire existe déjà (cf. backend).
 export const LeagueMatchCreateSchema = z
   .object({
     playerALogin: LoginSchema,
     playerBLogin: LoginSchema,
-    journee: z.number().int().min(1).max(100),
+    leg: z.union([z.literal(0), z.literal(1)]).default(0),
   })
   .refine((d) => d.playerALogin !== d.playerBLogin, {
     message: 'un match oppose deux participants différents',
@@ -338,6 +339,16 @@ export const LeagueMatchCreateSchema = z
   });
 
 export type LeagueMatchCreateInput = z.infer<typeof LeagueMatchCreateSchema>;
+
+// Édition d'un score de match de ligue déjà confirmé (admin/officiant) — correction
+// d'erreur de saisie. Le classement se recalcule à l'affichage ; les paris du match
+// sont re-réglés si le vainqueur change (cf. backend).
+export const TournamentEditScoreSchema = z.object({
+  scoreA: z.number().int().min(0).max(999),
+  scoreB: z.number().int().min(0).max(999),
+});
+
+export type TournamentEditScoreInput = z.infer<typeof TournamentEditScoreSchema>;
 
 // Bascule de la phase de ligue vers l'élimination directe : nombre de qualifiés
 // (puissance de 2, 2..32) → taille du bracket des premiers au goal average.
