@@ -114,6 +114,8 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
             src={imgSrc}
             alt={login}
             className="w-full h-full object-cover block"
+            loading="lazy"
+            decoding="async"
             onError={() => setErrCount((n) => n + 1)}
           />
         ) : (
