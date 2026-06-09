@@ -1,18 +1,19 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { DesktopShell } from './DesktopShell';
 import { MobileShell } from './MobileShell';
 import { ViewportSwitch } from './ViewportSwitch';
-import { NotifBanner } from '../components/NotifBanner';
-import { OpsRevealOverlay } from '../components/OpsRevealOverlay';
 import { GameModeSwitch } from '../components/GameModeSwitch';
 import { GameBackdrop } from '../components/GameBackdrop';
 import { TesterSwitch } from '../components/TesterSwitch';
 import { GameOnboarding } from '../components/GameOnboarding';
-import { AnnouncementPopup } from '../components/AnnouncementPopup';
-import { GameTransitionOverlay } from '../components/GameTransitionOverlay';
-import { MatchmakingOverlay } from '../components/MatchmakingOverlay';
-import { DuelStrikeOverlay } from '../components/DuelStrikeOverlay';
-import { ContestRageOverlay } from '../components/ContestRageOverlay';
+
+const NotifBanner        = lazy(() => import('../components/NotifBanner').then(m => ({ default: m.NotifBanner })));
+const OpsRevealOverlay   = lazy(() => import('../components/OpsRevealOverlay').then(m => ({ default: m.OpsRevealOverlay })));
+const AnnouncementPopup  = lazy(() => import('../components/AnnouncementPopup').then(m => ({ default: m.AnnouncementPopup })));
+const GameTransitionOverlay = lazy(() => import('../components/GameTransitionOverlay').then(m => ({ default: m.GameTransitionOverlay })));
+const MatchmakingOverlay = lazy(() => import('../components/MatchmakingOverlay').then(m => ({ default: m.MatchmakingOverlay })));
+const DuelStrikeOverlay  = lazy(() => import('../components/DuelStrikeOverlay').then(m => ({ default: m.DuelStrikeOverlay })));
+const ContestRageOverlay = lazy(() => import('../components/ContestRageOverlay').then(m => ({ default: m.ContestRageOverlay })));
 
 interface AppShellProps {
   children: ReactNode;
@@ -37,24 +38,26 @@ export function AppShell({ children }: AppShellProps) {
         mobile={<MobileShell>{children}</MobileShell>}
         desktop={<DesktopShell>{children}</DesktopShell>}
       />
-      <NotifBanner />
-      <OpsRevealOverlay />
+      <Suspense>
+        <NotifBanner />
+        <OpsRevealOverlay />
+      </Suspense>
       <GameModeSwitch />
       {/* Bouton « Tester en mode user » (staging + admins) — bas-gauche */}
       <TesterSwitch />
       <GameOnboarding />
-      {/* Annonces générales (admin) — popup « une seule fois » à la connexion */}
-      <AnnouncementPopup />
-      {/* Overlay cinématique de changement d'univers — pointer-events-none */}
-      <GameTransitionOverlay />
-      {/* Overlay VERSUS global : s'affiche sur n'importe quelle page quand le
-          matchmaking trouve un adversaire (recherche persistante inter-pages) */}
-      <MatchmakingOverlay />
-      {/* Réaction « rage » plein écran quand une game est contestée — des deux
-          côtés du litige (contesteur via API, contesté via SSE) */}
-      <ContestRageOverlay />
-      {/* Cinématique « coup de foudre → VERSUS » à l'acceptation/lancement d'un duel */}
-      <DuelStrikeOverlay />
+      <Suspense>
+        {/* Annonces générales (admin) — popup « une seule fois » à la connexion */}
+        <AnnouncementPopup />
+        {/* Overlay cinématique de changement d'univers — pointer-events-none */}
+        <GameTransitionOverlay />
+        {/* Overlay VERSUS global */}
+        <MatchmakingOverlay />
+        {/* Réaction « rage » plein écran quand une game est contestée */}
+        <ContestRageOverlay />
+        {/* Cinématique « coup de foudre → VERSUS » */}
+        <DuelStrikeOverlay />
+      </Suspense>
     </>
   );
 }
