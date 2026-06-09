@@ -1104,6 +1104,14 @@ function LeagueSection({
   const allerMatches = matches.filter((m) => (m.poolIndex ?? 0) === 0);
   const retourMatches = matches.filter((m) => (m.poolIndex ?? 0) === 1);
 
+  // Le classement est calculé par capitaine ; on remonte au duo pour l'affichage
+  // (en 2v2, une ligne = une équipe, pas un joueur seul).
+  const is2v2 = tournament.mode === '2v2';
+  const teamByCaptain = useMemo(
+    () => new Map(teams.map((tm) => [tm.captain, tm])),
+    [teams],
+  );
+
   // Choix possibles de qualifiés : puissances de 2 de 2 jusqu'au nombre de classés.
   const qualifyChoices: number[] = [];
   for (let p = 2; p <= standings.length; p *= 2) qualifyChoices.push(p);
@@ -1194,7 +1202,9 @@ function LeagueSection({
             <thead>
               <tr className="text-muted-2 border-b border-border/40">
                 <th className="text-left font-semibold py-1.5 pl-3">#</th>
-                <th className="text-left font-semibold py-1.5">{t('tournois.pool.col.player')}</th>
+                <th className="text-left font-semibold py-1.5">
+                  {is2v2 ? t('tournois.league.col.team') : t('tournois.pool.col.player')}
+                </th>
                 <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.played')}</th>
                 <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.wins')}</th>
                 <th className="text-center font-semibold py-1.5">{t('tournois.pool.col.diff')}</th>
@@ -1204,7 +1214,9 @@ function LeagueSection({
             <tbody>
               {standings.map((s, i) => {
                 const qualified = editable && i < effectiveQualify;
-                const isMine = teams.some((tm) => tm.captain === s.login && tm.members.includes(myLogin ?? ''));
+                const team = teamByCaptain.get(s.login);
+                const members = team?.members ?? [s.login];
+                const isMine = team?.members.includes(myLogin ?? '') ?? false;
                 return (
                   <tr
                     key={s.login}
@@ -1218,9 +1230,16 @@ function LeagueSection({
                       </span>
                     </td>
                     <td className="py-1.5">
-                      <PlayerLink login={s.login} className="text-sm truncate">
-                        <span className={qualified ? 'text-text-strong font-semibold' : ''}>{s.login}</span>
-                      </PlayerLink>
+                      <span className="flex items-center gap-1 text-sm min-w-0">
+                        {members.map((m, mi) => (
+                          <span key={m} className="flex items-center gap-1 min-w-0">
+                            {mi > 0 && <span className="text-muted-2">+</span>}
+                            <PlayerLink login={m} className="truncate">
+                              <span className={qualified ? 'text-text-strong font-semibold' : ''}>{m}</span>
+                            </PlayerLink>
+                          </span>
+                        ))}
+                      </span>
                     </td>
                     <td className="py-1.5 text-center tabular-nums text-muted-2">{s.played}</td>
                     <td className="py-1.5 text-center tabular-nums font-bold">{s.wins}</td>
