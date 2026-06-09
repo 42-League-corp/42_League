@@ -155,7 +155,7 @@ obligatoire**. Ce couplage build/config reviendra mordre (cf. 2.5 et Phase 4 bui
 
 ### 2.4 `www` vs apex
 
-**Symptôme.** `www.42league.fr` ne se comportait pas comme `42league.fr`.
+**Symptôme.** `www.oneleague.fr` ne se comportait pas comme `oneleague.fr`.
 
 **Fix.** `fix: redirect www to apex domain` (8c218ca) — redirection `www` → apex côté Caddy.
 Petit, mais typique du travail de mise en prod : la config DNS/proxy déborde de cas limites.
@@ -809,7 +809,7 @@ pouvoir **tester** librement (7b53464, 7353c92). Tout est ajouté à la mémoire
 
 ### 10.5 ⭐ Le boot staging cassé par un import jamais commité
 
-**Symptôme — 502 sur `staging.42league.fr`.** Le backend staging **bouclait en crash**.
+**Symptôme — 502 sur `staging.oneleague.fr`.** Le backend staging **bouclait en crash**.
 
 **Cause** (`fix(backend): commit contributor-stats manquant`, aec39eb). `index.ts:82` importait
 `./contributor-stats.js`, mais **le fichier n'avait jamais été commité** → `ERR_MODULE_NOT_FOUND` au

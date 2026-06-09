@@ -6,8 +6,8 @@
 
 | Tu pousses sur… | Ça déclenche… | Résultat visible |
 |---|---|---|
-| **`develop`** | `deploy-staging` (build image `:develop`) | https://staging.42league.fr (privé, `admin`/`6767`) |
-| **`main`** | `deploy-prod` (build/seed image `:main`) | https://42league.fr (**PRODUCTION**) |
+| **`develop`** | `deploy-staging` (build image `:develop`) | https://staging.oneleague.fr (privé, `admin`/`6767`) |
+| **`main`** | `deploy-prod` (build/seed image `:main`) | https://oneleague.fr (**PRODUCTION**) |
 
 > **Règle d'or : on teste sur `develop` (staging) AVANT de promouvoir sur `main` (prod).**
 
@@ -32,7 +32,7 @@ Quand la CI est verte, tu fusionnes dans `develop` :
 ```bash
 git switch develop
 git merge feat/ma-fonctionnalite
-git push origin develop                   # ⤴ deploy-staging → staging.42league.fr (~5-8 min)
+git push origin develop                   # ⤴ deploy-staging → staging.oneleague.fr (~5-8 min)
 ```
 
 ### Façon rapide — direct sur develop (pour de petits trucs)
@@ -55,7 +55,7 @@ git switch main && git pull
 # ... tu corriges ...
 git add -A
 git commit -m "fix(scope): hotfix ..."
-git push origin main                      # ⤴ deploy-prod → 42league.fr
+git push origin main                      # ⤴ deploy-prod → oneleague.fr
 ```
 > Chaque déploiement prod recrée les conteneurs backend/frontend/caddy → **blip de quelques secondes** (normal). La base de données n'est jamais touchée.
 > Après un hotfix sur main, reporte-le sur develop pour ne pas le perdre : `git switch develop && git merge main && git push origin develop`.
@@ -77,7 +77,7 @@ C'est **l'opération que tu feras le plus souvent** pour livrer en prod ce que t
 ```bash
 git switch main && git pull
 git merge develop                         # amène tout develop dans main
-git push origin main                      # ⤴ deploy-prod → 42league.fr
+git push origin main                      # ⤴ deploy-prod → oneleague.fr
 git switch develop                        # reviens bosser sur develop
 ```
 
@@ -97,8 +97,8 @@ git commit -m "docs: mise à jour du guide [skip ci]"
 
 **Suivre un déploiement en cours :** onglet **Actions** du dépôt GitHub. Ou vérifier en live :
 ```bash
-curl -sI https://staging.42league.fr      # 401 = normal (basic-auth actif)
-curl -s  https://42league.fr/api/health   # doit renvoyer {"ok":true}
+curl -sI https://staging.oneleague.fr      # 401 = normal (basic-auth actif)
+curl -s  https://oneleague.fr/api/health   # doit renvoyer {"ok":true}
 ```
 
 **Convention de commit (la tienne) :** `feat(...)`, `fix(...)`, `chore(...)`, `docs(...)`, `refactor(...)`. Pas de mention d'outil/IA.

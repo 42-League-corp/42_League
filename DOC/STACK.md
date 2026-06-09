@@ -132,7 +132,7 @@ Trois fichiers compose, pour trois usages.
 ### `docker-compose.prod.yml` — build local + run
 - `postgres` : Postgres 16, volume `league_pgdata`, `restart: always`.
 - `backend` : **construit** depuis `apps/backend/Dockerfile`. Lit `.env`. `DATABASE_URL` et `PORT=3000` en variables. Démarre après que Postgres soit `healthy`.
-- `frontend` : **construit** depuis `apps/web/Dockerfile`. `VITE_API_BASE_URL` passé en build-arg (`https://42league.fr/api`).
+- `frontend` : **construit** depuis `apps/web/Dockerfile`. `VITE_API_BASE_URL` passé en build-arg (`https://oneleague.fr/api`).
 - `caddy` : image `caddy:alpine`. Ports `80` et `443`. Monte `./Caddyfile`. Volumes `caddy_data`, `caddy_config`.
 
 ### `docker-compose.registry.yml` — déploiement serveur (images pré-construites)
@@ -164,12 +164,12 @@ Trois fichiers compose, pour trois usages.
 
 Fichier `Caddyfile` :
 ```
-42league.fr {
+oneleague.fr {
     reverse_proxy /api/* backend:3000
     reverse_proxy frontend:80
 }
 ```
-- Domaine : `42league.fr`. Caddy gère le **TLS automatiquement** (Let's Encrypt) sur `443`.
+- Domaine : `oneleague.fr`. Caddy gère le **TLS automatiquement** (Let's Encrypt) sur `443`.
 - Les requêtes `/api/*` vont au conteneur `backend` sur `3000`.
 - Tout le reste va au conteneur `frontend` sur `80` (le site).
 
@@ -210,7 +210,7 @@ Secrets GitHub utilisés : `GITHUB_TOKEN` (push GHCR), `SSH_PRIVATE_KEY` (accès
 > paths-filter v4, docker login v4 / build-push v7).
 
 ### Autres workflows
-- `deploy-staging.yml` : même pipeline, déclenché sur `push` sur `develop` → images `:develop`/`:dev-<sha>` (front baké avec `https://staging.42league.fr/api`), déployé dans `/opt/42_league_staging`.
+- `deploy-staging.yml` : même pipeline, déclenché sur `push` sur `develop` → images `:develop`/`:dev-<sha>` (front baké avec `https://staging.oneleague.fr/api`), déployé dans `/opt/42_league_staging`.
 - `force-build-deploy.yml` : rebuild forcé des deux images (sans paths-filter) + redéploiement prod (`workflow_dispatch`).
 - `ci.yml` : lint / typecheck / tests (unitaires + intégration) sur PR.
 - `build.yml` : build/push manuel des images (`workflow_dispatch`, choix backend/frontend/both).
@@ -240,8 +240,8 @@ Modèle : `.env.example`. Copier en `.env`.
 
 ## 10. Flux d'une requête en production
 
-1. Le navigateur charge le site depuis `https://42league.fr` → Caddy → conteneur `frontend` (Nginx) → fichiers statiques React.
-2. Le front appelle l'API sur `https://42league.fr/api/...` → Caddy (`/api/*`) → conteneur `backend` (Hono, port 3000).
+1. Le navigateur charge le site depuis `https://oneleague.fr` → Caddy → conteneur `frontend` (Nginx) → fichiers statiques React.
+2. Le front appelle l'API sur `https://oneleague.fr/api/...` → Caddy (`/api/*`) → conteneur `backend` (Hono, port 3000).
 3. Le backend lit/écrit dans PostgreSQL via Prisma.
 4. Le front maintient une connexion SSE (`/events`) ; le backend pousse les changements ; le front re-fetch la donnée concernée.
 

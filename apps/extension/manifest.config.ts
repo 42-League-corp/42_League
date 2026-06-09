@@ -34,7 +34,7 @@ export default defineManifest({
   },
   browser_specific_settings: {
     gecko: {
-      id: '42league@42league.fr',
+      id: '42league@oneleague.fr',
       strict_min_version: '140.0',
       data_collection_permissions: { required: [] },
     },
@@ -44,7 +44,7 @@ export default defineManifest({
     'https://intra.42.fr/*',
     'https://*.intra.42.fr/*',
     'https://api.intra.42.fr/*',
-    'https://42league.fr/*',
+    'https://oneleague.fr/*',
     ...(process.env.NODE_ENV === 'development'
       ? ['http://localhost:3000/*', 'http://localhost:5173/*']
       : []),

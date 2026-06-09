@@ -47,7 +47,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         # On remplace l'IP par le nom de domaine !
-        VITE_API_BASE_URL: "https://42league.fr/api" 
+        VITE_API_BASE_URL: "https://oneleague.fr/api" 
     container_name: league-frontend
     restart: always
 

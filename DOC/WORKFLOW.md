@@ -8,8 +8,8 @@
 
 | Branche | Ça déploie où | Quoi faire |
 |---------|---|---|
-| **`develop`** | staging.42league.fr | Tu bosses ici. Chaque `git push` = redéploiement auto. |
-| **`main`** | 42league.fr (PROD) | Branche de prod. Mise à jour = merger `develop` dedans. |
+| **`develop`** | staging.oneleague.fr | Tu bosses ici. Chaque `git push` = redéploiement auto. |
+| **`main`** | oneleague.fr (PROD) | Branche de prod. Mise à jour = merger `develop` dedans. |
 
 ---
 
@@ -32,15 +32,15 @@ git commit -m "feat: ma feature"
 git push origin develop
 ```
 
-✅ **Boom.** GitHub Actions lance un build auto, construit l'image Docker `:develop`, la pousse sur GHCR, et déploie sur **staging.42league.fr** en ~9 minutes.
+✅ **Boom.** GitHub Actions lance un build auto, construit l'image Docker `:develop`, la pousse sur GHCR, et déploie sur **staging.oneleague.fr** en ~9 minutes.
 
-**Tester** : https://staging.42league.fr (login OAuth, tu es automatiquement superadmin si tu es dans la whitelist).
+**Tester** : https://staging.oneleague.fr (login OAuth, tu es automatiquement superadmin si tu es dans la whitelist).
 
 ---
 
 ### Étape 2 — Tu valides sur staging
 
-Tu testes ta feature sur https://staging.42league.fr.
+Tu testes ta feature sur https://staging.oneleague.fr.
 
 Tout bon ? Continue. Pas bon ? Refais un `git commit` → `git push origin develop`, ça redéploie.
 
@@ -68,7 +68,7 @@ git merge develop
 git push origin main
 ```
 
-✅ **Boom.** GitHub Actions lance `deploy-prod` : construit les images `:main`, valide le Caddyfile, déploie sur **42league.fr** en ~9 minutes.
+✅ **Boom.** GitHub Actions lance `deploy-prod` : construit les images `:main`, valide le Caddyfile, déploie sur **oneleague.fr** en ~9 minutes.
 
 ---
 
@@ -96,7 +96,7 @@ GitHub: "OK, je lance deploy-staging"
 ⏳ 9 minutes plus tard
            │
            ▼
-✅ staging.42league.fr est à jour
+✅ staging.oneleague.fr est à jour
 ```
 
 ### 2. Si ça casse, tu vois l'erreur
@@ -123,7 +123,7 @@ git commit -m "feat: ta feature"
 # 3. Pousser (= déployer sur staging)
 git push origin develop
 
-# 4. Tester (manuel sur https://staging.42league.fr)
+# 4. Tester (manuel sur https://staging.oneleague.fr)
 # [ouvre le lien, testes]
 
 # 5. Passer en prod
@@ -157,7 +157,7 @@ DEVELOP branch (staging)          MAIN branch (prod)
   ⏳ build `:develop`             ⏳ build `:main`
        │                                │
        ▼                                ▼
-  ✅ staging.42league.fr          ✅ 42league.fr (REAL)
+  ✅ staging.oneleague.fr          ✅ oneleague.fr (REAL)
 ```
 
 **Voilà. C'est ça.**

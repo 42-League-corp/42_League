@@ -9,7 +9,7 @@ Un **bug classique d'infra** : fichier de config sur le serveur à jour, mais co
 ## 1. Le symptôme
 
 ```
-GET https://42league.fr/api/auth/web/login?return_to=...
+GET https://oneleague.fr/api/auth/web/login?return_to=...
 → HTTP 404 Not Found
 ```
 

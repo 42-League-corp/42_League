@@ -38,7 +38,7 @@
 
 ## Déploiement
 - [x] Hébergement : serveur dédié, stack Docker Compose (front nginx + backend Hono + Postgres + Caddy), images poussées sur GHCR
-- [x] **Staging + prod** : `develop` → `staging.42league.fr`, `main` → `42league.fr` (déploiement auto, cf. `architecture-ci-cd.md` / `GUIDE-GIT.md`)
+- [x] **Staging + prod** : `develop` → `staging.oneleague.fr`, `main` → `oneleague.fr` (déploiement auto, cf. `architecture-ci-cd.md` / `GUIDE-GIT.md`)
 - [x] Postgres conteneurisé (mot de passe paramétrable, non exposé)
 - [x] Variables d'env en prod/staging (dont `PROD_READONLY_URL` pour la synchro ELO)
 - [x] URLs de prod/staging dans les redirect URIs de l'app OAuth intra

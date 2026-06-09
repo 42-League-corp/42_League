@@ -51,7 +51,7 @@ domaines** :
                  │   CADDY edge (stack prod)           │
                  │   TLS auto · headers · 1 par domaine│
                  └───────┬──────────────────────┬──────┘
-        42league.fr      │                      │   staging.42league.fr
+        oneleague.fr      │                      │   staging.oneleague.fr
                          │                      │   (+ basic_auth admin)
               ┌──────────▼─────────┐  ┌─────────▼───────────┐
    réseau     │  /opt/42_league/   │  │ /opt/42_league_     │   réseau
@@ -86,12 +86,12 @@ Points importants :
 
 ## 3. Cheminement complet d'une requête HTTP
 
-### a) Un visiteur ouvre `https://42league.fr` (PRODUCTION)
+### a) Un visiteur ouvre `https://oneleague.fr` (PRODUCTION)
 
-1. **DNS** : `42league.fr` → `163.172.141.178` (le VPS).
+1. **DNS** : `oneleague.fr` → `163.172.141.178` (le VPS).
 2. **TLS** : la connexion arrive sur le port 443 du **Caddy edge**, qui présente le
    certificat Let's Encrypt qu'il a obtenu et renouvelle **tout seul**.
-3. **Routage par domaine** : Caddy voit l'en-tête `Host: 42league.fr` → bloc prod.
+3. **Routage par domaine** : Caddy voit l'en-tête `Host: oneleague.fr` → bloc prod.
 4. **Headers** : Caddy ajoute HSTS, X-Frame-Options, nosniff, etc.
 5. **Routage par chemin** :
    - `GET /api/...` → Caddy retire le préfixe `/api`, transmet à `backend:3000`
@@ -101,7 +101,7 @@ Points importants :
      sert le SPA React et applique le fallback `index.html`).
 6. La réponse remonte par le même chemin jusqu'au navigateur.
 
-### b) Un visiteur ouvre `https://staging.42league.fr` (STAGING)
+### b) Un visiteur ouvre `https://staging.oneleague.fr` (STAGING)
 
 Identique, **à deux différences près** :
 
@@ -111,7 +111,7 @@ Identique, **à deux différences près** :
   `league-stg-frontend:80` (les conteneurs staging), atteints via le réseau
   partagé `league_edge`.
 
-Le frontend staging a été **buildé avec `VITE_API_BASE_URL=https://staging.42league.fr/api`**,
+Le frontend staging a été **buildé avec `VITE_API_BASE_URL=https://staging.oneleague.fr/api`**,
 donc il tape bien l'API staging et jamais la prod.
 
 ---
@@ -197,11 +197,11 @@ tu as un **filet de sécurité** : `develop` (staging) avant `main` (prod).
    feature/ma-fonctionnalite      (tu codes ici)
             │  PR + CI verte
             ▼
-        develop  ───────────────►  build :develop  ──►  https://staging.42league.fr
+        develop  ───────────────►  build :develop  ──►  https://staging.oneleague.fr
             │  tu testes en conditions réelles            (privé, basic-auth)
             │  PR develop → main
             ▼
-          main   ───────────────►  build :main     ──►  https://42league.fr
+          main   ───────────────►  build :main     ──►  https://oneleague.fr
                                                           (PRODUCTION)
 ```
 
@@ -218,7 +218,7 @@ tu as un **filet de sécurité** : `develop` (staging) avant `main` (prod).
 
 2. **Tester sur le staging** : ouvre une PR vers `develop` et merge-la (ou pousse
    sur `develop`). Le staging se met à jour seul. Tu valides sur
-   `https://staging.42league.fr` — c'est **exactement** l'environnement prod, mais
+   `https://staging.oneleague.fr` — c'est **exactement** l'environnement prod, mais
    isolé et avec sa propre base.
 
 3. **Mettre en production** : quand le staging est validé, PR `develop → main`.
@@ -237,7 +237,7 @@ tu as un **filet de sécurité** : `develop` (staging) avant `main` (prod).
 Ces étapes créent l'environnement staging sur le VPS (voir le détail commandé
 fourni séparément) :
 
-1. **DNS** : enregistrement A `staging.42league.fr` → `163.172.141.178`.
+1. **DNS** : enregistrement A `staging.oneleague.fr` → `163.172.141.178`.
 2. `docker network create league_edge` (réseau partagé).
 3. Générer le hash bcrypt et le mettre dans `/opt/42_league/caddy.env`.
    ⚠️ **Piège** : Docker Compose interpole les valeurs de `env_file`, ce qui
@@ -251,8 +251,8 @@ fourni séparément) :
    # résultat attendu : STAGING_BASICAUTH_HASH=$$2a$$14$$....
    ```
 4. Créer `/opt/42_league_staging/.env` (copie du `.env` prod, adaptée :
-   `FT_OAUTH_REDIRECT_URI=https://staging.42league.fr/auth/callback`,
-   `WEB_APP_URLS=https://staging.42league.fr`, un `SESSION_SECRET` **différent**).
+   `FT_OAUTH_REDIRECT_URI=https://staging.oneleague.fr/auth/callback`,
+   `WEB_APP_URLS=https://staging.oneleague.fr`, un `SESSION_SECRET` **différent**).
 5. Premier déploiement : push sur `develop` → le pipeline fait le reste.
 
 > Le fichier legacy `docker-compose.prod.yml` (build sur le serveur) n'est plus

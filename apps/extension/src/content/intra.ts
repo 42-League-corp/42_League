@@ -20,7 +20,7 @@ const ANCHOR_KEYWORDS = ['évaluations', 'evaluations'];
 
 const WEB_APP_URL =
   (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
-  'https://42league.fr';
+  'https://oneleague.fr';
 
 let myLogin: string | null = null;
 let challenges: Challenge[] = [];

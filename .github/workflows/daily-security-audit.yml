@@ -41,7 +41,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://test:test@localhost:55432/league_test
-      SITE: https://42league.fr
+      SITE: https://oneleague.fr
       WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK_URL }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
@@ -129,7 +129,7 @@ jobs:
           fi
 
           # 3c. Redirection HTTP → HTTPS
-          redir=$(http_code "http://42league.fr")
+          redir=$(http_code "http://oneleague.fr")
           case "$redir" in
             301|302|308) add_check "✅ Redirection HTTP → HTTPS active (${redir})" ;;
             000)         : ;;

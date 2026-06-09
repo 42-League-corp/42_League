@@ -6,7 +6,7 @@ const STYLE_ID = 'league-42-profile-link-style';
 
 const WEB_APP_URL =
   (import.meta.env.VITE_WEB_APP_URL as string | undefined)?.replace(/\/$/, '') ??
-  'https://42league.fr';
+  'https://oneleague.fr';
 
 function playerUrl(login: string): string {
   return `${WEB_APP_URL}/joueur/${encodeURIComponent(login)}`;

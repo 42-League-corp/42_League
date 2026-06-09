@@ -1,6 +1,6 @@
 export const DEFAULT_API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  'https://42league.fr/api';
+  'https://oneleague.fr/api';
 
 export const STORAGE_TOKEN_KEY = 'league_token';
 export const STORAGE_LOGIN_KEY = 'league_login';

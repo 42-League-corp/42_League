@@ -1,8 +1,8 @@
-www.42league.fr {
-    redir https://42league.fr{uri} permanent
+www.oneleague.fr {
+    redir https://oneleague.fr{uri} permanent
 }
 
-42league.fr {
+oneleague.fr {
     # Headers de durcissement appliqués à toutes les réponses (front + API).
     # Vérifiés quotidiennement par .github/workflows/daily-security-audit.yml.
     header {
@@ -40,9 +40,9 @@ www.42league.fr {
 
 # ── STAGING ───────────────────────────────────────────────────────────────────
 # Même Caddy, second domaine. Caddy provisionne automatiquement le certificat
-# TLS de staging.42league.fr dès que le DNS pointe sur le VPS (aucun certbot).
+# TLS de staging.oneleague.fr dès que le DNS pointe sur le VPS (aucun certbot).
 # Les upstreams `league-stg-*` sont atteints via le réseau partagé `league_edge`.
-staging.42league.fr {
+staging.oneleague.fr {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"

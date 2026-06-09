@@ -5,7 +5,7 @@ multi-discipline (babyfoot, smash, échecs, street fighter, fléchettes) avec é
 quêtes hebdo et paris.
 
 **Conventions**
-- Base URL locale : `http://localhost:3000`. En prod : `https://42league.fr/api` (via Caddy).
+- Base URL locale : `http://localhost:3000`. En prod : `https://oneleague.fr/api` (via Caddy).
 - Auth : voir [SECURITY.md §7](./SECURITY.md). En résumé, un endpoint « auth » accepte un cookie de
   session signé, un `Authorization: Bearer <token>`, ou (dev uniquement) l'en-tête `x-dev-login`.
 - Toutes les erreurs renvoient `{ "message": "..." }` avec le code HTTP correspondant (handler global).

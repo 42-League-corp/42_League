@@ -7,7 +7,7 @@ interface StagingGateProps {
 }
 
 /**
- * Écran-barrière du staging : `staging.42league.fr` est réservé aux superadmins.
+ * Écran-barrière du staging : `staging.oneleague.fr` est réservé aux superadmins.
  * Affiché en plein écran quand un utilisateur authentifié N'EST PAS superadmin.
  *
  * Ce n'est pas qu'un masque visuel : le backend l'impose aussi (APP_ENV=staging,
@@ -42,8 +42,8 @@ export function StagingGate({ login }: StagingGateProps) {
           ) : null}
           cet environnement de test n’est ouvert qu’aux superadmins. Pour jouer,
           rends-toi sur{' '}
-          <a href="https://42league.fr" className="text-gold underline">
-            42league.fr
+          <a href="https://oneleague.fr" className="text-gold underline">
+            oneleague.fr
           </a>
           .
         </p>

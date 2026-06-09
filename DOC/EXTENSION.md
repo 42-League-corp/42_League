@@ -19,7 +19,7 @@ Manifest V3, généré à partir d'un fichier TS (typé), puis patché pour Fire
 - **background.service_worker** : `src/background/index.ts` (module ES) — OAuth + proxy API.
 - **action** (popup) : `src/popup/index.html` + `index.ts`.
 - **web_accessible_resources** : icônes injectées dans l'intra.
-- **Firefox** : id `42league@42league.fr`, min 140.0, `data_collection_permissions: none`.
+- **Firefox** : id `42league@oneleague.fr`, min 140.0, `data_collection_permissions: none`.
 
 Build sur le port dev **5180** (ne collisionne pas avec le site sur 5173), sortie `dist/`,
 sourcemaps activées.
