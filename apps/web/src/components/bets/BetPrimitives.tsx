@@ -49,6 +49,7 @@ export function BetForm({
   choices,
   avatars,
   partners,
+  labels,
   maxStake,
   busy,
   onSubmit,
@@ -63,6 +64,11 @@ export function BetForm({
    * pariée reste le login du capitaine (clé canonique côté règlement).
    */
   partners?: Record<string, string | null>;
+  /**
+   * Label custom par choix (remplace l'affichage « @login »). Sert p.ex. à afficher
+   * « Nul » pour le pronostic d'égalité d'un match, ou un nom d'équipe.
+   */
+  labels?: Record<string, string>;
   maxStake: number;
   busy: boolean;
   onSubmit: (choiceLogin: string, stake: number) => void;
@@ -96,13 +102,21 @@ export function BetForm({
                     : 'border border-white/8 bg-white/[0.02] text-muted hover:text-text'
                 }`}
               >
-                {hasAvatar && <Avatar login={login} imageUrl={avatars[login] ?? null} size="xs" />}
-                @{login}
-                {partner && (
+                {labels?.[login] ? (
+                  <span>{labels[login]}</span>
+                ) : (
                   <>
-                    <span className="opacity-60">&amp;</span>
-                    {hasAvatar && <Avatar login={partner} imageUrl={avatars[partner] ?? null} size="xs" />}
-                    @{partner}
+                    {hasAvatar && <Avatar login={login} imageUrl={avatars[login] ?? null} size="xs" />}
+                    @{login}
+                    {partner && (
+                      <>
+                        <span className="opacity-60">&amp;</span>
+                        {hasAvatar && (
+                          <Avatar login={partner} imageUrl={avatars[partner] ?? null} size="xs" />
+                        )}
+                        @{partner}
+                      </>
+                    )}
                   </>
                 )}
               </button>
