@@ -4,8 +4,8 @@ import type { PhaseInfo } from '../../lib/liveTournament';
 // Bandeau inférieur — rappel des disciplines (jeu du tournoi mis en avant) + phase.
 const GAMES: Array<{ id: string; label: string; color: string; grey: string }> = [
   { id: 'babyfoot', label: 'Babyfoot', color: '/coulour-baby.webp', grey: '/gray-baby.webp' },
-  { id: 'smash', label: 'Smash', color: '/smash-color.png', grey: '/smash-grey.png' },
-  { id: 'streetfighter', label: 'Street Fighter', color: '/sf-color.png', grey: '/sf-grey.png' },
+  { id: 'smash', label: 'Smash', color: '/smash-color.webp', grey: '/smash-grey.webp' },
+  { id: 'streetfighter', label: 'Street Fighter', color: '/sf-color.webp', grey: '/sf-grey.webp' },
   { id: 'chess', label: 'Échecs', color: '/chess.webp', grey: '/gray-chess.webp' },
 ];
 

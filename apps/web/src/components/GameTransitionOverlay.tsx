@@ -44,7 +44,7 @@ const UNIVERSE: Record<Game, {
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
         {/* Logo Smash seul, centré */}
-        <image href="/smash-color.png" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
+        <image href="/smash-color.webp" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
@@ -56,7 +56,7 @@ const UNIVERSE: Record<Game, {
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
         {/* Logo Street Fighter seul, centré */}
-        <image href="/sf-color.png" x="6" y="18" width="108" height="84" preserveAspectRatio="xMidYMid meet" />
+        <image href="/sf-color.webp" x="6" y="18" width="108" height="84" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },

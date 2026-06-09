@@ -47,7 +47,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     glowColor: 'rgba(255,61,80,0.45)',
     button: { from: '#ff9aa6', via: '#ff3d50', to: '#a8121f', text: '#2a0307', border: 'rgba(255,128,140,0.6)', glow: 'rgba(255,61,80,0.4)' },
     icon: (sel, size = 20) => (
-      <img src={sel ? '/smash-color.png' : '/smash-grey.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
+      <img src={sel ? '/smash-color.webp' : '/smash-grey.webp'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   chess: {
@@ -71,7 +71,7 @@ export const GAME_META: Record<Game, GameMeta> = {
     glowColor: 'rgba(255,122,24,0.45)',
     button: { from: '#ffc08a', via: '#ff7a18', to: '#b8480a', text: '#2a1200', border: 'rgba(255,176,102,0.6)', glow: 'rgba(255,122,24,0.4)' },
     icon: (sel, size = 20) => (
-      <img src={sel ? '/sf-color.png' : '/sf-grey.png'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
+      <img src={sel ? '/sf-color.webp' : '/sf-grey.webp'} alt="" width={size} height={size} loading="eager" decoding="async" className="object-contain" aria-hidden />
     ),
   },
   flechettes: {
