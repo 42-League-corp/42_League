@@ -2854,6 +2854,10 @@ function SeasonsTab() {
   const [openSeason, setOpenSeason] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  // Clôture programmée de la saison active.
+  const [schedAt, setSchedAt] = useState('');
+  const [schedName, setSchedName] = useState('');
+  const [schedBusy, setSchedBusy] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const t = useT();
 
@@ -2926,6 +2930,43 @@ function SeasonsTab() {
     }
   };
 
+  // Programme la clôture auto de la saison active à la date/heure choisie.
+  const onSchedule = async () => {
+    if (!schedAt || !schedName.trim()) return;
+    const when = new Date(schedAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      setMsg('La date de clôture doit être dans le futur.');
+      return;
+    }
+    setSchedBusy(true);
+    setMsg('');
+    try {
+      await api.scheduleSeasonEnd(when.toISOString(), schedName.trim());
+      setSchedAt('');
+      setSchedName('');
+      setMsg(`Clôture programmée le ${fmtDate(when.toISOString())} → « ${schedName.trim()} ».`);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSchedBusy(false);
+    }
+  };
+
+  const onCancelSchedule = async () => {
+    setSchedBusy(true);
+    setMsg('');
+    try {
+      await api.cancelSeasonSchedule();
+      setMsg('Clôture programmée annulée.');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSchedBusy(false);
+    }
+  };
+
   // Basculement de vue : remet une saison clôturée comme active (sans reset d'ELO).
   const onActivate = async (s: Season) => {
     setActivatingId(s.id);
@@ -2980,6 +3021,48 @@ function SeasonsTab() {
         {active && <div className="text-[11px] text-zinc-500 mt-2 leading-relaxed">{t('god.season.nextHint')}</div>}
         {msg && <div className="text-xs text-zinc-400 mt-2">{msg}</div>}
       </Section>
+
+      {active && (
+        <Section title="Clôture programmée">
+          {active.scheduledEndAt ? (
+            <div className="bg-amber-500/5 border border-amber-500/30 rounded p-3 text-sm">
+              <div className="text-amber-300">
+                ⏱ Bascule auto le <span className="font-bold">{fmtDate(active.scheduledEndAt)}</span>
+                {active.nextSeasonName && (
+                  <> vers <span className="font-bold">« {active.nextSeasonName} »</span></>
+                )}
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-1">
+                À cette date, la saison est clôturée automatiquement (snapshot + reset ELO au plancher de grade). Les League Coins sont conservés.
+              </div>
+              <Btn variant="ghost" onClick={() => void onCancelSchedule()} disabled={schedBusy} className="border border-red-500/40 text-red-400 mt-2">
+                Annuler la programmation
+              </Btn>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1 text-[11px] text-zinc-500">
+                  Date &amp; heure de clôture
+                  <input
+                    type="datetime-local"
+                    value={schedAt}
+                    onChange={(e) => setSchedAt(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500/60"
+                  />
+                </label>
+                <Input value={schedName} onChange={setSchedName} placeholder="Nom de la nouvelle saison" className="flex-1 min-w-[180px]" />
+                <Btn variant="success" onClick={() => void onSchedule()} disabled={schedBusy || !schedAt || !schedName.trim()}>
+                  {schedBusy ? '…' : 'Programmer'}
+                </Btn>
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
+                À l'heure choisie (ex. minuit), la saison actuelle est clôturée et « {schedName.trim() || 'la nouvelle saison'} » démarre automatiquement. Les coins persistent entre les saisons.
+              </div>
+            </>
+          )}
+        </Section>
+      )}
 
       <Section title={t('god.season.historyTitle')}>
         <div className="space-y-1.5">
