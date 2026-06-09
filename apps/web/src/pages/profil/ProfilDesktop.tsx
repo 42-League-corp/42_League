@@ -27,6 +27,7 @@ import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
 import { fmtCountdown } from '../../lib/format';
 import { pickRating } from '../../lib/gameStats';
+import { OPS_FORCED_MATCHES } from '../../lib/api';
 
 /**
  * Vue desktop du profil — version dense en infos avec stat cards.
@@ -460,6 +461,12 @@ function OpsWidget({ opsMe, locale, t }: OpsWidgetProps) {
                 {t('profil.opsHuntsUntil')}{' '}
                 {new Date(opsMe.current.expiresAt).toLocaleDateString(locale)} ·{' '}
                 {fmtCountdown(opsMe.current.expiresAt)} {t('profil.opsRemaining')}
+              </div>
+              {/* Quota de matchs forcés restant à imposer à la cible (sur 3). */}
+              <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gold/15 border border-gold/30 text-[10px] font-extrabold uppercase tracking-wider text-gold tabular-nums">
+                ⚔ {t('profil.opsForcedLeft')
+                  .replace('{n}', String(Math.max(0, OPS_FORCED_MATCHES - (opsMe.current.forcedUsed ?? 0))))
+                  .replace('{max}', String(OPS_FORCED_MATCHES))}
               </div>
             </div>
           </div>

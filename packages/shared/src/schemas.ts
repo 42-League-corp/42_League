@@ -224,6 +224,10 @@ export const CreateTournamentSchema = z
     mode: z.enum(['1v1', '2v2']).default('1v1'),
     // 2v2 uniquement : coéquipier du créateur (il s'inscrit avec sa paire à la création).
     partnerLogin: LoginSchema.optional(),
+    // L'organisateur participe-t-il à son propre tournoi ? Décoché par défaut :
+    // créer un tournoi n'oblige pas à y jouer. Si true, il est inscrit à la création
+    // (et, en 2v2, doit désigner un coéquipier).
+    selfJoin: z.boolean().default(false),
     // Format : élimination directe, phase de poules (puis bracket des qualifiés),
     // ou phase de ligue (affiches composées par l'admin, classement au goal average,
     // puis bascule en élimination directe des premiers au goal average).
@@ -270,8 +274,9 @@ export const CreateTournamentSchema = z
     message: 'une récompense ne peut être attachée qu\'à un tournoi officiel',
     path: ['prize'],
   })
-  // 2v2 : un coéquipier est obligatoire (le créateur engage sa paire).
-  .refine((d) => d.mode !== '2v2' || !!d.partnerLogin, {
+  // 2v2 : un coéquipier est obligatoire UNIQUEMENT si l'organisateur participe
+  // (il engage alors sa paire). S'il ne participe pas, aucun coéquipier requis.
+  .refine((d) => d.mode !== '2v2' || !d.selfJoin || !!d.partnerLogin, {
     message: 'un tournoi 2v2 nécessite de désigner ton coéquipier',
     path: ['partnerLogin'],
   })

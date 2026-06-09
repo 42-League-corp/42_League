@@ -86,16 +86,22 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              // Avatars 42 — StaleWhileRevalidate : sert le cache instantanément
-              // (perf) MAIS revalide en arrière-plan à chaque chargement. En
-              // CacheFirst, une réponse opaque cassée (hoquet CDN, fetch partiel)
-              // restait servie 30 j → pp absentes jusqu'au Ctrl+Shift+R qui bypass
-              // le SW. SWR auto-répare au rechargement suivant. cacheName bumpé
-              // pour repartir d'un cache propre côté clients déjà empoisonnés.
+              // Avatars 42 — NetworkFirst : on privilégie TOUJOURS le réseau,
+              // donc une pp fraîche à chaque chargement (comme un Ctrl+Shift+R),
+              // le cache ne servant plus que de filet hors-ligne.
+              // Pourquoi pas CacheFirst/SWR : les pp 42 sont chargées en <img>
+              // cross-origin → réponses OPAQUES (status 0). Une opaque ne permet
+              // pas de distinguer succès d'échec/fetch partiel, donc une pp cassée
+              // se faisait cacher puis re-servir → photo absente au simple Ctrl+R,
+              // récupérée seulement au Ctrl+Shift+R qui bypass le SW. En
+              // NetworkFirst en ligne on refait toujours la requête d'abord :
+              // plus jamais de pp qui disparaît. cacheName bumpé v2→v3 pour
+              // repartir d'un cache propre côté clients déjà empoisonnés.
               urlPattern: /^https:\/\/cdn\.intra\.42\.fr\//,
-              handler: 'StaleWhileRevalidate',
+              handler: 'NetworkFirst',
               options: {
-                cacheName: 'avatars-42-v2',
+                cacheName: 'avatars-42-v3',
+                networkTimeoutSeconds: 4,
                 cacheableResponse: { statuses: [0, 200] },
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
               },

@@ -4203,25 +4203,59 @@ app.post('/challenges', async (c) => {
   // Un adversaire banni / désactivé / anonymisé est hors-jeu : pas de défi.
   await assertTargetable(opponentLogin);
   await getOrCreateUser(me);
+
+  // ─── OPS : défi forcé → auto-accepté ──────────────────────────────────────
+  // Si JE (le traqueur) défie MA cible pendant un OPS actif et que le quota de 3
+  // matchs forcés n'est pas épuisé, le défi est FORCÉ : il naît déjà 'accepted'
+  // (la cible ne choisit pas, le duel a lieu — elle n'a plus qu'à le jouer). Le
+  // compteur forcedUsed n'est PAS touché ici : il l'est au confirm final du match
+  // (cf. /matches/:id/confirm) ou au refus forcé (cf. /challenges/:id/decline),
+  // pour ne compter que les matchs réellement consommés. 1v1 uniquement.
+  const now = new Date();
+  const forcedOps = await prisma.ops.findFirst({
+    where: {
+      ownerLogin: me,
+      targetLogin: opponentLogin,
+      expiresAt: { gt: now },
+      forcedUsed: { lt: OPS_FORCED_MATCHES },
+    },
+  });
+  const isForced = !!forcedOps;
+
   const challenge = await prisma.challenge.create({
     data: {
       id: randomUUID(),
       challengerLogin: me,
       opponentLogin,
-      status: 'pending',
+      status: isForced ? 'accepted' : 'pending',
+      ...(isForced ? { decidedAt: now } : {}),
       scheduledAt: new Date(scheduledAt),
       game,
     },
   });
-  emit([opponentLogin], { type: 'challenge:received', payload: challenge });
-  void notify(opponentLogin, {
-    type: 'challenge_received',
-    title: `@${me} t'a défié`,
-    body: 'Un nouveau défi t\'attend',
-    link: `/challenges?game=${encodeURIComponent(game)}`,
-    game,
-    refId: challenge.id,
-  });
+
+  if (isForced) {
+    // Défi déjà accepté : les deux camps doivent le voir « prêt à jouer ».
+    emit([opponentLogin, me], { type: 'challenge:accepted', payload: challenge });
+    void notify(opponentLogin, {
+      type: 'challenge_received',
+      title: `@${me} t'impose un duel`,
+      body: 'Duel OPS forcé — à jouer',
+      link: `/challenges?game=${encodeURIComponent(game)}`,
+      game,
+      refId: challenge.id,
+    });
+  } else {
+    emit([opponentLogin], { type: 'challenge:received', payload: challenge });
+    void notify(opponentLogin, {
+      type: 'challenge_received',
+      title: `@${me} t'a défié`,
+      body: 'Un nouveau défi t\'attend',
+      link: `/challenges?game=${encodeURIComponent(game)}`,
+      game,
+      refId: challenge.id,
+    });
+  }
   return c.json(challenge, 201);
 });
 
@@ -4673,6 +4707,9 @@ app.post('/challenges/:id/record', async (c) => {
     type: 'challenge:recorded',
     payload: { pendingId: pending.id },
   });
+  // Le défi est joué → notif cloche « duel reçu » soldée pour qui enregistre (utile
+  // surtout pour un défi OPS forcé, qui n'a jamais transité par accept/decline).
+  void markNotifsReadByRef(me, id);
   return c.json({ pendingId: pending.id, status: 'pending_confirmation' }, 201);
 });
 
@@ -5189,10 +5226,14 @@ app.post('/tournaments', async (c) => {
     throw new HTTPException(403, { message: 'only admins can attach a prize' });
   }
   await getOrCreateUser(me);
-  // 2v2 : le créateur engage sa paire. Le coéquipier doit être un vrai joueur
-  // disponible, différent de lui. L'entrée stocke le créateur en capitaine.
-  const partner = d.mode === '2v2' ? d.partnerLogin ?? null : null;
-  if (d.mode === '2v2') {
+  // L'organisateur ne s'inscrit que s'il a coché « je participe ». Créer un
+  // tournoi ne l'oblige pas à y jouer.
+  const selfJoin = d.selfJoin;
+  // 2v2 : si l'organisateur participe, il engage sa paire. Le coéquipier doit
+  // être un vrai joueur disponible, différent de lui. L'entrée stocke le
+  // créateur en capitaine. (Pas de coéquipier requis s'il ne participe pas.)
+  const partner = selfJoin && d.mode === '2v2' ? d.partnerLogin ?? null : null;
+  if (selfJoin && d.mode === '2v2') {
     if (!partner || partner === me) {
       throw new HTTPException(400, { message: 'choisis un coéquipier différent de toi' });
     }
@@ -5254,7 +5295,8 @@ app.post('/tournaments', async (c) => {
         prizeItemId,
         betFinalMult,
         cashPrizeBase,
-        entries: { create: { login: me, partnerLogin: partner } },
+        // L'organisateur n'est inscrit que s'il a choisi de participer.
+        ...(selfJoin ? { entries: { create: { login: me, partnerLogin: partner } } } : {}),
       },
       include: { entries: { select: { login: true, partnerLogin: true } }, prizeItem: true },
     });
@@ -6817,14 +6859,10 @@ app.post('/ops', async (c) => {
         message: `${target} est déjà l'ops de quelqu'un d'autre`,
       });
     }
-    const targetTargeting = await tx.ops.findFirst({
-      where: { ownerLogin: target, expiresAt: { gt: now } },
-    });
-    if (targetTargeting) {
-      throw new HTTPException(409, {
-        message: `${target} a actuellement quelqu'un comme ops`,
-      });
-    }
+    // NB : on autorise volontairement à cibler quelqu'un qui traque déjà
+    // quelqu'un d'autre. Être traqueur (owner d'un ops actif) ne protège pas
+    // d'être ciblé en retour. La seule limite côté traqueur reste « un seul
+    // ops actif à la fois » (ownerActive ci-dessus).
     // Bouclier anti-ops : si cette cible a annulé un de MES ops avec un anti-ops
     // il y a moins de ANTI_OPS_SHIELD_MS, je ne peux pas la re-cibler.
     const shielded = await tx.ops.findFirst({

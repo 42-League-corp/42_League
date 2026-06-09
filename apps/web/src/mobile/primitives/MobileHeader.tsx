@@ -42,7 +42,7 @@ export function MobileHeader() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { me } = useLeagueData();
-  const { amTarget, hunter } = useOpsStatus();
+  const { amTarget, hunter, amHunter, prey, forcedLeftAsHunter } = useOpsStatus();
   const title = titleFor(location.pathname);
 
   return (
@@ -98,6 +98,30 @@ export function MobileHeader() {
             <Crosshair className="w-3.5 h-3.5 text-red animate-pulse" strokeWidth={2.5} />
             <span className="font-gaming text-[9px] font-extrabold uppercase tracking-[0.12em] text-red leading-none tabular-nums">
               {fmtCountdown(hunter.expiresAt)}
+            </span>
+          </motion.button>
+        )}
+
+        {/* Indicateur OPS — côté TRAQUEUR : pastille dorée montrant combien de
+            matchs forcés il reste à imposer à sa proie (sur les 3). Disparaît dès
+            que le quota est épuisé. */}
+        {amHunter && prey && forcedLeftAsHunter > 0 && (
+          <motion.button
+            initial={{ scale: 0, rotate: 0 }}
+            animate={{ scale: 1, rotate: 4 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+            type="button"
+            onClick={() => {
+              haptic('selection');
+              navigate('/challenges');
+            }}
+            aria-label={`Il te reste ${forcedLeftAsHunter} match${forcedLeftAsHunter > 1 ? 's' : ''} OPS à imposer`}
+            className="relative flex items-center gap-1 pl-1.5 pr-2 h-7 rounded-md bg-gradient-to-br from-gold/25 to-gold/10 border border-gold/45 active:scale-95 transition-transform tap-transparent"
+            style={{ boxShadow: 'inset 0 1px 0 rgba(255,215,120,0.18), 0 2px 10px rgba(212,175,55,0.22)' }}
+          >
+            <Crosshair className="w-3.5 h-3.5 text-gold" strokeWidth={2.5} />
+            <span className="font-gaming text-[9px] font-extrabold uppercase tracking-[0.12em] text-gold leading-none tabular-nums">
+              {forcedLeftAsHunter} OPS
             </span>
           </motion.button>
         )}

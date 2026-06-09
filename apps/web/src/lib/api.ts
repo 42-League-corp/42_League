@@ -1274,6 +1274,7 @@ export const api = {
     kind: 'friendly' | 'official';
     mode?: '1v1' | '2v2';
     partnerLogin?: string;
+    selfJoin?: boolean;
     format?: 'elimination' | 'pools' | 'league';
     game?: Game;
     private?: boolean;

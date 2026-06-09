@@ -1772,7 +1772,12 @@ function BracketMatch({
     // Narrowing safe : on rentre ici uniquement quand `recorded` est true.
     if (match.scoreA == null || match.scoreB == null) return;
     try {
-      const res = await api.confirmTournamentMatch(tournament.id, match.id, match.scoreA, match.scoreB);
+      // L'officiant (admin/organisateur d'un amical) valide d'autorité le score
+      // déjà saisi : force-result confirme immédiatement, sans exiger qu'il soit
+      // le camp adverse (la confirmation double-aveugle ne le concerne pas).
+      const res = officiating
+        ? await api.adminForceTournamentMatch(tournament.id, match.id, match.scoreA, match.scoreB)
+        : await api.confirmTournamentMatch(tournament.id, match.id, match.scoreA, match.scoreB);
       flash.show(
         res.finished
           ? t('tournois.flash.tournamentWon').replace('{login}', String(res.winnerLogin))

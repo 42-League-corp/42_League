@@ -129,7 +129,13 @@ export function ChallengeMobileCard({
           {t('defis.cancel')}
         </Button>
       )}
-      {kind === 'accepted' && (
+      {/* Duel OPS forcé : pas de fuite ni d'annulation à l'amiable — seul le score. */}
+      {kind === 'accepted' && isOps && (
+        <Button size="sm" onClick={onAccept} className="text-[10px] px-3 flex-shrink-0">
+          {t('defis.scoreShort')}
+        </Button>
+      )}
+      {kind === 'accepted' && !isOps && (
         <div className="flex flex-col gap-1.5 flex-shrink-0">
           <Button size="sm" onClick={onAccept} className="text-[10px] px-3">
             {t('defis.scoreShort')}

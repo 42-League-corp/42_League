@@ -1456,7 +1456,13 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline, onA
         {kind === 'outgoing' && (
           <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.cancel')}</Button>
         )}
-        {kind === 'accepted' && !recording && (
+        {/* Duel OPS forcé : la cible (comme le traqueur) ne peut ni fuir ni
+            demander une annulation à l'amiable — seul l'enregistrement du score
+            est offert. C'est le sens du « forcé » : le duel a lieu. */}
+        {kind === 'accepted' && !recording && isOps && (
+          <Button size="sm" onClick={() => setRecording(true)}>{t('defis.enterScore')}</Button>
+        )}
+        {kind === 'accepted' && !recording && !isOps && (
           <>
             <Button size="sm" onClick={() => setRecording(true)}>{t('defis.enterScore')}</Button>
             {cancelState === 'awaiting_my_response' ? (
