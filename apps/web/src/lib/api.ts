@@ -27,6 +27,9 @@ export interface LeaderboardEntry {
   campus: string | null;
   imageUrl: string | null;
   title?: string | null;
+  /** Couleur du titre équipé (item boutique). Le titre se rend dans CETTE couleur,
+   *  indépendamment du mode de jeu (qui remappe `--accent-gold`). Repli : doré fixe. */
+  titleColor?: string | null;
   dodgeCount?: number;
   tournamentsWon?: number;
   /** Codes de badges de catalogue (cf. lib/badges.ts) — dont 'goat' pour le #1
@@ -80,6 +83,11 @@ export interface Challenge {
   /** Timestamps d'acceptation des 2 adversaires (2v2). */
   opponentAcceptedAt?: string | null;
   opponentPartnerAcceptedAt?: string | null;
+  /** Annulation à l'amiable (défi accepté) : login du demandeur, null si aucune. */
+  cancelRequestBy?: string | null;
+  cancelRequestAt?: string | null;
+  /** Logins de l'équipe adverse ayant déjà accepté l'annulation (joints par ','). */
+  cancelAcceptedBy?: string | null;
 }
 
 export interface PlayedMatch {
@@ -1181,6 +1189,24 @@ export const api = {
   declineChallenge: (id: string) =>
     request<{ id: string; status: string; eloPenalty: number; isOps: boolean }>(
       `/challenges/${encodeURIComponent(id)}/decline`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  /** Propose une annulation à l'amiable d'un défi accepté (sans perte d'ELO si accepté). */
+  requestCancelChallenge: (id: string) =>
+    request<{ id: string; status: 'cancel_requested' }>(
+      `/challenges/${encodeURIComponent(id)}/cancel-request`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  /** Accepte une demande d'annulation à l'amiable (équipe adverse). */
+  acceptCancelChallenge: (id: string) =>
+    request<{ id: string; status: 'cancelled' | 'cancel_waiting' }>(
+      `/challenges/${encodeURIComponent(id)}/cancel-accept`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  /** Refuse une demande d'annulation à l'amiable → le défi reste à jouer. */
+  refuseCancelChallenge: (id: string) =>
+    request<{ id: string; status: 'accepted' }>(
+      `/challenges/${encodeURIComponent(id)}/cancel-refuse`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
   recordChallengeResult: (id: string, result: MatchResultInput) =>

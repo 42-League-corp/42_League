@@ -46,10 +46,12 @@ export function DefisMobile() {
     confirmDarts,
     contestDarts,
     cancelDartsDeclaration,
+    requestAmicableCancel,
+    respondAmicableCancel,
   } = useDefisLogic();
   const t = useT();
   const { leaderboard, locations } = useLeagueData();
-  const { isOpsWith } = useOpsStatus();
+  const { isOpsDuel } = useOpsStatus();
   const { game } = useGameMode();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -266,7 +268,7 @@ export function DefisMobile() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group ${
-                      isOpsWith(p.declarerLogin) || isOpsWith(p.opponentLogin) ? 'ops-duel' : ''
+                      isOpsDuel(p.declarerLogin, p.opponentLogin) ? 'ops-duel' : ''
                     }`}
                   >
                     {/* Silhouette trophée à gauche */}
@@ -374,6 +376,8 @@ export function DefisMobile() {
                   )}
                   onAccept={() => setRecordChallenge(c)}
                   onDecline={() => handleAction(c.id, 'decline')}
+                  onAmicableRequest={() => requestAmicableCancel(c.id)}
+                  onAmicableRespond={(accept) => respondAmicableCancel(c.id, accept)}
                 />
               ))}
             </div>

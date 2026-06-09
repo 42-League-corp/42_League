@@ -28,7 +28,7 @@ import { useFlash } from '../../hooks/useFlash';
 import { useOpsStatus } from '../../hooks/useOpsStatus';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
-import { useDefisLogic } from './shared/useDefisLogic';
+import { useDefisLogic, challengeCancelState } from './shared/useDefisLogic';
 import { gameColor, GAME_EMOJI as GAME_EMOJI_MAP } from '../../lib/gameVisuals';
 import {
   DeclareGameFlow,
@@ -110,6 +110,8 @@ export function DefisDesktop() {
     confirmDarts,
     contestDarts,
     cancelDartsDeclaration,
+    requestAmicableCancel,
+    respondAmicableCancel,
   } = useDefisLogic();
 
   const [openCard, setOpenCard] = useState<OpenCard>(null);
@@ -224,6 +226,8 @@ export function DefisDesktop() {
           confirmDarts={confirmDarts}
           contestDarts={contestDarts}
           cancelDartsDeclaration={cancelDartsDeclaration}
+          requestAmicableCancel={requestAmicableCancel}
+          respondAmicableCancel={respondAmicableCancel}
         />
       )}
 
@@ -618,6 +622,8 @@ interface ActivityStreamProps {
   confirmDarts: (id: string, remaining: number) => Promise<void>;
   contestDarts: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
   cancelDartsDeclaration: (id: string) => Promise<void>;
+  requestAmicableCancel: (id: string) => Promise<void>;
+  respondAmicableCancel: (id: string, accept: boolean) => Promise<void>;
 }
 
 function ActivityStream({
@@ -626,6 +632,7 @@ function ActivityStream({
   myLogin, lang, refresh, handleAction, cancelDeclaration,
   confirmFfa, contestFfa, cancelFfaDeclaration,
   confirmDarts, contestDarts, cancelDartsDeclaration,
+  requestAmicableCancel, respondAmicableCancel,
 }: ActivityStreamProps) {
   const t = useT();
   const urgentCount = pendingToConfirm.length + ffaToConfirm.length + dartsToConfirm.length + incoming.length;
@@ -682,7 +689,9 @@ function ActivityStream({
             {accepted.map((c) => (
               <ChallengeRow key={c.id} challenge={c} kind="accepted" myLogin={myLogin} lang={lang}
                 onAccept={NOOP}
-                onDecline={() => handleAction(c.id, 'decline')} />
+                onDecline={() => handleAction(c.id, 'decline')}
+                onAmicableRequest={() => requestAmicableCancel(c.id)}
+                onAmicableRespond={(accept) => respondAmicableCancel(c.id, accept)} />
             ))}
           </ActivityGroup>
         )}
@@ -866,8 +875,8 @@ function PlayerCard({
 function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () => Promise<void> }) {
   const t = useT();
   const flash = useFlash();
-  const { isOpsWith } = useOpsStatus();
-  const isOps = match.mode !== '2v2' && (isOpsWith(match.declarerLogin) || isOpsWith(match.opponentLogin));
+  const { isOpsDuel } = useOpsStatus();
+  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin);
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resolved, setResolved] = useState(false);
@@ -987,8 +996,8 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   const t = useT();
-  const { isOpsWith } = useOpsStatus();
-  const isOps = match.mode !== '2v2' && (isOpsWith(match.declarerLogin) || isOpsWith(match.opponentLogin));
+  const { isOpsDuel } = useOpsStatus();
+  const isOps = match.mode !== '2v2' && isOpsDuel(match.declarerLogin, match.opponentLogin);
   // 2v2 : on attend la validation des 3 autres joueurs — on affiche la
   // composition complète (mon duo vs duo adverse) + l'avancée des confirmations.
   if (match.mode === '2v2') {
@@ -1393,15 +1402,20 @@ interface ChallengeRowProps {
   lang: Lang;
   onAccept: () => void;
   onDecline: () => void;
+  /** Demande d'annulation à l'amiable (défi accepté uniquement). */
+  onAmicableRequest?: () => void;
+  /** Réponse à une demande d'annulation à l'amiable (accept = true/false). */
+  onAmicableRespond?: (accept: boolean) => void;
 }
 
-function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: ChallengeRowProps) {
+function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline, onAmicableRequest, onAmicableRespond }: ChallengeRowProps) {
   const t = useT();
-  const { isOpsWith } = useOpsStatus();
+  const { isOpsDuel } = useOpsStatus();
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
-  const isOps = challenge.mode !== '2v2' && isOpsWith(opponent);
+  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const [recording, setRecording] = useState(false);
+  const cancelState = challengeCancelState(challenge, myLogin);
 
   const KIND_ICON = { incoming: '⚔', outgoing: '→', accepted: '🎯' };
   const KIND_LABEL = {
@@ -1445,7 +1459,24 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
         {kind === 'accepted' && !recording && (
           <>
             <Button size="sm" onClick={() => setRecording(true)}>{t('defis.enterScore')}</Button>
-            <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.cancel')}</Button>
+            {cancelState === 'awaiting_my_response' ? (
+              <>
+                <Button size="sm" onClick={() => onAmicableRespond?.(true)}>{t('defis.amicable.accept')}</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAmicableRespond?.(false)}>{t('defis.amicable.refuse')}</Button>
+              </>
+            ) : cancelState === 'requested_by_my_team' ? (
+              <>
+                <span className="text-[11px] text-gold/80 italic">{t('defis.amicable.waiting')}</span>
+                <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.flee')}</Button>
+              </>
+            ) : cancelState === 'awaiting_other_response' ? (
+              <span className="text-[11px] text-gold/80 italic">{t('defis.amicable.waitingTeam')}</span>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" onClick={onAmicableRequest}>{t('defis.amicable.request')}</Button>
+                <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.flee')}</Button>
+              </>
+            )}
           </>
         )}
       </div>

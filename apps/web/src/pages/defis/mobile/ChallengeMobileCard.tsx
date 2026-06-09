@@ -8,6 +8,7 @@ import type { Challenge } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { useI18n, useT } from '../../../lib/i18n';
 import { useOpsStatus } from '../../../hooks/useOpsStatus';
+import { challengeCancelState } from '../shared/useDefisLogic';
 
 type Kind = 'incoming' | 'outgoing' | 'accepted';
 
@@ -18,6 +19,10 @@ interface ChallengeMobileCardProps {
   imageUrl?: string | null;
   onAccept: () => void;
   onDecline: () => void;
+  /** Demande d'annulation à l'amiable (défi accepté uniquement). */
+  onAmicableRequest?: () => void;
+  /** Réponse à une demande d'annulation à l'amiable (accept = true/false). */
+  onAmicableRespond?: (accept: boolean) => void;
 }
 
 const KIND_LABEL_KEY: Record<Kind, string> = {
@@ -56,15 +61,18 @@ export function ChallengeMobileCard({
   imageUrl,
   onAccept,
   onDecline,
+  onAmicableRequest,
+  onAmicableRespond,
 }: ChallengeMobileCardProps) {
   const { lang } = useI18n();
   const t = useT();
-  const { isOpsWith } = useOpsStatus();
+  const { isOpsDuel } = useOpsStatus();
   const opponent =
     challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
-  const isOps = challenge.mode !== '2v2' && isOpsWith(opponent);
+  const isOps = challenge.mode !== '2v2' && isOpsDuel(challenge.challengerLogin, challenge.opponentLogin);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const tone = KIND_TONE[kind];
+  const cancelState = challengeCancelState(challenge, myLogin);
 
   const Inner = (
     <motion.div
@@ -122,9 +130,44 @@ export function ChallengeMobileCard({
         </Button>
       )}
       {kind === 'accepted' && (
-        <Button size="sm" onClick={onAccept} className="text-[10px]">
-          {t('defis.scoreShort')}
-        </Button>
+        <div className="flex flex-col gap-1.5 flex-shrink-0">
+          <Button size="sm" onClick={onAccept} className="text-[10px] px-3">
+            {t('defis.scoreShort')}
+          </Button>
+          {cancelState === 'awaiting_my_response' ? (
+            <>
+              <Button size="sm" onClick={() => onAmicableRespond?.(true)} className="text-[10px] px-3">
+                {t('defis.amicable.accept')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onAmicableRespond?.(false)} className="text-[10px] px-3">
+                {t('defis.amicable.refuse')}
+              </Button>
+            </>
+          ) : cancelState === 'requested_by_my_team' ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDecline}
+              className="text-[10px] px-3 text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+            >
+              {t('defis.flee')}
+            </Button>
+          ) : cancelState === 'none' ? (
+            <>
+              <Button size="sm" variant="ghost" onClick={onAmicableRequest} className="text-[10px] px-3">
+                {t('defis.amicable.request')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onDecline}
+                className="text-[10px] px-3 text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red"
+              >
+                {t('defis.flee')}
+              </Button>
+            </>
+          ) : null}
+        </div>
       )}
     </motion.div>
   );

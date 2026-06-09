@@ -40,6 +40,41 @@ export interface DefisLogic {
   contestDarts: (id: string, claimedRemaining: number, message?: string) => Promise<void>;
   /** Annule une manche de fléchettes que j'ai déclarée. */
   cancelDartsDeclaration: (id: string) => Promise<void>;
+  /** Propose l'annulation à l'amiable d'un défi accepté (sans perte d'ELO si accepté). */
+  requestAmicableCancel: (id: string) => Promise<void>;
+  /** Répond à une demande d'annulation à l'amiable (accept = true/false). */
+  respondAmicableCancel: (id: string, accept: boolean) => Promise<void>;
+}
+
+/** État de l'annulation à l'amiable d'un défi, vu de `myLogin`. */
+export type CancelState =
+  | 'none'
+  | 'requested_by_my_team' // mon camp a demandé → on attend l'équipe adverse
+  | 'awaiting_my_response' // l'autre camp a demandé → je peux accepter / refuser
+  | 'awaiting_other_response'; // j'ai accepté → on attend mon coéquipier (2v2)
+
+// Équipes d'un défi vues d'un login (miroir front de `challengeSides` côté back).
+function sidesOf(c: Challenge, login: string): { mine: string[]; other: string[] } {
+  if (c.mode === '2v2') {
+    const challengerSide = [c.challengerLogin, c.partnerLogin].filter(Boolean) as string[];
+    const opponentSide = [c.opponentLogin, c.opponentPartnerLogin].filter(Boolean) as string[];
+    const onChallengerSide = challengerSide.includes(login);
+    return {
+      mine: onChallengerSide ? challengerSide : opponentSide,
+      other: onChallengerSide ? opponentSide : challengerSide,
+    };
+  }
+  const all = [c.challengerLogin, c.opponentLogin];
+  return { mine: [login], other: all.filter((p) => p !== login) };
+}
+
+/** Déduit l'état d'annulation à l'amiable d'un défi pour le joueur courant. */
+export function challengeCancelState(c: Challenge, myLogin: string | undefined): CancelState {
+  if (!myLogin || c.status !== 'accepted' || !c.cancelRequestBy) return 'none';
+  // L'équipe adverse au DEMANDEUR est celle qui doit répondre.
+  if (sidesOf(c, c.cancelRequestBy).mine.includes(myLogin)) return 'requested_by_my_team';
+  const accepted = new Set((c.cancelAcceptedBy ?? '').split(',').filter(Boolean));
+  return accepted.has(myLogin) ? 'awaiting_other_response' : 'awaiting_my_response';
 }
 
 /**
@@ -367,6 +402,48 @@ export function useDefisLogic(): DefisLogic {
     [confirm, flash, refresh, t],
   );
 
+  const requestAmicableCancel = useCallback(
+    async (id: string) => {
+      const ok = await confirm({
+        title: t('defis.confirm.amicable.title'),
+        message: t('defis.confirm.amicable.message'),
+        confirmLabel: t('defis.confirm.amicable.confirm'),
+        cancelLabel: t('defis.confirm.keep'),
+      });
+      if (!ok) return;
+      try {
+        await api.requestCancelChallenge(id);
+        flash.show(t('defis.toast.amicableRequested'));
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [confirm, flash, refresh, t],
+  );
+
+  const respondAmicableCancel = useCallback(
+    async (id: string, accept: boolean) => {
+      try {
+        if (accept) {
+          const res = await api.acceptCancelChallenge(id);
+          flash.show(
+            res.status === 'cancelled'
+              ? t('defis.toast.amicableDone')
+              : t('defis.toast.amicableWaiting'),
+          );
+        } else {
+          await api.refuseCancelChallenge(id);
+          flash.show(t('defis.toast.amicableRefused'));
+        }
+        await refresh();
+      } catch (err) {
+        flash.show(err instanceof Error ? err.message : String(err), 'error');
+      }
+    },
+    [flash, refresh, t],
+  );
+
   return {
     myLogin,
     incoming,
@@ -390,5 +467,7 @@ export function useDefisLogic(): DefisLogic {
     confirmDarts,
     contestDarts,
     cancelDartsDeclaration,
+    requestAmicableCancel,
+    respondAmicableCancel,
   };
 }

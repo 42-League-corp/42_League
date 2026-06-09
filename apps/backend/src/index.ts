@@ -1619,12 +1619,21 @@ app.get('/leaderboard', async (c) => {
   // Badges de catalogue par joueur (dont le badge G.O.A.T du #1 de chaque
   // discipline) — calculés en batch pour éviter N requêtes.
   const badgesByLogin = await badgesForUsers(users.map((u) => ({ login: u.login, role: u.role, games: u.games })));
+  // Couleur du titre équipé (item boutique) par joueur — batché pour éviter N
+  // requêtes. Permet d'afficher le titre dans SA couleur propre (et non la teinte
+  // du mode de jeu courant) dans le classement et les survols.
+  const titleRows = await prisma.shopInventory.findMany({
+    where: { userLogin: { in: users.map((u) => u.login) }, equipped: true, item: { category: 'title' } },
+    include: { item: { select: { color: true } } },
+  });
+  const titleColorByLogin = new Map(titleRows.map((r) => [r.userLogin, r.item.color ?? null]));
   return c.json(
     users.map((u, i) => ({
       rank: i + 1,
       ...toPublicUser(u),
       ...projectStats(u, game),
       badges: badgesByLogin.get(u.login) ?? [],
+      titleColor: titleColorByLogin.get(u.login) ?? null,
     })),
   );
 });
@@ -4289,6 +4298,157 @@ app.post('/challenges/:id/accept', async (c) => {
 });
 
 const DODGE_ELO_PENALTY = 10;
+
+// Décompose un défi par rapport à un login : tous les participants, son équipe et
+// l'équipe adverse. En 1v1 chaque « équipe » est un singleton ; en 2v2 elle compte
+// le joueur et son coéquipier. Sert à l'annulation à l'amiable (l'équipe adverse au
+// demandeur doit accepter au complet pour valider sans perte d'ELO).
+function challengeSides(
+  ch: {
+    mode: string | null;
+    challengerLogin: string;
+    opponentLogin: string;
+    partnerLogin: string | null;
+    opponentPartnerLogin: string | null;
+  },
+  login: string,
+): { participants: string[]; myTeam: string[]; otherTeam: string[] } {
+  if (ch.mode === '2v2') {
+    const challengerSide = [ch.challengerLogin, ch.partnerLogin].filter(Boolean) as string[];
+    const opponentSide = [ch.opponentLogin, ch.opponentPartnerLogin].filter(Boolean) as string[];
+    const onChallengerSide = challengerSide.includes(login);
+    return {
+      participants: [...challengerSide, ...opponentSide],
+      myTeam: onChallengerSide ? challengerSide : opponentSide,
+      otherTeam: onChallengerSide ? opponentSide : challengerSide,
+    };
+  }
+  const participants = [ch.challengerLogin, ch.opponentLogin];
+  return {
+    participants,
+    myTeam: [login],
+    otherTeam: participants.filter((p) => p !== login),
+  };
+}
+
+// ─── Annulation à l'amiable d'un défi accepté ────────────────────────────────
+// Un participant qui veut se retirer d'un défi ACCEPTÉ peut, plutôt que de fuir
+// (decline → pénalité d'ELO), proposer une annulation à l'amiable. Si toute
+// l'équipe adverse accepte, le défi passe 'cancelled' sans perte d'ELO. En cas
+// de refus, la demande est effacée et le défi reste jouable (le demandeur peut
+// alors fuir s'il le souhaite).
+app.post('/challenges/:id/cancel-request', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const result = await prisma.$transaction(async (tx) => {
+    const ch = await tx.challenge.findUnique({ where: { id } });
+    if (!ch) throw new HTTPException(404, { message: 'challenge not found' });
+    const { participants, otherTeam } = challengeSides(ch, me);
+    if (!participants.includes(me)) {
+      throw new HTTPException(403, { message: 'not a participant' });
+    }
+    // Seul un défi accepté expose une pénalité ; l'amiable n'a de sens que là.
+    if (ch.status !== 'accepted') {
+      throw new HTTPException(409, { message: `challenge is ${ch.status}` });
+    }
+    if (ch.cancelRequestBy) {
+      throw new HTTPException(409, { message: 'cancel already requested' });
+    }
+    await tx.challenge.update({
+      where: { id },
+      data: { cancelRequestBy: me, cancelRequestAt: new Date(), cancelAcceptedBy: null },
+    });
+    return { game: ch.game, otherTeam, participants };
+  });
+  emit(result.otherTeam, { type: 'challenge:cancel_requested', payload: { id, requestedBy: me } });
+  void notifyMany(result.otherTeam, {
+    type: 'challenge_cancel_requested',
+    title: `@${me} demande à annuler le défi`,
+    body: "Accepte pour annuler sans perte d'ELO.",
+    link: `/challenges?game=${encodeURIComponent(result.game)}`,
+    game: result.game,
+    refId: `${id}:cancelreq`,
+  });
+  return c.json({ id, status: 'cancel_requested' });
+});
+
+app.post('/challenges/:id/cancel-accept', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const result = await prisma.$transaction(async (tx) => {
+    const ch = await tx.challenge.findUnique({ where: { id } });
+    if (!ch) throw new HTTPException(404, { message: 'challenge not found' });
+    if (ch.status !== 'accepted' || !ch.cancelRequestBy) {
+      throw new HTTPException(409, { message: 'no active cancel request' });
+    }
+    // L'équipe adverse AU DEMANDEUR (pas à moi) est celle qui doit accepter.
+    const { participants, otherTeam: requesterOtherTeam } = challengeSides(ch, ch.cancelRequestBy);
+    if (!requesterOtherTeam.includes(me)) {
+      throw new HTTPException(403, { message: 'only the opposing team can accept' });
+    }
+    const accepted = new Set((ch.cancelAcceptedBy ?? '').split(',').filter(Boolean));
+    accepted.add(me);
+    const allAccepted = requesterOtherTeam.every((p) => accepted.has(p));
+    await tx.challenge.update({
+      where: { id },
+      data: allAccepted
+        ? { status: 'cancelled', decidedAt: new Date(), cancelAcceptedBy: [...accepted].join(',') }
+        : { cancelAcceptedBy: [...accepted].join(',') },
+    });
+    return { finalized: allAccepted, game: ch.game, requestedBy: ch.cancelRequestBy, participants };
+  });
+  if (result.finalized) {
+    const recipients = result.participants.filter((p) => p !== me);
+    emit(recipients, { type: 'challenge:cancelled', payload: { id, by: me } });
+    void markNotifsReadByRef(me, `${id}:cancelreq`);
+    void notifyMany(recipients, {
+      type: 'challenge_cancelled_amicable',
+      title: 'Défi annulé à l’amiable',
+      body: "Aucune perte d'ELO.",
+      link: `/challenges?game=${encodeURIComponent(result.game)}`,
+      game: result.game,
+      refId: `${id}:cancelled`,
+    });
+  } else {
+    // 2v2 : un adversaire a accepté, on attend encore l'autre.
+    emit([result.requestedBy], { type: 'challenge:cancel_requested', payload: { id, partial: true } });
+  }
+  return c.json({ id, status: result.finalized ? 'cancelled' : 'cancel_waiting' });
+});
+
+app.post('/challenges/:id/cancel-refuse', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const result = await prisma.$transaction(async (tx) => {
+    const ch = await tx.challenge.findUnique({ where: { id } });
+    if (!ch) throw new HTTPException(404, { message: 'challenge not found' });
+    if (ch.status !== 'accepted' || !ch.cancelRequestBy) {
+      throw new HTTPException(409, { message: 'no active cancel request' });
+    }
+    const { participants, otherTeam: requesterOtherTeam } = challengeSides(ch, ch.cancelRequestBy);
+    if (!requesterOtherTeam.includes(me)) {
+      throw new HTTPException(403, { message: 'only the opposing team can refuse' });
+    }
+    const requestedBy = ch.cancelRequestBy;
+    // Refus → on efface la demande ; le défi reste 'accepted' et jouable.
+    await tx.challenge.update({
+      where: { id },
+      data: { cancelRequestBy: null, cancelRequestAt: null, cancelAcceptedBy: null },
+    });
+    return { game: ch.game, requestedBy, participants };
+  });
+  void markNotifsReadByRef(me, `${id}:cancelreq`);
+  emit([result.requestedBy], { type: 'challenge:cancel_refused', payload: { id, refusedBy: me } });
+  void notifyMany([result.requestedBy], {
+    type: 'challenge_cancel_refused',
+    title: `@${me} a refusé l’annulation`,
+    body: "Le défi reste à jouer — ou fuis (perte d'ELO).",
+    link: `/challenges?game=${encodeURIComponent(result.game)}`,
+    game: result.game,
+    refId: `${id}:cancelrefused`,
+  });
+  return c.json({ id, status: 'accepted' });
+});
 
 app.post('/challenges/:id/decline', async (c) => {
   const me = await getCurrentLogin(c);
