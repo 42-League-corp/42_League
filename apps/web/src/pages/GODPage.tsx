@@ -981,7 +981,13 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                     <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
                     <td className="py-2 px-3">
                       {isLocked ? (
-                        <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
+                        // Rôle/ban verrouillés pour les superadmins hardcodés et soi-même,
+                        // MAIS le reset de cooldown d'ops (inoffensif) reste accessible —
+                        // sinon un superadmin ne peut jamais reset son propre cooldown.
+                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                          <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
+                          <Btn onClick={() => resetOpsCooldown(u.login)} disabled={pending === u.login} variant="ghost" className="border border-red-500/40 text-red-400">{t('god.users.resetCooldown')}</Btn>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-1.5 justify-end flex-wrap">
                           {/* Promotion / rétrogradation de rôle (SUPERADMIN uniquement) */}
