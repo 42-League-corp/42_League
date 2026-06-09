@@ -77,15 +77,27 @@ export function TournamentBets({
 
   const entries = tournament.entries ?? [];
   const entrants = entries.map((e) => e.login);
-  // Map login → photo pour afficher la pp des participants dans le formulaire.
-  const avatars = Object.fromEntries(entries.map((e) => [e.login, e.user?.imageUrl ?? null]));
-  // On ne parie qu'AU DÉBUT du tournoi : dès qu'un match est confirmé (un premier
-  // résultat est tombé), le marché se ferme. Même règle côté serveur (POST /bets).
-  const hasResult = (tournament.matches ?? []).some((m) => m.confirmedAt);
+  // 2v2 : capitaine → coéquipier. On parie sur le DUO, mais la valeur reste le
+  // login du capitaine (clé canonique : le vainqueur du tournoi est ce login).
+  const partners = Object.fromEntries(
+    entries.map((e) => [e.login, e.partnerLogin ?? null]),
+  ) as Record<string, string | null>;
+  // Map login → photo (capitaines ET coéquipiers) pour les pp du formulaire.
+  const avatars = Object.fromEntries(
+    [
+      ...entries.map((e) => [e.login, e.user?.imageUrl ?? null] as const),
+      ...entries.map((e) => [e.partnerLogin, e.partner?.imageUrl ?? null] as const),
+    ].filter(([login]) => !!login),
+  ) as Record<string, string | null>;
+  // Marché ouvert UNIQUEMENT pendant l'inscription : dès que l'admin lance le
+  // tournoi, c'est fermé (même règle côté serveur, POST /bets).
+  const isOpenPhase = tournament.status === 'registration';
   const winnerKnown = !!tournament.winnerLogin;
-  // Un participant ne peut pas parier sur son propre tournoi (refus serveur 403).
-  const iAmEntrant = !!myLogin && entrants.includes(myLogin);
-  const canBetWinner = !winnerKnown && !hasResult && !iAmEntrant && entrants.length > 0;
+  // Un participant (capitaine OU coéquipier) ne peut pas parier sur son propre
+  // tournoi (refus serveur 403).
+  const iAmEntrant =
+    !!myLogin && (entrants.includes(myLogin) || Object.values(partners).includes(myLogin));
+  const canBetWinner = isOpenPhase && !iAmEntrant && entrants.length > 0;
 
   return (
     <section className="space-y-5">
@@ -132,6 +144,7 @@ export function TournamentBets({
               <BetForm
                 choices={entrants}
                 avatars={avatars}
+                partners={partners}
                 maxStake={coins}
                 busy={placing}
                 onCancel={() => setOpenForm(null)}

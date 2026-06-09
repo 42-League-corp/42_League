@@ -125,6 +125,7 @@ export function BetsPanel() {
                       {openForm === key && (
                         <BetForm
                           choices={tour.entrants}
+                          partners={tour.partners}
                           maxStake={coins}
                           busy={placing}
                           onCancel={() => setOpenForm(null)}

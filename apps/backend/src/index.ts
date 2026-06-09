@@ -9832,7 +9832,7 @@ app.get('/bets', async (c) => {
     prisma.tournament.findMany({
       where: { status: 'registration' },
       orderBy: { createdAt: 'desc' },
-      include: { entries: { select: { login: true } } },
+      include: { entries: { select: { login: true, partnerLogin: true } } },
     }),
     // Duels d'ops PARIABLES : chaque défi forcé encore À JOUER (status 'accepted')
     // d'un ops actif, auquel JE ne participe pas (ni traqueur ni cible). Un duel =
@@ -9898,7 +9898,15 @@ app.get('/bets', async (c) => {
       name: t.name,
       game: t.game,
       status: t.status,
+      mode: t.mode,
+      // `entrants` = logins des CAPITAINES (clé canonique du pari : en 2v2 le
+      // vainqueur du tournoi est stocké comme le login du capitaine). `partners`
+      // ajoute le coéquipier pour afficher le DUO côté UI (capitaine & coéquipier),
+      // sans changer la valeur pariée.
       entrants: t.entries.map((e) => e.login),
+      partners: Object.fromEntries(
+        t.entries.map((e) => [e.login, e.partnerLogin ?? null]),
+      ) as Record<string, string | null>,
     })),
     openOpsDuels,
   });
@@ -9922,7 +9930,7 @@ app.post('/bets', async (c) => {
   const result = await prisma.$transaction(async (tx) => {
     const tour = await tx.tournament.findUnique({
       where: { id: tournamentId },
-      include: { entries: { select: { login: true } } },
+      include: { entries: { select: { login: true, partnerLogin: true } } },
     });
     if (!tour) throw new HTTPException(404, { message: 'tournoi introuvable' });
     // Paris ouverts uniquement pendant l'INSCRIPTION : dès que l'admin lance le
@@ -9933,10 +9941,12 @@ app.post('/bets', async (c) => {
     }
 
     // Un participant ne peut pas parier sur le tournoi auquel il joue (il en
-    // arrange/contrôle les scores).
-    if (tour.entries.some((e) => e.login === me)) {
+    // arrange/contrôle les scores). En 2v2, le COÉQUIPIER aussi est un joueur.
+    if (tour.entries.some((e) => e.login === me || e.partnerLogin === me)) {
       throw new HTTPException(403, { message: 'tu ne peux pas parier sur un tournoi auquel tu participes' });
     }
+    // Le pronostic est le CAPITAINE (login canonique de l'équipe) — en 2v2 on
+    // parie sur le duo via ce login, jamais via le coéquipier.
     if (!tour.entries.some((e) => e.login === choiceLogin)) {
       throw new HTTPException(400, { message: 'le pronostic doit être un participant du tournoi' });
     }

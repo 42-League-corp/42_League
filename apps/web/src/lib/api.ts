@@ -903,7 +903,12 @@ export interface OpenBetTournament {
   name: string;
   game: Game;
   status: string;
+  /** '1v1' | '2v2'. En 2v2 chaque participant est une ÉQUIPE (capitaine + coéquipier). */
+  mode: string;
+  /** Logins des CAPITAINES = valeur pariée (clé canonique de l'équipe). */
   entrants: string[];
+  /** Capitaine → login du coéquipier (null en 1v1) — sert à afficher le duo. */
+  partners: Record<string, string | null>;
 }
 /**
  * Duel d'ops ouvert aux paris (traqueur ⚔️ cible). `id` = id du DUEL (le défi

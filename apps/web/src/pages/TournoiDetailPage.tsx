@@ -16,7 +16,6 @@ import { VersusOverlay, type VersusFighter } from '../components/tournois/Versus
 import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
-import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
@@ -69,7 +68,6 @@ export function TournoiDetailPage() {
   const [showCeremony, setShowCeremony] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
   // Onglet de la vue d'un tournoi en cours : bracket/poules ou paris.
-  const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const prevStatusRef = useRef<Tournament['status'] | null>(null);
   // Écran VERSUS : on l'ouvre pour le match dont l'id vient d'être désigné
   // « match suivant » (activeMatchId). Détecté par diff dans load().
@@ -692,26 +690,31 @@ export function TournoiDetailPage() {
                 : `Ligue — ${entriesCount} inscrit${entriesCount > 1 ? 's' : ''}. Ajoute autant de joueurs que tu veux, puis lance le tournoi.`}
             </p>
           )}
+
+          {/* Paris ouverts PENDANT l'inscription : on parie sur le vainqueur avant
+              le lancement, directement depuis la page du tournoi. Le marché se
+              ferme dès que l'admin lance le tournoi. */}
+          {entriesCount > 0 && (
+            <div className="mt-5 pt-5 border-t border-border/50">
+              <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
+            </div>
+          )}
         </>
       )}
 
       {tournament.status !== 'registration' && (
-        // Cockpit : surface de pilotage (bracket / ligue / paris) à gauche, console
-        // d'actions à droite (onglets, état, zone admin). Empilé sur mobile (la
-        // console passe au-dessus pour garder les commandes à portée).
+        // Cockpit : surface de pilotage (bracket / ligue) à gauche, console
+        // d'actions à droite (état, zone admin). Empilé sur mobile (la console
+        // passe au-dessus pour garder les commandes à portée).
         <div className="grid xl:grid-cols-[1fr_300px] gap-5 items-start">
           <div className="min-w-0 order-2 xl:order-1">
-            {tournament.status === 'in_progress' && detailTab === 'bets' ? (
-              <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
-            ) : (
-              <PoolsAndBracket
-                tournament={tournament}
-                myLogin={myLogin ?? null}
-                canManage={isOrganizer || isAdmin}
-                canOfficiate={canOfficiate}
-                onChange={refreshSilent}
-              />
-            )}
+            <PoolsAndBracket
+              tournament={tournament}
+              myLogin={myLogin ?? null}
+              canManage={isOrganizer || isAdmin}
+              canOfficiate={canOfficiate}
+              onChange={refreshSilent}
+            />
           </div>
 
           <aside className="order-1 xl:order-2 flex flex-col gap-3 xl:sticky xl:top-2">
@@ -724,23 +727,6 @@ export function TournoiDetailPage() {
                   <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
                   <span className="font-extrabold text-text-strong">{tournament.winner.login}</span>
                 </PlayerLink>
-              </div>
-            )}
-
-            {/* Onglets (tournoi en cours) : suivre le bracket ou parier. */}
-            {tournament.status === 'in_progress' && (
-              <div className="rounded-xl border border-border/60 bg-bg-2/40 p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
-                  {t('tournois.detail.tournament')}
-                </div>
-                <RankingScopeToggle<'bracket' | 'bets'>
-                  value={detailTab}
-                  onChange={setDetailTab}
-                  choices={[
-                    { value: 'bracket', label: t('tournois.tab.bracket') },
-                    { value: 'bets', label: t('tournois.tab.bets') },
-                  ]}
-                />
               </div>
             )}
 

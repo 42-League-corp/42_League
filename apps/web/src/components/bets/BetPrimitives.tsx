@@ -48,6 +48,7 @@ export function betStatusStyle(status: BetStatus): string {
 export function BetForm({
   choices,
   avatars,
+  partners,
   maxStake,
   busy,
   onSubmit,
@@ -56,6 +57,12 @@ export function BetForm({
   choices: string[];
   /** Map login → URL de photo, pour afficher la pp à côté de chaque choix. */
   avatars?: Record<string, string | null>;
+  /**
+   * Tournois en DUO (2v2) : map capitaine → login du coéquipier. Quand il existe,
+   * le choix s'affiche comme l'ÉQUIPE (capitaine & coéquipier) — mais la valeur
+   * pariée reste le login du capitaine (clé canonique côté règlement).
+   */
+  partners?: Record<string, string | null>;
   maxStake: number;
   busy: boolean;
   onSubmit: (choiceLogin: string, stake: number) => void;
@@ -77,6 +84,7 @@ export function BetForm({
           {choices.map((login) => {
             const active = login === choice;
             const hasAvatar = avatars !== undefined;
+            const partner = partners?.[login] ?? null;
             return (
               <button
                 key={login}
@@ -90,6 +98,13 @@ export function BetForm({
               >
                 {hasAvatar && <Avatar login={login} imageUrl={avatars[login] ?? null} size="xs" />}
                 @{login}
+                {partner && (
+                  <>
+                    <span className="opacity-60">&amp;</span>
+                    {hasAvatar && <Avatar login={partner} imageUrl={avatars[partner] ?? null} size="xs" />}
+                    @{partner}
+                  </>
+                )}
               </button>
             );
           })}
