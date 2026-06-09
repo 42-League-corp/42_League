@@ -356,13 +356,8 @@ function DeclareOpsBox({
         .replace('{owner}', opsForPlayer.targetedBy.ownerLogin),
     );
   }
-  if (opsForPlayer?.owns) {
-    reasons.push(
-      t('ops.playerOwns')
-        .replace('{player}', playerLogin)
-        .replace('{target}', opsForPlayer.owns.targetLogin),
-    );
-  }
+  // NB : on n'empêche plus de cibler un joueur qui traque déjà quelqu'un.
+  // Être traqueur (owns un ops actif) ne le protège pas d'être ciblé en retour.
 
   if (reasons.length > 0) {
     return (
