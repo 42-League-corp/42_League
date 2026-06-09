@@ -10356,6 +10356,12 @@ app.post('/bets/match', async (c) => {
     if (!m.playerALogin || !m.playerBLogin) {
       throw new HTTPException(409, { message: 'match pas encore défini (tour précédent en attente)' });
     }
+    // Le pile-ou-face lancé ferme aussi le marché : une fois le tirage effectué le
+    // match va commencer, on ne parie plus (cohérent avec la liste des marchés
+    // ouverts qui exclut déjà tossAt).
+    if (m.tossAt) {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le pile-ou-face a eu lieu' });
+    }
     // Marché ouvert tant qu'aucun score n'a été saisi/confirmé (betsLockedAt posé
     // dès la 1re saisie → le score est exposé, on ne parie plus).
     if (m.betsLockedAt || m.recordedAt || m.confirmedAt) {
