@@ -330,6 +330,9 @@ model Tournament {
   game           String    @default("babyfoot") // 'babyfoot' | 'smash'
   status         String // 'registration' | 'in_progress' | 'finished' | 'cancelled'
   createdByLogin String    @map("created_by_login")
+  // Co-organisateurs : logins disposant de TOUS les droits d'organisation sur ce
+  // tournoi (comme le créateur). Gérés par le créateur ou un admin. Défaut : aucun.
+  coOrganizers   String[]  @default([]) @map("co_organizers")
   winnerLogin    String?   @map("winner_login")
   createdAt      DateTime  @default(now()) @map("created_at")
   startedAt      DateTime? @map("started_at")
@@ -400,6 +403,8 @@ model TournamentEntry {
   // pour éviter d'alourdir le modèle User. Un login n'apparaît qu'une fois par tournoi
   // (ni deux fois capitaine, ni capitaine+partenaire) — garanti côté route.
   partnerLogin String?  @map("partner_login")
+  // 2v2 : nom d'équipe optionnel, affiché à la place de « @cap & @partner ».
+  teamName     String?  @map("team_name")
   joinedAt     DateTime @default(now()) @map("joined_at")
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

@@ -5204,7 +5204,7 @@ async function loadTournamentForViewer(me: string, id: string) {
   const hasInvite = tournament.invites.some((inv) => inv.inviteeLogin === me);
   if (
     tournament.isPrivate &&
-    tournament.createdByLogin !== me &&
+    !isTournamentManager(tournament, me) &&
     !isAdmin(me) &&
     !tournament.entries.some((e) => e.login === me || e.partnerLogin === me) &&
     !hasInvite
@@ -5234,7 +5234,7 @@ async function loadTournamentForViewer(me: string, id: string) {
   }
   // Filtrer les invites visibles selon le rôle :
   // l'organisateur et les admins voient tout ; les autres ne voient que leur propre invite.
-  const isOrganizer = tournament.createdByLogin === me || isAdmin(me);
+  const isOrganizer = isTournamentManager(tournament, me) || isAdmin(me);
   const visibleInvites = isOrganizer
     ? tournament.invites
     : tournament.invites.filter((inv) => inv.inviteeLogin === me);
@@ -5294,6 +5294,16 @@ app.get('/tournaments/:id/live', async (c) => {
   }));
   return c.json({ ...out, betPool, betTotalCoins, bets });
 });
+
+// Créateur OU co-organisateur d'un tournoi : les co-organisateurs disposent de TOUS
+// les droits d'organisation, exactement comme le créateur. (Les admins restent gérés
+// à part via isAdmin/isAdminLogin.) Nécessite que `coOrganizers` soit dans le select.
+function isTournamentManager(
+  t: { createdByLogin: string; coOrganizers?: string[] },
+  me: string,
+): boolean {
+  return t.createdByLogin === me || (t.coOrganizers ?? []).includes(me);
+}
 
 app.post('/tournaments', async (c) => {
   const me = await getCurrentLogin(c);
@@ -5400,6 +5410,10 @@ app.post('/tournaments/:id/join', async (c) => {
   const partnerRaw = typeof (body as { partnerLogin?: unknown })?.partnerLogin === 'string'
     ? ((body as { partnerLogin: string }).partnerLogin).trim()
     : null;
+  // 2v2 : nom d'équipe optionnel (borné à 40 car.).
+  const teamNameRaw = typeof (body as { teamName?: unknown })?.teamName === 'string'
+    ? ((body as { teamName: string }).teamName).trim().slice(0, 40) || null
+    : null;
   const result = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({
       where: { id },
@@ -5410,7 +5424,7 @@ app.post('/tournaments/:id/join', async (c) => {
       throw new HTTPException(409, { message: `tournament is ${t.status}` });
     }
     // Tournoi privé : pas d'inscription libre, l'organisateur invite (add-player).
-    if (t.isPrivate && t.createdByLogin !== me && !isAdmin(me)) {
+    if (t.isPrivate && !isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, { message: 'tournoi privé — sur invitation uniquement' });
     }
     // 2v2 : valider la paire (coéquipier réel, différent, tous deux libres).
@@ -5433,7 +5447,12 @@ app.post('/tournaments/:id/join', async (c) => {
       throw new HTTPException(409, { message: 'tournament is full' });
     }
     await tx.tournamentEntry.create({
-      data: { tournamentId: id, login: me, partnerLogin: partner },
+      data: {
+        tournamentId: id,
+        login: me,
+        partnerLogin: partner,
+        teamName: t.mode === '2v2' ? teamNameRaw : null,
+      },
     });
     // Auto-démarrage quand le tournoi est plein — sauf en ligue, démarrée MANUELLEMENT
     // par l'organisateur (il compose les affiches au fil de l'eau).
@@ -5476,6 +5495,7 @@ app.post('/tournaments/:id/join', async (c) => {
 const AddTournamentPlayerSchema = z.object({
   login: z.string().trim().min(1),
   partnerLogin: z.string().trim().min(1).optional(),
+  teamName: z.string().trim().max(40).optional(),
 });
 
 app.post('/tournaments/:id/add-player', async (c) => {
@@ -5492,7 +5512,7 @@ app.post('/tournaments/:id/add-player', async (c) => {
   const result = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id }, include: { entries: true } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, {
         message: "seul l'organisateur ou un admin peut inviter des joueurs",
       });
@@ -5522,7 +5542,14 @@ app.post('/tournaments/:id/add-player', async (c) => {
     if (t.format !== 'league' && t.entries.length >= t.capacity) {
       throw new HTTPException(409, { message: 'tournoi complet' });
     }
-    await tx.tournamentEntry.create({ data: { tournamentId: id, login, partnerLogin: partner } });
+    await tx.tournamentEntry.create({
+      data: {
+        tournamentId: id,
+        login,
+        partnerLogin: partner,
+        teamName: t.mode === '2v2' ? (parsed.data.teamName ?? null) : null,
+      },
+    });
     // Ligue : pas d'auto-démarrage (lancement manuel par l'organisateur).
     const newCount = t.entries.length + 1;
     if (t.format !== 'league' && newCount === t.capacity) {
@@ -5573,7 +5600,7 @@ app.post('/tournaments/:id/invite', async (c) => {
     if (t.mode === '2v2') {
       throw new HTTPException(400, { message: 'tournoi 2v2 : pas d\'invitations — inscris directement une paire (ajouter une équipe)' });
     }
-    if (t.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, { message: "seul l'organisateur ou un admin peut inviter" });
     }
     if (t.status !== 'registration') {
@@ -5749,7 +5776,7 @@ app.post('/tournaments/:id/remove-player', async (c) => {
   const refunded = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, { message: "seul l'organisateur ou un admin peut retirer un inscrit" });
     }
     if (t.status !== 'registration') {
@@ -5776,6 +5803,86 @@ app.post('/tournaments/:id/remove-player', async (c) => {
   return c.json({ id, removed: login });
 });
 
+// Nom d'équipe (2v2) : un membre de l'équipe (capitaine ou coéquipier), un
+// organisateur ou un admin peut (re)nommer l'équipe. Vide → efface le nom.
+const SetTeamNameSchema = z.object({
+  login: z.string().trim().min(1), // capitaine de l'équipe (clé de l'inscription)
+  teamName: z.string().trim().max(40),
+});
+app.post('/tournaments/:id/team-name', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = SetTeamNameSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { login, teamName } = parsed.data;
+  await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({ where: { id } });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    if (t.mode !== '2v2') throw new HTTPException(400, { message: 'noms d’équipe réservés au 2v2' });
+    const entry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login } },
+    });
+    if (!entry) throw new HTTPException(404, { message: 'équipe introuvable' });
+    const isMember = me === entry.login || me === entry.partnerLogin;
+    if (!isMember && !isTournamentManager(t, me) && !isAdmin(me)) {
+      throw new HTTPException(403, {
+        message: 'seul un membre de l’équipe ou un organisateur peut la nommer',
+      });
+    }
+    await tx.tournamentEntry.update({
+      where: { tournamentId_login: { tournamentId: id, login } },
+      data: { teamName: teamName || null },
+    });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, login, teamName: teamName || null });
+});
+
+// Co-organisateurs : le CRÉATEUR (ou un admin) ajoute/retire des co-organisateurs,
+// qui obtiennent TOUS les droits d'organisation sur le tournoi (comme le créateur).
+const OrganizerSchema = z.object({
+  login: z.string().trim().min(1),
+  action: z.enum(['add', 'remove']),
+});
+app.post('/tournaments/:id/organizers', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = OrganizerSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { login, action } = parsed.data;
+  const coOrganizers = await prisma.$transaction(async (tx) => {
+    const t = await tx.tournament.findUnique({
+      where: { id },
+      select: { createdByLogin: true, coOrganizers: true },
+    });
+    if (!t) throw new HTTPException(404, { message: 'tournament not found' });
+    // Seul le créateur (ou un admin) gère la liste des co-organisateurs.
+    if (t.createdByLogin !== me && !isAdmin(me)) {
+      throw new HTTPException(403, { message: 'seul le créateur ou un admin gère les co-organisateurs' });
+    }
+    if (login === t.createdByLogin) {
+      throw new HTTPException(400, { message: 'le créateur est déjà organisateur' });
+    }
+    if (action === 'add') {
+      const target = await tx.user.findUnique({ where: { login } });
+      if (!target || target.bannedAt || target.anonymizedAt || target.deletionScheduledAt) {
+        throw new HTTPException(404, { message: `joueur introuvable : ${login}` });
+      }
+    }
+    const set = new Set(t.coOrganizers);
+    if (action === 'add') set.add(login);
+    else set.delete(login);
+    const next = [...set];
+    await tx.tournament.update({ where: { id }, data: { coOrganizers: next } });
+    return next;
+  });
+  emit([login], { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, coOrganizers });
+});
+
 app.post('/tournaments/:id/start', async (c) => {
   const me = await getCurrentLogin(c);
   const id = c.req.param('id');
@@ -5785,7 +5892,7 @@ app.post('/tournaments/:id/start', async (c) => {
       include: { entries: true },
     });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, { message: 'only the organizer or an admin can start' });
     }
     if (t.status !== 'registration') {
@@ -5831,10 +5938,10 @@ async function assertLeagueOfficiant(
 ): Promise<{ createdByLogin: string; kind: string; format: string; status: string; name: string; game: string }> {
   const t = await prisma.tournament.findUnique({
     where: { id },
-    select: { createdByLogin: true, kind: true, format: true, status: true, name: true, game: true },
+    select: { createdByLogin: true, coOrganizers: true, kind: true, format: true, status: true, name: true, game: true },
   });
   if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-  const ownerIsFriendlyOrganizer = t.createdByLogin === me && t.kind === 'friendly';
+  const ownerIsFriendlyOrganizer = isTournamentManager(t, me) && t.kind === 'friendly';
   if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
     throw new HTTPException(403, {
       message: 'admins or the organizer of a friendly tournament only',
@@ -6293,7 +6400,7 @@ app.post('/tournaments/:id/reshuffle', async (c) => {
     include: { entries: { select: { login: true } } },
   });
   if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-  if (t.createdByLogin !== me && !isAdmin(me)) {
+  if (!isTournamentManager(t, me) && !isAdmin(me)) {
     throw new HTTPException(403, { message: 'only the organizer or an admin can reshuffle' });
   }
   if (t.status !== 'in_progress') {
@@ -6336,10 +6443,10 @@ app.post('/tournaments/:id/bracket/swap', async (c) => {
   const id = c.req.param('id');
   const owner = await prisma.tournament.findUnique({
     where: { id },
-    select: { createdByLogin: true, kind: true, activeMatchId: true },
+    select: { createdByLogin: true, coOrganizers: true, kind: true, activeMatchId: true },
   });
   if (!owner) throw new HTTPException(404, { message: 'tournament not found' });
-  const ownerIsFriendlyOrganizer = owner.createdByLogin === me && owner.kind === 'friendly';
+  const ownerIsFriendlyOrganizer = isTournamentManager(owner, me) && owner.kind === 'friendly';
   if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
     throw new HTTPException(403, { message: 'admins or the organizer of a friendly tournament only' });
   }
@@ -6427,7 +6534,7 @@ app.post('/tournaments/:id/cancel', async (c) => {
   const refunded = await prisma.$transaction(async (tx) => {
     const t = await tx.tournament.findUnique({ where: { id } });
     if (!t) throw new HTTPException(404, { message: 'tournament not found' });
-    if (t.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(t, me) && !isAdmin(me)) {
       throw new HTTPException(403, {
         message: 'only the organizer can cancel',
       });
@@ -6649,12 +6756,12 @@ app.post('/tournaments/:id/matches/:matchId/toss', async (c) => {
     // amical) — l'officiant peut lancer la pièce sans jouer le match.
     const tour = await tx.tournament.findUnique({
       where: { id },
-      select: { createdByLogin: true, kind: true },
+      select: { createdByLogin: true, coOrganizers: true, kind: true },
     });
     const isParticipant = m.playerALogin === me || m.playerBLogin === me;
     const canOfficiate =
       (await isAdminLogin(me)) ||
-      (!!tour && tour.createdByLogin === me && tour.kind === 'friendly');
+      (!!tour && isTournamentManager(tour, me) && tour.kind === 'friendly');
     if (!isParticipant && !canOfficiate) {
       throw new HTTPException(403, { message: 'not a participant' });
     }
@@ -6734,10 +6841,10 @@ app.post('/tournaments/:id/matches/:matchId/announce', async (c) => {
   const updated = await prisma.$transaction(async (tx) => {
     const tour = await tx.tournament.findUnique({
       where: { id },
-      select: { createdByLogin: true, status: true, game: true },
+      select: { createdByLogin: true, coOrganizers: true, status: true, game: true },
     });
     if (!tour) throw new HTTPException(404, { message: 'tournament not found' });
-    if (tour.createdByLogin !== me && !isAdmin(me)) {
+    if (!isTournamentManager(tour, me) && !isAdmin(me)) {
       throw new HTTPException(403, { message: 'only the organizer can announce a match' });
     }
     if (tour.status !== 'in_progress') {
@@ -7832,10 +7939,10 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
   // Lui permet de saisir le score d'autorité sans jouer le match.
   const owner = await prisma.tournament.findUnique({
     where: { id },
-    select: { createdByLogin: true, kind: true },
+    select: { createdByLogin: true, coOrganizers: true, kind: true },
   });
   if (!owner) throw new HTTPException(404, { message: 'tournament not found' });
-  const ownerIsFriendlyOrganizer = owner.createdByLogin === me && owner.kind === 'friendly';
+  const ownerIsFriendlyOrganizer = isTournamentManager(owner, me) && owner.kind === 'friendly';
   if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
     throw new HTTPException(403, {
       message: 'admins or the organizer of a friendly tournament only',
