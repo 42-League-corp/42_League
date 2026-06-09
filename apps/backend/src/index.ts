@@ -2049,11 +2049,14 @@ app.post('/seasons/:id/activate', async (c) => {
 // Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
 // Comptes présents en prod mais absents de staging → créés avec une identité
 // minimale (rôle USER) pour que le classement staging reflète la prod.
+// NB : la prod peut tourner sur un schéma EN RETARD sur develop. On se limite donc
+// au dénominateur commun des colonnes réellement présentes en prod aujourd'hui —
+// PAS de first_name/last_name ni des colonnes fléchettes (absentes en prod). Sinon
+// `findMany` plante (« column users.first_name does not exist »). Les disciplines
+// manquantes en prod prennent simplement leur défaut côté staging (Elo 1000).
 const PROD_ELO_SELECT = {
   login: true,
   ftId: true,
-  firstName: true,
-  lastName: true,
   campus: true,
   imageUrl: true,
   title: true,
@@ -2071,9 +2074,6 @@ const PROD_ELO_SELECT = {
   eloSf: true,
   matchesPlayedSf: true,
   tournamentsWonSf: true,
-  eloFlechettes: true,
-  matchesPlayedFlechettes: true,
-  tournamentsWonFlechettes: true,
 } satisfies Prisma.UserSelect;
 
 app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
@@ -2122,9 +2122,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         eloSf: u.eloSf,
         matchesPlayedSf: u.matchesPlayedSf,
         tournamentsWonSf: u.tournamentsWonSf,
-        eloFlechettes: u.eloFlechettes,
-        matchesPlayedFlechettes: u.matchesPlayedFlechettes,
-        tournamentsWonFlechettes: u.tournamentsWonFlechettes,
+        // Fléchettes : absentes de la prod (schéma en retard) → non copiées, le
+        // staging garde son défaut (Elo 1000) pour cette discipline.
       };
       try {
         const existing = await prisma.user.findUnique({
@@ -2140,8 +2139,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
             data: {
               login: u.login,
               ftId: u.ftId,
-              firstName: u.firstName,
-              lastName: u.lastName,
+              // firstName/lastName absents en prod → laissés null (le nom pourra
+              // être backfillé via l'API 42, cf. backfillMissingProfiles).
               campus: u.campus,
               imageUrl: u.imageUrl,
               title: u.title,
