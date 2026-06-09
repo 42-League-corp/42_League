@@ -3,8 +3,6 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
-import { OnlineBadge } from '../../components/OnlineBadge';
-import { IntraStatusPill } from '../../components/IntraStatusPill';
 import { StatCard } from '../../components/StatCard';
 import { RankBadge } from '../../components/RankBadge';
 import { BadgesRow } from '../../components/Badges';
@@ -36,7 +34,7 @@ import { pickRating } from '../../lib/gameStats';
 export function ProfilDesktop() {
   const t = useT();
   const { locale } = useI18n();
-  const { me, matches, opsMe, leaderboard, tournaments, locations, refresh } = useLeagueData();
+  const { me, matches, opsMe, leaderboard, tournaments, refresh } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
   const [editGame, setEditGame] = useState<FightingGame | null>(null);
@@ -115,7 +113,6 @@ export function ProfilDesktop() {
   const realName =
     [u.firstName, u.lastName].filter(Boolean).join(' ').trim() ||
     [myEntry?.firstName, myEntry?.lastName].filter(Boolean).join(' ').trim();
-  const myOnlineHost = locations.get(u.login);
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
@@ -188,9 +185,6 @@ export function ProfilDesktop() {
               size="xl"
               className="relative ring-2 ring-gold/45 ring-offset-2 ring-offset-bg-2"
             />
-            {myOnlineHost && (
-              <OnlineBadge host={myOnlineHost} compact className="absolute bottom-0.5 right-0.5 ring-offset-bg-2" />
-            )}
           </div>
 
           {/* Identité */}
@@ -228,8 +222,6 @@ export function ProfilDesktop() {
                 </motion.span>
               )}
             </div>
-            {/* Statut intra 42 — disponible (connecté au cluster) / indisponible */}
-            <IntraStatusPill host={myOnlineHost} className="mt-2.5 w-fit" />
           </div>
 
           {/* Bloc ELO mis en valeur — libellé "ELO" centré au-dessus du nombre. */}

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, UserPlus, UserCheck } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { Tooltip } from '../components/Tooltip';
-import { OnlineBadge } from '../components/OnlineBadge';
 import { Button } from '../components/Button';
 import { Palmares } from '../components/Palmares';
 import { EloChart } from '../components/EloChart';
@@ -31,7 +30,7 @@ export function PlayerPage() {
   const login = rawLogin ?? '';
   const navigate = useNavigate();
   const t = useT();
-  const { me, opsMe, locations, matches, refresh } = useLeagueData();
+  const { me, opsMe, matches, refresh } = useLeagueData();
   const { game } = useGameMode();
   const flash = useFlash();
   const confirm = useConfirm();
@@ -110,7 +109,6 @@ export function PlayerPage() {
   const p = profile;
   const myLogin = me?.login;
   const isMe = myLogin === p.user.login;
-  const onlineHost = locations.get(p.user.login);
 
   // Mêmes stats que le profil perso (calcul pur partagé), isolées par discipline
   // depuis l'historique global — agencement strictement identique à `ProfilMobile`.
@@ -119,7 +117,7 @@ export function PlayerPage() {
   return (
     <div className="space-y-5">
       {/* Carte héro — même design que le profil perso (sans le sélecteur de titre) */}
-      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} customBadges={p.customBadges} isMe={isMe} onlineHost={onlineHost} coins={p.coins} />
+      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} customBadges={p.customBadges} isMe={isMe} coins={p.coins} />
 
       {/* Actions propres à la fiche d'un autre joueur : suivre + head-to-head */}
       {!isMe && myLogin && (
@@ -150,7 +148,6 @@ export function PlayerPage() {
               Head-to-Head
             </Button>
           </Tooltip>
-          {onlineHost && <OnlineBadge host={onlineHost} />}
         </div>
       )}
 

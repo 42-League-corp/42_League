@@ -26,7 +26,7 @@ type ProfilTab = 'profile' | 'quests' | 'bets';
 
 export function ProfilMobile() {
   const { stats, myLogin } = useProfilLogic();
-  const { me, matches, locations, refresh } = useLeagueData();
+  const { me, matches, refresh } = useLeagueData();
   const { game } = useGameMode();
   const { signOut } = useAuth();
   const t = useT();
@@ -54,7 +54,7 @@ export function ProfilMobile() {
           — le remount est masqué par l'overlay de transition d'univers. */}
       <div key={game} className="space-y-5">
         {/* Héro : ELO, stats, badges, autres disciplines — tout dans la carte */}
-        <ProfileHeroCard stats={stats} onlineHost={myLogin ? locations.get(myLogin) : undefined} />
+        <ProfileHeroCard stats={stats} />
 
         {/* Réaction meme contextuelle (série de défaites → « offre ton ELO ? »,
             série de victoires → « calme-toi le sweat »). Cf. lib/playerReactions. */}

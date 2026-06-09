@@ -3,8 +3,6 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { Avatar } from '../../../components/Avatar';
 import { CoinCount } from '../../../components/CoinCount';
-import { OnlineBadge } from '../../../components/OnlineBadge';
-import { IntraStatusPill } from '../../../components/IntraStatusPill';
 import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../../lib/chars';
@@ -40,8 +38,6 @@ interface ProfileHeroCardProps {
   /** Badges « libres » (GOD) du joueur affiché — rendus en plus des badges catalogue. */
   customBadges?: MeResponse['customBadges'];
   equippedBanner?: string | null;
-  /** Hôte 42 si le joueur est actuellement connecté sur un PC du cluster. */
-  onlineHost?: string;
   /** Solde de League Coins (pour les fiches d'autres joueurs ; `me.coins` est utilisé quand isMe). */
   coins?: number;
 }
@@ -60,7 +56,6 @@ export function ProfileHeroCard({
   equippedBadge: equippedBadgeProp,
   customBadges: customBadgesProp,
   equippedBanner: equippedBannerProp,
-  onlineHost,
   coins: coinsProp,
 }: ProfileHeroCardProps) {
   const { me, leaderboard, refresh } = useLeagueData();
@@ -211,9 +206,6 @@ export function ProfileHeroCard({
               size="lg"
               className="relative"
             />
-            {onlineHost && (
-              <OnlineBadge host={onlineHost} compact className="absolute bottom-0 right-0" />
-            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -266,9 +258,6 @@ export function ProfileHeroCard({
             </motion.div>
           )}
         </div>
-
-        {/* Statut intra 42 — disponible (connecté au cluster) / indisponible */}
-        <IntraStatusPill host={onlineHost} className="mb-5" />
 
         {/* ELO bloc */}
         <div className="flex items-end justify-between gap-4 mb-2 px-1">
