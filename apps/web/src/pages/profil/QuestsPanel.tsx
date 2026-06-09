@@ -10,7 +10,7 @@ import { SectionHeader } from './shared/SectionHeader';
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 tabular-nums ${className}`}>
-      <img src="/42coin.png" alt="" className="w-4 h-4" />
+      <img src="/42coin.webp" alt="" className="w-4 h-4" />
       {value}
     </span>
   );

@@ -81,7 +81,7 @@ function CategoryBadge({ category }: { category: ShopCategory }) {
 }
 
 function CoinIcon() {
-  return <img src="/42coin.png" alt="League Coin" className="w-4 h-4 inline-block align-text-bottom" />;
+  return <img src="/42coin.webp" alt="League Coin" className="w-4 h-4 inline-block align-text-bottom" />;
 }
 
 // ── Modal d'édition d'un item ───────────────────────────────────────────────
@@ -544,7 +544,7 @@ export function ShopGODPage() {
             >
               <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
-            <img src="/42coin.png" alt="League Coin" className="w-6 h-6" />
+            <img src="/42coin.webp" alt="League Coin" className="w-6 h-6" />
             <div className="flex flex-col leading-tight">
               <span className="text-zinc-200 font-bold tracking-widest text-sm flex items-center gap-1.5">
                 <Store className="w-4 h-4 text-amber-400" /> SHOP GOD

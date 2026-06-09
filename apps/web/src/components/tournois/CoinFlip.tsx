@@ -27,7 +27,7 @@ export interface CoinFlipProps {
   size?: number;
 }
 
-const COIN = '/42coin.png';
+const COIN = '/42coin.webp';
 
 export default function CoinFlip({
   side,

@@ -63,7 +63,7 @@ const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'badge'];
 function CoinAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 tabular-nums ${className}`}>
-      <img src="/42coin.png" alt="" className="w-4 h-4" />
+      <img src="/42coin.webp" alt="" className="w-4 h-4" />
       {value}
     </span>
   );
@@ -181,7 +181,7 @@ function EarnGuide() {
                   <span
                     className={`font-display text-2xl font-extrabold tabular-nums leading-none flex items-center gap-1 ${m.valueColor}`}
                   >
-                    {m.coin && <img src="/42coin.png" alt="" className="w-5 h-5" />}
+                    {m.coin && <img src="/42coin.webp" alt="" className="w-5 h-5" />}
                     {m.value}
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-2">
@@ -505,7 +505,7 @@ export function ShopPage() {
           <div className="absolute right-0 -bottom-12 w-44 h-44 rounded-full bg-violet-500/18 blur-3xl pointer-events-none" />
           {/* Pièce avec reflet doré qui balaie */}
           <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-gold/35 to-violet-500/15 border border-gold/45 flex items-center justify-center shadow-gold-glow overflow-hidden">
-            <img src="/42coin.png" alt="League Coin" className="relative w-10 h-10 drop-shadow" />
+            <img src="/42coin.webp" alt="League Coin" className="relative w-10 h-10 drop-shadow" />
             <div className="absolute inset-y-0 -left-1/2 w-1/2 bg-white/25 blur-md animate-gold-sweep pointer-events-none" />
           </div>
           <div className="relative min-w-0">

@@ -491,7 +491,7 @@ export function TournoiDetailPage() {
             <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
               {tournament.prizeKind === 'coins' ? (
                 <>
-                  <img src="/42coin.png" alt="" className="w-4 h-4" />
+                  <img src="/42coin.webp" alt="" className="w-4 h-4" />
                   {t('tournois.detail.prize.coins').replace('{n}', String(tournament.prizeCoins ?? 0))}
                 </>
               ) : tournament.prizeItem ? (
@@ -518,7 +518,7 @@ export function TournoiDetailPage() {
               {t('tournois.detail.cashPrize')}
             </div>
             <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
-              <img src="/42coin.png" alt="" className="w-4 h-4" />
+              <img src="/42coin.webp" alt="" className="w-4 h-4" />
               {tournament.cashPrizeBase.toLocaleString()}
               <span className="text-[11px] text-muted-2 font-medium">{t('tournois.detail.cashPrize.note')}</span>
             </div>
