@@ -774,6 +774,18 @@ export interface Tournament {
 export interface LiveTournament extends Tournament {
   betPool?: Record<string, number>;
   betTotalCoins?: number;
+  bets?: LiveBet[];
+}
+
+/** Une mise affichée dans le bandeau défilant de l'écran TV. */
+export interface LiveBet {
+  id: string;
+  bettor: string;
+  bettorImageUrl: string | null;
+  choice: string;
+  stake: number;
+  status: BetStatus;
+  createdAt: string;
 }
 
 /** Récompense passée à la création d'un tournoi officiel (cf. backend). */
