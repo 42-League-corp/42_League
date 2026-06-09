@@ -1,8 +1,16 @@
-www.42league.fr {
-    redir https://42league.fr{uri} permanent
+# Ancien domaine (rebrand) → 301 vers oneleague.fr, en conservant le chemin.
+# L'URL change réellement dans le navigateur (redirection permanente, pas un proxy).
+# Le front appelle l'API en same-origin (/api) quel que soit le domaine — aucun
+# besoin de proxifier /api ici : tout le trafic utile passe par oneleague.fr.
+www.42league.fr, 42league.fr {
+    redir https://oneleague.fr{uri} permanent
 }
 
-42league.fr {
+www.oneleague.fr {
+    redir https://oneleague.fr{uri} permanent
+}
+
+oneleague.fr {
     # Headers de durcissement appliqués à toutes les réponses (front + API).
     # Vérifiés quotidiennement par .github/workflows/daily-security-audit.yml.
     header {
@@ -10,6 +18,13 @@ www.42league.fr {
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        # Isole le top-level window (audit Lighthouse "origin isolation with COOP").
+        Cross-Origin-Opener-Policy "same-origin"
+        # CSP : limite la surface d'exfiltration en cas de XSS. `connect-src 'self'`
+        # bloque fetch/XHR/EventSource/beacon vers un domaine externe → un token volé
+        # ne peut pas être exfiltré par requête. `script-src 'unsafe-inline'` reste
+        # requis (script inline + onload= dans index.html) ; Google Fonts autorisé.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.intra.42.fr; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
         -Server
     }
 
@@ -19,6 +34,11 @@ www.42league.fr {
             # Flush immédiat : indispensable pour le flux SSE (/api/events),
             # sinon Caddy bufferise et les events n'arrivent qu'à la fermeture.
             flush_interval -1
+            # Anti-spoof : on écrase X-Forwarded-For avec l'IP réelle du client
+            # (Caddy est l'edge). Sans ça, un client pouvait fournir un XFF arbitraire
+            # et contourner le rate-limit / l'anti-brute-force keyés par IP.
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
         }
     }
     handle {
@@ -28,16 +48,23 @@ www.42league.fr {
 
 # ── STAGING ───────────────────────────────────────────────────────────────────
 # Même Caddy, second domaine. Caddy provisionne automatiquement le certificat
-# TLS de staging.42league.fr dès que le DNS pointe sur le VPS (aucun certbot).
+# TLS de staging.oneleague.fr dès que le DNS pointe sur le VPS (aucun certbot).
 # Les upstreams `league-stg-*` sont atteints via le réseau partagé `league_edge`.
+# Ancien sous-domaine staging.42league.fr → 301 vers staging.oneleague.fr.
 staging.42league.fr {
+    redir https://staging.oneleague.fr{uri} permanent
+}
+
+staging.oneleague.fr {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        Cross-Origin-Opener-Policy "same-origin"
         # Empêche l'indexation du staging par les moteurs de recherche.
         X-Robots-Tag "noindex, nofollow"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.intra.42.fr; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
         -Server
     }
 
@@ -50,6 +77,8 @@ staging.42league.fr {
         uri strip_prefix /api
         reverse_proxy league-stg-backend:3000 {
             flush_interval -1
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
         }
     }
     handle {
