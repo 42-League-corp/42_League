@@ -159,6 +159,121 @@ export function eloMap(entries: TournamentEntry[] = []): Map<string, number> {
   return m;
 }
 
+/**
+ * Table login (capitaine) → ELO d'ÉQUIPE. En 1v1 c'est l'ELO du joueur ; en 2v2 c'est
+ * la moyenne capitaine + coéquipier (la force réelle de la paire), arrondie. Utilisée
+ * pour tous les pronostics afin que le 2v2 soit aussi juste que le 1v1.
+ */
+export function teamEloMap(entries: TournamentEntry[] = []): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const e of entries) {
+    if (!e.user) continue;
+    const captain = e.user.elo;
+    const partner = e.partner?.elo ?? null;
+    m.set(e.login, partner != null ? Math.round((captain + partner) / 2) : captain);
+  }
+  return m;
+}
+
+// ── Pronostic ELO ─────────────────────────────────────────────────────────────
+
+/**
+ * Probabilité (0..1) que A batte B selon la formule ELO standard
+ * (`1 / (1 + 10^((eloB - eloA) / 400))`). Renvoie 0.5 si un ELO manque (inconnu =
+ * équilibré, jamais de favori inventé).
+ */
+export function winProbability(eloA?: number, eloB?: number): number {
+  if (eloA == null || eloB == null) return 0.5;
+  return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
+}
+
+export type PronoTone = 'serre' | 'equilibre' | 'favori';
+
+export interface Pronostic {
+  /** Probabilité de victoire du camp A (0..1). */
+  pa: number;
+  /** Probabilité de victoire du camp B (0..1). */
+  pb: number;
+  /** Intensité du suspense 0..1 (1 = 50/50, 0 = écrasé). */
+  heat: number;
+  /** Catégorie lisible : très serré / équilibré / favori net. */
+  tone: PronoTone;
+  /** Libellé court prêt à afficher (« MATCH SERRÉ », « FAVORI NET »…). */
+  label: string;
+  /** Vrai si aucun ELO connu (pronostic indisponible, on reste neutre). */
+  unknown: boolean;
+}
+
+/**
+ * Pronostic complet d'un duel à partir des ELO d'équipe. `heat` mesure le suspense
+ * (1 = parfaitement équilibré). Sert aux barres de pronostic et au tri « matchs serrés ».
+ */
+export function pronostic(eloA?: number, eloB?: number): Pronostic {
+  const unknown = eloA == null || eloB == null;
+  const pa = winProbability(eloA, eloB);
+  const pb = 1 - pa;
+  const heat = 1 - Math.abs(pa - 0.5) * 2; // |p-0.5| ∈ [0,0.5] → heat ∈ [0,1]
+  let tone: PronoTone;
+  let label: string;
+  if (unknown) {
+    tone = 'equilibre';
+    label = 'À SUIVRE';
+  } else if (heat >= 0.78) {
+    // ~44–56 % : duel à pile ou face.
+    tone = 'serre';
+    label = 'MATCH SERRÉ';
+  } else if (heat >= 0.4) {
+    // ~35–65 % : équilibré.
+    tone = 'equilibre';
+    label = 'ÉQUILIBRÉ';
+  } else {
+    tone = 'favori';
+    label = 'FAVORI NET';
+  }
+  return { pa, pb, heat, tone, label, unknown };
+}
+
+// ── Lecture des matchs joués ──────────────────────────────────────────────────
+
+/** Écart de buts d'un match (valeur absolue), ou null si pas de score. */
+export function matchMargin(m: TournamentMatch): number | null {
+  if (m.scoreA == null || m.scoreB == null) return null;
+  return Math.abs(m.scoreA - m.scoreB);
+}
+
+export interface MarginInfo {
+  margin: number;
+  /** 'nailbiter' (1 d'écart), 'tight' (2), 'clear' (3-4), 'blowout' (5+). */
+  kind: 'nailbiter' | 'tight' | 'clear' | 'blowout';
+  label: string;
+}
+
+/** Qualifie l'intensité d'un résultat selon l'écart de buts (pour les badges). */
+export function marginInfo(m: TournamentMatch): MarginInfo | null {
+  const margin = matchMargin(m);
+  if (margin == null) return null;
+  if (margin <= 1) return { margin, kind: 'nailbiter', label: 'AU BUZZER' };
+  if (margin === 2) return { margin, kind: 'tight', label: 'SERRÉ' };
+  if (margin <= 4) return { margin, kind: 'clear', label: 'NET' };
+  return { margin, kind: 'blowout', label: 'CARTON' };
+}
+
+/**
+ * Détecte une « surprise » : le vainqueur avait l'ELO d'équipe le plus faible d'au
+ * moins `gap` points. Renvoie l'écart d'ELO renversé, ou null si pas d'upset / ELO
+ * inconnus.
+ */
+export function upsetGap(m: TournamentMatch, elo: Map<string, number>, gap = 60): number | null {
+  if (!m.winnerLogin || !m.playerALogin || !m.playerBLogin) return null;
+  const eA = elo.get(m.playerALogin);
+  const eB = elo.get(m.playerBLogin);
+  if (eA == null || eB == null) return null;
+  const winnerElo = m.winnerLogin === m.playerALogin ? eA : eB;
+  const loserElo = m.winnerLogin === m.playerALogin ? eB : eA;
+  const diff = loserElo - winnerElo;
+  return diff >= gap ? diff : null;
+}
+
 // ── HYPE ─────────────────────────────────────────────────────────────────────
 
 /** Proximité d'ELO normalisée 0..1 (écart 0 → 1, écart ≥ 300 → 0). */
@@ -213,11 +328,14 @@ export function tightMatches(t: LiveTournament, elo: Map<string, number>, limit 
     .sort((a, b) => a.gap - b.gap || (b.match.recordedAt ?? b.match.confirmedAt ?? '').localeCompare(a.match.recordedAt ?? a.match.confirmedAt ?? ''));
 
   const eloClose: TightMatch[] = upcomingDuels(t, null, 20)
-    .map((m) => ({
-      match: m,
-      kind: 'eloClose' as const,
-      gap: Math.abs((elo.get(m.playerALogin ?? '') ?? 1000) - (elo.get(m.playerBLogin ?? '') ?? 1000)),
-    }))
+    .map((m) => {
+      const eA = elo.get(m.playerALogin ?? '');
+      const eB = elo.get(m.playerBLogin ?? '');
+      // ELO inconnu → on ne fabrique pas un faux « match serré » : gap infini = exclu.
+      const gap = eA != null && eB != null ? Math.abs(eA - eB) : Number.POSITIVE_INFINITY;
+      return { match: m, kind: 'eloClose' as const, gap };
+    })
+    .filter((x) => Number.isFinite(x.gap))
     .sort((a, b) => a.gap - b.gap);
 
   return [...liveClose, ...eloClose].slice(0, limit);

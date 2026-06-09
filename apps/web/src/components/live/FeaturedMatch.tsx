@@ -1,11 +1,15 @@
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Avatar } from '../Avatar';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
-import { avatarMap, eloMap, partnerOf, type FeaturedState } from '../../lib/liveTournament';
+import { avatarMap, teamEloMap, partnerOf, pronostic, type FeaturedState } from '../../lib/liveTournament';
 
 // Centre haut — affiche VS du match en avant, sur l'image babyfoot animée. Gère 1v1
 // et 2v2 (paire affichée). Le visuel s'adapte à l'état (en cours / live / à venir /
-// dernier match).
+// dernier match). Ajouts : barre de PRONOSTIC ELO (qui dit en un coup d'œil si le
+// duel sera serré) et CÉLÉBRATION « waouh » quand un score décisif tombe.
+
+const GREEN = '#7fd66e';
 
 const STATE_BADGE: Record<FeaturedState, { label: string; tone: string }> = {
   active: { label: '⚔ MATCH EN COURS', tone: 'text-gold border-gold/60 bg-gold/10' },
@@ -38,12 +42,47 @@ export function FeaturedMatch({
 }) {
   const entries = tournament.entries ?? [];
   const avatars = avatarMap(entries);
-  const elos = eloMap(entries);
+  const elos = teamEloMap(entries);
   const isBabyfoot = (tournament.game ?? 'babyfoot') === 'babyfoot';
   const badge = STATE_BADGE[state];
   const showScores = match.scoreA != null && match.scoreB != null;
   const winnerA = match.winnerLogin && match.winnerLogin === match.playerALogin;
   const winnerB = match.winnerLogin && match.winnerLogin === match.playerBLogin;
+
+  const eloA = match.playerALogin ? elos.get(match.playerALogin) : undefined;
+  const eloB = match.playerBLogin ? elos.get(match.playerBLogin) : undefined;
+  const prono = pronostic(eloA, eloB);
+
+  // ── Célébration du score gagnant ────────────────────────────────────────────
+  // On déclenche une cinématique « waouh » quand le vainqueur de CE match vient
+  // d'être désigné (transition null → login), une seule fois par match.
+  const prevWinnerRef = useRef<string | null>(match.winnerLogin ?? null);
+  const prevMatchIdRef = useRef<string>(match.id);
+  const [celebrate, setCelebrate] = useState<{ key: number; side: 'A' | 'B'; login: string } | null>(null);
+  const celebKey = useRef(0);
+
+  useEffect(() => {
+    // Reset du suivi quand le match en avant change (on n'hérite pas du précédent).
+    if (prevMatchIdRef.current !== match.id) {
+      prevMatchIdRef.current = match.id;
+      prevWinnerRef.current = match.winnerLogin ?? null;
+      return;
+    }
+    const prev = prevWinnerRef.current;
+    const now = match.winnerLogin ?? null;
+    if (!prev && now) {
+      const side: 'A' | 'B' = now === match.playerALogin ? 'A' : 'B';
+      celebKey.current += 1;
+      setCelebrate({ key: celebKey.current, side, login: now });
+    }
+    prevWinnerRef.current = now;
+  }, [match.id, match.winnerLogin, match.playerALogin]);
+
+  useEffect(() => {
+    if (!celebrate) return;
+    const t = setTimeout(() => setCelebrate(null), 3200);
+    return () => clearTimeout(t);
+  }, [celebrate]);
 
   return (
     <div className="relative flex flex-col items-center justify-center h-full w-full rounded-xl border border-border/60 bg-gradient-to-b from-bg-1/80 to-bg-0 overflow-hidden shadow-rivet">
@@ -54,13 +93,13 @@ export function FeaturedMatch({
         {badge.label}
       </div>
 
-      <div className="relative z-10 flex items-center justify-between w-full px-[2vw] mt-[2vh]">
+      <div className="relative z-10 flex items-center justify-between w-full px-[2vw] mt-[1.4vh]">
         <Fighter
           login={match.playerALogin}
           partner={match.playerALogin ? partnerOf(match.playerALogin, entries) : null}
           imageUrl={match.playerALogin ? avatars.get(match.playerALogin) ?? null : null}
           partnerImg={match.playerALogin ? avatars.get(partnerOf(match.playerALogin, entries) ?? '') ?? null : null}
-          elo={match.playerALogin ? elos.get(match.playerALogin) : undefined}
+          elo={eloA}
           align="left"
           winner={!!winnerA}
           loser={!!match.winnerLogin && !winnerA}
@@ -83,7 +122,7 @@ export function FeaturedMatch({
             <img
               src="/baby anim-Photoroom.png"
               alt=""
-              className="h-[14vh] w-auto object-contain mt-[0.5vh] drop-shadow-[0_8px_30px_rgba(0,0,0,0.6)]"
+              className="h-[12vh] w-auto object-contain mt-[0.4vh] drop-shadow-[0_8px_30px_rgba(0,0,0,0.6)]"
             />
           )}
           <div className="mt-[0.4vh] text-[1.5vh] uppercase tracking-[0.18em] text-gold/90 font-gaming font-bold whitespace-nowrap">
@@ -96,13 +135,138 @@ export function FeaturedMatch({
           partner={match.playerBLogin ? partnerOf(match.playerBLogin, entries) : null}
           imageUrl={match.playerBLogin ? avatars.get(match.playerBLogin) ?? null : null}
           partnerImg={match.playerBLogin ? avatars.get(partnerOf(match.playerBLogin, entries) ?? '') ?? null : null}
-          elo={match.playerBLogin ? elos.get(match.playerBLogin) : undefined}
+          elo={eloB}
           align="right"
           winner={!!winnerB}
           loser={!!match.winnerLogin && !winnerB}
         />
       </div>
+
+      {/* Barre de pronostic ELO — masquée une fois le vainqueur connu (le résultat
+          parle de lui-même). */}
+      {!match.winnerLogin && match.playerALogin && match.playerBLogin && (
+        <PronoBar prono={prono} loginA={match.playerALogin} loginB={match.playerBLogin} />
+      )}
+
+      {/* Cinématique de victoire (waouh) */}
+      <AnimatePresence>
+        {celebrate && <WinBurst key={celebrate.key} side={celebrate.side} login={celebrate.login} />}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// ── Barre de pronostic « serré-o-mètre » ───────────────────────────────────────
+
+function PronoBar({
+  prono,
+  loginA,
+  loginB,
+}: {
+  prono: ReturnType<typeof pronostic>;
+  loginA: string;
+  loginB: string;
+}) {
+  const pctA = Math.round(prono.pa * 100);
+  const pctB = 100 - pctA;
+  const toneClass =
+    prono.tone === 'serre'
+      ? 'text-red border-red/50 bg-red/10'
+      : prono.tone === 'equilibre'
+        ? 'text-teal border-teal/40 bg-teal/10'
+        : 'text-gold border-gold/40 bg-gold/10';
+  const flame = prono.tone === 'serre' ? '🔥 ' : '';
+
+  return (
+    <div className="absolute bottom-[1.2vh] left-1/2 -translate-x-1/2 z-10 w-[80%] max-w-[42vw] flex flex-col items-center gap-[0.5vh]">
+      <span className={`px-[0.8vw] py-[0.2vh] rounded-full border text-[1.2vh] font-bold uppercase tracking-[0.14em] ${toneClass}`}>
+        {flame}{prono.unknown ? 'Pronostic à venir' : prono.label}
+      </span>
+      <div className="w-full flex items-center gap-[0.6vw]">
+        <span className="text-[1.4vh] font-mono font-bold tabular-nums text-text-strong w-[3.2ch] text-right shrink-0">
+          {prono.unknown ? '–' : `${pctA}%`}
+        </span>
+        <div className="relative flex-1 h-[1.1vh] rounded-full overflow-hidden bg-bg-3/80 border border-border/50">
+          <motion.div
+            className="absolute inset-y-0 left-0"
+            style={{ background: `linear-gradient(90deg, ${GREEN}, ${GREEN}aa)` }}
+            animate={{ width: prono.unknown ? '50%' : `${pctA}%` }}
+            transition={{ type: 'spring', stiffness: 120, damping: 22 }}
+          />
+          <div className="absolute inset-y-0 left-1/2 w-px bg-text-strong/40" />
+        </div>
+        <span className="text-[1.4vh] font-mono font-bold tabular-nums text-text-strong w-[3.2ch] shrink-0">
+          {prono.unknown ? '–' : `${pctB}%`}
+        </span>
+      </div>
+      <div className="w-full flex items-center justify-between text-[1.0vh] uppercase tracking-wide text-muted-2">
+        <span className="truncate max-w-[40%]">{loginA}</span>
+        <span className="truncate max-w-[40%] text-right">{loginB}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Cinématique de victoire ────────────────────────────────────────────────────
+
+function WinBurst({ side, login }: { side: 'A' | 'B'; login: string }) {
+  // Particules dorées qui jaillissent du côté du vainqueur.
+  const particles = Array.from({ length: 18 }, (_, i) => i);
+  const originX = side === 'A' ? '24%' : '76%';
+  return (
+    <motion.div
+      className="pointer-events-none absolute inset-0 z-30 overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.5 } }}
+    >
+      {/* Flash d'écran */}
+      <motion.div
+        className="absolute inset-0"
+        style={{ background: 'radial-gradient(ellipse at center, rgba(255,201,74,0.35), transparent 70%)' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0.9, 0] }}
+        transition={{ duration: 0.7, times: [0, 0.2, 1] }}
+      />
+      {/* Particules */}
+      <div className="absolute top-[42%]" style={{ left: originX }}>
+        {particles.map((i) => {
+          const angle = (i / particles.length) * Math.PI * 2;
+          const dist = 60 + (i % 5) * 26;
+          const dx = Math.cos(angle) * dist;
+          const dy = Math.sin(angle) * dist;
+          const gold = i % 3 === 0;
+          return (
+            <motion.span
+              key={i}
+              className="absolute block rounded-sm"
+              style={{
+                width: gold ? 10 : 7,
+                height: gold ? 10 : 7,
+                background: gold ? '#ffc94a' : GREEN,
+                boxShadow: gold ? '0 0 8px rgba(255,201,74,0.8)' : '0 0 6px rgba(127,214,110,0.7)',
+              }}
+              initial={{ x: 0, y: 0, opacity: 1, scale: 1, rotate: 0 }}
+              animate={{ x: dx, y: dy + 40, opacity: 0, scale: 0.4, rotate: 180 }}
+              transition={{ duration: 1.1 + (i % 4) * 0.15, ease: 'easeOut' }}
+            />
+          );
+        })}
+      </div>
+      {/* Tampon VICTOIRE du côté du vainqueur */}
+      <motion.div
+        className={`absolute top-[10%] ${side === 'A' ? 'left-[6%]' : 'right-[6%]'} flex flex-col items-center`}
+        initial={{ scale: 0.2, opacity: 0, rotate: side === 'A' ? -16 : 16 }}
+        animate={{ scale: 1, opacity: 1, rotate: side === 'A' ? -10 : 10 }}
+        exit={{ scale: 1.4, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 14 }}
+      >
+        <span className="font-display font-black text-[3.4vh] uppercase tracking-[0.1em] text-gold drop-shadow-[0_0_18px_rgba(255,201,74,0.7)]">
+          Victoire
+        </span>
+        <span className="text-[1.6vh] font-bold uppercase text-text-strong truncate max-w-[18vw]">{login}</span>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -115,7 +279,7 @@ function Score({ value, highlight }: { value: number; highlight: boolean }) {
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.4, opacity: 0, y: 10 }}
         transition={{ type: 'spring', stiffness: 320, damping: 20 }}
-        className={`font-display font-black tabular-nums text-[9vh] leading-none ${
+        className={`font-display font-black tabular-nums text-[8.5vh] leading-none ${
           highlight ? 'text-gold drop-shadow-[0_0_22px_rgba(255,201,74,0.6)]' : 'text-text-strong'
         }`}
       >
@@ -151,9 +315,13 @@ function Fighter({
       } ${align === 'left' ? 'items-center' : 'items-center'}`}
     >
       <div className="relative">
-        <div className={winner ? 'ring-4 ring-gold rounded-full shadow-[0_0_30px_rgba(255,201,74,0.6)]' : ''}>
+        <motion.div
+          className={winner ? 'ring-4 ring-gold rounded-full shadow-[0_0_30px_rgba(255,201,74,0.6)]' : ''}
+          animate={winner ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+          transition={winner ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+        >
           <Avatar login={login ?? '?'} imageUrl={imageUrl} size="xl" grayscale={loser} />
-        </div>
+        </motion.div>
         {partner && (
           <div className="absolute -bottom-[0.5vh] -right-[0.5vh] rounded-full ring-2 ring-bg-0">
             <Avatar login={partner} imageUrl={partnerImg} size="md" grayscale={loser} />

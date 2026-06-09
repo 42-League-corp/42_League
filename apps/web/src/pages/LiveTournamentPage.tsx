@@ -9,7 +9,7 @@ import { computeStandings, type Standing } from '../lib/tournamentStandings';
 import {
   bracketRounds,
   computeDuelHypes,
-  eloMap,
+  teamEloMap,
   matchesOfStage,
   phaseInfo,
   pickCurrentTournament,
@@ -122,7 +122,8 @@ export function LiveTournamentPage() {
 
 function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
   const phase = useMemo(() => phaseInfo(data), [data]);
-  const elos = useMemo(() => eloMap(data.entries ?? []), [data]);
+  // ELO d'ÉQUIPE (moyenne de la paire en 2v2) pour des pronostics justes partout.
+  const elos = useMemo(() => teamEloMap(data.entries ?? []), [data]);
 
   // Classement général (goal average) — tous les participants sont listés : ceux qui
   // ont joué d'abord (par résultats), puis le reste par ELO. Garantit un tableau
@@ -144,9 +145,9 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
   const featured = useMemo(() => pickFeaturedMatch(data), [data]);
   const bRounds = useMemo(() => bracketRounds(data), [data]);
   const hasBracket = bRounds > 0;
-  const recents = useMemo(() => recentResults(data, 6), [data]);
+  const recents = useMemo(() => recentResults(data, 5), [data]);
   const upcoming = useMemo(
-    () => upcomingDuels(data, featured?.state === 'next' ? featured.match.id : null, 6),
+    () => upcomingDuels(data, featured?.state === 'next' ? featured.match.id : null, 5),
     [data, featured],
   );
   const hypes = useMemo(() => computeDuelHypes(upcoming, data.betPool ?? {}, elos), [upcoming, data, elos]);

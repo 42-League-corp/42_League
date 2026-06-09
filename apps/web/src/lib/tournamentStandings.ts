@@ -55,6 +55,44 @@ export function computeStandings(
   return rows;
 }
 
+export interface PoolStanding {
+  poolIndex: number;
+  standings: Standing[];
+}
+
+/**
+ * Classements par poule à partir des matchs de poule (`stage='pool'`). Chaque poule
+ * est triée avec le mode 'pool' (victoires → diff → buts). Les poules sont retournées
+ * dans l'ordre de leur index. Tout joueur présent dans un match de la poule apparaît,
+ * même sans match joué (ligne à zéro), pour un tableau toujours peuplé.
+ */
+export function poolStandings(matches: TournamentMatch[]): PoolStanding[] {
+  const pools = new Map<number, TournamentMatch[]>();
+  for (const m of matches) {
+    if ((m.stage ?? 'bracket') !== 'pool') continue;
+    const idx = m.poolIndex ?? 0;
+    const arr = pools.get(idx) ?? [];
+    arr.push(m);
+    pools.set(idx, arr);
+  }
+  const out: PoolStanding[] = [];
+  for (const [poolIndex, poolMatches] of [...pools.entries()].sort((a, b) => a[0] - b[0])) {
+    const base = computeStandings(poolMatches, 'pool');
+    const seen = new Set(base.map((s) => s.login));
+    // Joueurs composés mais sans match joué : on les ajoute en bas (ligne vide).
+    for (const m of poolMatches) {
+      for (const login of [m.playerALogin, m.playerBLogin]) {
+        if (login && !seen.has(login)) {
+          seen.add(login);
+          base.push({ login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 });
+        }
+      }
+    }
+    out.push({ poolIndex, standings: base });
+  }
+  return out;
+}
+
 /**
  * Forme récente d'un joueur : séquence chronologique de résultats (victoire `'W'` /
  * défaite `'L'`) sur ses matchs confirmés, du plus ancien au plus récent. Sert à
