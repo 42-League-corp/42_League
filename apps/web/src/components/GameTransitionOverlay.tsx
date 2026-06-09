@@ -32,7 +32,7 @@ const UNIVERSE: Record<Game, {
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
         {/* Baby-foot (table) centré — visuel dédié à la cinématique de transition */}
-        <image href="/baby%20anim-Photoroom.png" x="2" y="14" width="116" height="92" preserveAspectRatio="xMidYMid meet" />
+        <image href="/baby-anim.webp" x="2" y="14" width="116" height="92" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
@@ -68,7 +68,7 @@ const UNIVERSE: Record<Game, {
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
         {/* Pièce blanche (roi en marbre) centrée */}
-        <image href="/chess.png" x="20" y="6" width="80" height="108" preserveAspectRatio="xMidYMid meet" />
+        <image href="/chess.webp" x="20" y="6" width="80" height="108" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },
@@ -80,7 +80,7 @@ const UNIVERSE: Record<Game, {
     symbol: (s) => (
       <svg viewBox="0 0 120 120" width={s} height={s} aria-hidden>
         {/* Fléchette seule, centrée */}
-        <image href="/flechette.png" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
+        <image href="/flechette.webp" x="10" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
       </svg>
     ),
   },

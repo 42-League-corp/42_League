@@ -3,10 +3,10 @@ import type { PhaseInfo } from '../../lib/liveTournament';
 
 // Bandeau inférieur — rappel des disciplines (jeu du tournoi mis en avant) + phase.
 const GAMES: Array<{ id: string; label: string; color: string; grey: string }> = [
-  { id: 'babyfoot', label: 'Babyfoot', color: '/coulour baby.png', grey: '/gray baby.png' },
+  { id: 'babyfoot', label: 'Babyfoot', color: '/coulour-baby.webp', grey: '/gray-baby.webp' },
   { id: 'smash', label: 'Smash', color: '/smash-color.png', grey: '/smash-grey.png' },
   { id: 'streetfighter', label: 'Street Fighter', color: '/sf-color.png', grey: '/sf-grey.png' },
-  { id: 'chess', label: 'Échecs', color: '/chess.png', grey: '/gray chess.png' },
+  { id: 'chess', label: 'Échecs', color: '/chess.webp', grey: '/gray-chess.webp' },
 ];
 
 export function LiveDock({ tournament, phase }: { tournament: LiveTournament; phase: PhaseInfo }) {
