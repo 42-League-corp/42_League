@@ -65,6 +65,7 @@ export function TournoiDetailPage() {
   const [joinPartner, setJoinPartner] = useState<LeaderboardEntry | null>(null);
   const [addCaptain, setAddCaptain] = useState<LeaderboardEntry | null>(null);
   const [addPartner, setAddPartner] = useState<LeaderboardEntry | null>(null);
+  const [coAdminPick, setCoAdminPick] = useState<LeaderboardEntry | null>(null);
   // Cérémonie de lancement : déclenchée une fois au passage registration→in_progress.
   const [detailTab, setDetailTab] = useState<'bracket' | 'bets'>('bracket');
   const [showCeremony, setShowCeremony] = useState(false);
@@ -142,7 +143,9 @@ export function TournoiDetailPage() {
   }
 
   const myLogin = me?.login;
-  const isOrganizer = tournament.createdByLogin === myLogin;
+  // Le créateur ET les co-organisateurs ont tous les droits d'organisation.
+  const isCreator = tournament.createdByLogin === myLogin;
+  const isOrganizer = isCreator || (tournament.coOrganizers ?? []).includes(myLogin ?? '');
   const isAdmin = !!me?.isAdmin;
   // « Officiant » : peut saisir un score / lancer la pièce SANS jouer le match.
   // Admin/superadmin partout ; le créateur seulement sur un tournoi amical.
@@ -354,6 +357,25 @@ export function TournoiDetailPage() {
     });
     if (!ok) return;
     await runAction(() => api.reopenLeagueRegistration(tournament.id), 'Retour en phase d’inscription');
+  };
+
+  // 2v2 : (re)nommer une équipe (membre de l'équipe ou organisateur). Action rare
+  // → simple invite de saisie.
+  const handleSetTeamName = async (login: string, current?: string | null) => {
+    const name = window.prompt('Nom de l’équipe (laisse vide pour effacer) :', current ?? '');
+    if (name === null) return;
+    await runAction(
+      () => api.setTournamentTeamName(tournament.id, login, name.trim()),
+      'Nom d’équipe mis à jour',
+    );
+  };
+
+  // Créateur : ajoute / retire un co-organisateur (tous les droits sur le tournoi).
+  const handleManageOrganizer = async (login: string, action: 'add' | 'remove') => {
+    await runAction(
+      () => api.manageTournamentOrganizer(tournament.id, login, action),
+      action === 'add' ? `@${login} est co-organisateur` : `@${login} retiré`,
+    );
   };
 
   // ── Salle de contrôle : méta de pilotage partagées avec l'écran TV live ──
@@ -659,6 +681,63 @@ export function TournoiDetailPage() {
             </div>
           )}
 
+          {/* Co-organisateurs : le créateur (ou un admin) délègue tous les droits
+              d'organisation à d'autres joueurs. */}
+          {(isCreator || isAdmin) && (
+            <div className="mb-4 p-3 rounded-xl border border-gold/20 bg-bg-2/30">
+              <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
+                Co-organisateurs · tous les droits
+              </div>
+              {(tournament.coOrganizers ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {(tournament.coOrganizers ?? []).map((login) => (
+                    <span
+                      key={login}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-bg-1 border border-border text-[11px] text-text-strong"
+                    >
+                      @{login}
+                      <button
+                        type="button"
+                        onClick={() => handleManageOrganizer(login, 'remove')}
+                        className="text-red hover:text-red/80 font-bold"
+                        aria-label="Retirer ce co-organisateur"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <PlayerSearch
+                  players={leaderboard.filter(
+                    (p) =>
+                      p.login !== tournament.createdByLogin &&
+                      !(tournament.coOrganizers ?? []).includes(p.login),
+                  )}
+                  recentPlayers={[]}
+                  opponentCounts={{}}
+                  selected={coAdminPick}
+                  onSelect={setCoAdminPick}
+                  onClear={() => setCoAdminPick(null)}
+                  locations={locations}
+                />
+                <Button
+                  disabled={!coAdminPick}
+                  onClick={() => {
+                    if (!coAdminPick) return;
+                    void handleManageOrganizer(coAdminPick.login, 'add');
+                    setCoAdminPick(null);
+                  }}
+                >
+                  {coAdminPick
+                    ? `Ajouter @${coAdminPick.login} comme co-organisateur`
+                    : 'Ajouter un co-organisateur'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
             {t('tournois.detail.entrants')}
           </div>
@@ -669,21 +748,26 @@ export function TournoiDetailPage() {
                 className="flex items-center gap-2.5 p-2.5 border border-border bg-bg-2/40 rounded"
               >
                 {is2v2 ? (
-                  // Équipe : capitaine + coéquipier côte à côte.
-                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                    <PlayerLink login={e.login} className="min-w-0 flex items-center gap-1.5">
-                      <Avatar login={e.login} imageUrl={e.user?.imageUrl ?? null} size="sm" />
-                      <span className="font-bold truncate text-text-strong text-sm">{e.login}</span>
-                    </PlayerLink>
-                    <span className="text-muted-2 text-xs font-bold px-0.5">&amp;</span>
-                    {e.partnerLogin ? (
-                      <PlayerLink login={e.partnerLogin} className="min-w-0 flex items-center gap-1.5">
-                        <Avatar login={e.partnerLogin} imageUrl={e.partner?.imageUrl ?? null} size="sm" />
-                        <span className="font-bold truncate text-text-strong text-sm">{e.partnerLogin}</span>
-                      </PlayerLink>
-                    ) : (
-                      <span className="text-muted text-sm">?</span>
+                  // Équipe : nom d'équipe optionnel au-dessus du duo capitaine + coéquipier.
+                  <div className="flex-1 min-w-0">
+                    {e.teamName && (
+                      <div className="text-[12px] font-extrabold text-gold truncate mb-0.5">{e.teamName}</div>
                     )}
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <PlayerLink login={e.login} className="min-w-0 flex items-center gap-1.5">
+                        <Avatar login={e.login} imageUrl={e.user?.imageUrl ?? null} size="sm" />
+                        <span className="font-bold truncate text-text-strong text-sm">{e.login}</span>
+                      </PlayerLink>
+                      <span className="text-muted-2 text-xs font-bold px-0.5">&amp;</span>
+                      {e.partnerLogin ? (
+                        <PlayerLink login={e.partnerLogin} className="min-w-0 flex items-center gap-1.5">
+                          <Avatar login={e.partnerLogin} imageUrl={e.partner?.imageUrl ?? null} size="sm" />
+                          <span className="font-bold truncate text-text-strong text-sm">{e.partnerLogin}</span>
+                        </PlayerLink>
+                      ) : (
+                        <span className="text-muted text-sm">?</span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <PlayerLink login={e.login} className="flex-1 min-w-0">
@@ -696,6 +780,18 @@ export function TournoiDetailPage() {
                     </div>
                   </PlayerLink>
                 )}
+                {is2v2 &&
+                  (isOrganizer || isAdmin || e.login === myLogin || e.partnerLogin === myLogin) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetTeamName(e.login, e.teamName)}
+                      title="Nommer l'équipe"
+                      aria-label="Nommer l'équipe"
+                      className="shrink-0 w-7 h-7 rounded-lg border border-gold/30 bg-gold/10 text-gold text-sm font-bold tap-transparent hover:bg-gold/20"
+                    >
+                      ✎
+                    </button>
+                  )}
                 {(isOrganizer || isAdmin) && (
                   <button
                     type="button"
