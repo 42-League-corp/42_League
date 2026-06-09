@@ -30,6 +30,16 @@ export const dict: Record<Lang, Dict> = {
     'profil.fromTop': 'Du top',
     'profil.streakBrokenBy': 'Série brisée par',
     'profil.streakOngoing': 'Série toujours en cours 🔥',
+    // Réactions / memes (cf. lib/playerReactions.ts)
+    'reaction.dismiss': "Ouais c'est bon…",
+    'reaction.suspiciousLoss.title': "T'es vraiment nul ou tu offres ton ELO ?",
+    'reaction.suspiciousLoss.message':
+      "Soit tu joues les yeux fermés, soit tu fais des cadeaux à tes potes. Dans les deux cas, le panel GOD adore. 👀",
+    'reaction.suspiciousLoss.countSuffix': "défaites d'affilée",
+    'reaction.hotWin.title': 'Ok calme-toi le sweat 😳',
+    'reaction.hotWin.message':
+      "Tu écrases tout le monde là. Soit t'es vraiment cracké, soit on devrait checker tes adversaires de plus près… 👀",
+    'reaction.hotWin.countSuffix': "victoires d'affilée",
     // Équipes
     'profil.noTeam': 'Aucune équipe',
     'profil.duo': 'duo',
@@ -86,6 +96,16 @@ export const dict: Record<Lang, Dict> = {
     'profil.fromTop': 'Top',
     'profil.streakBrokenBy': 'Streak broken by',
     'profil.streakOngoing': 'Streak still going 🔥',
+    // Reactions / memes (see lib/playerReactions.ts)
+    'reaction.dismiss': 'Yeah yeah…',
+    'reaction.suspiciousLoss.title': 'Are you really this bad, or gifting your ELO?',
+    'reaction.suspiciousLoss.message':
+      "Either you play blindfolded, or you're handing wins to your buddies. Either way, the GOD panel loves it. 👀",
+    'reaction.suspiciousLoss.countSuffix': 'losses in a row',
+    'reaction.hotWin.title': 'Ok, calm down sweat 😳',
+    'reaction.hotWin.message':
+      "You're stomping everyone. Either you're cracked, or someone should take a closer look at your opponents… 👀",
+    'reaction.hotWin.countSuffix': 'wins in a row',
     // Teams
     'profil.noTeam': 'No team',
     'profil.duo': 'duo',
@@ -142,6 +162,16 @@ export const dict: Record<Lang, Dict> = {
     'profil.fromTop': 'Top',
     'profil.streakBrokenBy': 'Racha rota por',
     'profil.streakOngoing': 'Racha aún en curso 🔥',
+    // Reacciones / memes (ver lib/playerReactions.ts)
+    'reaction.dismiss': 'Vale, vale…',
+    'reaction.suspiciousLoss.title': '¿Eres muy malo o regalas tu ELO?',
+    'reaction.suspiciousLoss.message':
+      'O juegas con los ojos cerrados, o le regalas victorias a tus colegas. En ambos casos, al panel GOD le encanta. 👀',
+    'reaction.suspiciousLoss.countSuffix': 'derrotas seguidas',
+    'reaction.hotWin.title': 'Vale, cálmate sweat 😳',
+    'reaction.hotWin.message':
+      'Estás aplastando a todos. O eres un crack, o habría que revisar a tus rivales más de cerca… 👀',
+    'reaction.hotWin.countSuffix': 'victorias seguidas',
     // Equipos
     'profil.noTeam': 'Sin equipo',
     'profil.duo': 'dúo',
