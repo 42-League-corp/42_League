@@ -3704,7 +3704,13 @@ app.delete('/admin/users/:login', async (c) => {
 
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
-  if (user.ftId !== null) {
+  // En PROD, seuls les faux comptes (ftId null, créés manuellement) sont
+  // supprimables — on protège les vrais comptes 42. En STAGING, les comptes
+  // synchronisés depuis la prod portent un ftId réel mais ne sont que des copies
+  // sandbox (la synchro est en lecture seule, aucune écriture vers la prod) → on
+  // autorise leur suppression pour pouvoir nettoyer le staging.
+  const isStagingEnv = process.env.APP_ENV === 'staging';
+  if (user.ftId !== null && !isStagingEnv) {
     throw new HTTPException(403, {
       message: 'Seuls les faux comptes (créés manuellement, sans compte 42) peuvent être supprimés.',
     });
@@ -3781,6 +3787,10 @@ app.delete('/admin/users/:login', async (c) => {
     });
     await refundOpenBetsForTournamentsTx(tx, createdTours.map((t) => t.id));
     await tx.tournament.deleteMany({ where: { createdByLogin: login } });
+    // Classements de saison figés : SeasonStanding n'a pas de FK vers User (simple
+    // colonne `login`) → la suppression du joueur ne les nettoie pas en cascade.
+    // On les retire pour ne pas laisser le joueur supprimé hanter les palmarès.
+    await tx.seasonStanding.deleteMany({ where: { login } });
     await tx.user.delete({ where: { login } });
   });
 

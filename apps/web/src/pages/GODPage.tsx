@@ -811,9 +811,13 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   }
 
   // Comptes supprimables : faux joueurs (sans 42), hors soi-même et superadmins.
+  // En staging, on autorise aussi les comptes synchronisés depuis la prod (ftId
+  // réel mais simple copie sandbox) — cf. backend, suppression élargie en staging.
   const deletableLogins =
     myRole === 'SUPERADMIN'
-      ? filtered.filter((u) => u.ftId === null && u.login !== myLogin && u.role !== 'SUPERADMIN').map((u) => u.login)
+      ? filtered
+          .filter((u) => (IS_STAGING || u.ftId === null) && u.login !== myLogin && u.role !== 'SUPERADMIN')
+          .map((u) => u.login)
       : [];
 
   async function deleteFakeUser(login: string) {
@@ -1010,7 +1014,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                             : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">{t('god.users.ban')}</Btn>
                           }
                           <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
-                          {myRole === 'SUPERADMIN' && u.ftId === null && (
+                          {myRole === 'SUPERADMIN' && (IS_STAGING || u.ftId === null) && (
                             <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">{t('god.users.deleteBtn')}</Btn>
                           )}
                         </div>
