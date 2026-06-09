@@ -27,8 +27,10 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Préchargement de l'icône du SplashScreen (élément LCP) : la requête part
-         dès le parsing HTML au lieu d'attendre le bootstrap JS. -->
+    <!-- Préchargement du logo desktop (élément LCP) : la requête part dès le
+         parsing HTML sans attendre le bootstrap JS ni le CSS. -->
+    <link rel="preload" as="image" href="/logo-wordmark.webp" type="image/webp" />
+    <!-- Préchargement de l'icône du SplashScreen (LCP mobile) -->
     <link rel="preload" as="image" href="/apple-touch-icon.png" />
 
     <!-- Préchargement des logos d'univers (évite le flash gris↔couleur du GameModeSwitch) -->

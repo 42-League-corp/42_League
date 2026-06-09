@@ -27,10 +27,10 @@ export function LoginPage() {
 
         <div className="relative">
           <img
-            src="/logo-wordmark.png"
+            src="/logo-wordmark.webp"
             alt="42 League"
-            width={512}
-            height={103}
+            width={700}
+            height={233}
             className="w-64 max-w-full h-auto mx-auto mb-2 select-none drop-shadow-[0_3px_12px_rgba(255,201,74,0.3)]"
             draggable={false}
           />
