@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, useEffect, type CSSProperties } from 'react';
 import { useAvatarRingColor } from '../hooks/useAvatarRing';
 
 interface AvatarProps {
@@ -58,8 +58,22 @@ function ringStyle(color: string, glow: number): CSSProperties {
  * Avatar rond — design friendly et coloré, cerclé d'un rebord de grade façon gemme.
  */
 export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false, noRing = false }: AvatarProps) {
-  const [broken, setBroken] = useState(false);
+  // Nombre d'échecs de chargement de la photo. 0 = 1ʳᵉ tentative, 1 = réessai
+  // anti-cache, 2 = on abandonne et on affiche l'initiale. Le réessai garantit
+  // qu'une réponse cassée servie par un cache (SW opaque empoisonné, hoquet CDN)
+  // ne fait pas disparaître la pp : on retente une fois via une URL différente,
+  // qui force un fetch réseau frais en contournant tout cache indexé par URL.
+  const [errCount, setErrCount] = useState(0);
+  // Réinitialise dès que la photo change (réutilisation d'un composant monté).
+  useEffect(() => setErrCount(0), [imageUrl]);
+  const broken = errCount >= 2;
   const showImg = imageUrl && !broken;
+  // Au réessai, suffixe anti-cache → URL distincte → contourne le cache cassé.
+  const imgSrc = imageUrl
+    ? errCount > 0
+      ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_r=${errCount}`
+      : imageUrl
+    : '';
   const initial = (login[0] ?? '?').toUpperCase();
   // Reflet diagonal posé sur le placeholder pour rendre la rotation 3D lisible.
   const sheen = coin && !showImg
@@ -97,10 +111,10 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
       >
         {showImg ? (
           <img
-            src={imageUrl}
+            src={imgSrc}
             alt={login}
             className="w-full h-full object-cover block"
-            onError={() => setBroken(true)}
+            onError={() => setErrCount((n) => n + 1)}
           />
         ) : (
           <span className="relative z-10">{initial}</span>
