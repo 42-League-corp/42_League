@@ -15,7 +15,7 @@ env:
   BACKEND_IMAGE: ghcr.io/42-league-corp/42_league-backend
   FRONTEND_IMAGE: ghcr.io/42-league-corp/42_league-frontend
   # URL publique (non sensible) bakée dans le bundle Vite du frontend staging.
-  STAGING_API_URL: https://staging.oneleague.fr/api
+  STAGING_API_URL: https://staging.42league.fr/api
 
 jobs:
   build-backend:
@@ -26,8 +26,6 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0   # historique complet → stats de lignes par auteur (À propos)
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -35,11 +33,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Stats de contributions git injectées dans l'image (la prod n'a pas de git).
-      - name: Compute contributor git stats
-        id: contrib
-        run: echo "json=$(bash .github/scripts/contributor-stats.sh)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend (develop)
         uses: docker/build-push-action@v7
@@ -51,7 +44,6 @@ jobs:
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.run_id }}
-            CONTRIBUTOR_STATS=${{ steps.contrib.outputs.json }}
 
       - name: Trivy scan (backend)
         uses: aquasecurity/trivy-action@v0.24.0

@@ -5,8 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: league
-      # Secret injecté via .env ; défaut `league` conservé (volume existant).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-league}
+      POSTGRES_PASSWORD: league
       POSTGRES_DB: league
     volumes:
       - league_pgdata:/var/lib/postgresql/data
@@ -23,7 +22,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://league:${POSTGRES_PASSWORD:-league}@postgres:5432/league?schema=public
+      - DATABASE_URL=postgresql://league:league@postgres:5432/league?schema=public
       - PORT=3000
     depends_on:
       postgres:
