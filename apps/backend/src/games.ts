@@ -108,6 +108,14 @@ export function tournamentsWonDelta(game: GameId, delta: number): Prisma.UserUpd
 }
 
 /**
+ * Fragment d'update Prisma : ajoute `delta` à l'Elo de la discipline SANS toucher
+ * au compteur de matchs joués (bonus de tournoi, pas un match individuel).
+ */
+export function eloDelta(game: GameId, delta: number): Prisma.UserUpdateInput {
+  return { [COLUMNS[game].elo]: { increment: delta } } as Prisma.UserUpdateInput;
+}
+
+/**
  * Pose le MÊME Elo sur TOUTES les disciplines. Utilisé à la création d'un joueur
  * depuis GOD : l'Elo attribué vaut pour tous les modes de jeu (et non le seul
  * babyfoot), si bien que le joueur a un grade — donc un anneau de pp — partout.

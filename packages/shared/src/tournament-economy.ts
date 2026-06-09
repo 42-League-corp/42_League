@@ -54,3 +54,44 @@ export function cashPrizeForRounds(roundsWon: number, totalRounds: number, base:
   const k = Math.min(roundsWon, totalRounds);
   return Math.round(base * (k / totalRounds));
 }
+
+/** Bonus d'Elo (points) du champion d'un tournoi. Versé une seule fois à la finale. */
+export const TOURNAMENT_ELO_WINNER = 100;
+
+/**
+ * Bonus d'Elo gagné par un participant au terme d'un tournoi, selon le palier
+ * atteint. Le champion touche `max` (100 par défaut), un joueur sorti dès la
+ * phase de qualification touche 0, et les paliers intermédiaires sont interpolés
+ * linéairement jusqu'au champion.
+ *
+ * La « phase de qualification » dépend du format (cf. schéma `Tournament.format`) :
+ *   - `elimination` : le 1er tour du bracket EST la qualif. 0 tour gagné → 0 ;
+ *     champion (`totalBracketRounds` tours) → `max`. bonus = round(max · k / R).
+ *   - `pools` / `league` : franchir les poules / la phase de ligue est un palier à
+ *     part entière. Non qualifié (absent du bracket) → 0. Sinon le palier de
+ *     qualification compte comme un tour, et le total devient `R + 1` :
+ *     bonus = round(max · (1 + k) / (R + 1)) — un qualifié sorti au 1er tour de
+ *     bracket touche donc déjà max/(R+1), et le champion `max`.
+ *
+ * @param qualified présent dans le bracket (a franchi poules/ligue) — ignoré en
+ *   élimination directe où tout le monde démarre dans le bracket.
+ * @param bracketRoundsWon tours de bracket gagnés (byes compris), borné à `R`.
+ */
+export function tournamentEloReward(params: {
+  format: string;
+  qualified: boolean;
+  bracketRoundsWon: number;
+  totalBracketRounds: number;
+  max?: number;
+}): number {
+  const max = params.max ?? TOURNAMENT_ELO_WINNER;
+  const R = params.totalBracketRounds;
+  if (R <= 0 || max <= 0) return 0;
+  const k = Math.max(0, Math.min(params.bracketRoundsWon, R));
+  if (params.format === 'pools' || params.format === 'league') {
+    if (!params.qualified) return 0;
+    return Math.round((max * (1 + k)) / (R + 1));
+  }
+  // Élimination directe : pas de palier de qualification distinct.
+  return Math.round((max * k) / R);
+}

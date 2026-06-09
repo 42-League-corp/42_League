@@ -3,6 +3,8 @@ import {
   betMultiplier,
   betPayout,
   cashPrizeForRounds,
+  tournamentEloReward,
+  TOURNAMENT_ELO_WINNER,
   DEFAULT_BET_FINAL_MULT,
 } from './tournament-economy.js';
 
@@ -62,5 +64,62 @@ describe('cashPrizeForRounds', () => {
 
   it('base nulle ou négative → 0', () => {
     expect(cashPrizeForRounds(3, 4, 0)).toBe(0);
+  });
+});
+
+describe('tournamentEloReward', () => {
+  it('défaut champion = 100', () => {
+    expect(TOURNAMENT_ELO_WINNER).toBe(100);
+  });
+
+  describe('élimination directe (le 1er tour EST la qualif)', () => {
+    const elim = (bracketRoundsWon: number, totalBracketRounds: number) =>
+      tournamentEloReward({ format: 'elimination', qualified: true, bracketRoundsWon, totalBracketRounds });
+
+    it('sorti au 1er tour (0 gagné) → 0', () => {
+      expect(elim(0, 4)).toBe(0);
+    });
+
+    it('champion → 100', () => {
+      expect(elim(4, 4)).toBe(100);
+      expect(elim(1, 1)).toBe(100); // bracket de 2
+    });
+
+    it('paliers interpolés — bracket de 16 (4 tours)', () => {
+      expect(elim(3, 4)).toBe(75); // finaliste
+      expect(elim(2, 4)).toBe(50); // demi
+      expect(elim(1, 4)).toBe(25); // 1 tour franchi
+    });
+  });
+
+  describe('poules / ligue (franchir la phase = un palier)', () => {
+    const pool = (qualified: boolean, bracketRoundsWon: number, totalBracketRounds: number) =>
+      tournamentEloReward({ format: 'pools', qualified, bracketRoundsWon, totalBracketRounds });
+
+    it('non qualifié (sorti en poules/ligue) → 0', () => {
+      expect(pool(false, 0, 3)).toBe(0);
+    });
+
+    it('qualifié sorti au 1er tour de bracket → déjà > 0', () => {
+      // R=3 → total 4 paliers : qualif seule = 1/4 = 25.
+      expect(pool(true, 0, 3)).toBe(25);
+    });
+
+    it('champion → 100', () => {
+      expect(pool(true, 3, 3)).toBe(100);
+    });
+
+    it('même barème pour la phase de ligue', () => {
+      expect(tournamentEloReward({ format: 'league', qualified: false, bracketRoundsWon: 0, totalBracketRounds: 2 })).toBe(0);
+      expect(tournamentEloReward({ format: 'league', qualified: true, bracketRoundsWon: 2, totalBracketRounds: 2 })).toBe(100);
+    });
+  });
+
+  it('bracket vide / dégénéré → 0', () => {
+    expect(tournamentEloReward({ format: 'elimination', qualified: true, bracketRoundsWon: 0, totalBracketRounds: 0 })).toBe(0);
+  });
+
+  it('borne les tours gagnés au total du bracket', () => {
+    expect(tournamentEloReward({ format: 'elimination', qualified: true, bracketRoundsWon: 9, totalBracketRounds: 3 })).toBe(100);
   });
 });
