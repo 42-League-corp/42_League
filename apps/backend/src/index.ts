@@ -2618,6 +2618,9 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
     tx.user.findUniqueOrThrow({ where: { login: b1 } }),
     tx.user.findUniqueOrThrow({ where: { login: b2 } }),
   ]);
+  // L'init d'une entité BabyfootTeam (Calcul A) se fait sur l'ELO 1v1 babyfoot
+  // (échelle de référence du duo), mais le rating PERSONNEL 2v2 (Calcul B) évolue
+  // sur sa propre colonne `eloBabyfoot2v2`.
   const eA1 = readElo(uA1, 'babyfoot');
   const eA2 = readElo(uA2, 'babyfoot');
   const eB1 = readElo(uB1, 'babyfoot');
@@ -2626,8 +2629,8 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
   const teamA = await upsertBabyfootTeam(tx, a1, eA1, a2, eA2);
   const teamB = await upsertBabyfootTeam(tx, b1, eB1, b2, eB2);
 
-  const sideA: Side2v2 = { p1Login: a1, p2Login: a2, teamId: teamA.id, teamElo: teamA.elo, p1Elo: eA1, p2Elo: eA2 };
-  const sideB: Side2v2 = { p1Login: b1, p2Login: b2, teamId: teamB.id, teamElo: teamB.elo, p1Elo: eB1, p2Elo: eB2 };
+  const sideA: Side2v2 = { p1Login: a1, p2Login: a2, teamId: teamA.id, teamElo: teamA.elo, p1Elo: uA1.eloBabyfoot2v2, p2Elo: uA2.eloBabyfoot2v2 };
+  const sideB: Side2v2 = { p1Login: b1, p2Login: b2, teamId: teamB.id, teamElo: teamB.elo, p1Elo: uB1.eloBabyfoot2v2, p2Elo: uB2.eloBabyfoot2v2 };
 
   // scoreA/scoreB orientés côté déclarant (équipe A).
   const scoreA = p.scoreDeclarer;
@@ -2653,7 +2656,7 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
   // Deltas des entités BabyfootTeam (Calcul A) — persistés pour l'historique du duo.
   let tdA = 0, tdB = 0;
   if (countsForElo) {
-    const r = await applyElo2v2(tx, { winner, sideA, sideB });
+    const r = await applyElo2v2(tx, { winner, scoreA, scoreB, sideA, sideB });
     dA1 = r.individual.deltaA1;
     dA2 = r.individual.deltaA2;
     dB1 = r.individual.deltaB1;
@@ -8574,6 +8577,10 @@ app.post('/admin/announcements', async (c) => {
       ...(d.active !== undefined ? { active: d.active } : {}),
     },
   });
+  // Pousse l'annonce en temps réel : tous les clients connectés rechargent `me`
+  // → le popup apparaît sans refresh (le filtre "non vue / postée après le compte"
+  // reste appliqué côté /me, donc seuls les bons destinataires la verront).
+  if (item.active) broadcast({ type: 'announcement:created', payload: { id: item.id } });
   return c.json(serializeAnnouncement(item));
 });
 
@@ -8583,6 +8590,7 @@ app.delete('/admin/announcements/:id', async (c) => {
   await requireAdmin(me);
   const id = c.req.param('id');
   await prisma.announcement.delete({ where: { id } });
+  broadcast({ type: 'announcement:deleted', payload: { id } });
   return c.json({ ok: true });
 });
 

@@ -21,6 +21,9 @@ export interface RatingSource {
   eloFlechettes?: number;
   matchesPlayedFlechettes?: number;
   tournamentsWonFlechettes?: number;
+  // Babyfoot 2v2 : rating personnel distinct du 1v1.
+  eloBabyfoot2v2?: number;
+  matchesPlayed2v2?: number;
 }
 
 /** Rating + compteurs du joueur pour une discipline donnée. */

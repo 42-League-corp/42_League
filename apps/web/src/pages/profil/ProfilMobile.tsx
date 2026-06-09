@@ -26,7 +26,7 @@ type ProfilTab = 'profile' | 'quests' | 'bets';
 
 export function ProfilMobile() {
   const { stats, myLogin } = useProfilLogic();
-  const { me, matches, refresh } = useLeagueData();
+  const { me, matches, playedDarts, refresh } = useLeagueData();
   const { game } = useGameMode();
   const { signOut } = useAuth();
   const t = useT();
@@ -105,7 +105,7 @@ export function ProfilMobile() {
         {/* Recent matches */}
         <section>
           <SectionHeader title={t('profil.recent')} badge={stats.total} />
-          <ProfilHistory login={myLogin ?? ''} matches={matches} limit={10} showFullHistoryLink />
+          <ProfilHistory login={myLogin ?? ''} matches={matches} darts={playedDarts} user={me.user} limit={10} showFullHistoryLink />
         </section>
 
         {/* Mes Équipes 2v2 — uniquement en Babyfoot */}

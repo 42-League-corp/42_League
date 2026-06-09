@@ -390,6 +390,9 @@ export interface MeResponse {
     eloFlechettes?: number;
     matchesPlayedFlechettes?: number;
     tournamentsWonFlechettes?: number;
+    // Babyfoot 2v2 : rating personnel distinct du 1v1 (cf. eloBabyfoot2v2 backend).
+    eloBabyfoot2v2?: number;
+    matchesPlayed2v2?: number;
     games?: Game[];
     favSmash?: string[];
     favSf?: string[];
@@ -445,6 +448,9 @@ export interface AdminUser {
   eloFlechettes?: number;
   matchesPlayedFlechettes?: number;
   tournamentsWonFlechettes?: number;
+  // Babyfoot 2v2 : rating personnel distinct du 1v1 (cf. eloBabyfoot2v2 backend).
+  eloBabyfoot2v2?: number;
+  matchesPlayed2v2?: number;
   games?: Game[];
   favSmash?: string[];
   favSf?: string[];
@@ -587,6 +593,9 @@ export interface UserProfile {
     eloFlechettes?: number;
     matchesPlayedFlechettes?: number;
     tournamentsWonFlechettes?: number;
+    // Babyfoot 2v2 : rating personnel distinct du 1v1 (cf. eloBabyfoot2v2 backend).
+    eloBabyfoot2v2?: number;
+    matchesPlayed2v2?: number;
     /** Disciplines auxquelles le joueur a adhéré (badges cross-jeux de la carte héro). */
     games?: Game[];
     favSmash?: string[];
@@ -615,6 +624,12 @@ export interface UserProfile {
   palmares?: PalmaresEntry[];
   /** Solde de League Coins du joueur — visible de tous. */
   coins?: number;
+  /** Couleur du titre équipé (item boutique) — teinte le titre sur la fiche. */
+  titleColor?: string | null;
+  /** Badge acheté & équipé (boutique) — affiché en plus des badges d'accomplissement. */
+  equippedBadge?: EquippedBadge | null;
+  /** Bannière équipée (data-URL) — fond de la carte profil, visible de tous. */
+  equippedBanner?: string | null;
 }
 
 export interface FollowPrefs {

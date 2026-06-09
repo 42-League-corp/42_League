@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import {
-  calculate2v2BabyfootElo,
+  calculateBabyfootElo,
+  calculateTeamElo,
   initTeamElo,
   type Winner,
 } from '@42-league/shared';
@@ -75,11 +76,11 @@ export interface Side2v2 {
   p2Login: string;
   /** BabyfootTeam.id */
   teamId: string;
-  /** BabyfootTeam.elo courant */
+  /** BabyfootTeam.elo courant (Calcul A — entité duo). */
   teamElo: number;
-  /** ELO personnel de p1 */
+  /** ELO personnel 2v2 de p1 (Calcul B — colonne `eloBabyfoot2v2`). */
   p1Elo: number;
-  /** ELO personnel de p2 */
+  /** ELO personnel 2v2 de p2 (Calcul B — colonne `eloBabyfoot2v2`). */
   p2Elo: number;
 }
 
@@ -88,6 +89,10 @@ export interface Side2v2 {
 export interface Settle2v2Input {
   /** Résultat du match du point de vue de l'équipe A (déclarant + partner1). */
   winner: Winner;
+  /** Score de l'équipe A (orienté déclarant) — alimente le bonus de marge 1v1. */
+  scoreA: number;
+  /** Score de l'équipe B. */
+  scoreB: number;
   sideA: Side2v2;
   sideB: Side2v2;
 }
@@ -108,60 +113,73 @@ export interface Settle2v2Result {
  * Calcule et applique les mises à jour ELO pour un match 2v2 de Babyfoot.
  *
  * Effectue dans la transaction :
- *   1. Calcul A (équipes) + Calcul B (individuel anti-carry).
- *   2. Mise à jour des ELO des BabyfootTeam.
- *   3. Mise à jour des ELO individuels (colonne `elo` du Babyfoot 1v1) des 4 joueurs.
- *      Le mode 2v2 partage la colonne `elo` du Babyfoot : un même joueur a un seul
- *      rating personnel Babyfoot qui reflète ses performances en 1v1 ET en 2v2.
+ *   1. Calcul A (équipes) — `calculateTeamElo` sur l'ELO des entités BabyfootTeam.
+ *   2. Calcul B (individuel) — MÊME formule que le Babyfoot 1v1
+ *      (`calculateBabyfootElo`, marge + upset), mais chaque camp entre dans la
+ *      formule avec la MOYENNE des deux ELO 2v2 de ses coéquipiers. Le delta
+ *      résultant s'applique aux DEUX joueurs du camp (gain/perte commun au duo).
+ *   3. Mise à jour de la colonne `eloBabyfoot2v2` (rating 2v2 DISTINCT du 1v1) et
+ *      du compteur `matchesPlayed2v2` des 4 joueurs. L'ELO 1v1 (`elo`) n'est PAS
+ *      touché par un match 2v2 (et inversement).
  *
- * Renvoie tous les deltas pour les stocker dans `PlayedMatch`.
+ * Renvoie tous les deltas pour les stocker dans `PlayedMatch` (les deux joueurs
+ * d'un même camp partagent le delta du camp : deltaA1 = deltaA2, deltaB1 = deltaB2).
  */
 export async function applyElo2v2(
   tx: Prisma.TransactionClient,
   input: Settle2v2Input,
 ): Promise<Settle2v2Result> {
-  const { winner, sideA, sideB } = input;
+  const { winner, scoreA, scoreB, sideA, sideB } = input;
 
-  const result = calculate2v2BabyfootElo(
-    { teamElo: sideA.teamElo, player1Elo: sideA.p1Elo, player2Elo: sideA.p2Elo },
-    { teamElo: sideB.teamElo, player1Elo: sideB.p1Elo, player2Elo: sideB.p2Elo },
-    winner,
-  );
+  // ── Calcul A : entités BabyfootTeam (échelle de duo persistante). ──────────
+  const team = calculateTeamElo(sideA.teamElo, sideB.teamElo, winner);
 
-  const { team, individual } = result;
+  // ── Calcul B : ELO 2v2 individuel, formule 1v1 sur la MOYENNE de chaque duo. ─
+  const avgA = (sideA.p1Elo + sideA.p2Elo) / 2;
+  const avgB = (sideB.p1Elo + sideB.p2Elo) / 2;
+  const indiv = calculateBabyfootElo(avgA, avgB, winner, scoreA, scoreB);
+  // Le delta du camp s'applique tel quel à ses deux joueurs.
+  const dA = indiv.deltaA;
+  const dB = indiv.deltaB;
 
   // Mise à jour des ELO des entités BabyfootTeam.
   await Promise.all([
-    tx.babyfootTeam.update({
-      where: { id: sideA.teamId },
-      data: { elo: team.newTeamAElo },
-    }),
-    tx.babyfootTeam.update({
-      where: { id: sideB.teamId },
-      data: { elo: team.newTeamBElo },
-    }),
+    tx.babyfootTeam.update({ where: { id: sideA.teamId }, data: { elo: team.newA } }),
+    tx.babyfootTeam.update({ where: { id: sideB.teamId }, data: { elo: team.newB } }),
   ]);
 
-  // Mise à jour des ELO personnels Babyfoot des 4 joueurs.
-  // `matchesPlayed` est incrémenté pour chacun via le champ standard.
+  // Mise à jour des ELO 2v2 personnels + compteur de matchs 2v2 des 4 joueurs.
   await Promise.all([
     tx.user.update({
       where: { login: sideA.p1Login },
-      data: { elo: individual.newEloA1, matchesPlayed: { increment: 1 } },
+      data: { eloBabyfoot2v2: sideA.p1Elo + dA, matchesPlayed2v2: { increment: 1 } },
     }),
     tx.user.update({
       where: { login: sideA.p2Login },
-      data: { elo: individual.newEloA2, matchesPlayed: { increment: 1 } },
+      data: { eloBabyfoot2v2: sideA.p2Elo + dA, matchesPlayed2v2: { increment: 1 } },
     }),
     tx.user.update({
       where: { login: sideB.p1Login },
-      data: { elo: individual.newEloB1, matchesPlayed: { increment: 1 } },
+      data: { eloBabyfoot2v2: sideB.p1Elo + dB, matchesPlayed2v2: { increment: 1 } },
     }),
     tx.user.update({
       where: { login: sideB.p2Login },
-      data: { elo: individual.newEloB2, matchesPlayed: { increment: 1 } },
+      data: { eloBabyfoot2v2: sideB.p2Elo + dB, matchesPlayed2v2: { increment: 1 } },
     }),
   ]);
 
-  return { team, individual };
+  return {
+    team: {
+      newTeamAElo: team.newA,
+      newTeamBElo: team.newB,
+      deltaA: team.deltaA,
+      deltaB: team.deltaB,
+    },
+    individual: {
+      newEloA1: sideA.p1Elo + dA, deltaA1: dA,
+      newEloA2: sideA.p2Elo + dA, deltaA2: dA,
+      newEloB1: sideB.p1Elo + dB, deltaB1: dB,
+      newEloB2: sideB.p2Elo + dB, deltaB2: dB,
+    },
+  };
 }

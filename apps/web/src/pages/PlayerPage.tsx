@@ -30,7 +30,7 @@ export function PlayerPage() {
   const login = rawLogin ?? '';
   const navigate = useNavigate();
   const t = useT();
-  const { me, opsMe, matches, refresh } = useLeagueData();
+  const { me, opsMe, matches, playedDarts, refresh } = useLeagueData();
   const { game } = useGameMode();
   const flash = useFlash();
   const confirm = useConfirm();
@@ -117,7 +117,7 @@ export function PlayerPage() {
   return (
     <div className="space-y-5">
       {/* Carte héro — même design que le profil perso (sans le sélecteur de titre) */}
-      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} customBadges={p.customBadges} isMe={isMe} coins={p.coins} />
+      <ProfileHeroCard stats={stats} user={p.user} badges={p.badges} customBadges={p.customBadges} titleColor={p.titleColor} equippedBadge={p.equippedBadge} equippedBanner={p.equippedBanner} isMe={isMe} coins={p.coins} />
 
       {/* Actions propres à la fiche d'un autre joueur : suivre + head-to-head */}
       {!isMe && myLogin && (
@@ -254,7 +254,7 @@ export function PlayerPage() {
       {/* Matchs récents — même liste que le profil perso */}
       <section>
         <SectionHeader title={t('profil.recent')} badge={stats.total} />
-        <ProfilHistory login={p.user.login} matches={matches} limit={10} showFullHistoryLink />
+        <ProfilHistory login={p.user.login} matches={matches} darts={playedDarts} user={p.user} limit={10} showFullHistoryLink />
       </section>
 
       {/* Équipes 2v2 — uniquement en Babyfoot */}

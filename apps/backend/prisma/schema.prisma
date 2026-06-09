@@ -27,6 +27,12 @@ model User {
   role                Role      @default(USER)
   elo                 Int       @default(1000)
   matchesPlayed       Int       @default(0) @map("matches_played")
+  // Classement Babyfoot 2v2 — rating PERSONNEL distinct du 1v1 (colonne `elo`).
+  // Le 2v2 a sa propre échelle : jouer en duo n'affecte plus l'Elo 1v1, et vice
+  // versa. Calcul « comme le 1v1 » mais chaque camp entre dans la formule avec la
+  // MOYENNE des deux Elo 2v2 des coéquipiers (cf. settle2v2PendingAsPlayed).
+  eloBabyfoot2v2      Int       @default(1000) @map("elo_babyfoot_2v2")
+  matchesPlayed2v2    Int       @default(0) @map("matches_played_2v2")
   dodgeCount          Int       @default(0) @map("dodge_count")
   tournamentsWon      Int       @default(0) @map("tournaments_won")
   // Classement Smash Bros (jeu parallèle) — rating/compteurs distincts du babyfoot.
@@ -437,6 +443,17 @@ model Challenge {
   opponentPartnerLogin      String?   @map("opponent_partner_login") // coéquipier de l'adversaire
   opponentAcceptedAt        DateTime? @map("opponent_accepted_at")
   opponentPartnerAcceptedAt DateTime? @map("opponent_partner_accepted_at")
+
+  // Annulation à l'amiable d'un défi ACCEPTÉ : un participant propose d'annuler
+  // sans perte d'ELO. `cancelRequestBy` = login du demandeur (null = aucune
+  // demande active). Tant qu'elle n'est pas validée, le défi reste 'accepted'.
+  // `cancelAcceptedBy` = logins de l'équipe adverse ayant accepté, joints par ','
+  // (en 2v2 il en faut deux). Validation → statut 'cancelled', aucun ELO touché.
+  // Refus → les trois champs repassent à null, le défi reste jouable. À défaut,
+  // le demandeur peut « fuir » (decline) et subir la pénalité d'ELO habituelle.
+  cancelRequestBy  String?   @map("cancel_request_by")
+  cancelRequestAt  DateTime? @map("cancel_request_at")
+  cancelAcceptedBy String?   @map("cancel_accepted_by")
 
   challenger User @relation("challenger", fields: [challengerLogin], references: [login])
   opponent   User @relation("opponentChallenge", fields: [opponentLogin], references: [login])

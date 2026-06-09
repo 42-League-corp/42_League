@@ -1,86 +1,165 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
-import type { Game, PlayedMatch } from '../../../lib/api';
-import { GAMES, GAME_META } from '../../../lib/gameMeta';
-import { useT } from '../../../lib/i18n';
+import { ChevronRight, Users } from 'lucide-react';
+import type { Game, PlayedFfa, PlayedMatch } from '../../../lib/api';
+import { GAME_META } from '../../../lib/gameMeta';
+import { pickRating, type RatingSource } from '../../../lib/gameStats';
+import { useLeagueData } from '../../../hooks/useLeagueData';
+import { useI18n, useT } from '../../../lib/i18n';
+import type { MyDartsStat } from '../../historique/shared/useHistoriqueLogic';
+import { MyDartsCard } from '../../historique/shared/MatchCards';
 import { RecentMatchRow } from './RecentMatchRow';
 
-type Filter = 'all' | Game;
+// Catégorie filtrable : une discipline (Game, dont 'flechettes') OU le 2v2 babyfoot
+// (mode distinct du 1v1, son propre ELO). 'all' = tout mélangé.
+type Filter = 'all' | Game | '2v2';
+
+// Ordre d'affichage des onglets (les catégories absentes sont retirées).
+const FILTER_ORDER: (Game | '2v2')[] = [
+  'babyfoot', '2v2', 'smash', 'streetfighter', 'chess', 'flechettes',
+];
+
+// Catégorie d'un match : 2v2 si mode équipe, sinon sa discipline.
+function matchCategory(m: PlayedMatch): Game | '2v2' {
+  return m.mode === '2v2' ? '2v2' : ((m.game ?? 'babyfoot') as Game);
+}
+
+// Couleur/libellé/icône d'une catégorie d'onglet.
+function categoryMeta(cat: Game | '2v2'): { label: string; color: string; icon?: ReactNode } {
+  if (cat === '2v2') {
+    return { label: '2v2', color: '#eab308', icon: <Users className="w-3.5 h-3.5" strokeWidth={2.5} /> };
+  }
+  const m = GAME_META[cat];
+  return { label: m.shortLabel, color: m.color, icon: m.icon(true) };
+}
 
 interface ProfilHistoryProps {
   /** Login du joueur dont on affiche l'historique (perspective « moi »). */
   login: string;
-  /** Historique global (GET /matches) — filtré ici par joueur + mode. */
+  /** Historique global (GET /matches) — filtré ici par joueur + catégorie. */
   matches: PlayedMatch[];
+  /** Manches de fléchettes (GET /matches/darts) — filtrées ici par participant. */
+  darts?: PlayedFfa[];
+  /** Source de rating du joueur — pour afficher l'ELO de la catégorie filtrée. */
+  user?: RatingSource;
   /** Nb max de lignes affichées (20 desktop, 10 mobile). */
   limit?: number;
   /** Affiche le lien « voir tout l'historique » sous la liste (mobile). */
   showFullHistoryLink?: boolean;
 }
 
+// Élément d'historique unifié : un match 1v1/2v2 OU une manche de fléchettes.
+type HistItem =
+  | { kind: 'match'; id: string; at: number; cat: Game | '2v2'; match: PlayedMatch }
+  | { kind: 'darts'; id: string; at: number; cat: 'flechettes'; stat: MyDartsStat };
+
 /**
- * Historique de match d'un profil, filtrable par mode de jeu — partagé entre le
+ * Historique de match d'un profil, filtrable par catégorie — partagé entre le
  * profil perso (desktop + mobile) et la fiche d'un autre joueur (PlayerPage).
- * Découplé du sélecteur de mode global : « Tous » mélange les disciplines (chaque
- * ligne porte sa pastille de mode), sinon on isole une discipline. On n'affiche
- * que les onglets des modes réellement joués par ce joueur.
+ * Découplé du sélecteur de mode global : « Tous » mélange tout (chaque ligne
+ * porte sa pastille), sinon on isole une catégorie. Le 2v2 babyfoot est une
+ * catégorie À PART du 1v1 (ELO + historique distincts) et les fléchettes y sont
+ * intégrées (modèle FFA, table séparée). On n'affiche que les onglets des
+ * catégories réellement jouées par ce joueur.
  */
 export function ProfilHistory({
   login,
   matches,
+  darts = [],
+  user,
   limit = 20,
   showFullHistoryLink = false,
 }: ProfilHistoryProps) {
   const t = useT();
+  const { lang } = useI18n();
+  const { leaderboard } = useLeagueData();
   const [filter, setFilter] = useState<Filter>('all');
 
-  // Tous les matchs du joueur, du plus récent au plus ancien.
-  const mine = useMemo(
-    () =>
-      matches
-        .filter((m) => m.playerALogin === login || m.playerBLogin === login)
-        .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt)),
-    [matches, login],
+  const imgByLogin = useMemo(
+    () => new Map(leaderboard.map((u) => [u.login, u.imageUrl ?? null])),
+    [leaderboard],
   );
 
-  // Modes réellement présents dans son historique (pour n'afficher que ces onglets).
-  const playedGames = useMemo(() => {
-    const present = new Set<Game>();
-    for (const m of mine) present.add((m.game ?? 'babyfoot') as Game);
-    return GAMES.filter((g) => present.has(g));
-  }, [mine]);
+  // Tous mes éléments (matchs + fléchettes), du plus récent au plus ancien.
+  const items = useMemo<HistItem[]>(() => {
+    const mineMatches = matches.filter(
+      (m) =>
+        m.playerALogin === login ||
+        m.playerBLogin === login ||
+        m.playerA2Login === login ||
+        m.playerB2Login === login,
+    );
+    const matchItems: HistItem[] = mineMatches.map((m) => ({
+      kind: 'match',
+      id: m.id,
+      at: +new Date(m.playedAt),
+      cat: matchCategory(m),
+      match: m,
+    }));
+    const dartItems: HistItem[] = darts
+      .map((d): HistItem | null => {
+        const me = d.participants.find((p) => p.login === login);
+        if (!me) return null;
+        return {
+          kind: 'darts',
+          id: d.id,
+          at: +new Date(d.playedAt),
+          cat: 'flechettes',
+          stat: { ffa: d, myPosition: me.position, myDelta: me.delta, total: d.participants.length },
+        };
+      })
+      .filter((x): x is HistItem => x !== null);
+    return [...matchItems, ...dartItems].sort((a, b) => b.at - a.at);
+  }, [matches, darts, login]);
 
-  const shown = useMemo(() => {
-    const list =
-      filter === 'all' ? mine : mine.filter((m) => (m.game ?? 'babyfoot') === filter);
-    return list.slice(0, limit);
-  }, [mine, filter, limit]);
+  // Catégories réellement présentes (pour n'afficher que ces onglets).
+  const categories = useMemo(() => {
+    const present = new Set<Game | '2v2'>();
+    for (const it of items) present.add(it.cat);
+    return FILTER_ORDER.filter((c) => present.has(c));
+  }, [items]);
 
-  if (mine.length === 0) {
+  const shown = useMemo(
+    () => (filter === 'all' ? items : items.filter((it) => it.cat === filter)).slice(0, limit),
+    [items, filter, limit],
+  );
+
+  // ELO de la catégorie filtrée (un ELO PAR MODE) — null pour « Tous » / sans user.
+  const filterElo = useMemo<number | null>(() => {
+    if (!user || filter === 'all') return null;
+    if (filter === '2v2') return user.eloBabyfoot2v2 ?? 1000;
+    return pickRating(user, filter).elo;
+  }, [user, filter]);
+
+  if (items.length === 0) {
     return <div className="text-center py-6 text-sm text-muted-2">{t('profil.noMatchYet')}</div>;
   }
 
   return (
     <div>
-      {/* Filtre par mode — uniquement si le joueur a touché à ≥2 disciplines. */}
-      {playedGames.length >= 2 && (
+      {/* Filtre par catégorie — uniquement si le joueur a touché à ≥2 catégories. */}
+      {categories.length >= 2 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <FilterPill
-            active={filter === 'all'}
-            onClick={() => setFilter('all')}
-            label={t('profil.histFilter.all')}
-          />
-          {playedGames.map((g) => (
-            <FilterPill
-              key={g}
-              active={filter === g}
-              onClick={() => setFilter(g)}
-              label={GAME_META[g].shortLabel}
-              color={GAME_META[g].color}
-              icon={GAME_META[g].icon(filter === g)}
-            />
-          ))}
+          <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label={t('profil.histFilter.all')} />
+          {categories.map((c) => {
+            const meta = categoryMeta(c);
+            return (
+              <FilterPill
+                key={c}
+                active={filter === c}
+                onClick={() => setFilter(c)}
+                label={meta.label}
+                color={meta.color}
+                icon={meta.icon}
+              />
+            );
+          })}
+          {filterElo != null && (
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-mono font-extrabold tabular-nums text-text-strong">
+              <span className="text-[9px] uppercase tracking-wider text-muted-2 font-sans">ELO</span>
+              {filterElo}
+            </span>
+          )}
         </div>
       )}
 
@@ -88,9 +167,13 @@ export function ProfilHistory({
         <div className="text-center py-6 text-sm text-muted-2">{t('profil.noMatchYet')}</div>
       ) : (
         <div className="space-y-1.5">
-          {shown.map((m, i) => (
-            <RecentMatchRow key={m.id} match={m} ownerLogin={login} delay={i * 0.03} />
-          ))}
+          {shown.map((it, i) =>
+            it.kind === 'darts' ? (
+              <MyDartsCard key={it.id} stat={it.stat} lang={lang} imgByLogin={imgByLogin} delay={i * 0.03} />
+            ) : (
+              <RecentMatchRow key={it.id} match={it.match} ownerLogin={login} delay={i * 0.03} />
+            ),
+          )}
           {showFullHistoryLink && (
             <Link
               to="/history"
@@ -106,8 +189,8 @@ export function ProfilHistory({
   );
 }
 
-/** Pastille de filtre. Active = remplie de la couleur du mode (gris neutre pour
- *  « Tous ») avec texte sombre ; inactive = contour discret. */
+/** Pastille de filtre. Active = remplie de la couleur de la catégorie (gris neutre
+ *  pour « Tous ») avec texte sombre ; inactive = contour discret. */
 function FilterPill({
   active,
   onClick,

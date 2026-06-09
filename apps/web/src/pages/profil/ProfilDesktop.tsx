@@ -34,7 +34,7 @@ import { pickRating } from '../../lib/gameStats';
 export function ProfilDesktop() {
   const t = useT();
   const { locale } = useI18n();
-  const { me, matches, opsMe, leaderboard, tournaments, refresh } = useLeagueData();
+  const { me, matches, playedDarts, opsMe, leaderboard, tournaments, refresh } = useLeagueData();
   const { game, isSmash } = useGameMode();
   const reducedMotion = useReducedMotion();
   const [editGame, setEditGame] = useState<FightingGame | null>(null);
@@ -45,6 +45,9 @@ export function ProfilDesktop() {
     const my = matches.filter(
       (m) =>
         (m.game ?? 'babyfoot') === game &&
+        // Le 2v2 babyfoot a son propre ELO/historique : il n'entre PAS dans les
+        // stats 1v1 de la discipline (catégorie à part, cf. ProfilHistory).
+        m.mode !== '2v2' &&
         (m.playerALogin === myLogin || m.playerBLogin === myLogin),
     );
     const wins = my.filter((m) => {
@@ -334,7 +337,7 @@ export function ProfilDesktop() {
       <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-text-strong mb-3 mt-6">
         {t('profil.recent')}
       </div>
-      <ProfilHistory login={u.login} matches={matches} limit={20} />
+      <ProfilHistory login={u.login} matches={matches} darts={playedDarts} user={u} limit={20} />
       </Panel>
 
       {editGame && (

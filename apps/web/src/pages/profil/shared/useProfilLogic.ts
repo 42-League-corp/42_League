@@ -70,6 +70,9 @@ export function computeProfilStats(
     .filter(
       (m) =>
         (m.game ?? 'babyfoot') === game &&
+        // Le 2v2 babyfoot a son propre ELO/historique : exclu des stats 1v1 de la
+        // discipline (catégorie à part, cf. ProfilHistory).
+        m.mode !== '2v2' &&
         (m.playerALogin === login || m.playerBLogin === login),
     )
     .sort((a, b) => +new Date(b.playedAt) - +new Date(a.playedAt));
