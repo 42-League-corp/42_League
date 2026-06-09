@@ -7,6 +7,7 @@ import { PlayerLink } from '../../../components/PlayerLink';
 import type { Challenge } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { useI18n, useT } from '../../../lib/i18n';
+import { useOpsStatus } from '../../../hooks/useOpsStatus';
 
 type Kind = 'incoming' | 'outgoing' | 'accepted';
 
@@ -58,8 +59,10 @@ export function ChallengeMobileCard({
 }: ChallengeMobileCardProps) {
   const { lang } = useI18n();
   const t = useT();
+  const { isOpsWith } = useOpsStatus();
   const opponent =
     challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
+  const isOps = challenge.mode !== '2v2' && isOpsWith(opponent);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const tone = KIND_TONE[kind];
 
@@ -68,7 +71,7 @@ export function ChallengeMobileCard({
       layout
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`relative card-hud border ${tone.border} rounded-2xl p-3.5 flex items-center gap-3 hover-glow`}
+      className={`relative card-hud border ${tone.border} rounded-2xl p-3.5 flex items-center gap-3 hover-glow ${isOps ? 'ops-duel' : ''}`}
     >
       <Avatar login={opponent} imageUrl={imageUrl ?? null} size="md" />
 

@@ -317,16 +317,33 @@ function PlaceholderCard({ category, label, soon }: { category: ShopCategory; la
   );
 }
 
+/**
+ * Cache mémoire (durée de vie du module) du dernier état chargé de la boutique.
+ * Sert à un affichage *instantané* à la réouverture : on réhydrate l'UI depuis
+ * ce snapshot puis on rafraîchit en arrière-plan (stale-while-revalidate), au
+ * lieu de repartir d'un skeleton à chaque visite. Mis à jour à chaque `load()`.
+ */
+type ShopSnapshot = {
+  coins: number;
+  items: ShopItemData[];
+  owned: string[];
+  equipped: string[];
+  monthly: Record<string, { used: number; cap: number }>;
+};
+let shopCache: ShopSnapshot | null = null;
+
 export function ShopPage() {
   const t = useT();
   const { show } = useFlash();
   const { me, refresh } = useLeagueData();
 
-  const [coins, setCoins] = useState<number>(me?.coins ?? 0);
-  const [items, setItems] = useState<ShopItemData[]>([]);
-  const [owned, setOwned] = useState<Set<string>>(new Set());
-  const [equipped, setEquipped] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [coins, setCoins] = useState<number>(shopCache?.coins ?? me?.coins ?? 0);
+  const [items, setItems] = useState<ShopItemData[]>(shopCache?.items ?? []);
+  const [owned, setOwned] = useState<Set<string>>(new Set(shopCache?.owned ?? []));
+  const [equipped, setEquipped] = useState<Set<string>>(new Set(shopCache?.equipped ?? []));
+  // Skeleton uniquement au tout premier chargement (cache vide). Si on a déjà un
+  // snapshot, on affiche le catalogue connu immédiatement, sans clignotement.
+  const [loading, setLoading] = useState(!shopCache);
   const [busy, setBusy] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<ShopCategory | 'all'>('all');
   const [sortKey, setSortKey] = useState<SortKey>('rarity');
@@ -335,7 +352,9 @@ export function ShopPage() {
   const [preview, setPreview] = useState<ShopItemData | null>(null);
   // État mensuel des consommables (kind → achats restants ce mois). Décrémente à
   // l'achat (rechargé après chaque buy), reset au 1er du mois (clé mois côté serveur).
-  const [monthly, setMonthly] = useState<Record<string, { used: number; cap: number }>>({});
+  const [monthly, setMonthly] = useState<Record<string, { used: number; cap: number }>>(
+    shopCache?.monthly ?? {},
+  );
 
   /** Clic sur un critère de tri : si déjà actif, on inverse le sens ; sinon on
    *  bascule sur ce critère avec un sens par défaut (rareté/prix décroissants,
@@ -358,15 +377,21 @@ export function ShopPage() {
         api.inventory().catch(() => [] as InventoryEntry[]),
         api.consumables().catch(() => null),
       ]);
-      setCoins(shop.coins ?? 0);
-      setItems(shop.items ?? []);
-      setOwned(new Set(shop.owned ?? []));
-      setEquipped(new Set(inventory.filter((e) => e.equipped).map((e) => e.itemId)));
-      setMonthly(
-        Object.fromEntries(
+      const snap: ShopSnapshot = {
+        coins: shop.coins ?? 0,
+        items: shop.items ?? [],
+        owned: shop.owned ?? [],
+        equipped: inventory.filter((e) => e.equipped).map((e) => e.itemId),
+        monthly: Object.fromEntries(
           (consumables?.items ?? []).map((c) => [c.kind, { used: c.monthlyUsed, cap: c.monthlyCap }]),
         ),
-      );
+      };
+      shopCache = snap;
+      setCoins(snap.coins);
+      setItems(snap.items);
+      setOwned(new Set(snap.owned));
+      setEquipped(new Set(snap.equipped));
+      setMonthly(snap.monthly);
     } catch (err) {
       show(err instanceof Error ? err.message : t('shop.error'), 'error');
     } finally {

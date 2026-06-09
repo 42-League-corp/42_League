@@ -1341,6 +1341,9 @@ function BracketMatch({
   // résultat du tirage à l'écran un instant avant d'enchaîner sur la saisie du
   // score. True d'emblée si le toss était déjà tranché au montage (revisite).
   const [tossRevealed, setTossRevealed] = useState(() => match.tossWinnerLogin != null);
+  // Instant du clic « Pile ou face », pour garantir un temps de vol minimal de la
+  // pièce identique à /god même si le backend tranche en quelques ms.
+  const flipStartedAt = useRef<number | null>(null);
 
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
   const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
@@ -1382,12 +1385,19 @@ function BracketMatch({
   // l'étape suivante (choix d'avantage).
   useEffect(() => {
     if (!tossDone) return;
-    setFlipping(false);
-    const tm = setTimeout(() => setTossRevealed(true), 2000);
-    return () => clearTimeout(tm);
+    // On calque le timing de /god : la pièce vole ~2,6 s avant d'atterrir, puis le
+    // résultat reste affiché ~2 s. Si le backend a répondu plus vite, on laisse la
+    // pièce finir son vol ; sur revisite (pas de clic) flipStartedAt est null → vol
+    // déjà « écoulé » → atterrissage immédiat.
+    const elapsed = Date.now() - (flipStartedAt.current ?? 0);
+    const landDelay = Math.max(0, 2600 - elapsed);
+    const tLand = setTimeout(() => setFlipping(false), landDelay);
+    const tReveal = setTimeout(() => setTossRevealed(true), landDelay + 2000);
+    return () => { clearTimeout(tLand); clearTimeout(tReveal); };
   }, [tossDone]);
 
   const handleToss = async () => {
+    flipStartedAt.current = Date.now();
     setFlipping(true);
     try {
       await api.tossTournamentMatch(tournament.id, match.id);

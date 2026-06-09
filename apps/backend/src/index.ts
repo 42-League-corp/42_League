@@ -17,6 +17,7 @@ import {
   AnnouncementCreateSchema,
   betPayout,
   cashPrizeForRounds,
+  tournamentEloReward,
   DEFAULT_BET_FINAL_MULT,
   BET_FINAL_MULT_MIN,
   BET_FINAL_MULT_MAX,
@@ -56,11 +57,13 @@ import {
   rankTierForRank,
   GRANDMASTER_MIN_ELO,
   ownedTitles,
+  computeGoat,
 } from '@42-league/shared';
 import {
   GAME_IDS,
   applyGameElo,
   eloAllGames,
+  eloDelta,
   eloOrderBy,
   getGameAdvantage,
   getGameDef,
@@ -70,6 +73,7 @@ import {
   readElo,
   tournamentsWonDelta,
   validateTournamentScore,
+  type GameId,
 } from './games.js';
 import { prisma } from './db.js';
 import {
@@ -532,21 +536,100 @@ async function maybeNotifyTop3(login: string, delta: number): Promise<void> {
   }
 }
 
+// G.O.A.T (meilleur joueur all-time) d'une discipline : #1 du classement pondéré
+// (cf. @42-league/shared computeGoat — calcul identique à la page GOAT du front).
+// Balaie tout l'historique des matchs du jeu → mis en cache (TTL court) car
+// interrogé pour chaque rendu de profil/fiche/classement.
+const GOAT_TOP1_TTL_MS = 60_000;
+const goatTop1Cache = new Map<string, { login: string | null; at: number }>();
+async function goatTop1ForGame(game: string): Promise<string | null> {
+  const cached = goatTop1Cache.get(game);
+  const now = Date.now();
+  if (cached && now - cached.at < GOAT_TOP1_TTL_MS) return cached.login;
+  // Ensemble des candidats = classement courant de la discipline (joueurs visibles).
+  const [candidates, matches, tournaments] = await Promise.all([
+    prisma.user.findMany({
+      where: { ...VISIBLE_USER_WHERE, games: { has: game } },
+      select: { login: true },
+    }),
+    prisma.playedMatch.findMany({
+      where: { game },
+      select: {
+        countedForElo: true,
+        playerALogin: true,
+        playerBLogin: true,
+        deltaA: true,
+        deltaB: true,
+        winner: true,
+        scoreA: true,
+        scoreB: true,
+        playedAt: true,
+      },
+    }),
+    prisma.tournament.findMany({
+      where: { game, status: 'finished', winnerLogin: { not: null } },
+      select: { status: true, winnerLogin: true, kind: true },
+    }),
+  ]);
+  const ranking = computeGoat(candidates, matches, tournaments);
+  const top = ranking[0]?.entry.login ?? null;
+  goatTop1Cache.set(game, { login: top, at: now });
+  return top;
+}
+
 // Badges d'un joueur : badges par défaut dérivés du rôle (admin/superadmin) et
-// du fondateur (throbert), suivis des badges gagnés (stockés en base).
-async function badgesFor(login: string, role: string): Promise<string[]> {
+// du fondateur (throbert), suivis des badges gagnés (stockés en base), plus le
+// badge G.O.A.T auto-attribué au #1 du classement GOAT de sa discipline principale.
+// Assemble les codes de badges de catalogue d'un joueur (source unique, partagée
+// par badgesFor et badgesForUsers pour éviter toute divergence de règles).
+// `earnedCodes` = codes des UserBadge SANS label (les badges « libres » à label
+// sont rendus à part via customBadgesFor). `isGoat` = #1 du classement GOAT de sa
+// discipline principale (remplace l'ancien titre « G.O.A.T »).
+function assembleBadgeCodes(login: string, role: string, earnedCodes: string[], isGoat: boolean): string[] {
+  const out: string[] = [];
+  if (['throbert', 'abidaux'].includes(login.toLowerCase())) out.push('founder');
+  if (role === 'ADMIN') out.push('admin');
+  out.push(...earnedCodes);
+  if (isGoat) out.push('goat');
+  return [...new Set(out)];
+}
+
+async function badgesFor(login: string, role: string, games?: string[]): Promise<string[]> {
   const earned = await prisma.userBadge.findMany({
     where: { userLogin: login },
     select: { code: true, label: true },
     orderBy: { awardedAt: 'asc' },
   });
-  const out: string[] = [];
-  if (['throbert', 'abidaux'].includes(login.toLowerCase())) out.push('founder');
-  if (role === 'ADMIN') out.push('admin');
-  // Les badges « libres » (label renseigné) portent leur propre rendu — ils sont
-  // renvoyés à part via customBadgesFor, pas comme codes de catalogue.
-  for (const e of earned) if (!e.label) out.push(e.code);
-  return [...new Set(out)];
+  const earnedCodes = earned.filter((e) => !e.label).map((e) => e.code);
+  const isGoat = (await goatTop1ForGame(parseGameId(games?.[0]))) === login;
+  return assembleBadgeCodes(login, role, earnedCodes, isGoat);
+}
+
+// Variante batchée pour les listes (classement) : 1 seule requête UserBadge pour
+// tous les logins, et un classement GOAT calculé (caché) une fois par discipline
+// distincte. Renvoie une Map login → codes de badges de catalogue.
+async function badgesForUsers(
+  users: { login: string; role: string; games: string[] }[],
+): Promise<Map<string, string[]>> {
+  const logins = users.map((u) => u.login);
+  const earned = await prisma.userBadge.findMany({
+    where: { userLogin: { in: logins } },
+    select: { userLogin: true, code: true, label: true },
+    orderBy: { awardedAt: 'asc' },
+  });
+  const earnedByLogin = new Map<string, string[]>();
+  for (const e of earned) {
+    if (e.label) continue;
+    const arr = earnedByLogin.get(e.userLogin) ?? [];
+    arr.push(e.code);
+    earnedByLogin.set(e.userLogin, arr);
+  }
+  const out = new Map<string, string[]>();
+  for (const u of users) {
+    const isGoat = (await goatTop1ForGame(parseGameId(u.games?.[0]))) === u.login;
+    out.set(u.login, assembleBadgeCodes(u.login, u.role, earnedByLogin.get(u.login) ?? [], isGoat));
+  }
+  return out;
 }
 
 // Badges « libres » attribués via le /GOD : métadonnées d'affichage portées par la
@@ -603,19 +686,10 @@ async function ownedTitlesFor(
   user: { tournamentsWon: number; tournamentsWonSmash: number; tournamentsWonChess: number; tournamentsWonSf: number; tournamentsWonFlechettes: number; games: string[] } | null,
 ): Promise<{ key: string; label: string }[]> {
   if (!user) return [];
-  const badges = await badgesFor(login, role);
+  const badges = await badgesFor(login, role, user.games);
   const tournamentsWon =
     user.tournamentsWon + user.tournamentsWonSmash + user.tournamentsWonChess + user.tournamentsWonSf + user.tournamentsWonFlechettes;
-  // Rang dans la discipline principale (1er mode adhéré, défaut babyfoot).
-  const primaryGame = parseGameId(user.games?.[0]);
-  const ranked = await prisma.user.findMany({
-    where: { ...VISIBLE_USER_WHERE, games: { has: primaryGame } },
-    orderBy: eloOrderBy(primaryGame),
-    select: { login: true },
-  });
-  const idx = ranked.findIndex((u) => u.login === login);
-  const rank = idx >= 0 ? idx + 1 : null;
-  return ownedTitles({ login, badges, tournamentsWon, rank });
+  return ownedTitles({ login, badges, tournamentsWon });
 }
 
 async function getOrCreateUser(login: string, profile?: FtProfile) {
@@ -1034,7 +1108,7 @@ app.get('/me', async (c) => {
   await getOrCreateUser(login);
   const user = await prisma.user.findUnique({ where: { login } });
   const role = await getUserRole(login);
-  const badges = user ? await badgesFor(login, role) : [];
+  const badges = user ? await badgesFor(login, role, user.games) : [];
   const customBadges = user ? await customBadgesFor(login) : [];
   const palmares = user ? await palmaresFor(login) : [];
   const ownedTitlesList = await ownedTitlesFor(login, role, user);
@@ -1474,7 +1548,7 @@ app.get('/users/:login', async (c) => {
   }).length;
   const draws = played.filter((m) => m.winner === 'draw').length;
   const losses = played.length - wins - draws;
-  const badges = await badgesFor(login, user.role);
+  const badges = await badgesFor(login, user.role, user.games);
   const customBadges = await customBadgesFor(login);
   // Statut de suivi du visiteur vis-à-vis de ce profil.
   const follow =
@@ -1529,7 +1603,17 @@ app.get('/leaderboard', async (c) => {
     orderBy: eloOrderBy(game),
     take: MAX_PUBLIC_LIST,
   });
-  return c.json(users.map((u, i) => ({ rank: i + 1, ...toPublicUser(u), ...projectStats(u, game) })));
+  // Badges de catalogue par joueur (dont le badge G.O.A.T du #1 de chaque
+  // discipline) — calculés en batch pour éviter N requêtes.
+  const badgesByLogin = await badgesForUsers(users.map((u) => ({ login: u.login, role: u.role, games: u.games })));
+  return c.json(
+    users.map((u, i) => ({
+      rank: i + 1,
+      ...toPublicUser(u),
+      ...projectStats(u, game),
+      badges: badgesByLogin.get(u.login) ?? [],
+    })),
+  );
 });
 
 // ── Classement des équipes Babyfoot 2v2 ───────────────────────────────────────
@@ -3628,11 +3712,45 @@ app.delete('/admin/users/:login', async (c) => {
 
   await prisma.$transaction(async (tx) => {
     await tx.pendingMatch.deleteMany({
-      where: { OR: [{ declarerLogin: login }, { opponentLogin: login }] },
+      where: {
+        OR: [
+          { declarerLogin: login },
+          { opponentLogin: login },
+          // 2v2 : le joueur peut n'être que coéquipier (partner1/partner2).
+          { partner1Login: login },
+          { partner2Login: login },
+        ],
+      },
     });
+    // Inclut les slots coéquipiers 2v2 (playerA2/B2) : sinon un match où le
+    // joueur n'est « que » coéquipier subsiste et viole la FK. Doit précéder la
+    // suppression des BabyfootTeam (PlayedMatch.teamA/B y pointent, sans cascade).
     await tx.playedMatch.deleteMany({
-      where: { OR: [{ playerALogin: login }, { playerBLogin: login }] },
+      where: {
+        OR: [
+          { playerALogin: login },
+          { playerBLogin: login },
+          { playerA2Login: login },
+          { playerB2Login: login },
+        ],
+      },
     });
+    // Duos 2v2 dont le joueur fait partie (FK sans cascade vers User).
+    await tx.babyfootTeam.deleteMany({
+      where: { OR: [{ player1Login: login }, { player2Login: login }] },
+    });
+    // FFA joués (Smash / Fléchettes) auxquels le joueur a participé : on supprime
+    // le FFA entier (cascade → participants), sinon PlayedFfaParticipant.user
+    // (FK sans cascade) bloque la suppression.
+    const userFfas = await tx.playedFfaParticipant.findMany({
+      where: { login },
+      select: { playedId: true },
+    });
+    if (userFfas.length) {
+      await tx.playedFfa.deleteMany({
+        where: { id: { in: [...new Set(userFfas.map((p) => p.playedId))] } },
+      });
+    }
     await tx.challenge.deleteMany({
       where: { OR: [{ challengerLogin: login }, { opponentLogin: login }] },
     });
@@ -4309,6 +4427,53 @@ async function launchTournamentMatches(
 // → génération du bracket (poules terminées) ou avancement du gagnant (bracket),
 // finale → tournoi terminé + titre + récompense + paris du tournoi.
 // Renvoie le même objet de résultat que la route confirm (emits/notifs APRÈS commit).
+/**
+ * Crédite le bonus d'Elo de fin de tournoi à TOUS les participants, selon le
+ * palier atteint (champion +100, sorti en qualif 0, paliers interpolés — cf.
+ * `tournamentEloReward`). Appelé une seule fois, au settlement de la finale.
+ *
+ * Le palier d'un joueur se déduit du bracket : nombre de matchs de bracket gagnés
+ * (byes inclus) et présence dans le bracket (= a franchi poules/ligue). En 2v2 le
+ * bonus du capitaine est versé aux deux coéquipiers.
+ */
+async function awardTournamentElo(
+  tx: Prisma.TransactionClient,
+  id: string,
+  format: string,
+  game: GameId,
+  totalBracketRounds: number,
+): Promise<void> {
+  const entries = await tx.tournamentEntry.findMany({
+    where: { tournamentId: id },
+    select: { login: true, partnerLogin: true },
+  });
+  const bracket = await tx.tournamentMatch.findMany({
+    where: { tournamentId: id, stage: 'bracket' },
+    select: { playerALogin: true, playerBLogin: true, winnerLogin: true },
+  });
+  // Tours de bracket gagnés par login + présence dans le bracket (= qualifié).
+  const roundsWon = new Map<string, number>();
+  const inBracket = new Set<string>();
+  for (const bm of bracket) {
+    if (bm.playerALogin) inBracket.add(bm.playerALogin);
+    if (bm.playerBLogin) inBracket.add(bm.playerBLogin);
+    if (bm.winnerLogin) roundsWon.set(bm.winnerLogin, (roundsWon.get(bm.winnerLogin) ?? 0) + 1);
+  }
+  for (const e of entries) {
+    const reward = tournamentEloReward({
+      format,
+      qualified: inBracket.has(e.login),
+      bracketRoundsWon: roundsWon.get(e.login) ?? 0,
+      totalBracketRounds,
+    });
+    if (reward <= 0) continue;
+    const members = e.partnerLogin ? [e.login, e.partnerLogin] : [e.login];
+    for (const login of members) {
+      await tx.user.update({ where: { login }, data: eloDelta(game, reward) });
+    }
+  }
+}
+
 async function settleConfirmedTournamentMatch(
   tx: Prisma.TransactionClient,
   id: string,
@@ -4434,8 +4599,11 @@ async function settleConfirmedTournamentMatch(
         finishedAt: new Date(),
         winnerLogin,
       },
-      select: { game: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
+      select: { game: true, format: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
     });
+    // Bonus d'Elo de fin de tournoi à tous les participants (champion +100, sortis
+    // en qualif 0, paliers interpolés). Indépendant des récompenses coins/cosmétiques.
+    await awardTournamentElo(tx, id, tour.format, parseGameId(tour.game), totalBracketRounds);
     // Membres de l'équipe gagnante : capitaine seul (1v1) ou + coéquipier (2v2).
     const winEntry = await tx.tournamentEntry.findUnique({
       where: { tournamentId_login: { tournamentId: id, login: winnerLogin } },
@@ -7639,7 +7807,10 @@ app.post('/me/inventory/:id/equip', async (c) => {
 //                 pendant ANTI_OPS_SHIELD_MS (cf. POST /ops).
 //  - 'elo_mult' : arme un x2 (gain ET perte) sur ton prochain score validé. Cap
 //                 mensuel d'achats, pas de cooldown.
-const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult'] as const;
+//  - 'force_duel' : « marionnettiste ». Désigne DEUX joueurs et les force à
+//                 s'affronter en babyfoot — un défi déjà accepté (inéluctable,
+//                 impossible à refuser) apparaît dans leurs duels. Cap 1/mois.
+const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel'] as const;
 type ConsumableKind = (typeof CONSUMABLE_KINDS)[number];
 function isConsumableKind(s: string): s is ConsumableKind {
   return (CONSUMABLE_KINDS as readonly string[]).includes(s);
@@ -7647,11 +7818,15 @@ function isConsumableKind(s: string): s is ConsumableKind {
 const ELO_MULT_FACTOR = 2;
 const ANTI_OPS_MONTHLY_CAP = 2;
 const ELO_MULT_MONTHLY_CAP = 6;
+const FORCE_DUEL_MONTHLY_CAP = 1;
+// Discipline imposée par le duel forcé (1v1 phare, le plus robuste).
+const FORCE_DUEL_GAME = 'babyfoot';
 const ANTI_OPS_USE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 semaines entre usages
 const ANTI_OPS_SHIELD_MS = 7 * 24 * 60 * 60 * 1000; // 1 semaine sans re-ciblage
 const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
   anti_ops: ANTI_OPS_MONTHLY_CAP,
   elo_mult: ELO_MULT_MONTHLY_CAP,
+  force_duel: FORCE_DUEL_MONTHLY_CAP,
 };
 
 // Objets boutique « consommable » seedés (ids stables, comme la mystery box).
@@ -7678,6 +7853,15 @@ const CONSUMABLE_ITEMS: {
     description: 'Ton prochain score validé compte double : gain ×2… mais perte ×2 aussi.',
     price: 500,
     rarity: 'rare',
+  },
+  {
+    id: 'consumable-force-duel',
+    kind: 'force_duel',
+    name: 'Main du Destin',
+    description:
+      'Désigne deux joueurs et force-les à s’affronter en babyfoot : un défi inéluctable apparaît dans leurs duels, impossible à refuser. 1 par mois.',
+    price: 2500,
+    rarity: 'epic',
   },
 ];
 
@@ -7741,6 +7925,12 @@ async function cancelOpsTargetingTx(
   return ops.ownerLogin;
 }
 
+// Corps du POST .../force_duel/use : les deux joueurs désignés (marionnettiste).
+const ForceDuelUseSchema = z.object({
+  player1: z.string().trim().min(1),
+  player2: z.string().trim().min(1),
+});
+
 // GET /me/consumables — stock par type + cap mensuel + état du x2 armé.
 app.get('/me/consumables', async (c) => {
   const login = await getCurrentLogin(c);
@@ -7776,6 +7966,56 @@ app.post('/me/consumables/:kind/use', async (c) => {
   const kind = c.req.param('kind');
   if (!isConsumableKind(kind)) throw new HTTPException(404, { message: 'consommable inconnu' });
   const now = new Date();
+
+  // ── Main du Destin : force deux joueurs désignés à s'affronter en babyfoot. ──
+  // Le défi est créé DÉJÀ accepté (status 'accepted') → inéluctable : ni refus ni
+  // annulation possibles (ces transitions exigent 'pending'). L'acheteur n'est pas
+  // partie au duel ; il est l'instigateur (mentionné dans les notifications).
+  if (kind === 'force_duel') {
+    const body = await c.req.json().catch(() => null);
+    const parsed = ForceDuelUseSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+    const { player1, player2 } = parsed.data;
+    if (player1 === player2) {
+      throw new HTTPException(400, { message: 'choisis deux joueurs différents' });
+    }
+    await assertTargetable(player1);
+    await assertTargetable(player2);
+
+    const challenge = await prisma.$transaction(async (tx) => {
+      const row = await tx.consumableInventory.findUnique({
+        where: { userLogin_kind: { userLogin: login, kind } },
+      });
+      if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucune Main du Destin en stock' });
+      await tx.consumableInventory.update({
+        where: { userLogin_kind: { userLogin: login, kind } },
+        data: { quantity: { decrement: 1 }, lastUsedAt: now },
+      });
+      return tx.challenge.create({
+        data: {
+          id: randomUUID(),
+          challengerLogin: player1,
+          opponentLogin: player2,
+          status: 'accepted',
+          game: FORCE_DUEL_GAME,
+          scheduledAt: now,
+          decidedAt: now,
+        },
+      });
+    });
+
+    emit([player1, player2], { type: 'challenge:accepted', payload: challenge });
+    void notifyMany([player1, player2], {
+      type: 'challenge_received',
+      title: `La Main du Destin vous oppose`,
+      body: `@${login} vous force à un duel : @${player1} vs @${player2} en babyfoot.`,
+      link: `/challenges?game=${encodeURIComponent(FORCE_DUEL_GAME)}`,
+      game: FORCE_DUEL_GAME,
+      refId: challenge.id,
+    });
+    emit([login], { type: 'panel:update', payload: {} });
+    return c.json({ ok: true, forced: true, challengeId: challenge.id });
+  }
 
   if (kind === 'elo_mult') {
     await prisma.$transaction(async (tx) => {
@@ -7866,8 +8106,8 @@ const ShopItemUpdateSchema = z
     }
     if (d.category === 'consumable') {
       const kind = typeof d.payload.kind === 'string' ? d.payload.kind : '';
-      if (kind !== 'anti_ops' && kind !== 'elo_mult') {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind doit être 'anti_ops' ou 'elo_mult'" });
+      if (!isConsumableKind(kind)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind invalide (anti_ops | elo_mult | force_duel)" });
       }
     }
   });
@@ -8846,7 +9086,7 @@ app.post('/admin/shop/grant-item', async (c) => {
 // POST /admin/consumables/grant — ajuste (±) le stock d'un consommable d'un joueur.
 const AdminConsumableGrantSchema = z.object({
   login: z.string().trim().min(1),
-  kind: z.enum(['anti_ops', 'elo_mult']),
+  kind: z.enum(['anti_ops', 'elo_mult', 'force_duel']),
   amount: z.number().int(),
 });
 app.post('/admin/consumables/grant', async (c) => {

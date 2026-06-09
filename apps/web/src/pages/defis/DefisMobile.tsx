@@ -17,6 +17,7 @@ import { ChallengeMobileCard } from './mobile/ChallengeMobileCard';
 import { MatchmakingButton } from '../../components/MatchmakingButton';
 import { useDefisLogic } from './shared/useDefisLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
+import { useOpsStatus } from '../../hooks/useOpsStatus';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useT } from '../../lib/i18n';
 import type { Challenge, PendingFfa } from '../../lib/api';
@@ -48,6 +49,7 @@ export function DefisMobile() {
   } = useDefisLogic();
   const t = useT();
   const { leaderboard, locations } = useLeagueData();
+  const { isOpsWith } = useOpsStatus();
   const { game } = useGameMode();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -263,7 +265,9 @@ export function DefisMobile() {
                     key={p.id}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group"
+                    className={`relative card-hud px-4 py-3 flex items-center gap-3 text-xs hover-glow group ${
+                      isOpsWith(p.declarerLogin) || isOpsWith(p.opponentLogin) ? 'ops-duel' : ''
+                    }`}
                   >
                     {/* Silhouette trophée à gauche */}
                     <div className="relative flex-shrink-0 w-9 h-9 rounded-lg metal-plate flex items-center justify-center">

@@ -6,6 +6,7 @@ import { ContestModal } from '../../../components/ContestModal';
 import { PlayerLink } from '../../../components/PlayerLink';
 import { api, type PendingMatch } from '../../../lib/api';
 import { useFlash } from '../../../hooks/useFlash';
+import { useOpsStatus } from '../../../hooks/useOpsStatus';
 import { useT } from '../../../lib/i18n';
 import { haptic } from '../../../mobile/feedback/useHaptic';
 
@@ -55,6 +56,8 @@ interface PendingMatchCardProps {
 export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardProps) {
   const t = useT();
   const flash = useFlash();
+  const { isOpsWith } = useOpsStatus();
+  const isOps = match.mode !== '2v2' && (isOpsWith(match.declarerLogin) || isOpsWith(match.opponentLogin));
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
   // Dès qu'on a tranché (confirmé/contesté avec succès), la carte se retire
@@ -153,8 +156,8 @@ export function PendingMatchCard({ match, myLogin, onDone }: PendingMatchCardPro
         initial={{ opacity: 0, y: 8, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        className="relative overflow-hidden rounded-2xl border-2 border-gold/60 bg-gradient-to-br from-gold/[0.10] to-bg-1/85 backdrop-blur-md shadow-lg"
-        style={{ boxShadow: '0 6px 28px -8px rgba(255,201,74,0.35), inset 0 1px 0 rgba(255,215,120,0.12)' }}
+        className={`relative overflow-hidden rounded-2xl border-2 border-gold/60 bg-gradient-to-br from-gold/[0.10] to-bg-1/85 backdrop-blur-md shadow-lg ${isOps ? 'ops-duel' : ''}`}
+        style={isOps ? undefined : { boxShadow: '0 6px 28px -8px rgba(255,201,74,0.35), inset 0 1px 0 rgba(255,215,120,0.12)' }}
       >
         {/* Liseré animé en haut */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent animate-pulse" />

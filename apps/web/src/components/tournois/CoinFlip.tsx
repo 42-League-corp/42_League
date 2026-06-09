@@ -57,7 +57,7 @@ export default function CoinFlip({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 py-2">
+    <div className="flex flex-col items-center gap-3 py-2">
       {/* Scène du lancer : pièce + ombre projetée au sol. On ne réserve la hauteur
           de vol que pendant le lancer (sinon, au repos, un grand vide au-dessus). */}
       <div
@@ -69,7 +69,9 @@ export default function CoinFlip({
             // ── Révélation : PP du vainqueur qui jaillit ──
             <motion.div
               key="winner-pp"
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              // Ancrée en bas comme la pièce → la PP révélée occupe le même point
+              // que la pièce et le texte se cale juste dessous (bien centré).
+              className="absolute left-1/2 bottom-0 -translate-x-1/2"
               initial={{ scale: 0.2, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.6, opacity: 0 }}

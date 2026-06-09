@@ -15,6 +15,12 @@ export interface OpsStatus {
   forcedLeftAsTarget: number;
   /** Matchs forcés que je peux encore imposer à ma cible (en tant que traqueur). */
   forcedLeftAsHunter: number;
+  /**
+   * `true` si un défi/match qui m'oppose à `login` fait partie d'un OPS actif —
+   * que je sois le traqueur (ma proie) ou la cible (mon traqueur). Sert à teinter
+   * en rouge fluo clignotant les cartes de duel d'ops, des deux côtés.
+   */
+  isOpsWith: (login: string | null | undefined) => boolean;
 }
 
 /**
@@ -30,6 +36,11 @@ export function useOpsStatus(): OpsStatus {
     const prey = opsMe?.current ?? null;
     const left = (o: Ops | null) =>
       o ? Math.max(0, OPS_FORCED_MATCHES - (o.forcedUsed ?? 0)) : 0;
+    // Logins avec lesquels je suis en ops actif : ma proie (je traque) et/ou mon
+    // traqueur (je suis traqué). Un duel contre l'un d'eux est un duel d'ops.
+    const opsLogins = new Set<string>();
+    if (prey) opsLogins.add(prey.targetLogin);
+    if (hunter) opsLogins.add(hunter.ownerLogin);
     return {
       amTarget: !!hunter,
       amHunter: !!prey,
@@ -37,6 +48,7 @@ export function useOpsStatus(): OpsStatus {
       prey,
       forcedLeftAsTarget: left(hunter),
       forcedLeftAsHunter: left(prey),
+      isOpsWith: (login) => !!login && opsLogins.has(login),
     };
   }, [opsMe]);
 }

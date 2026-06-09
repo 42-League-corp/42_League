@@ -108,9 +108,9 @@ export function AnnouncementPopup() {
             type="button"
             onClick={close}
             aria-label={t('common.back')}
-            className="absolute right-3 top-3 z-10 w-7 h-7 rounded-full flex items-center justify-center text-muted-2 hover:text-text-strong hover:bg-white/10 transition-colors"
+            className="absolute right-3 top-3 z-10 w-10 h-10 rounded-full flex items-center justify-center text-muted-2 hover:text-text-strong hover:bg-white/10 transition-colors"
           >
-            <X className="w-4 h-4" strokeWidth={2.4} />
+            <X className="w-6 h-6" strokeWidth={2.6} />
           </button>
 
           <div className="relative p-6 sm:p-7">
@@ -133,21 +133,25 @@ export function AnnouncementPopup() {
 
             <p className="text-sm text-muted leading-relaxed whitespace-pre-line">{current.body}</p>
 
-            <div className="mt-6 flex items-center gap-3">
-              {queue.length > 1 && (
+            {/* Plus de bouton « J'ai compris » : on ferme via la croix. Le bouton
+                « Suivant » ne reste que pour défiler entre plusieurs annonces. */}
+            {queue.length > 1 && (
+              <div className="mt-6 flex items-center gap-3">
                 <span className="text-[11px] font-mono text-muted-2 tabular-nums">
                   {index + 1} / {queue.length}
                 </span>
-              )}
-              <button
-                type="button"
-                onClick={next}
-                className="ml-auto inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 transition-all active:scale-[0.98] hover:brightness-110"
-                style={{ background: `linear-gradient(90deg, ${meta.accent}, ${meta.accent}cc)` }}
-              >
-                {isLast ? t('announce.popup.ok') : t('announce.popup.next')}
-              </button>
-            </div>
+                {!isLast && (
+                  <button
+                    type="button"
+                    onClick={next}
+                    className="ml-auto inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-display text-sm font-black uppercase tracking-wider text-bg-1 transition-all active:scale-[0.98] hover:brightness-110"
+                    style={{ background: `linear-gradient(90deg, ${meta.accent}, ${meta.accent}cc)` }}
+                  >
+                    {t('announce.popup.next')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
       </motion.div>

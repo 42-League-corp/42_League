@@ -25,6 +25,7 @@ import { pickRating } from '../../lib/gameStats';
 import { RankedBadge } from '../../components/RankedBadge';
 import { StatCard } from '../../components/StatCard';
 import { useFlash } from '../../hooks/useFlash';
+import { useOpsStatus } from '../../hooks/useOpsStatus';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
 import { useDefisLogic } from './shared/useDefisLogic';
@@ -865,6 +866,8 @@ function PlayerCard({
 function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () => Promise<void> }) {
   const t = useT();
   const flash = useFlash();
+  const { isOpsWith } = useOpsStatus();
+  const isOps = match.mode !== '2v2' && (isOpsWith(match.declarerLogin) || isOpsWith(match.opponentLogin));
   const [contesting, setContesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resolved, setResolved] = useState(false);
@@ -927,7 +930,7 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 
   return (
     <>
-      <div className="relative rounded-xl p-3 border border-gold/40 bg-gold/[0.05] animate-pop flex flex-wrap items-center gap-2.5">
+      <div className={`relative rounded-xl p-3 border border-gold/40 bg-gold/[0.05] animate-pop flex flex-wrap items-center gap-2.5 ${isOps ? 'ops-duel' : ''}`}>
         <Zap className="w-4 h-4 text-gold flex-shrink-0" strokeWidth={2.5} fill="rgba(255,201,74,0.4)" />
         <PlayerLink login={match.declarerLogin} className="font-semibold text-gold text-sm">
           {match.declarerLogin}
@@ -984,6 +987,8 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
 
 function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: () => void }) {
   const t = useT();
+  const { isOpsWith } = useOpsStatus();
+  const isOps = match.mode !== '2v2' && (isOpsWith(match.declarerLogin) || isOpsWith(match.opponentLogin));
   // 2v2 : on attend la validation des 3 autres joueurs — on affiche la
   // composition complète (mon duo vs duo adverse) + l'avancée des confirmations.
   if (match.mode === '2v2') {
@@ -1023,7 +1028,7 @@ function PendingWaitRow({ match, onCancel }: { match: PendingMatch; onCancel: ()
     );
   }
   return (
-    <div className="rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02]">
+    <div className={`rounded-xl p-3 flex flex-wrap items-center gap-2 text-sm border border-border/50 bg-white/[0.02] ${isOps ? 'ops-duel' : ''}`}>
       <Clock className="w-4 h-4 text-muted-2 flex-shrink-0" strokeWidth={2} />
       <span className="text-muted-2">{t('defis.waitingFor')}</span>
       <PlayerLink login={match.opponentLogin} className="font-semibold">{match.opponentLogin}</PlayerLink>
@@ -1392,7 +1397,9 @@ interface ChallengeRowProps {
 
 function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: ChallengeRowProps) {
   const t = useT();
+  const { isOpsWith } = useOpsStatus();
   const opponent = challenge.challengerLogin === myLogin ? challenge.opponentLogin : challenge.challengerLogin;
+  const isOps = challenge.mode !== '2v2' && isOpsWith(opponent);
   const when = fmtRelative(challenge.scheduledAt, lang);
   const [recording, setRecording] = useState(false);
 
@@ -1404,7 +1411,7 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline }: C
   };
 
   return (
-    <div className="rounded-xl p-3 border border-border/50 bg-white/[0.02] hover:border-accent/30 transition-colors">
+    <div className={`rounded-xl p-3 border border-border/50 bg-white/[0.02] hover:border-accent/30 transition-colors ${isOps ? 'ops-duel' : ''}`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span aria-hidden>{KIND_ICON[kind]}</span>
         <span className="text-muted-2 text-[11px]">{KIND_LABEL[kind]}</span>
