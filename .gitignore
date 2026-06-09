@@ -6,6 +6,14 @@ dist-firefox/
 caddy.env
 *.log
 .DS_Store
+
+# Dumps de base de données — ne jamais versionner (données sensibles)
+# (root-level uniquement : les migrations Prisma .sql en sous-dossier restent versionnées)
+/*.sql
+full_backup_*.sql
+*.dump
+# Déchets Windows (alternate data streams)
+*:Zone.Identifier
 .vscode/
 .idea/
 coverage/
