@@ -360,7 +360,7 @@ export const dict: Record<Lang, Dict> = {
       'Recopier l\'ELO et les stats de la PROD vers staging ? Les classements staging seront remplacés par l\'état actuel de la prod (rôles, coins et comptes de test préservés).',
     'god.season.syncBtn': 'Synchroniser depuis la prod',
     'god.season.syncing': 'Synchro…',
-    'god.season.syncDone': 'Synchro OK ✓ — {updated} mis à jour, {created} créés, {skipped} ignorés.',
+    'god.season.syncDone': 'Synchro OK ✓ — {prodCount} lus depuis la prod · {updated} mis à jour, {created} créés, {skipped} ignorés.',
     // Transition : ajouter une saison clôture instantanément la précédente.
     'god.season.nextTitle': 'Démarrer la saison suivante',
     'god.season.next': 'Démarrer la saison suivante',
@@ -831,7 +831,7 @@ export const dict: Record<Lang, Dict> = {
       'Copy ELO and stats from PROD into staging? Staging standings will be replaced with the current prod state (roles, coins and test accounts preserved).',
     'god.season.syncBtn': 'Sync from prod',
     'god.season.syncing': 'Syncing…',
-    'god.season.syncDone': 'Sync OK ✓ — {updated} updated, {created} created, {skipped} skipped.',
+    'god.season.syncDone': 'Sync OK ✓ — {prodCount} read from prod · {updated} updated, {created} created, {skipped} skipped.',
     'god.season.nextTitle': 'Start the next season',
     'god.season.next': 'Start the next season',
     'god.season.nextHint':
@@ -1298,7 +1298,7 @@ export const dict: Record<Lang, Dict> = {
       '¿Copiar el ELO y las estadísticas de PROD a staging? Las clasificaciones de staging se reemplazarán por el estado actual de prod (roles, monedas y cuentas de prueba preservados).',
     'god.season.syncBtn': 'Sincronizar desde prod',
     'god.season.syncing': 'Sincronizando…',
-    'god.season.syncDone': 'Sincronización OK ✓ — {updated} actualizados, {created} creados, {skipped} omitidos.',
+    'god.season.syncDone': 'Sincronización OK ✓ — {prodCount} leídos de prod · {updated} actualizados, {created} creados, {skipped} omitidos.',
     'god.season.nextTitle': 'Iniciar la siguiente temporada',
     'god.season.next': 'Iniciar la siguiente temporada',
     'god.season.nextHint':
