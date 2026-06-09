@@ -21,6 +21,7 @@ import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
+import { computeStandings, type Standing } from '../lib/tournamentStandings';
 import { tournamentEloReward, tournamentEloMax } from '@42-league/shared';
 
 // Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
@@ -666,57 +667,12 @@ function BackLink() {
   );
 }
 
-interface Standing {
-  login: string;
-  played: number;
-  wins: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  diff: number;
-}
-
 // Équipe d'un championnat de ligue : un duo (2v2) résolu, ou un joueur seul. La clé
 // d'identité dans les matchs est le `captain` (les TournamentMatch ne référencent
 // que les capitaines ; le coéquipier vient de TournamentEntry.partnerLogin).
 interface LeagueTeam {
   captain: string;
   members: string[];
-}
-
-// Classement (miroir des helpers serveur) à partir des matchs confirmés.
-//  - 'pool'   : victoires → différence de buts → buts marqués (poolStandings)
-//  - 'league' : différence de buts (goal average) → buts marqués → victoires (leagueStandings)
-function computeStandings(matches: TournamentMatch[], mode: 'pool' | 'league' = 'pool'): Standing[] {
-  const table = new Map<string, Standing>();
-  const ensure = (login: string): Standing => {
-    let s = table.get(login);
-    if (!s) {
-      s = { login, played: 0, wins: 0, goalsFor: 0, goalsAgainst: 0, diff: 0 };
-      table.set(login, s);
-    }
-    return s;
-  };
-  for (const m of matches) {
-    if (!m.playerALogin || !m.playerBLogin || m.scoreA == null || m.scoreB == null) continue;
-    const a = ensure(m.playerALogin);
-    const b = ensure(m.playerBLogin);
-    a.played++;
-    b.played++;
-    a.goalsFor += m.scoreA;
-    a.goalsAgainst += m.scoreB;
-    b.goalsFor += m.scoreB;
-    b.goalsAgainst += m.scoreA;
-    if (m.winnerLogin === m.playerALogin) a.wins++;
-    else if (m.winnerLogin === m.playerBLogin) b.wins++;
-  }
-  const rows = [...table.values()];
-  for (const r of rows) r.diff = r.goalsFor - r.goalsAgainst;
-  if (mode === 'league') {
-    rows.sort((x, y) => y.diff - x.diff || y.goalsFor - x.goalsFor || y.wins - x.wins);
-  } else {
-    rows.sort((x, y) => y.wins - x.wins || y.diff - x.diff || y.goalsFor - x.goalsFor);
-  }
-  return rows;
 }
 
 const QUALIFY_PER_POOL = 2;
