@@ -52,9 +52,6 @@ export function HypePanel({
                 </div>
                 {/* Thermomètre de suspense */}
                 <div className="mt-[0.3vh] flex items-center gap-[0.5vw]">
-                  <span className="text-[0.9vh] uppercase tracking-wide text-muted-2 shrink-0">
-                    {x.kind === 'liveClose' ? 'En cours' : 'Suspense'}
-                  </span>
                   <div className="flex-1 h-[0.55vh] rounded-full bg-bg-3/80 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-gold via-[#ff8a3a] to-red"

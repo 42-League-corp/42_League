@@ -175,6 +175,30 @@ export function teamEloMap(entries: TournamentEntry[] = []): Map<string, number>
   return m;
 }
 
+export interface EloBand {
+  min: number;
+  max: number;
+}
+
+/** Fourchette d'ELO d'équipe du plateau (pour normaliser la « hype » d'une affiche). */
+export function teamEloBand(entries: TournamentEntry[] = []): EloBand {
+  const vals = [...teamEloMap(entries).values()];
+  if (vals.length === 0) return { min: 0, max: 0 };
+  return { min: Math.min(...vals), max: Math.max(...vals) };
+}
+
+/**
+ * « Hype » d'une affiche fondée sur l'ELO des binômes : plus les DEUX camps sont forts,
+ * plus l'affiche est grosse (0..1). Normalisée sur la fourchette d'ELO du plateau, donc
+ * « le choc des cadors » ressort vraiment. 0.5 si les ELO sont inconnus.
+ */
+export function matchHype(eloA: number | undefined, eloB: number | undefined, band: EloBand): number {
+  if (eloA == null || eloB == null) return 0.5;
+  if (band.max <= band.min) return 0.6;
+  const avg = (eloA + eloB) / 2;
+  return Math.max(0, Math.min(1, (avg - band.min) / (band.max - band.min)));
+}
+
 // ── Pronostic ELO ─────────────────────────────────────────────────────────────
 
 /**

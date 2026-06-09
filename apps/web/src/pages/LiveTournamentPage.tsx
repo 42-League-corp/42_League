@@ -8,7 +8,6 @@ import { reportError } from '../lib/reportError';
 import { computeStandings, type Standing } from '../lib/tournamentStandings';
 import {
   bracketRounds,
-  computeDuelHypes,
   teamEloMap,
   matchesOfStage,
   phaseInfo,
@@ -84,6 +83,21 @@ export function LiveTournamentPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  // Rattrapage au retour au premier plan : si l'écran TV était en arrière-plan / sans
+  // focus (timers ralentis, SSE éventuellement gelé), on recharge immédiatement dès
+  // qu'il redevient visible ou reprend le focus — plus besoin de cliquer pour rafraîchir.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [load]);
+
   if (status === 'loading') return <FullScreen><Spinner size="md" /></FullScreen>;
   if (status === 'empty')
     return (
@@ -150,7 +164,6 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
     () => upcomingDuels(data, featured?.state === 'next' ? featured.match.id : null, 5),
     [data, featured],
   );
-  const hypes = useMemo(() => computeDuelHypes(upcoming, data.betPool ?? {}, elos), [upcoming, data, elos]);
   const tight = useMemo(() => tightMatches(data, elos, 3), [data, elos]);
 
   const isFinished = data.status === 'finished';
@@ -204,7 +217,7 @@ function LiveBoard({ data, stale }: { data: LiveTournament; stale: boolean }) {
 
         {/* Droite : prochains duels + matchs serrés */}
         <div className="flex flex-col min-h-0 gap-[1vh]">
-          <UpcomingDuels duels={upcoming} tournament={data} hypes={hypes} />
+          <UpcomingDuels duels={upcoming} tournament={data} />
           <HypePanel tight={tight} tournament={data} />
         </div>
       </main>

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Avatar } from '../Avatar';
 import { PanelTitle } from './LivePanel';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
-import { avatarMap, teamEloMap, marginInfo, upsetGap } from '../../lib/liveTournament';
+import { avatarMap, teamEloMap, teamLabelOf, marginInfo, upsetGap } from '../../lib/liveTournament';
 
 // Centre bas (phase ligue) — fil des derniers résultats confirmés, enrichi : on lit
 // d'un coup d'œil À QUEL POINT c'était serré (badge d'écart + barre de score) et si
@@ -24,8 +24,9 @@ export function RecentResults({
   matches: TournamentMatch[];
   tournament: LiveTournament;
 }) {
-  const avatars = avatarMap(tournament.entries ?? []);
-  const elos = teamEloMap(tournament.entries ?? []);
+  const entries = tournament.entries ?? [];
+  const avatars = avatarMap(entries);
+  const elos = teamEloMap(entries);
   return (
     <section className="flex flex-col min-h-0 h-full rounded-xl border border-border/60 bg-bg-1/70 overflow-hidden">
       <PanelTitle>Derniers résultats</PanelTitle>
@@ -48,13 +49,25 @@ export function RecentResults({
                 className="rounded-lg bg-bg-2/50 border border-border/40 px-[0.8vw] py-[0.45vh]"
               >
                 <div className="flex items-center gap-[0.6vw]">
-                  <Side login={m.playerALogin} img={avatars.get(m.playerALogin ?? '') ?? null} win={aWin} align="left" />
+                  <Side
+                    login={m.playerALogin}
+                    label={teamLabelOf(m.playerALogin, entries)}
+                    img={avatars.get(m.playerALogin ?? '') ?? null}
+                    win={aWin}
+                    align="left"
+                  />
                   <div className="flex items-center gap-[0.5vw] font-display font-black tabular-nums text-[2.1vh] shrink-0">
                     <span className={aWin ? 'text-gold' : 'text-muted-2'}>{m.scoreA ?? '–'}</span>
                     <span className="text-muted-2 text-[1.3vh]">:</span>
                     <span className={!aWin ? 'text-gold' : 'text-muted-2'}>{m.scoreB ?? '–'}</span>
                   </div>
-                  <Side login={m.playerBLogin} img={avatars.get(m.playerBLogin ?? '') ?? null} win={!aWin} align="right" />
+                  <Side
+                    login={m.playerBLogin}
+                    label={teamLabelOf(m.playerBLogin, entries)}
+                    img={avatars.get(m.playerBLogin ?? '') ?? null}
+                    win={!aWin}
+                    align="right"
+                  />
                 </div>
                 {/* Barre de partage du score + badges d'intensité */}
                 <div className="mt-[0.35vh] flex items-center gap-[0.5vw]">
@@ -97,11 +110,13 @@ export function RecentResults({
 
 function Side({
   login,
+  label,
   img,
   win,
   align,
 }: {
   login: string | null;
+  label: string;
   img: string | null;
   win: boolean;
   align: 'left' | 'right';
@@ -109,8 +124,8 @@ function Side({
   return (
     <div className={`flex items-center gap-[0.5vw] flex-1 min-w-0 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
       <Avatar login={login ?? '?'} imageUrl={img} size="sm" grayscale={!win} />
-      <span className={`text-[1.6vh] truncate ${win ? 'text-text-strong font-bold' : 'text-muted-2'}`}>
-        {login ?? '?'}
+      <span className={`text-[1.5vh] truncate ${win ? 'text-text-strong font-bold' : 'text-muted-2'}`}>
+        {label}
       </span>
     </div>
   );

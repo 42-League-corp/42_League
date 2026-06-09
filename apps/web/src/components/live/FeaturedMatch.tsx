@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Avatar } from '../Avatar';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
-import { avatarMap, teamEloMap, partnerOf, pronostic, type FeaturedState } from '../../lib/liveTournament';
+import { avatarMap, teamEloMap, teamEloBand, partnerOf, matchHype, type FeaturedState } from '../../lib/liveTournament';
 
 // Centre haut — affiche VS du match en avant, sur l'image babyfoot animée. Gère 1v1
 // et 2v2 (paire affichée). Le visuel s'adapte à l'état (en cours / live / à venir /
@@ -51,7 +51,8 @@ export function FeaturedMatch({
 
   const eloA = match.playerALogin ? elos.get(match.playerALogin) : undefined;
   const eloB = match.playerBLogin ? elos.get(match.playerBLogin) : undefined;
-  const prono = pronostic(eloA, eloB);
+  // Hype de l'affiche = niveau des deux binômes (ELO). Grosse affiche = gros ELO.
+  const hype = matchHype(eloA, eloB, teamEloBand(entries));
 
   // ── Célébration du score gagnant ────────────────────────────────────────────
   // On déclenche une cinématique « waouh » quand le vainqueur de CE match vient
@@ -142,10 +143,10 @@ export function FeaturedMatch({
         />
       </div>
 
-      {/* Barre de pronostic ELO — masquée une fois le vainqueur connu (le résultat
-          parle de lui-même). */}
+      {/* Barre de HYPE (niveau des binômes) — en bas du match en cours, masquée une
+          fois le vainqueur connu. */}
       {!match.winnerLogin && match.playerALogin && match.playerBLogin && (
-        <PronoBar prono={prono} loginA={match.playerALogin} loginB={match.playerBLogin} />
+        <HypeBar hype={hype} unknown={eloA == null || eloB == null} />
       )}
 
       {/* Cinématique de victoire (waouh) */}
@@ -156,53 +157,38 @@ export function FeaturedMatch({
   );
 }
 
-// ── Barre de pronostic « serré-o-mètre » ───────────────────────────────────────
+// ── Barre de HYPE (force des binômes) ──────────────────────────────────────────
 
-function PronoBar({
-  prono,
-  loginA,
-  loginB,
-}: {
-  prono: ReturnType<typeof pronostic>;
-  loginA: string;
-  loginB: string;
-}) {
-  const pctA = Math.round(prono.pa * 100);
-  const pctB = 100 - pctA;
-  const toneClass =
-    prono.tone === 'serre'
-      ? 'text-red border-red/50 bg-red/10'
-      : prono.tone === 'equilibre'
-        ? 'text-teal border-teal/40 bg-teal/10'
-        : 'text-gold border-gold/40 bg-gold/10';
-  const flame = prono.tone === 'serre' ? '🔥 ' : '';
+function HypeBar({ hype, unknown }: { hype: number; unknown: boolean }) {
+  const pct = Math.round(hype * 100);
+  // Libellé qualitatif : grosse affiche = ELO élevés des deux côtés.
+  const label = unknown
+    ? 'Affiche à découvrir'
+    : hype >= 0.75
+      ? '🔥 Affiche de gala'
+      : hype >= 0.45
+        ? 'Belle affiche'
+        : 'Montée en puissance';
 
   return (
-    <div className="absolute bottom-[1.2vh] left-1/2 -translate-x-1/2 z-10 w-[80%] max-w-[42vw] flex flex-col items-center gap-[0.5vh]">
-      <span className={`px-[0.8vw] py-[0.2vh] rounded-full border text-[1.2vh] font-bold uppercase tracking-[0.14em] ${toneClass}`}>
-        {flame}{prono.unknown ? 'Pronostic à venir' : prono.label}
-      </span>
+    <div className="absolute bottom-[1.2vh] left-1/2 -translate-x-1/2 z-10 w-[82%] max-w-[44vw] flex flex-col items-center gap-[0.4vh]">
+      <div className="flex items-center gap-[0.6vw]">
+        <span className="text-[1.25vh] font-gaming font-black uppercase tracking-[0.16em] text-gold">Hype</span>
+        <span className="text-[1.15vh] font-bold uppercase tracking-[0.1em] text-text-strong">{label}</span>
+      </div>
       <div className="w-full flex items-center gap-[0.6vw]">
-        <span className="text-[1.4vh] font-mono font-bold tabular-nums text-text-strong w-[3.2ch] text-right shrink-0">
-          {prono.unknown ? '–' : `${pctA}%`}
-        </span>
         <div className="relative flex-1 h-[1.1vh] rounded-full overflow-hidden bg-bg-3/80 border border-border/50">
           <motion.div
-            className="absolute inset-y-0 left-0"
-            style={{ background: `linear-gradient(90deg, ${GREEN}, ${GREEN}aa)` }}
-            animate={{ width: prono.unknown ? '50%' : `${pctA}%` }}
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-deep via-gold to-[#ff8a3a]"
+            animate={{ width: `${Math.max(4, pct)}%` }}
             transition={{ type: 'spring', stiffness: 120, damping: 22 }}
           />
-          <div className="absolute inset-y-0 left-1/2 w-px bg-text-strong/40" />
         </div>
-        <span className="text-[1.4vh] font-mono font-bold tabular-nums text-text-strong w-[3.2ch] shrink-0">
-          {prono.unknown ? '–' : `${pctB}%`}
+        <span className="text-[1.3vh] font-mono font-bold tabular-nums text-gold w-[4ch] text-right shrink-0">
+          {unknown ? '–' : `${pct}%`}
         </span>
       </div>
-      <div className="w-full flex items-center justify-between text-[1.0vh] uppercase tracking-wide text-muted-2">
-        <span className="truncate max-w-[40%]">{loginA}</span>
-        <span className="truncate max-w-[40%] text-right">{loginB}</span>
-      </div>
+      <span className="text-[0.95vh] uppercase tracking-wide text-muted-2">d'après l'ELO des deux binômes</span>
     </div>
   );
 }
@@ -333,8 +319,9 @@ function Fighter({
       </div>
       {partner && <div className="text-[1.4vh] text-muted-2 -mt-[0.4vh] truncate max-w-full">&amp; {partner}</div>}
       {elo != null && (
-        <div className="text-[1.6vh] font-mono text-gold">
-          ELO <span className="font-bold">{elo}</span>
+        <div className="flex flex-col items-center leading-none text-gold">
+          <span className="text-[1.0vh] uppercase tracking-[0.12em] text-muted-2">ELO de la team</span>
+          <span className="text-[1.7vh] font-mono font-bold">{elo}</span>
         </div>
       )}
     </div>

@@ -23,24 +23,32 @@ const VICTORY_MS = 5200;
 export function VictoryOverlay({
   open,
   champion,
+  partner = null,
   tournamentName,
   accent,
   onDone,
+  persist = false,
   t,
 }: {
   open: boolean;
   champion: VictoryChampion | null;
+  /** Coéquipier du champion (2v2) — affiché à côté pour célébrer le binôme. */
+  partner?: VictoryChampion | null;
   tournamentName: string;
   accent: string;
   onDone: () => void;
+  /** Si vrai, la célébration RESTE à l'écran (pas d'auto-fermeture) jusqu'à ce que le
+   *  parent la retire — ex. écran TV : on laisse fêter jusqu'à la clôture du tournoi. */
+  persist?: boolean;
   t: (k: string) => string;
 }) {
-  // Auto-fermeture : l'animation est non bloquante, on referme après l'effet.
+  // Auto-fermeture : l'animation est non bloquante, on referme après l'effet — sauf en
+  // mode `persist` où elle reste jusqu'à ce que le parent la ferme (clôture admin).
   useEffect(() => {
-    if (!open) return;
+    if (!open || persist) return;
     const id = setTimeout(onDone, VICTORY_MS);
     return () => clearTimeout(id);
-  }, [open, onDone]);
+  }, [open, persist, onDone]);
 
   // Confettis : positions/délais/teintes figés (recalculés si l'accent change).
   const confetti = useMemo(
@@ -155,35 +163,23 @@ export function VictoryOverlay({
             {t('tournois.victory.title')}
           </motion.div>
 
-          {/* Portrait + nom du champion. */}
+          {/* Portrait(s) + nom du champion (binôme affiché en 2v2). */}
           <motion.div
             initial={{ scale: 0.7, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 150, damping: 15, delay: 0.7 }}
             className="relative z-10 mt-[2.4vh] flex flex-col items-center gap-3"
           >
-            <div
-              className="rounded-full flex items-center justify-center font-display font-black text-[#0a0a0a] overflow-hidden"
-              style={{
-                width: 'clamp(86px, 24vw, 148px)',
-                height: 'clamp(86px, 24vw, 148px)',
-                fontSize: 'clamp(2rem, 9vw, 3.4rem)',
-                border: `3px solid ${accent}`,
-                boxShadow: `0 0 40px ${accent}aa, inset 0 1px 0 rgba(255,255,255,0.3)`,
-                background: champion.imageUrl ? undefined : accent,
-              }}
-            >
-              {champion.imageUrl ? (
-                <img src={champion.imageUrl} alt={champion.login} className="w-full h-full object-cover" />
-              ) : (
-                champion.login[0]?.toUpperCase()
-              )}
+            <div className="flex items-center justify-center gap-[2vw]">
+              <ChampionPortrait fighter={champion} accent={accent} />
+              {partner && <ChampionPortrait fighter={partner} accent={accent} />}
             </div>
             <span
-              className="font-display font-black text-text-strong uppercase max-w-[80vw] truncate"
+              className="font-display font-black text-text-strong uppercase max-w-[86vw] truncate text-center"
               style={{ fontSize: 'clamp(1.6rem, 7vw, 3.2rem)', lineHeight: 1.05 }}
             >
               {champion.login}
+              {partner && <span className="text-text-strong/80"> &amp; {partner.login}</span>}
             </span>
           </motion.div>
 
@@ -201,5 +197,27 @@ export function VictoryOverlay({
       )}
     </AnimatePresence>,
     document.body,
+  );
+}
+
+function ChampionPortrait({ fighter, accent }: { fighter: VictoryChampion; accent: string }) {
+  return (
+    <div
+      className="rounded-full flex items-center justify-center font-display font-black text-[#0a0a0a] overflow-hidden shrink-0"
+      style={{
+        width: 'clamp(80px, 22vw, 140px)',
+        height: 'clamp(80px, 22vw, 140px)',
+        fontSize: 'clamp(2rem, 8vw, 3.2rem)',
+        border: `3px solid ${accent}`,
+        boxShadow: `0 0 40px ${accent}aa, inset 0 1px 0 rgba(255,255,255,0.3)`,
+        background: fighter.imageUrl ? undefined : accent,
+      }}
+    >
+      {fighter.imageUrl ? (
+        <img src={fighter.imageUrl} alt={fighter.login} className="w-full h-full object-cover" />
+      ) : (
+        fighter.login[0]?.toUpperCase()
+      )}
+    </div>
   );
 }

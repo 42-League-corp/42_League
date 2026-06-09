@@ -4,7 +4,7 @@ import { VersusOverlay, type VersusFighter } from '../tournois/VersusOverlay';
 import { VictoryOverlay } from '../tournois/VictoryOverlay';
 import { useT } from '../../lib/i18n';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
-import { avatarMap } from '../../lib/liveTournament';
+import { avatarMap, partnerOf } from '../../lib/liveTournament';
 
 // Cinématiques de l'écran TV pilotées par le diff SSE : quand l'admin lance le
 // pile-ou-face (tossAt) ou désigne le match suivant (activeMatchId) depuis la page de
@@ -35,12 +35,16 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
   // ── Détection des transitions ───────────────────────────────────────────────
   const initedRef = useRef(false);
   const prevActiveRef = useRef<string | null>(null);
-  const prevStatusRef = useRef<LiveTournament['status'] | null>(null);
   const prevTossRef = useRef<Map<string, string>>(new Map()); // matchId → tossAt
 
   const [versus, setVersus] = useState<{ a: VersusFighter | null; b: VersusFighter | null } | null>(null);
   const [toss, setToss] = useState<TossState | null>(null);
-  const [victory, setVictory] = useState(false);
+
+  // Célébration du champion : RESTE affichée tant que le tournoi est « terminé »
+  // (jusqu'à ce que l'admin le clôture depuis son panneau → le statut change).
+  const championLogin = data.winner?.login ?? null;
+  const showVictory = data.status === 'finished' && !!championLogin;
+  const partnerLogin = championLogin ? partnerOf(championLogin, data.entries ?? []) : null;
 
   useEffect(() => {
     const matches = data.matches ?? [];
@@ -51,16 +55,9 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
     if (!initedRef.current) {
       initedRef.current = true;
       prevActiveRef.current = data.activeMatchId ?? null;
-      prevStatusRef.current = data.status;
       prevTossRef.current = tossNow;
       return;
     }
-
-    // Fin du tournoi : célébration du champion (une fois, en live).
-    if (prevStatusRef.current === 'in_progress' && data.status === 'finished' && data.winner) {
-      setVictory(true);
-    }
-    prevStatusRef.current = data.status;
 
     // Nouveau pile-ou-face : un match dont le tossAt vient d'apparaître/changer.
     let freshToss: TournamentMatch | null = null;
@@ -95,18 +92,43 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
   }, [data]);
 
   // Déroulé du pile-ou-face : rotation (~1,8 s) → révélation du gagnant → fermeture
-  // (~4,6 s). On planifie les DEUX timers une seule fois par tirage, en se calant sur
-  // `matchId` (et non sur l'objet `toss`) : sinon, quand `setToss({…flipping:false})`
-  // muterait l'objet à 1,8 s, l'effet se relancerait, son cleanup annulerait le timer
-  // de fermeture, et l'écran resterait bloqué sur « X gagne le tirage » indéfiniment.
+  // (~4,6 s). Pilotage AUTO-RÉPARANT : au lieu de deux setTimeout fragiles (qui restent
+  // « bloqués » si l'onglet est ralenti en arrière-plan ou perd le focus), on mémorise
+  // l'instant d'ouverture et on RE-ÉVALUE l'état à chaque tick d'un intervalle court +
+  // au retour au premier plan. Même si un tick saute, le suivant rattrape → l'overlay
+  // ne reste JAMAIS figé sur « X gagne le tirage ».
+  const tossOpenedAtRef = useRef<number | null>(null);
   const tossMatchId = toss?.matchId ?? null;
   useEffect(() => {
-    if (!tossMatchId) return;
-    const reveal = setTimeout(() => setToss((s) => (s ? { ...s, flipping: false } : null)), 1800);
-    const close = setTimeout(() => setToss(null), 4600);
+    if (!tossMatchId) {
+      tossOpenedAtRef.current = null;
+      return;
+    }
+    if (tossOpenedAtRef.current == null) tossOpenedAtRef.current = Date.now();
+
+    const tick = () => {
+      const started = tossOpenedAtRef.current;
+      if (started == null) return;
+      const elapsed = Date.now() - started;
+      if (elapsed >= 4600) {
+        setToss(null);
+      } else if (elapsed >= 1800) {
+        setToss((s) => (s && s.flipping ? { ...s, flipping: false } : s));
+      }
+    };
+
+    const id = setInterval(tick, 200);
+    // Rattrapage immédiat au retour au premier plan (focus / onglet visible) : si le
+    // navigateur a gelé l'intervalle, on referme tout de suite ce qui doit l'être.
+    const onWake = () => tick();
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    tick();
+
     return () => {
-      clearTimeout(reveal);
-      clearTimeout(close);
+      clearInterval(id);
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
     };
   }, [tossMatchId]);
 
@@ -130,11 +152,17 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
         t={t}
       />
       <VictoryOverlay
-        open={victory}
+        open={showVictory}
         champion={data.winner ?? null}
+        partner={
+          partnerLogin
+            ? { login: partnerLogin, imageUrl: avatars.get(partnerLogin) ?? null }
+            : null
+        }
         tournamentName={data.name}
         accent={accent}
-        onDone={() => setVictory(false)}
+        persist
+        onDone={() => {}}
         t={t}
       />
     </>
