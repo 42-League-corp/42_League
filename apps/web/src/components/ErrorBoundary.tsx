@@ -4,6 +4,8 @@ interface Props {
   children: ReactNode;
   /** Optionnel : contenu de repli personnalisé. */
   fallback?: ReactNode;
+  /** Optionnel : appelé à la capture d'une erreur (ex. remontée Discord). */
+  onError?: (error: Error, info: ErrorInfo) => void;
 }
 
 interface State {
@@ -30,6 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo) {
     // Log en dev pour faciliter le debug
     console.error('[ErrorBoundary] Erreur capturée:', error, info.componentStack);
+    this.props.onError?.(error, info);
   }
 
   override render() {
