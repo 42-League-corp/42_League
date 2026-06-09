@@ -55,8 +55,23 @@ export function cashPrizeForRounds(roundsWon: number, totalRounds: number, base:
   return Math.round(base * (k / totalRounds));
 }
 
-/** Bonus d'Elo (points) du champion d'un tournoi. Versé une seule fois à la finale. */
-export const TOURNAMENT_ELO_WINNER = 100;
+/**
+ * Bonus d'Elo (points) du champion d'un tournoi, selon son type (`Tournament.kind`).
+ * Versé une seule fois à la finale. Les officiels « comptent double » : un tournoi
+ * officiel rapporte 100 au vainqueur, un amical seulement 50. Les paliers inférieurs
+ * sont interpolés sur ce plafond → ils se répartissent en conséquence (cf.
+ * `tournamentEloReward`).
+ */
+export const TOURNAMENT_ELO_WINNER_OFFICIAL = 100;
+export const TOURNAMENT_ELO_WINNER_FRIENDLY = 50;
+
+/** Plafond d'Elo (gain du champion) d'un tournoi selon son `kind`. */
+export function tournamentEloMax(kind: string): number {
+  return kind === 'official' ? TOURNAMENT_ELO_WINNER_OFFICIAL : TOURNAMENT_ELO_WINNER_FRIENDLY;
+}
+
+/** @deprecated Utiliser `tournamentEloMax(kind)`. Conservé = plafond officiel (100). */
+export const TOURNAMENT_ELO_WINNER = TOURNAMENT_ELO_WINNER_OFFICIAL;
 
 /**
  * Bonus d'Elo gagné par un participant au terme d'un tournoi, selon le palier

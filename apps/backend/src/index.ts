@@ -18,6 +18,7 @@ import {
   betPayout,
   cashPrizeForRounds,
   tournamentEloReward,
+  tournamentEloMax,
   DEFAULT_BET_FINAL_MULT,
   BET_FINAL_MULT_MIN,
   BET_FINAL_MULT_MAX,
@@ -26,6 +27,7 @@ import {
   LeagueMatchCreateSchema,
   TournamentEditScoreSchema,
   LeagueFinalizeSchema,
+  LeagueQualifyCountSchema,
   SetTitleSchema,
   DeclareOpsSchema,
   FeatureRequestSchema,
@@ -4717,16 +4719,76 @@ async function assertRegisterablePartner(tx: TxOrPrisma, login: string): Promise
   }
 }
 
-// Génère les matchs au démarrage : phase de poules (format 'pools') ou bracket à
-// élimination directe (format 'elimination', byes inclus si nécessaire). Le format
-// 'league' ne génère RIEN — l'admin compose les affiches lui-même (cf. route
-// POST /tournaments/:id/league/matches).
+// Crée toutes les affiches ALLER manquantes d'un round-robin de ligue (chaque paire
+// d'équipes s'affronte une fois). Idempotent : ne recrée jamais une paire déjà
+// composée (peu importe le sens A/B ou la manche). En 2v2, `logins` = capitaines
+// (chaque entrée est une équipe distincte → un capitaine n'affronte jamais son
+// binôme, qui n'est pas un login d'entrée). Renvoie le nombre d'affiches créées.
+async function ensureLeagueRoundRobin(
+  tx: TxOrPrisma,
+  tournamentId: string,
+  logins: string[],
+): Promise<number> {
+  const existing = await tx.tournamentMatch.findMany({
+    where: { tournamentId, stage: 'league' },
+    select: { playerALogin: true, playerBLogin: true },
+  });
+  // Clé non-ordonnée d'une paire déjà composée (toutes manches confondues).
+  const pairKey = (a: string, b: string) => [a, b].sort().join(' ');
+  const seen = new Set(
+    existing
+      .filter((m) => m.playerALogin && m.playerBLogin)
+      .map((m) => pairKey(m.playerALogin!, m.playerBLogin!)),
+  );
+  const agg = await tx.tournamentMatch.aggregate({
+    where: { tournamentId, round: 0 },
+    _max: { slot: true },
+  });
+  let slot = (agg._max.slot ?? -1) + 1;
+  const data: Array<{
+    id: string;
+    tournamentId: string;
+    stage: string;
+    poolIndex: number;
+    round: number;
+    slot: number;
+    playerALogin: string;
+    playerBLogin: string;
+  }> = [];
+  for (let i = 0; i < logins.length; i++) {
+    for (let j = i + 1; j < logins.length; j++) {
+      const a = logins[i]!;
+      const b = logins[j]!;
+      if (seen.has(pairKey(a, b))) continue;
+      data.push({
+        id: randomUUID(),
+        tournamentId,
+        stage: 'league',
+        poolIndex: 0,
+        round: 0,
+        slot: slot++,
+        playerALogin: a,
+        playerBLogin: b,
+      });
+    }
+  }
+  if (data.length) await tx.tournamentMatch.createMany({ data });
+  return data.length;
+}
+
+// Génère les matchs au démarrage : phase de poules (format 'pools'), bracket à
+// élimination directe (format 'elimination', byes inclus si nécessaire) ou, pour la
+// ligue, le round-robin complet des affiches ALLER (proposées d'office ; l'admin
+// peut en supprimer / en composer d'autres, et déclencher les retours à la main).
 async function launchTournamentMatches(
   tournamentId: string,
   format: string,
   logins: string[],
 ): Promise<void> {
-  if (format === 'league') return;
+  if (format === 'league') {
+    await ensureLeagueRoundRobin(prisma, tournamentId, logins);
+    return;
+  }
   if (format === 'pools') await generatePools(tournamentId, logins);
   else await generateBracket(tournamentId, logins);
 }
@@ -4740,8 +4802,9 @@ async function launchTournamentMatches(
 // Renvoie le même objet de résultat que la route confirm (emits/notifs APRÈS commit).
 /**
  * Crédite le bonus d'Elo de fin de tournoi à TOUS les participants, selon le
- * palier atteint (champion +100, sorti en qualif 0, paliers interpolés — cf.
- * `tournamentEloReward`). Appelé une seule fois, au settlement de la finale.
+ * palier atteint (champion `maxReward`, sorti en qualif 0, paliers interpolés — cf.
+ * `tournamentEloReward`). `maxReward` dépend du type : 100 pour un officiel, 50 pour
+ * un amical (cf. `tournamentEloMax`). Appelé une seule fois, au settlement de la finale.
  *
  * Le palier d'un joueur se déduit du bracket : nombre de matchs de bracket gagnés
  * (byes inclus) et présence dans le bracket (= a franchi poules/ligue). En 2v2 le
@@ -4753,6 +4816,7 @@ async function awardTournamentElo(
   format: string,
   game: GameId,
   totalBracketRounds: number,
+  maxReward: number,
 ): Promise<void> {
   const entries = await tx.tournamentEntry.findMany({
     where: { tournamentId: id },
@@ -4776,6 +4840,7 @@ async function awardTournamentElo(
       qualified: inBracket.has(e.login),
       bracketRoundsWon: roundsWon.get(e.login) ?? 0,
       totalBracketRounds,
+      max: maxReward,
     });
     if (reward <= 0) continue;
     const members = e.partnerLogin ? [e.login, e.partnerLogin] : [e.login];
@@ -4912,9 +4977,16 @@ async function settleConfirmedTournamentMatch(
       },
       select: { game: true, format: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
     });
-    // Bonus d'Elo de fin de tournoi à tous les participants (champion +100, sortis
-    // en qualif 0, paliers interpolés). Indépendant des récompenses coins/cosmétiques.
-    await awardTournamentElo(tx, id, tour.format, parseGameId(tour.game), totalBracketRounds);
+    // Bonus d'Elo de fin de tournoi à tous les participants (champion 100 officiel /
+    // 50 amical, sortis en qualif 0, paliers interpolés). Indépendant des coins/cosmétiques.
+    await awardTournamentElo(
+      tx,
+      id,
+      tour.format,
+      parseGameId(tour.game),
+      totalBracketRounds,
+      tournamentEloMax(tour.kind),
+    );
     // Membres de l'équipe gagnante : capitaine seul (1v1) ou + coéquipier (2v2).
     const winEntry = await tx.tournamentEntry.findUnique({
       where: { tournamentId_login: { tournamentId: id, login: winnerLogin } },
@@ -5766,8 +5838,12 @@ app.post('/tournaments/:id/league/finalize', async (c) => {
     if (leagueMatches.length === 0) {
       throw new HTTPException(409, { message: 'aucun match de ligue à classer' });
     }
-    if (leagueMatches.some((m) => !m.confirmedAt)) {
-      throw new HTTPException(409, { message: 'tous les matchs de ligue doivent être confirmés' });
+    // Bascule anticipée autorisée : on n'exige PAS que tous les matchs soient joués.
+    // Les affiches non confirmées sont simplement IGNORÉES du classement (elles
+    // restent dans l'historique de ligue, marquées « non joué »). Il faut juste
+    // qu'au moins une confrontation ait été tranchée pour pouvoir classer.
+    if (!leagueMatches.some((m) => m.confirmedAt)) {
+      throw new HTTPException(409, { message: 'aucun match de ligue confirmé à classer' });
     }
     const qualifiers = leagueQualifiers(leagueMatches, qualifyCount);
     if (qualifiers.length < qualifyCount) {
@@ -5776,6 +5852,9 @@ app.post('/tournaments/:id/league/finalize', async (c) => {
       });
     }
     await generateBracket(id, qualifiers, { preSeeded: true });
+    // Mémorise le nombre de qualifiés effectivement utilisé (cohérent avec la
+    // surbrillance du classement et une éventuelle re-finalisation après undo).
+    await tx.tournament.update({ where: { id }, data: { leagueQualifyCount: qualifyCount } });
     // Paris progressifs : les non-qualifiés n'ont franchi aucun tour de bracket →
     // perdus (sinon leurs paris resteraient « open » à jamais).
     const qualSet = new Set(qualifiers);
@@ -5811,6 +5890,135 @@ app.post('/tournaments/:id/league/finalize', async (c) => {
     payload: { forced: 'league-finalize', tournamentId: id, qualifyCount },
   });
   return c.json({ id, finalized: true, qualifyCount });
+});
+
+// Admin/officiant : règle le nombre d'équipes qualifiées pour la phase finale et le
+// PERSISTE sur le tournoi (modifiable à tout moment tant que la ligue est ouverte).
+// La surbrillance du classement (côté front) le reflète en direct. Nombre libre ≥ 2.
+app.post('/tournaments/:id/league/qualify-count', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  await assertLeagueOfficiant(me, id);
+  const body = await c.req.json().catch(() => null);
+  const parsed = LeagueQualifyCountSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { qualifyCount } = parsed.data;
+  await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, { message: 'la phase de ligue est terminée (bracket généré)' });
+    }
+    await tx.tournament.update({ where: { id }, data: { leagueQualifyCount: qualifyCount } });
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, leagueQualifyCount: qualifyCount });
+});
+
+// Admin/officiant : (re)génère les affiches ALLER manquantes du round-robin. Sert de
+// filet si des affiches ont été supprimées par erreur (idempotent — ne touche pas
+// aux affiches existantes ni aux scores). Sans objet une fois le bracket généré.
+app.post('/tournaments/:id/league/generate', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  await assertLeagueOfficiant(me, id);
+  const created = await prisma.$transaction(async (tx) => {
+    if (await leaguePhaseClosed(tx, id)) {
+      throw new HTTPException(409, { message: 'la phase de ligue est terminée (bracket généré)' });
+    }
+    const entries = await tx.tournamentEntry.findMany({
+      where: { tournamentId: id },
+      select: { login: true },
+    });
+    return ensureLeagueRoundRobin(tx, id, entries.map((e) => e.login));
+  });
+  broadcast({ type: 'tournament:update', payload: {} });
+  return c.json({ id, created });
+});
+
+// Admin/officiant : ANNULE la bascule en phase finale et revient à la phase de ligue
+// (correction d'une erreur de qualifiés). N'est possible QUE tant qu'aucun match de
+// bracket n'a vraiment commencé (pas de score saisi, ni pile-ou-face, ni match
+// désigné « suivant ») — les byes auto-confirmés à la génération ne comptent pas.
+// On efface tout le bracket et on rouvre la ligue (les affiches de ligue, joués comme
+// non joués, sont intactes) ; les paris « vainqueur du tournoi » réglés perdants à la
+// finalisation repassent « open » (mise re-immobilisée, aucun débit puisque payout 0).
+app.post('/tournaments/:id/league/undo-finalize', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const t = await assertLeagueOfficiant(me, id);
+  const reopened = await prisma.$transaction(async (tx) => {
+    const bracket = await tx.tournamentMatch.findMany({
+      where: { tournamentId: id, stage: 'bracket' },
+      select: {
+        id: true,
+        playerALogin: true,
+        playerBLogin: true,
+        scoreA: true,
+        confirmedAt: true,
+        tossWinnerLogin: true,
+      },
+    });
+    if (bracket.length === 0) {
+      throw new HTTPException(409, { message: 'aucune phase finale à annuler' });
+    }
+    // Un match « entamé » = un duel (2 joueurs présents) avec score saisi, confirmé,
+    // ou pile-ou-face lancé. Les byes (un seul joueur, confirmés d'office) sont exclus.
+    const started = bracket.some(
+      (m) =>
+        m.playerALogin != null &&
+        m.playerBLogin != null &&
+        (m.scoreA != null || m.confirmedAt != null || m.tossWinnerLogin != null),
+    );
+    const tour = await tx.tournament.findUnique({
+      where: { id },
+      select: { activeMatchId: true, status: true },
+    });
+    if (started || tour?.activeMatchId || tour?.status !== 'in_progress') {
+      throw new HTTPException(409, {
+        message: 'la phase finale a déjà commencé — impossible de revenir en arrière',
+      });
+    }
+    await tx.tournamentMatch.deleteMany({ where: { tournamentId: id, stage: 'bracket' } });
+    // Rouvre les paris « vainqueur du tournoi » réglés à la finalisation (non-qualifiés
+    // marqués perdants → 'open'). Débit clampé du payout éventuel (0 ici par construction).
+    const settled = await tx.bet.findMany({
+      where: { targetType: 'tournament', tournamentId: id, status: { in: ['won', 'lost'] } },
+    });
+    const touched = new Set<string>();
+    for (const b of settled) {
+      if (b.payout > 0) {
+        await grantCoinsTx(tx, b.bettorLogin, -b.payout);
+        touched.add(b.bettorLogin);
+      }
+      await tx.bet.update({
+        where: { id: b.id },
+        data: { status: 'open', payout: 0, settledAt: null },
+      });
+    }
+    return [...touched];
+  });
+  if (reopened.length) emit(reopened, { type: 'panel:update', payload: {} });
+  void notifyMany(
+    (await prisma.tournamentEntry.findMany({ where: { tournamentId: id }, select: { login: true } })).map(
+      (p) => p.login,
+    ),
+    {
+      type: 'tournament',
+      title: 'Phase finale annulée',
+      body: 'Retour à la phase de ligue — le classement et les affiches sont rouverts.',
+      link: `/tournaments/${id}`,
+      game: t.game,
+    },
+  );
+  broadcast({ type: 'tournament:update', payload: {} });
+  broadcast({ type: 'leaderboard:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: t.createdByLogin,
+    payload: { forced: 'league-undo-finalize', tournamentId: id },
+  });
+  return c.json({ id, undone: true });
 });
 
 // Re-tirage du bracket — le créateur OU un admin relance le tirage au sort tant

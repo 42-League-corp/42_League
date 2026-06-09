@@ -4,7 +4,10 @@ import {
   betPayout,
   cashPrizeForRounds,
   tournamentEloReward,
+  tournamentEloMax,
   TOURNAMENT_ELO_WINNER,
+  TOURNAMENT_ELO_WINNER_OFFICIAL,
+  TOURNAMENT_ELO_WINNER_FRIENDLY,
   DEFAULT_BET_FINAL_MULT,
 } from './tournament-economy.js';
 
@@ -121,5 +124,25 @@ describe('tournamentEloReward', () => {
 
   it('borne les tours gagnés au total du bracket', () => {
     expect(tournamentEloReward({ format: 'elimination', qualified: true, bracketRoundsWon: 9, totalBracketRounds: 3 })).toBe(100);
+  });
+
+  describe('plafond selon le type (officiel 100 / amical 50)', () => {
+    it('tournamentEloMax mappe le kind', () => {
+      expect(TOURNAMENT_ELO_WINNER_OFFICIAL).toBe(100);
+      expect(TOURNAMENT_ELO_WINNER_FRIENDLY).toBe(50);
+      expect(tournamentEloMax('official')).toBe(100);
+      expect(tournamentEloMax('friendly')).toBe(50);
+      expect(tournamentEloMax('autre')).toBe(50); // défaut = amical
+    });
+
+    it('amical : champion → 50, paliers redispersés en conséquence (bracket de 16)', () => {
+      const amical = (k: number) =>
+        tournamentEloReward({ format: 'elimination', qualified: true, bracketRoundsWon: k, totalBracketRounds: 4, max: 50 });
+      expect(amical(4)).toBe(50); // champion
+      expect(amical(3)).toBe(38); // finaliste — round(50·3/4)=37.5→38
+      expect(amical(2)).toBe(25); // demi
+      expect(amical(1)).toBe(13); // 1 tour — round(50·1/4)=12.5→13
+      expect(amical(0)).toBe(0);
+    });
   });
 });

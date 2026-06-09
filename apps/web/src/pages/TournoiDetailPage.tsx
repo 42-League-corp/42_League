@@ -21,7 +21,7 @@ import { useFlash } from '../hooks/useFlash';
 import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
-import { tournamentEloReward, TOURNAMENT_ELO_WINNER } from '@42-league/shared';
+import { tournamentEloReward, tournamentEloMax } from '@42-league/shared';
 
 // Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
 const GAME_ACCENT: Record<Game, string> = {
@@ -1096,13 +1096,31 @@ function LeagueSection({
   const [teamB, setTeamB] = useState('');
   const [leg, setLeg] = useState<0 | 1>(0);
   const [adding, setAdding] = useState(false);
-  // Nombre de qualifiés (puissance de 2) — défaut : plus grande puissance de 2 ≤ classés.
-  const [qualifyCount, setQualifyCount] = useState(() => largestPow2AtMost(standings.length || 2));
+  const [generating, setGenerating] = useState(false);
+  // Nombre d'équipes qualifiées en phase finale — nombre LIBRE (≥ 2), persisté sur le
+  // tournoi et modifiable à tout moment. Défaut : valeur enregistrée, sinon plus grande
+  // puissance de 2 ≤ nombre de classés.
+  const [qualifyCount, setQualifyCount] = useState(
+    () => tournament.leagueQualifyCount ?? largestPow2AtMost(standings.length || 2),
+  );
   const [finalizing, setFinalizing] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  // Resynchronise si la valeur persistée change (autre admin, reload SSE).
+  useEffect(() => {
+    if (tournament.leagueQualifyCount != null) setQualifyCount(tournament.leagueQualifyCount);
+  }, [tournament.leagueQualifyCount]);
 
-  // Matchs séparés par manche (aller / retour) pour l'affichage en sections.
-  const allerMatches = matches.filter((m) => (m.poolIndex ?? 0) === 0);
-  const retourMatches = matches.filter((m) => (m.poolIndex ?? 0) === 1);
+  // Clé non-ordonnée d'une affiche (paire d'équipes, sens A/B indifférent).
+  const pairKey = (m: TournamentMatch) =>
+    [m.playerALogin ?? '', m.playerBLogin ?? ''].sort().join(' ');
+  // Partition : affiches jouables (2 équipes), séparées « à jouer » / « jouées ».
+  const playable = matches.filter((m) => m.playerALogin && m.playerBLogin);
+  const pending = playable.filter((m) => !m.confirmedAt);
+  const played = playable.filter((m) => m.confirmedAt);
+  // Paires ayant déjà un retour composé (pour masquer le bouton « demander un retour »).
+  const retourPairs = new Set(
+    matches.filter((m) => (m.poolIndex ?? 0) === 1).map((m) => pairKey(m)),
+  );
 
   // Le classement est calculé par capitaine ; on remonte au duo pour l'affichage
   // (en 2v2, une ligne = une équipe, pas un joueur seul).
@@ -1112,22 +1130,27 @@ function LeagueSection({
     [teams],
   );
 
-  // Choix possibles de qualifiés : puissances de 2 de 2 jusqu'au nombre de classés.
-  const qualifyChoices: number[] = [];
-  for (let p = 2; p <= standings.length; p *= 2) qualifyChoices.push(p);
-  const effectiveQualify = qualifyChoices.includes(qualifyCount)
-    ? qualifyCount
-    : qualifyChoices[qualifyChoices.length - 1] ?? 2;
+  // Nombre de qualifiés visé (libre, borné 2..64). La surbrillance du classement se
+  // limite au nombre d'équipes réellement classées (matchs confirmés).
+  const rankedCount = standings.length;
+  const effectiveQualify = Math.min(64, Math.max(2, qualifyCount || 2));
+  const highlightQualify = Math.min(effectiveQualify, rankedCount);
+  // Finalisation possible dès qu'au moins 2 équipes sont classées et qu'on ne demande
+  // pas plus de qualifiés qu'il n'y a de classés.
+  const canFinalize = rankedCount >= 2 && effectiveQualify <= rankedCount;
 
   // ── Gains projetés (temps réel) ──
   // Bonus Elo minimal sécurisé en se qualifiant (palier qualification d'un format
-  // ligue), et bonus du champion (TOURNAMENT_ELO_WINNER). Recalculé à chaque score.
+  // ligue), et bonus du champion (plafond selon le type : 100 officiel / 50 amical).
+  // Recalculé à chaque score.
+  const eloMax = tournamentEloMax(tournament.kind);
   const projectedRounds = Math.max(1, Math.round(Math.log2(effectiveQualify)));
   const securedQualElo = tournamentEloReward({
     format: 'league',
     qualified: true,
     bracketRoundsWon: 0,
     totalBracketRounds: projectedRounds,
+    max: eloMax,
   });
   // Libellé du prix unique au champion (officiels) : coins ou cosmétique.
   const championPrize =
@@ -1166,11 +1189,24 @@ function LeagueSection({
     }
   };
 
+  // Persiste le nombre de qualifiés (au blur de l'input) — sans bloquer l'UI.
+  const persistQualify = (n: number) => {
+    const clamped = Math.min(64, Math.max(2, n || 2));
+    setQualifyCount(clamped);
+    if (clamped === tournament.leagueQualifyCount) return;
+    void api.setLeagueQualifyCount(tournament.id, clamped).then(onChange).catch((err) => {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    });
+  };
+
   const handleFinalize = async () => {
+    // Avertit si on bascule alors que des affiches ne sont pas jouées (elles seront
+    // ignorées du classement mais conservées en historique « non joué »).
+    const warning = pending.length > 0 ? t('tournois.league.finalizeEarly') : t('tournois.league.finalize.warning');
     const ok = await confirm({
       title: t('tournois.league.finalize.title'),
       message: t('tournois.league.finalize.message').replace('{n}', String(effectiveQualify)),
-      warning: t('tournois.league.finalize.warning'),
+      warning,
       confirmLabel: t('tournois.league.finalize.confirm'),
       cancelLabel: t('tournois.league.finalize.cancel'),
     });
@@ -1184,6 +1220,56 @@ function LeagueSection({
       flash.show(err instanceof Error ? err.message : String(err), 'error');
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  // Demande un match retour sur une affiche déjà jouée (admin/organisateur) : crée la
+  // manche retour → elle apparaît dans « à jouer » (pile-ou-face puis score).
+  const handleRequestReturn = async (m: TournamentMatch) => {
+    if (!m.playerALogin || !m.playerBLogin) return;
+    try {
+      await api.addLeagueMatch(tournament.id, m.playerALogin, m.playerBLogin, 1);
+      flash.show(t('tournois.league.returnAdded'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
+  // (Re)génère les affiches aller manquantes du round-robin.
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await api.generateLeagueSchedule(tournament.id);
+      flash.show(res.created > 0 ? t('tournois.league.generated') : t('tournois.league.allScheduled'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Annule la bascule en phase finale et rouvre la ligue (correction d'erreur).
+  const handleUndo = async () => {
+    const ok = await confirm({
+      title: t('tournois.league.undo.title'),
+      message: t('tournois.league.undo.message'),
+      warning: t('tournois.league.undo.warning'),
+      confirmLabel: t('tournois.league.undo.confirm'),
+      cancelLabel: t('tournois.league.undo.cancel'),
+      danger: true,
+    });
+    if (!ok) return;
+    setUndoing(true);
+    try {
+      await api.undoFinalizeLeague(tournament.id);
+      flash.show(t('tournois.league.undone'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -1213,7 +1299,7 @@ function LeagueSection({
             </thead>
             <tbody>
               {standings.map((s, i) => {
-                const qualified = editable && i < effectiveQualify;
+                const qualified = editable && i < highlightQualify;
                 const team = teamByCaptain.get(s.login);
                 const members = team?.members ?? [s.login];
                 const isMine = team?.members.includes(myLogin ?? '') ?? false;
@@ -1253,7 +1339,7 @@ function LeagueSection({
                         <span className="text-muted-2 text-[11px]">{t('tournois.league.gainNone')}</span>
                       ) : i === 0 ? (
                         <span className="text-gold font-bold text-[11px]" title={championPrize ?? undefined}>
-                          🏆 +{TOURNAMENT_ELO_WINNER}
+                          🏆 +{eloMax}
                           {championPrize ? ` · ${championPrize}` : ''}
                         </span>
                       ) : (
@@ -1326,85 +1412,182 @@ function LeagueSection({
               {t('tournois.league.add')}
             </Button>
           </div>
+          {/* Filet : recrée les affiches aller manquantes du round-robin (idempotent). */}
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={generating}
+            className="w-full text-[11px] font-semibold text-muted-2 hover:text-text-strong border border-border/60 hover:border-gold/40 rounded-lg py-1.5 transition-colors disabled:opacity-50"
+          >
+            {t('tournois.league.generateMissing')}
+          </button>
         </div>
       )}
 
-      {/* Matchs par manche (aller puis retour). Pas de notion de journée. */}
-      {matches.length > 0 && (
-        <div className="space-y-4">
-          {([
-            { leg: 0 as const, label: t('tournois.league.legFirst'), list: allerMatches },
-            { leg: 1 as const, label: t('tournois.league.legReturn'), list: retourMatches },
-          ]).filter((g) => g.list.length > 0).map((g) => (
-            <div key={g.leg} className="rounded-xl border border-border bg-bg-2/30 overflow-hidden">
-              <div className="px-3 py-2 bg-bg-2/60 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-text-strong">
-                {g.label}
+      {/* ── À jouer ── Affiches prêtes (round-robin auto + retours demandés) : pile-ou-face
+          puis saisie du score. Le retour porte un badge « Retour ». */}
+      {editable && pending.length > 0 && (
+        <div className="rounded-xl border border-gold/25 bg-bg-2/30 overflow-hidden mb-4">
+          <div className="px-3 py-2 bg-gold/[0.07] border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-gold flex items-center justify-between">
+            <span>{t('tournois.league.toPlay')}</span>
+            <span className="text-muted-2 tabular-nums font-mono">{pending.length}</span>
+          </div>
+          <div className="p-2.5 space-y-2">
+            {pending.map((m) => (
+              <div key={m.id} className="relative">
+                {(m.poolIndex ?? 0) === 1 && (
+                  <span className="absolute -top-1 left-2 z-10 px-1.5 py-0.5 rounded bg-bg-1 border border-border/60 text-[9px] font-bold uppercase tracking-wider text-muted-2">
+                    {t('tournois.league.legReturn')}
+                  </span>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(m.id)}
+                    title={t('tournois.league.deleteMatch')}
+                    className="absolute -top-1 -right-1 z-10 w-5 h-5 rounded-full bg-red/80 text-white text-xs font-bold flex items-center justify-center hover:bg-red"
+                  >
+                    ×
+                  </button>
+                )}
+                <BracketMatch
+                  tournament={tournament}
+                  match={m}
+                  myLogin={myLogin}
+                  canOfficiate={canOfficiate}
+                  onChange={onChange}
+                />
               </div>
-              <div className="p-2.5 space-y-2">
-                {g.list.map((m) => (
-                  <div key={m.id} className="relative">
-                    {canManage && editable && !m.confirmedAt && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(m.id)}
-                        title={t('tournois.league.deleteMatch')}
-                        className="absolute -top-1 -right-1 z-10 w-5 h-5 rounded-full bg-red/80 text-white text-xs font-bold flex items-center justify-center hover:bg-red"
-                      >
-                        ×
-                      </button>
-                    )}
-                    <BracketMatch
-                      tournament={tournament}
-                      match={m}
-                      myLogin={myLogin}
-                      canOfficiate={canOfficiate}
-                      onChange={onChange}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Bascule en phase finale (admin) : sélection du nombre de qualifiés. */}
+      {/* ── Résultats ── Affiches jouées : score figé, édition admin (ligue ouverte) et
+          bouton « demander un match retour » sur les allers sans retour. */}
+      {played.length > 0 && (
+        <div className="rounded-xl border border-teal/25 bg-bg-2/30 overflow-hidden mb-4">
+          <div className="px-3 py-2 bg-teal/[0.06] border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-teal flex items-center justify-between">
+            <span>{t('tournois.league.played')}</span>
+            <span className="text-muted-2 tabular-nums font-mono">{played.length}</span>
+          </div>
+          <div className="p-2.5 space-y-2">
+            {played.map((m) => {
+              const isAller = (m.poolIndex ?? 0) === 0;
+              const canAskReturn = canManage && editable && isAller && !retourPairs.has(pairKey(m));
+              return (
+                <div key={m.id} className="relative">
+                  {!isAller && (
+                    <span className="absolute -top-1 left-2 z-10 px-1.5 py-0.5 rounded bg-bg-1 border border-border/60 text-[9px] font-bold uppercase tracking-wider text-muted-2">
+                      {t('tournois.league.legReturn')}
+                    </span>
+                  )}
+                  <BracketMatch
+                    tournament={tournament}
+                    match={m}
+                    myLogin={myLogin}
+                    canOfficiate={editable && canOfficiate}
+                    onChange={onChange}
+                  />
+                  {canAskReturn && (
+                    <button
+                      type="button"
+                      onClick={() => handleRequestReturn(m)}
+                      className="mt-1.5 w-full text-[11px] font-semibold text-muted-2 hover:text-gold border border-border/60 hover:border-gold/40 rounded-lg py-1.5 transition-colors"
+                    >
+                      ↩ {t('tournois.league.requestReturn')}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Non joués ── Après bascule : affiches jamais disputées (ignorées du classement). */}
+      {!editable && pending.length > 0 && (
+        <div className="rounded-xl border border-border bg-bg-2/20 overflow-hidden mb-4 opacity-70">
+          <div className="px-3 py-2 bg-bg-2/50 border-b border-border/50 text-[11px] font-extrabold uppercase tracking-wider text-muted-2 flex items-center justify-between">
+            <span>{t('tournois.league.notPlayed')}</span>
+            <span className="tabular-nums font-mono">{pending.length}</span>
+          </div>
+          <div className="p-2.5 space-y-1">
+            {pending.map((m) => {
+              const lbl = (login: string | null) => {
+                const tm = login ? teamByCaptain.get(login) : null;
+                return tm ? leagueTeamLabel(tm) : (login ?? '—');
+              };
+              return (
+                <div key={m.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-bg-2/40">
+                  <span className="truncate">
+                    {lbl(m.playerALogin)} <span className="text-muted-2">vs</span> {lbl(m.playerBLogin)}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-2 shrink-0 ml-2">
+                    {t('tournois.league.notPlayed')}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Bascule en phase finale (admin) : nombre LIBRE de qualifiés, modifiable à tout
+          moment et persisté. Autorisée même avec des matchs non joués (ignorés). */}
       {canManage && editable && (
-        <div className="mt-4 p-3 rounded-xl border border-teal/25 bg-teal/[0.05]">
-          <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold mb-2">
+        <div className="mt-4 p-3 rounded-xl border border-teal/25 bg-teal/[0.05] space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-teal font-extrabold">
             {t('tournois.league.toKnockout')}
           </div>
-          {qualifyChoices.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-[11px] text-muted-2 uppercase tracking-wider font-semibold">
-                {t('tournois.league.qualifyCount')}
-              </label>
-              <select
-                value={effectiveQualify}
-                onChange={(e) => setQualifyCount(Number(e.target.value))}
-                className="px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none tabular-nums"
-              >
-                {qualifyChoices.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                loading={finalizing}
-                onClick={handleFinalize}
-                disabled={matchCount === 0 || !complete}
-              >
-                {t('tournois.league.finalizeCta')}
-              </Button>
-              {matchCount > 0 && !complete && (
-                <span className="text-[11px] text-muted-2">{t('tournois.league.pendingMatches')}</span>
-              )}
-            </div>
-          ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] text-muted-2 uppercase tracking-wider font-semibold">
+              {t('tournois.league.qualifyCount')}
+            </label>
+            <input
+              type="number"
+              min={2}
+              max={64}
+              value={qualifyCount}
+              onChange={(e) => setQualifyCount(Number(e.target.value))}
+              onBlur={(e) => persistQualify(Number(e.target.value))}
+              className="w-20 px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-sm focus:border-gold outline-none tabular-nums"
+            />
+            <Button
+              size="sm"
+              loading={finalizing}
+              onClick={handleFinalize}
+              disabled={!canFinalize || matchCount === 0}
+            >
+              {t('tournois.league.finalizeCta')}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-2">{t('tournois.league.qualifyHint')}</p>
+          {rankedCount < 2 && (
             <p className="text-[11px] text-muted-2">{t('tournois.league.needMorePlayers')}</p>
           )}
+          {rankedCount >= 2 && effectiveQualify > rankedCount && (
+            <p className="text-[11px] text-gold">
+              {t('tournois.league.qualifyCount')} &gt; {rankedCount}
+            </p>
+          )}
+          {canFinalize && !complete && (
+            <p className="text-[11px] text-muted-2">{t('tournois.league.pendingMatches')}</p>
+          )}
+        </div>
+      )}
+
+      {/* Revenir en arrière depuis la phase finale (admin) : efface le bracket et rouvre la
+          ligue (possible tant qu'aucun match de la finale n'a commencé). */}
+      {canManage && !editable && tournament.status === 'in_progress' && (
+        <div className="mt-4 p-3 rounded-xl border border-gold/25 bg-gold/[0.05]">
+          <div className="text-[10px] uppercase tracking-wider text-gold font-extrabold mb-2">
+            {t('tournois.league.undoFinalize')}
+          </div>
+          <Button size="sm" variant="ghost" loading={undoing} onClick={handleUndo}>
+            ↩ {t('tournois.league.undoFinalize')}
+          </Button>
+          <p className="text-[10px] text-muted-2 mt-1.5">{t('tournois.league.undo.warning')}</p>
         </div>
       )}
     </section>
@@ -1548,9 +1731,11 @@ function BracketMatch({
   const iAmIn = !!(myLogin && (match.playerALogin === myLogin || match.playerBLogin === myLogin));
   const recorded = match.recordedByLogin != null && match.scoreA != null && match.scoreB != null;
   const iRecorded = recorded && match.recordedByLogin === myLogin;
-  // Officiant non-joueur : saisit le score d'autorité (force-result, validé direct)
-  // au lieu du double-aveugle record/confirm réservé aux 2 joueurs.
-  const officiating = canOfficiate && !iAmIn;
+  // Officiant (admin/organisateur) : saisit le score d'autorité (force-result, validé
+  // direct) au lieu du double-aveugle record/confirm — y compris s'il joue lui-même
+  // le match (un score saisi par un admin compte immédiatement, sans confirmation
+  // adverse, depuis la page tournoi).
+  const officiating = canOfficiate;
 
   const canRecord =
     tournament.status === 'in_progress' &&

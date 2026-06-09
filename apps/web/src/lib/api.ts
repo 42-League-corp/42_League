@@ -762,6 +762,8 @@ export interface Tournament {
   betFinalMult?: number;
   /** Cash-prize (coins) du champion d'un officiel ; paliers dérivés. null = aucun. */
   cashPrizeBase?: number | null;
+  /** Ligue : nb d'équipes qualifiées en phase finale (persistant, modifiable). null = défaut UI. */
+  leagueQualifyCount?: number | null;
 }
 
 /** Récompense passée à la création d'un tournoi officiel (cf. backend). */
@@ -1378,11 +1380,31 @@ export const api = {
       `/tournaments/${encodeURIComponent(tournamentId)}/league/matches/${encodeURIComponent(matchId)}`,
       { method: 'DELETE' },
     ),
-  // Bascule la ligue en élimination directe : les `qualifyCount` premiers au goal average.
+  // Bascule la ligue en élimination directe : les `qualifyCount` premiers au goal
+  // average (nombre LIBRE ≥ 2 — le bracket gère les byes). Autorisée même si tous les
+  // matchs ne sont pas joués (les non-joués sont ignorés du classement).
   finalizeLeague: (tournamentId: string, qualifyCount: number) =>
     request<{ id: string; finalized: true; qualifyCount: number }>(
       `/tournaments/${encodeURIComponent(tournamentId)}/league/finalize`,
       { method: 'POST', body: JSON.stringify({ qualifyCount }) },
+    ),
+  // Persiste le nombre d'équipes qualifiées en phase finale (modifiable au fil de la ligue).
+  setLeagueQualifyCount: (tournamentId: string, qualifyCount: number) =>
+    request<{ id: string; leagueQualifyCount: number }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/qualify-count`,
+      { method: 'POST', body: JSON.stringify({ qualifyCount }) },
+    ),
+  // (Re)génère les affiches aller manquantes du round-robin (idempotent).
+  generateLeagueSchedule: (tournamentId: string) =>
+    request<{ id: string; created: number }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/generate`,
+      { method: 'POST' },
+    ),
+  // Annule la bascule en phase finale et rouvre la ligue (si le bracket n'a pas commencé).
+  undoFinalizeLeague: (tournamentId: string) =>
+    request<{ id: string; undone: true }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/league/undo-finalize`,
+      { method: 'POST' },
     ),
   locations: () => request<Record<string, string>>('/locations'),
   health: () => request<{ ok: boolean }>('/health', {}, { auth: false }),

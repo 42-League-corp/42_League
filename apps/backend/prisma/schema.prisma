@@ -345,6 +345,12 @@ model Tournament {
   // cash-prize (amicaux, ou officiel sans dotation).
   cashPrizeBase Int? @map("cash_prize_base")
 
+  // Phase de ligue : nombre d'équipes qualifiées pour la phase finale. Persistant
+  // et modifiable au fil du tournoi par l'officiant (la surbrillance du classement
+  // le reflète en direct) ; nombre LIBRE (≥ 2, pas forcément une puissance de 2 —
+  // le bracket gère les byes). null = pas encore choisi (défaut UI dérivé).
+  leagueQualifyCount Int? @map("league_qualify_count")
+
   createdBy User               @relation("tournamentCreator", fields: [createdByLogin], references: [login])
   winner    User?              @relation("tournamentWinner", fields: [winnerLogin], references: [login])
   prizeItem ShopItem?          @relation("tournamentPrize", fields: [prizeItemId], references: [id], onDelete: SetNull)

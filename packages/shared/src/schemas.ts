@@ -351,19 +351,22 @@ export const TournamentEditScoreSchema = z.object({
 export type TournamentEditScoreInput = z.infer<typeof TournamentEditScoreSchema>;
 
 // Bascule de la phase de ligue vers l'élimination directe : nombre de qualifiés
-// (puissance de 2, 2..32) → taille du bracket des premiers au goal average.
+// (nombre LIBRE 2..64) → taille du bracket des premiers au goal average. Le bracket
+// gère les byes : pas besoin d'une puissance de 2 (un nombre quelconque est admis,
+// arrondi à la puissance de 2 supérieure avec byes aux têtes de série).
 export const LeagueFinalizeSchema = z.object({
-  qualifyCount: z
-    .number()
-    .int()
-    .min(2)
-    .max(32)
-    .refine((n) => (n & (n - 1)) === 0, {
-      message: 'le nombre de qualifiés doit être une puissance de 2 (2, 4, 8, 16, 32)',
-    }),
+  qualifyCount: z.number().int().min(2).max(64),
 });
 
 export type LeagueFinalizeInput = z.infer<typeof LeagueFinalizeSchema>;
+
+// Réglage du nombre d'équipes qualifiées (persisté sur le tournoi), modifiable au
+// fil de la phase de ligue. Même borne libre que la bascule finale.
+export const LeagueQualifyCountSchema = z.object({
+  qualifyCount: z.number().int().min(2).max(64),
+});
+
+export type LeagueQualifyCountInput = z.infer<typeof LeagueQualifyCountSchema>;
 
 export const FeatureRequestSchema = z.object({
   text: z.string().min(10, 'description must be at least 10 characters').max(500),
