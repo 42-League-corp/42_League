@@ -24,7 +24,7 @@ type Dict = Record<string, string>;
 
 const fr: Dict = {
   // Topbar / nav
-  'app.console': '42 League',
+  'app.console': 'One League',
   'nav.defis': 'Défis',
   'nav.tournois': 'Tournois',
   'nav.leaderboard': 'Classement',
@@ -161,7 +161,7 @@ const fr: Dict = {
   'profil.eloEvolution': 'Évolution ELO',
   'profil.notEnoughMatches': 'Pas encore assez de matches',
   'profil.notRegistered': "n'est pas inscrit dans la league.",
-  'profil.subtitle': 'Profil 42 League',
+  'profil.subtitle': 'Profil One League',
 
   'panel.history.title': 'Historique',
   'panel.history.sub': '50 derniers matchs',
@@ -237,7 +237,7 @@ const fr: Dict = {
 };
 
 const en: Dict = {
-  'app.console': '42 League',
+  'app.console': 'One League',
   'nav.defis': 'Challenges',
   'nav.tournois': 'Tournaments',
   'nav.leaderboard': 'Leaderboard',
@@ -374,7 +374,7 @@ const en: Dict = {
   'profil.eloEvolution': 'ELO progression',
   'profil.notEnoughMatches': 'Not enough matches yet',
   'profil.notRegistered': 'is not registered in the league.',
-  'profil.subtitle': '42 League profile',
+  'profil.subtitle': 'One League profile',
 
   'panel.history.title': 'History',
   'panel.history.sub': 'Last 50 matches',
@@ -450,7 +450,7 @@ const en: Dict = {
 };
 
 const es: Dict = {
-  'app.console': '42 League',
+  'app.console': 'One League',
   'nav.defis': 'Desafíos',
   'nav.tournois': 'Torneos',
   'nav.leaderboard': 'Clasificación',
@@ -583,7 +583,7 @@ const es: Dict = {
   'profil.eloEvolution': 'Evolución ELO',
   'profil.notEnoughMatches': 'Aún no hay suficientes partidas',
   'profil.notRegistered': 'no está inscrito en la liga.',
-  'profil.subtitle': 'Perfil 42 League',
+  'profil.subtitle': 'Perfil One League',
 
   'panel.history.title': 'Historial',
   'panel.history.sub': 'Últimos 50 partidos',

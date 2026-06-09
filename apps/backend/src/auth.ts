@@ -269,7 +269,7 @@ export function createAuthRouter(
 
     return c.html(`<!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><title>42 League — connecté</title>
+<head><meta charset="utf-8"><title>One League — connecté</title>
 <style>body{font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center}</style>
 </head>
 <body>

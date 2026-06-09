@@ -1209,7 +1209,7 @@ function startLogoInjector() {
     a.href = WEB_APP_URL;
     a.target = '_blank';
     a.rel = 'noreferrer noopener';
-    a.title = 'Aller sur 42 League';
+    a.title = 'Aller sur One League';
 
     const iconDiv = document.createElement('div');
     iconDiv.id = 'league-42-icon';
@@ -1347,8 +1347,8 @@ function startUserStatsInjector() {
       a.target = '_blank';
       a.rel = 'noreferrer noopener';
       a.title = isOtherProfile
-        ? `42 League — voir la fiche de ${targetLogin}`
-        : '42 League — voir ma fiche';
+        ? `One League — voir la fiche de ${targetLogin}`
+        : 'One League — voir ma fiche';
       if (isFirst) a.dataset.dataKey = dataKey;
       a.innerHTML =
         `<span class="l42-label">${label}</span>` +
@@ -1357,7 +1357,7 @@ function startUserStatsInjector() {
     };
 
     container.append(
-      mkStat('elo', '<span class="l42-icon">⚔</span>42 League', String(target.elo), true),
+      mkStat('elo', '<span class="l42-icon">⚔</span>One League', String(target.elo), true),
       mkStat('rank', 'Rang', `#${target.rank}`),
       mkStat(
         'record',

@@ -33,7 +33,7 @@ function titleFor(pathname: string): string {
   for (const [route, title] of Object.entries(ROUTE_TITLE)) {
     if (pathname.startsWith(`${route}/`)) return title;
   }
-  return '42 League';
+  return 'One League';
 }
 
 export function MobileHeader() {

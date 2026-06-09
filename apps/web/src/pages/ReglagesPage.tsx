@@ -190,7 +190,7 @@ export function ReglagesPage() {
         {/* Version */}
         <div className="border-t border-gold/10 pt-4 flex items-center justify-between">
           <span className="font-gaming text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold/50">
-            42 League
+            One League
           </span>
           <div className="text-right leading-snug">
             <span className="font-mono text-[11px] font-bold text-muted-2 tabular-nums">

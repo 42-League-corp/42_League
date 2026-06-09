@@ -1191,6 +1191,15 @@ app.put('/me/title', async (c) => {
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user) throw new HTTPException(404, { message: 'user not found' });
 
+  // Bloque le changement de titre si l'Apôtre de Sheldon est équipé (verrou permanent).
+  const equippedTitles = await prisma.shopInventory.findMany({
+    where: { userLogin: login, equipped: true, item: { category: 'title' } },
+    include: { item: true },
+  });
+  if (equippedTitles.some((r) => isSheldonApostle(r.item))) {
+    throw new HTTPException(409, { message: "impossible de changer de titre tant que l'Apôtre de Sheldon est équipé" });
+  }
+
   // Retrait du titre.
   if (!raw) {
     const updated = await prisma.user.update({ where: { login }, data: { title: null } });
@@ -8698,10 +8707,9 @@ app.get('/shop', async (c) => {
 // transaction pour éviter les doubles achats / soldes négatifs.
 // ── « Apôtre de Sheldon » : objet spécial reconnu par son nom (insensible à la
 // casse et aux accents). À l'achat il DONNE 300 coins au lieu de coûter, ne peut
-// être acheté qu'une fois, et s'auto-équipe verrouillé 1 semaine (impossible à
-// déséquiper avant, ni de lui substituer un autre objet de sa catégorie).
+// être acheté qu'une fois, et s'auto-équipe définitivement (impossible à déséquiper,
+// ni de lui substituer un autre objet de sa catégorie, ni de changer de titre).
 const SHELDON_REWARD = 300;
-const SHELDON_LOCK_MS = 7 * 24 * 60 * 60 * 1000;
 function isSheldonApostle(item: { name: string }): boolean {
   return item.name
     .normalize('NFD')
@@ -8854,25 +8862,20 @@ app.post('/me/inventory/:id/equip', async (c) => {
   });
   if (!row) throw new HTTPException(404, { message: 'objet non possédé' });
 
-  // Verrou « Apôtre de Sheldon » : tant qu'il est équipé depuis moins d'une
-  // semaine, on ne peut NI le déséquiper, NI équiper un autre objet de SA
-  // catégorie (qui le déséquiperait par la règle « un seul équipé par catégorie »).
-  const nowEquip = new Date();
+  // Verrou « Apôtre de Sheldon » : permanent, impossible à déséquiper ou à
+  // remplacer par un autre objet de la même catégorie.
   const equippedRows = await prisma.shopInventory.findMany({
     where: { userLogin: login, equipped: true },
     include: { item: true },
   });
-  const lockedSheldon = equippedRows.find(
-    (r) => isSheldonApostle(r.item) && r.acquiredAt.getTime() + SHELDON_LOCK_MS > nowEquip.getTime(),
-  );
+  const lockedSheldon = equippedRows.find((r) => isSheldonApostle(r.item));
   if (lockedSheldon) {
-    const until = new Date(lockedSheldon.acquiredAt.getTime() + SHELDON_LOCK_MS).toISOString();
     if (lockedSheldon.itemId === itemId && !equipped) {
-      throw new HTTPException(409, { message: `l'Apôtre de Sheldon reste équipé jusqu'au ${until}` });
+      throw new HTTPException(409, { message: "l'Apôtre de Sheldon ne peut pas être déséquipé" });
     }
     if (lockedSheldon.itemId !== itemId && equipped && row.item.category === lockedSheldon.item.category) {
       throw new HTTPException(409, {
-        message: `impossible de changer de ${row.item.category} tant que l'Apôtre de Sheldon est équipé (jusqu'au ${until})`,
+        message: `impossible de changer de ${row.item.category} tant que l'Apôtre de Sheldon est équipé`,
       });
     }
   }

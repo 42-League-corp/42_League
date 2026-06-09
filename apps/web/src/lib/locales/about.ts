@@ -50,7 +50,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Carrousel équipe
     'about.team.intro':
-      '42 League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première idée jusqu’à la mise en production.',
+      'One League est un projet collectif. Chacun y a joué un rôle bien distinct — de la première idée jusqu’à la mise en production.',
     'about.team.intro.hint': '← glisse, scrolle ou clique pour parcourir →',
     'about.team.prev': 'Précédent',
     'about.team.next': 'Suivant',
@@ -143,7 +143,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Team carousel
     'about.team.intro':
-      '42 League is a collective project. Everyone played a distinct role — from the very first idea to production.',
+      'One League is a collective project. Everyone played a distinct role — from the very first idea to production.',
     'about.team.intro.hint': '← swipe, scroll or click to browse →',
     'about.team.prev': 'Previous',
     'about.team.next': 'Next',
@@ -236,7 +236,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Carrusel del equipo
     'about.team.intro':
-      '42 League es un proyecto colectivo. Cada uno jugó un papel bien distinto — desde la primera idea hasta la puesta en producción.',
+      'One League es un proyecto colectivo. Cada uno jugó un papel bien distinto — desde la primera idea hasta la puesta en producción.',
     'about.team.intro.hint': '← desliza, haz scroll o clic para recorrer →',
     'about.team.prev': 'Anterior',
     'about.team.next': 'Siguiente',
