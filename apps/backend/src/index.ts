@@ -5874,7 +5874,10 @@ app.post('/tournaments/:id/league/matches/:matchId/edit-score', async (c) => {
       throw new HTTPException(409, { message: 'match sans joueurs' });
     }
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
-    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    // Édition d'un match de ligue : score libre (goal average).
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
+      freeGoals: true,
+    });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
 
     const newWinner = scoreA > scoreB ? m.playerALogin : m.playerBLogin;
@@ -6319,7 +6322,9 @@ app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
     // Validation du score selon la discipline du tournoi (échecs 1-0, smash set,
     // babyfoot 10-x) — empêche le « 10-0 » sur une finale d'échecs/smash.
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
-    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
+      freeGoals: m.stage === 'league',
+    });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
     await tx.tournamentMatch.update({
       where: { id: matchId },
@@ -7672,7 +7677,9 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
     }
     // Validation du score selon la discipline du tournoi (même règle que record/confirm).
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
-    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB);
+    const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
+      freeGoals: m.stage === 'league',
+    });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
 
     const winnerLogin = scoreA > scoreB ? m.playerALogin : m.playerBLogin;

@@ -2004,6 +2004,7 @@ function BracketMatch({
           game={tournament.game ?? 'babyfoot'}
           labelA={labelA}
           labelB={labelB}
+          freeScores={match.stage === 'league'}
           onSubmit={handleRecordSubmit}
           onCancel={() => setRecording(false)}
         />
@@ -2034,6 +2035,7 @@ function BracketMatch({
             game={tournament.game ?? 'babyfoot'}
             labelA={labelA}
             labelB={labelB}
+            freeScores
             onSubmit={handleEditSubmit}
             onCancel={() => setEditing(false)}
           />
@@ -2107,6 +2109,7 @@ function RecordBracketForm({
   game,
   labelA,
   labelB,
+  freeScores = false,
   onSubmit,
   onCancel,
 }: {
@@ -2114,6 +2117,8 @@ function RecordBracketForm({
   // Libellés d'équipe (capitaine + binôme en 2v2), affichés au lieu du seul login.
   labelA: string;
   labelB: string;
+  // Phase de ligue (babyfoot) : saisie libre des deux scores (goal average).
+  freeScores?: boolean;
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -2121,6 +2126,8 @@ function RecordBracketForm({
   const [winner, setWinner] = useState<'a' | 'b' | null>(null);
   const [loserScore, setLoserScore] = useState(0);
   const [winnerGames, setWinnerGames] = useState(2); // smash : games du vainqueur (2 ou 3)
+  const [freeA, setFreeA] = useState(0);
+  const [freeB, setFreeB] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const send = async (scoreA: number, scoreB: number) => {
@@ -2131,6 +2138,36 @@ function RecordBracketForm({
       setBusy(false);
     }
   };
+
+  // Ligue babyfoot (classement au goal average) : on saisit librement le score
+  // des DEUX camps, chaque champ étiqueté avec son équipe — pas d'étape « qui a
+  // gagné », le vainqueur se déduit du score le plus élevé.
+  if (freeScores && game === 'babyfoot') {
+    const tie = freeA === freeB;
+    const row = (label: string, value: number, onChange: (v: number) => void) => (
+      <div className="flex items-center gap-2">
+        <div className="w-24 shrink-0 text-right text-xs font-semibold text-text truncate">{label}</div>
+        <div className="flex-1 min-w-0">
+          <AbacusSlider value={value} onChange={onChange} min={0} max={WINNING_SCORE} />
+        </div>
+        <div className="w-7 shrink-0 text-center font-mono font-extrabold tabular-nums text-gold">{value}</div>
+      </div>
+    );
+    return (
+      <div className="mt-2 space-y-2.5">
+        <div className="text-xs text-muted text-center">{t('tournois.match.finalScore')}</div>
+        {row(labelA, freeA, setFreeA)}
+        {row(labelB, freeB, setFreeB)}
+        {tie && <div className="text-[11px] text-center text-red-400">{t('tournois.match.noTie')}</div>}
+        <div className="flex gap-1.5 pt-1">
+          <Button size="sm" loading={busy} disabled={tie} onClick={() => send(freeA, freeB)} className="flex-1">
+            OK
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} className="flex-none">×</Button>
+        </div>
+      </div>
+    );
+  }
 
   // Étape 1 — vainqueur. Aux échecs, le résultat est binaire : un clic suffit.
   if (!winner) {

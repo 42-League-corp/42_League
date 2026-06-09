@@ -217,13 +217,17 @@ export function validateTournamentScore(
   game: GameId,
   scoreA: number,
   scoreB: number,
+  opts?: { freeGoals?: boolean },
 ): string | null {
   if (scoreA === scoreB) return 'il faut un vainqueur (pas de match nul en tournoi)';
   const hi = Math.max(scoreA, scoreB);
   const lo = Math.min(scoreA, scoreB);
   switch (getGameDef(game).scoring) {
     case 'goals':
-      // Babyfoot : le vainqueur atteint 10 (le perdant est déjà borné -10..9).
+      // Phase de ligue (goal average) : score libre des deux camps — on exige
+      // seulement un vainqueur et aucun but négatif. Sinon (bracket/poules) le
+      // vainqueur atteint 10 (le perdant est déjà borné -10..9).
+      if (opts?.freeGoals) return lo >= 0 ? null : 'score de buts négatif invalide';
       return hi === 10 ? null : 'un camp doit atteindre 10 buts';
     case 'binary':
       // Échecs : 1-0.
