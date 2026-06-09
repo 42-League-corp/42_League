@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
+import { EloBoostAura, EloBoostBadge, useEloBoostRemaining } from '../../components/EloBoost';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
@@ -96,6 +97,9 @@ export function ProfilDesktop() {
   }
 
   const u = me.user;
+  // ELO boost window — alimente l'aura incandescente sur la carte profil.
+  const boostUntil = u.eloMultUntil ?? null;
+  const { active: boosted } = useEloBoostRemaining(boostUntil);
   // Cosmétiques équipés (boutique) — profil perso.
   const titleColor = me.titleColor ?? null;
   // Titre équipé : null si aucun → « sans éclat. » GRISÉ (état NONE), pas en or.
@@ -122,13 +126,18 @@ export function ProfilDesktop() {
       <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')} accent="user">
       {/* Hero : avatar · identité · bloc ELO — fond doré + halo holographique animé. */}
       <div
-        className="relative overflow-hidden rounded-2xl mb-6 border border-gold/35"
+        className={`relative overflow-hidden rounded-2xl mb-6 border ${boosted ? 'border-orange-500/70' : 'border-gold/35'}`}
         style={{
-          background: 'linear-gradient(180deg, #2a241c 0%, #15120e 55%, #1d1914 100%)',
-          boxShadow:
-            'inset 0 1px 0 rgba(255,215,120,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 32px -12px rgba(255,201,74,0.25)',
+          background: boosted
+            ? 'linear-gradient(180deg, #2d1a0e 0%, #1a0e07 55%, #22100a 100%)'
+            : 'linear-gradient(180deg, #2a241c 0%, #15120e 55%, #1d1914 100%)',
+          boxShadow: boosted
+            ? 'inset 0 1px 0 rgba(255,140,60,0.25), inset 0 -1px 0 rgba(0,0,0,0.6), 0 12px 40px -8px rgba(255,80,20,0.45)'
+            : 'inset 0 1px 0 rgba(255,215,120,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 32px -12px rgba(255,201,74,0.25)',
         }}
       >
+        {/* Aura incandescente — visible uniquement quand le boost ELO ×2 est actif. */}
+        <EloBoostAura active={boosted} />
         {/* Bannière équipée (boutique) = fond de la carte + voile sombre. */}
         {equippedBanner && (
           <>
@@ -234,11 +243,15 @@ export function ProfilDesktop() {
               <RankBadge elo={stats.elo} rank={myRank} size="xs" asLink />
             </div>
             <div
-              className="font-display text-[2.75rem] leading-none font-black text-gold-emboss tabular-nums"
-              style={{ textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 18px rgba(255,201,74,0.35)' }}
+              className="font-display text-[2.75rem] leading-none font-black tabular-nums"
+              style={boosted
+                ? { color: '#ffb347', textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 24px rgba(255,120,24,0.7)' }
+                : { textShadow: '0 1px 0 rgba(0,0,0,0.6), 0 0 18px rgba(255,201,74,0.35)' }
+              }
             >
               {stats.elo}
             </div>
+            {boosted && <EloBoostBadge until={boostUntil} className="mt-1.5" />}
           </div>
         </div>
       </div>
