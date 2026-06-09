@@ -94,16 +94,21 @@ export function LiveOverlays({ data }: { data: LiveTournament }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // Déroulé du pile-ou-face : rotation puis révélation puis fermeture.
+  // Déroulé du pile-ou-face : rotation (~1,8 s) → révélation du gagnant → fermeture
+  // (~4,6 s). On planifie les DEUX timers une seule fois par tirage, en se calant sur
+  // `matchId` (et non sur l'objet `toss`) : sinon, quand `setToss({…flipping:false})`
+  // muterait l'objet à 1,8 s, l'effet se relancerait, son cleanup annulerait le timer
+  // de fermeture, et l'écran resterait bloqué sur « X gagne le tirage » indéfiniment.
+  const tossMatchId = toss?.matchId ?? null;
   useEffect(() => {
-    if (!toss || !toss.flipping) return;
+    if (!tossMatchId) return;
     const reveal = setTimeout(() => setToss((s) => (s ? { ...s, flipping: false } : null)), 1800);
     const close = setTimeout(() => setToss(null), 4600);
     return () => {
       clearTimeout(reveal);
       clearTimeout(close);
     };
-  }, [toss]);
+  }, [tossMatchId]);
 
   return (
     <>
