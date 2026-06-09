@@ -2010,13 +2010,13 @@ const CreateSeasonSchema = z.object({ name: z.string().trim().min(2).max(40) });
 // les Étains sont remontés au plancher Bronze), compteurs de matchs à 0.
 // L'historique des matchs est conservé (taggé par
 // saison). Passage instantané à la saison suivante.
-app.post('/seasons', async (c) => {
-  const me = await getCurrentLogin(c);
-  await requireSuperAdmin(me);
-  const body = await c.req.json().catch(() => ({}));
-  const parsed = CreateSeasonSchema.safeParse(body);
-  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-
+// Cœur du rollover de saison, réutilisable : appelé soit manuellement (POST
+// /seasons), soit automatiquement par le timer de clôture programmée. Clôture la
+// saison active (snapshot du classement + badge champion + reset ELO au plancher
+// du grade), puis crée la saison `newName`. Les League Coins ne sont JAMAIS
+// touchés — ils persistent d'une saison à l'autre. L'historique des matchs/
+// tournois est conservé (tournois officiels visibles à vie).
+async function performSeasonRollover(newName: string) {
   const result = await prisma.$transaction(async (tx) => {
     const active = await tx.season.findFirst({ where: { isActive: true } });
     let closed: { seasonName: string; champion: string | null; players: number } | null = null;
@@ -2125,7 +2125,7 @@ app.post('/seasons', async (c) => {
     }
 
     const season = await tx.season.create({
-      data: { id: randomUUID(), name: parsed.data.name, isActive: true },
+      data: { id: randomUUID(), name: newName, isActive: true },
     });
     return { season, closed };
   });
@@ -2141,7 +2141,57 @@ app.post('/seasons', async (c) => {
   }
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
+  return result;
+}
+
+app.post('/seasons', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = CreateSeasonSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const result = await performSeasonRollover(parsed.data.name);
   return c.json({ ...result.season, previous: result.closed }, 201);
+});
+
+// Programme la clôture automatique de la saison active : à `endAt`, le timer de
+// fond bascule sur une nouvelle saison nommée `nextName`. SUPERADMIN only.
+const ScheduleSeasonSchema = z.object({
+  endAt: z.string().datetime(),
+  nextName: z.string().trim().min(2).max(40),
+});
+app.post('/seasons/schedule', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ScheduleSeasonSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const endAt = new Date(parsed.data.endAt);
+  if (endAt.getTime() <= Date.now()) {
+    throw new HTTPException(400, { message: 'La date de clôture doit être dans le futur.' });
+  }
+  const active = await prisma.season.findFirst({ where: { isActive: true } });
+  if (!active) throw new HTTPException(400, { message: 'Aucune saison active à programmer.' });
+  const updated = await prisma.season.update({
+    where: { id: active.id },
+    data: { scheduledEndAt: endAt, nextSeasonName: parsed.data.nextName },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json(updated);
+});
+
+// Annule une clôture programmée (chemin statique → pas de collision avec :id).
+app.post('/seasons/schedule/cancel', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSuperAdmin(me);
+  const active = await prisma.season.findFirst({ where: { isActive: true } });
+  if (!active) throw new HTTPException(400, { message: 'Aucune saison active.' });
+  const updated = await prisma.season.update({
+    where: { id: active.id },
+    data: { scheduledEndAt: null, nextSeasonName: null },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json(updated);
 });
 
 // Réactive / bascule la saison active (outil admin/staging). Simple basculement
@@ -10719,5 +10769,29 @@ if (process.env.NODE_ENV !== 'test') {
       runDailyPurges();
       setInterval(runDailyPurges, 24 * 60 * 60 * 1000);
     }, msUntil3am);
+
+    // Clôture programmée des saisons : vérifie chaque minute si la saison active a
+    // une `scheduledEndAt` échue, et bascule alors automatiquement sur la saison
+    // suivante (`nextSeasonName`). Idempotent : après bascule la nouvelle saison
+    // n'a plus de date programmée, donc plus aucun déclenchement.
+    let seasonRolloverRunning = false;
+    const checkSeasonSchedule = async () => {
+      if (seasonRolloverRunning) return;
+      const active = await prisma.season.findFirst({ where: { isActive: true } });
+      if (!active || !active.scheduledEndAt || !active.nextSeasonName) return;
+      if (active.scheduledEndAt.getTime() > Date.now()) return;
+      seasonRolloverRunning = true;
+      try {
+        const nextName = active.nextSeasonName;
+        console.log(`[season] clôture programmée atteinte → nouvelle saison « ${nextName} »`);
+        await performSeasonRollover(nextName);
+      } finally {
+        seasonRolloverRunning = false;
+      }
+    };
+    checkSeasonSchedule().catch((err) => console.error('season schedule check failed', err));
+    setInterval(() => {
+      checkSeasonSchedule().catch((err) => console.error('season schedule check failed', err));
+    }, 60 * 1000);
   });
 }

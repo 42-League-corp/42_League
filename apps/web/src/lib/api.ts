@@ -664,6 +664,9 @@ export interface Season {
   isActive: boolean;
   startedAt: string;
   endedAt: string | null;
+  /** Clôture programmée (ISO) — bascule auto vers `nextSeasonName` à cette date. */
+  scheduledEndAt?: string | null;
+  nextSeasonName?: string | null;
 }
 
 export interface SeasonStanding {
@@ -1095,6 +1098,16 @@ export const api = {
       '/seasons',
       { method: 'POST', body: JSON.stringify({ name }) },
     ),
+  // Programme la clôture auto de la saison active : à `endAt` (ISO), bascule
+  // automatique vers une nouvelle saison nommée `nextName`. Les coins persistent.
+  scheduleSeasonEnd: (endAt: string, nextName: string) =>
+    request<Season>('/seasons/schedule', {
+      method: 'POST',
+      body: JSON.stringify({ endAt, nextName }),
+    }),
+  // Annule une clôture programmée.
+  cancelSeasonSchedule: () =>
+    request<Season>('/seasons/schedule/cancel', { method: 'POST' }),
   // Réactive / bascule la saison active (basculement de vue, sans reset d'ELO).
   activateSeason: (id: string) =>
     request<Season>(`/seasons/${encodeURIComponent(id)}/activate`, { method: 'POST' }),

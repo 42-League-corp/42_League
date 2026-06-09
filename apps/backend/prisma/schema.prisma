@@ -689,6 +689,11 @@ model Season {
   isActive  Boolean   @default(false) @map("is_active")
   startedAt DateTime  @default(now()) @map("started_at")
   endedAt   DateTime? @map("ended_at")
+  // Clôture programmée : si renseigné, un timer de fond bascule automatiquement
+  // sur la saison suivante (nommée `nextSeasonName`) une fois `scheduledEndAt`
+  // atteint. Réglable depuis le /GOD. Les coins ne sont jamais reset au passage.
+  scheduledEndAt DateTime? @map("scheduled_end_at")
+  nextSeasonName String?   @map("next_season_name")
 
   @@map("seasons")
 }
