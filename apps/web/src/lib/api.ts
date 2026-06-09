@@ -885,8 +885,10 @@ export interface MyBet {
   tournamentName: string | null;
   game: Game | null;
   matchId: string | null;
-  /** Duel d'ops parié (targetType='ops'). */
+  /** Ops auquel appartient le duel parié (targetType='ops'). */
   opsId: string | null;
+  /** Duel (défi forcé) précis parié (targetType='ops'). */
+  challengeId: string | null;
   opsOwnerLogin: string | null;
   opsTargetLogin: string | null;
   choiceLogin: string;
@@ -903,14 +905,19 @@ export interface OpenBetTournament {
   status: string;
   entrants: string[];
 }
-/** Duel d'ops en cours, ouvert aux paris (hunter ⚔️ cible). */
+/**
+ * Duel d'ops ouvert aux paris (traqueur ⚔️ cible). `id` = id du DUEL (le défi
+ * forcé) ; chaque duel d'un ops est un marché distinct.
+ */
 export interface OpenOpsDuel {
   id: string;
+  opsId: string | null;
   ownerLogin: string;
   targetLogin: string;
   ownerImageUrl: string | null;
   targetImageUrl: string | null;
-  expiresAt: string;
+  game: Game;
+  expiresAt: string | null;
 }
 export interface BetsResponse {
   coins: number;
@@ -925,9 +932,9 @@ export interface PlaceBetInput {
   choiceLogin: string;
   stake: number;
 }
-/** Pari sur l'issue d'un duel d'ops : pronostic = hunter ou cible. */
+/** Pari sur l'issue d'un duel d'ops précis : `challengeId` = le duel, pronostic = traqueur ou cible. */
 export interface PlaceOpsBetInput {
-  opsId: string;
+  challengeId: string;
   choiceLogin: string;
   stake: number;
 }

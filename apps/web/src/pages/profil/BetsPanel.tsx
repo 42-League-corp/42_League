@@ -184,7 +184,7 @@ export function BetsPanel() {
                           busy={placing}
                           onCancel={() => setOpenForm(null)}
                           onSubmit={(choiceLogin, stake) =>
-                            placeOpsBet({ opsId: duel.id, choiceLogin, stake })
+                            placeOpsBet({ challengeId: duel.id, choiceLogin, stake })
                           }
                         />
                       )}

@@ -292,6 +292,11 @@ model Ops {
   // Nombre de matchs forcés déjà consommés (joués ou refusés) sur cet OPS.
   // La cible ne peut pas refuser tant que forcedUsed < OPS_FORCED_MATCHES (3).
   forcedUsed  Int      @default(0) @map("forced_used")
+  // Fin RÉELLE de l'ops : posé quand forcedUsed atteint OPS_FORCED_MATCHES (3),
+  // donc avant expiresAt si les 3 défis sont consommés en moins de 24h. Quand
+  // renseigné, l'ops n'est plus « actif » (cible libérée, traqueur plus en ops)
+  // et le cooldown de redéclaration court à partir de cette date (et non des 24h).
+  endedAt     DateTime? @map("ended_at")
   // Renseigné quand la cible a annulé cet ops avec un consommable « anti-ops ».
   // Sert de bouclier : le chasseur ne peut pas re-cibler cette même cible pendant
   // ANTI_OPS_SHIELD_MS après cette date (cf. POST /ops).
@@ -300,6 +305,8 @@ model Ops {
   owner  User @relation("opsOwner", fields: [ownerLogin], references: [login])
   target User @relation("opsTarget", fields: [targetLogin], references: [login])
   bets   Bet[] @relation("opsBets")
+  // Défis forcés générés par cet ops (les « duels d'ops », chacun pariable).
+  challenges Challenge[] @relation("opsChallenges")
 
   @@index([ownerLogin, expiresAt])
   @@index([targetLogin, expiresAt])
@@ -465,11 +472,19 @@ model Challenge {
   cancelRequestAt  DateTime? @map("cancel_request_at")
   cancelAcceptedBy String?   @map("cancel_accepted_by")
 
+  // Renseigné quand ce défi est un « duel d'ops » forcé (né accepté pendant un
+  // ops actif). Sert à le rendre pariable individuellement et à régler les paris
+  // du duel au confirm du match. null = défi normal.
+  opsId            String?   @map("ops_id")
+
   challenger User @relation("challenger", fields: [challengerLogin], references: [login])
   opponent   User @relation("opponentChallenge", fields: [opponentLogin], references: [login])
+  ops        Ops? @relation("opsChallenges", fields: [opsId], references: [id], onDelete: SetNull)
+  bets       Bet[] @relation("challengeBets")
 
   @@index([opponentLogin, status])
   @@index([challengerLogin, status])
+  @@index([opsId, status])
   @@map("challenges")
 }
 
@@ -491,6 +506,9 @@ model PendingMatch {
   mode          String? // null | '2v2'
   partner1Login String?  @map("partner_1_login")
   partner2Login String?  @map("partner_2_login")
+  // Défi d'ops forcé à l'origine de ce match (porté depuis /challenges/:id/record)
+  // → au confirm, on règle les paris du duel par le vainqueur. null = hors ops.
+  challengeId   String?  @map("challenge_id")
   // Confirmations progressives 2v2 — null = n/a (match 1v1).
   // Le déclarant est auto-validé ; les 3 autres valident indépendamment.
   // Settlement déclenché uniquement quand les 3 sont à `true`.
@@ -862,7 +880,8 @@ model Bet {
   targetType   String    @map("target_type") // 'tournament' | 'match' | 'ops'
   tournamentId String?   @map("tournament_id") // renseigné pour 'tournament'/'match' ; null pour 'ops'
   matchId      String?   @map("match_id") // TournamentMatch.id quand targetType='match'
-  opsId        String?   @map("ops_id") // Ops.id quand targetType='ops'
+  opsId        String?   @map("ops_id") // Ops.id quand targetType='ops' (le duel appartient à cet ops)
+  challengeId  String?   @map("challenge_id") // Challenge.id du duel d'ops parié (targetType='ops')
   choiceLogin  String    @map("choice_login") // vainqueur pronostiqué
   stake        Int // mise débitée à la prise
   status       String    @default("open") // 'open' | 'won' | 'lost' | 'refunded'
@@ -873,11 +892,13 @@ model Bet {
   bettor     User        @relation("userBets", fields: [bettorLogin], references: [login], onDelete: Cascade)
   tournament Tournament? @relation("tournamentBets", fields: [tournamentId], references: [id], onDelete: Cascade)
   ops        Ops?        @relation("opsBets", fields: [opsId], references: [id], onDelete: Cascade)
+  challenge  Challenge?  @relation("challengeBets", fields: [challengeId], references: [id], onDelete: Cascade)
 
   @@index([bettorLogin])
   @@index([tournamentId, status])
   @@index([matchId, status])
   @@index([opsId, status])
+  @@index([challengeId, status])
   @@map("bets")
 }
 

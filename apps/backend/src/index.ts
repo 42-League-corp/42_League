@@ -2963,12 +2963,29 @@ app.post('/matches/:id/confirm', async (c) => {
             },
           });
     if (opsBetween) {
+      // 3ᵉ défi consommé → l'ops se termine (endedAt) : cible libérée, traqueur
+      // plus en ops, cooldown 3j ancré sur maintenant.
+      const willEnd = opsBetween.forcedUsed + 1 >= OPS_FORCED_MATCHES;
       await tx.ops.update({
         where: { id: opsBetween.id },
-        data: { forcedUsed: { increment: 1 } },
+        data: { forcedUsed: { increment: 1 }, ...(willEnd ? { endedAt: new Date() } : {}) },
       });
     }
-    return { mismatch: false as const, match: created, opsTouched: !!opsBetween };
+    // Paris sur CE duel d'ops (s'il en est un) : réglés ici, au confirm du match,
+    // par le vainqueur du match. Nul (rare) → remboursement.
+    let opsDuelCredited: string[] = [];
+    if (p.challengeId) {
+      const winnerLogin =
+        created.winner === 'A'
+          ? created.playerALogin
+          : created.winner === 'B'
+            ? created.playerBLogin
+            : null;
+      opsDuelCredited = winnerLogin
+        ? await settleBetsTx(tx, { targetType: 'ops', challengeId: p.challengeId }, winnerLogin)
+        : await refundBetsTx(tx, { targetType: 'ops', challengeId: p.challengeId });
+    }
+    return { mismatch: false as const, match: created, opsTouched: !!opsBetween, opsDuelCredited };
   });
 
   // Le 409 est levé hors transaction : le delete du pending est ainsi committé.
@@ -2993,6 +3010,10 @@ app.post('/matches/:id/confirm', async (c) => {
   void notifyMatchResult(match);
   // L'ELO des deux joueurs a changé → le classement bouge pour tout le monde.
   broadcast({ type: 'leaderboard:update', payload: {} });
+  // Paris du duel d'ops crédités → les gagnants voient leur solde bouger.
+  if (result.opsDuelCredited.length) {
+    emit([...new Set(result.opsDuelCredited)], { type: 'panel:update', payload: {} });
+  }
   // Abonnés notifiés si un joueur entre dans le top 3.
   void maybeNotifyTop3(match.playerALogin, match.deltaA);
   void maybeNotifyTop3(match.playerBLogin, match.deltaB);
@@ -4230,6 +4251,9 @@ app.post('/challenges', async (c) => {
       opponentLogin,
       status: isForced ? 'accepted' : 'pending',
       ...(isForced ? { decidedAt: now } : {}),
+      // Marque ce défi comme « duel d'ops » → pariable individuellement et réglé
+      // au confirm du match (cf. POST /bets/ops, GET /bets, settlement).
+      ...(isForced ? { opsId: forcedOps!.id } : {}),
       scheduledAt: new Date(scheduledAt),
       game,
     },
@@ -4436,8 +4460,16 @@ app.post('/challenges/:id/cancel-accept', async (c) => {
         ? { status: 'cancelled', decidedAt: new Date(), cancelAcceptedBy: [...accepted].join(',') }
         : { cancelAcceptedBy: [...accepted].join(',') },
     });
-    return { finalized: allAccepted, game: ch.game, requestedBy: ch.cancelRequestBy, participants };
+    // Duel d'ops annulé à l'amiable → remboursement de ses paris.
+    const opsRefunded =
+      allAccepted && ch.opsId
+        ? await refundBetsTx(tx, { targetType: 'ops', challengeId: id })
+        : [];
+    return { finalized: allAccepted, game: ch.game, requestedBy: ch.cancelRequestBy, participants, opsRefunded };
   });
+  if (result.opsRefunded.length) {
+    emit([...new Set(result.opsRefunded)], { type: 'panel:update', payload: {} });
+  }
   if (result.finalized) {
     const recipients = result.participants.filter((p) => p !== me);
     emit(recipients, { type: 'challenge:cancelled', payload: { id, by: me } });
@@ -4523,6 +4555,11 @@ app.post('/challenges/:id/decline', async (c) => {
       data: { status: newStatus, decidedAt: new Date() },
     });
 
+    // Duel d'ops refusé/annulé → il ne sera jamais joué : on rembourse ses paris.
+    const opsRefunded = ch.opsId
+      ? await refundBetsTx(tx, { targetType: 'ops', challengeId: id })
+      : [];
+
     // ─── OPS : refus d'un match forcé ─────────────────────────────────────
     // Si la cible (me) refuse un défi de SON traqueur (le challenger) pendant
     // l'OPS actif, et que le quota de 3 matchs forcés n'est pas épuisé, la
@@ -4543,9 +4580,11 @@ app.post('/challenges/:id/decline', async (c) => {
           tx.user.findUniqueOrThrow({ where: { login: ch.challengerLogin } }),
         ]);
         opsPenalty = OPS_REFUSE_MULTIPLIER * estimatedEloLoss(target.elo, hunter.elo);
+        // 3ᵉ défi consommé (ici par un refus) → l'ops se termine (endedAt).
+        const willEnd = activeOps.forcedUsed + 1 >= OPS_FORCED_MATCHES;
         await tx.ops.update({
           where: { id: activeOps.id },
-          data: { forcedUsed: { increment: 1 } },
+          data: { forcedUsed: { increment: 1 }, ...(willEnd ? { endedAt: new Date() } : {}) },
         });
       }
     }
@@ -4579,8 +4618,13 @@ app.post('/challenges/:id/decline', async (c) => {
       opponentLogin: ch.opponentLogin,
       // Tous les participants (4 en 2v2) à prévenir, hormis celui qui refuse.
       participants: participants as string[],
+      opsRefunded,
     };
   });
+  // Parieurs du duel remboursés (défi forcé refusé/annulé) → solde rafraîchi.
+  if (result.opsRefunded.length) {
+    emit([...new Set(result.opsRefunded)], { type: 'panel:update', payload: {} });
+  }
   const declineRecipients = result.participants.filter((p) => p !== me);
   emit(declineRecipients, {
     type: 'challenge:declined',
@@ -4694,6 +4738,8 @@ app.post('/challenges/:id/record', async (c) => {
         charDeclarer: charSelf ?? null,
         charOpponent: charOpponent ?? null,
         stocks: stocks ?? null,
+        // Duel d'ops : on porte le défi jusqu'au confirm pour régler ses paris.
+        challengeId: ch.opsId ? ch.id : null,
       },
     });
   });
@@ -4900,12 +4946,12 @@ async function settleConfirmedTournamentMatch(
     stage: string;
     round: number;
     slot: number;
-    winnerLogin: string;
+    winnerLogin: string | null;
     playerALogin: string | null;
     playerBLogin: string | null;
   },
 ): Promise<{
-  winnerLogin: string;
+  winnerLogin: string | null;
   winners: string[];
   finished: boolean;
   prizeAwarded: boolean;
@@ -4914,7 +4960,8 @@ async function settleConfirmedTournamentMatch(
 }> {
   const winnerLogin = m.winnerLogin;
   // Vainqueurs du tournoi (rempli à la finale) : capitaine seul ou paire en 2v2.
-  let winners: string[] = [winnerLogin];
+  // Nul en ligue → aucun vainqueur (liste vide).
+  let winners: string[] = winnerLogin ? [winnerLogin] : [];
   // Le duel désigné « match suivant » est terminé → on efface le pointeur
   // (sinon l'arbre garderait le badge « EN COURS » sur un match déjà joué).
   await tx.tournament.updateMany({
@@ -4972,6 +5019,11 @@ async function settleConfirmedTournamentMatch(
       }
     }
     return { winnerLogin, winners, finished: false, prizeAwarded: false, bracketGenerated, betWinners };
+  }
+
+  // En bracket, un nul est impossible (refusé à la validation) → winnerLogin défini.
+  if (winnerLogin === null) {
+    return { winnerLogin, winners, finished: false, prizeAwarded: false, bracketGenerated: false, betWinners };
   }
 
   // Match de bracket : propage le gagnant. Le nombre de rounds est calculé depuis
@@ -5874,13 +5926,16 @@ app.post('/tournaments/:id/league/matches/:matchId/edit-score', async (c) => {
       throw new HTTPException(409, { message: 'match sans joueurs' });
     }
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
-    // Édition d'un match de ligue : score libre (goal average).
+    // Édition d'un match de ligue : score libre, nul autorisé (goal average).
     const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
       freeGoals: true,
+      allowDraw: true,
     });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
 
-    const newWinner = scoreA > scoreB ? m.playerALogin : m.playerBLogin;
+    // Nul possible en ligue (scores égaux) → pas de vainqueur.
+    const newWinner =
+      scoreA === scoreB ? null : scoreA > scoreB ? m.playerALogin : m.playerBLogin;
     const winnerChanged = newWinner !== m.winnerLogin;
     await tx.tournamentMatch.update({
       where: { id: matchId },
@@ -6323,7 +6378,8 @@ app.post('/tournaments/:id/matches/:matchId/record', async (c) => {
     // babyfoot 10-x) — empêche le « 10-0 » sur une finale d'échecs/smash.
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
     const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
-      freeGoals: m.stage === 'league',
+      freeGoals: m.stage === 'league' || m.stage === 'bracket',
+      allowDraw: m.stage === 'league',
     });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
     await tx.tournamentMatch.update({
@@ -6394,8 +6450,9 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
         message: `Scores différents — saisi ${m.scoreA}-${m.scoreB}, tu as soumis ${scoreA}-${scoreB}. Score reset, à ressaisir.`,
       });
     }
+    // Nul possible en ligue (scores égaux) → pas de vainqueur.
     const winnerLogin =
-      scoreA > scoreB ? m.playerALogin! : m.playerBLogin!;
+      scoreA === scoreB ? null : scoreA > scoreB ? m.playerALogin! : m.playerBLogin!;
     await tx.tournamentMatch.update({
       where: { id: matchId },
       data: { winnerLogin, confirmedAt: new Date() },
@@ -6412,7 +6469,7 @@ app.post('/tournaments/:id/matches/:matchId/confirm', async (c) => {
     });
   });
   // Push live au vainqueur APRÈS commit (jamais d'emit dans la transaction).
-  if (result.finished && result.prizeAwarded) {
+  if (result.finished && result.prizeAwarded && result.winnerLogin) {
     emit([result.winnerLogin], { type: 'panel:update', payload: {} });
   }
   // Parieurs gagnants notifiés du crédit (solde mis à jour).
@@ -6859,8 +6916,16 @@ app.patch('/bug-reports/:id/status', async (c) => {
 
 /* ============ OPS ============ */
 // Durée d'un OPS : 24h (partagée avec le front via @42-league/shared).
-// Le cooldown reste plus long : un seul OPS par semaine pour rester un acte fort.
-const OPS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+// Cooldown de redéclaration : 3 jours après la FIN de l'ops (3 défis consommés
+// ou expiration 24h, au premier des deux) — un ops reste un acte fort, espacé.
+const OPS_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+
+// Fin effective d'un ops : sa date de fin réelle si les 3 défis ont été
+// consommés avant 24h (endedAt), sinon son expiration 24h. C'est l'ancre du
+// cooldown de redéclaration.
+function opsEffectiveEnd(o: { endedAt: Date | null; expiresAt: Date }): Date {
+  return o.endedAt ?? o.expiresAt;
+}
 
 // ─── Expiration des ops en temps réel ──────────────────────────────────────
 // Un ops expire — puis son cooldown se termine — uniquement par le temps, sans
@@ -6901,8 +6966,9 @@ async function rescheduleOpsTimers(): Promise<void> {
 app.get('/ops', async (c) => {
   await getCurrentLogin(c);
   const now = new Date();
+  // « Actif » = non expiré ET pas terminé par 3 défis (endedAt null).
   const list = await prisma.ops.findMany({
-    where: { expiresAt: { gt: now } },
+    where: { expiresAt: { gt: now }, endedAt: null },
   });
   return c.json(list);
 });
@@ -6912,31 +6978,36 @@ app.get('/ops/me', async (c) => {
   const now = new Date();
   const cooldownThreshold = new Date(now.getTime() - OPS_COOLDOWN_MS);
   const [activeAsOwner, lastAsOwner, activeAsTarget, meUser] = await Promise.all([
+    // Ops actif du traqueur : non expiré ET pas terminé par 3 défis.
     prisma.ops.findFirst({
-      where: { ownerLogin: me, expiresAt: { gt: now } },
+      where: { ownerLogin: me, expiresAt: { gt: now }, endedAt: null },
       include: { target: { select: { login: true, imageUrl: true } } },
     }),
     prisma.ops.findFirst({
       where: { ownerLogin: me },
       orderBy: { expiresAt: 'desc' },
     }),
+    // Cible : on n'est « ciblé » que par un ops encore actif (idem).
     prisma.ops.findFirst({
-      where: { targetLogin: me, expiresAt: { gt: now } },
+      where: { targetLogin: me, expiresAt: { gt: now }, endedAt: null },
       include: { owner: { select: { login: true, imageUrl: true } } },
     }),
     prisma.user.findUnique({ where: { login: me }, select: { opsCooldownResetAt: true } }),
   ]);
   // Un reset admin neutralise le cooldown des ops terminés avant la date de reset.
   const reset = meUser?.opsCooldownResetAt ?? null;
+  // Le cooldown court depuis la FIN effective de l'ops (3 défis ou 24h).
+  const lastEnd = lastAsOwner ? opsEffectiveEnd(lastAsOwner) : null;
   let canDeclareAt: Date | null = null;
   if (activeAsOwner) {
-    canDeclareAt = new Date(activeAsOwner.expiresAt.getTime() + OPS_COOLDOWN_MS);
+    canDeclareAt = new Date(opsEffectiveEnd(activeAsOwner).getTime() + OPS_COOLDOWN_MS);
   } else if (
     lastAsOwner &&
-    lastAsOwner.expiresAt > cooldownThreshold &&
-    (!reset || lastAsOwner.expiresAt > reset)
+    lastEnd &&
+    lastEnd > cooldownThreshold &&
+    (!reset || lastEnd > reset)
   ) {
-    canDeclareAt = new Date(lastAsOwner.expiresAt.getTime() + OPS_COOLDOWN_MS);
+    canDeclareAt = new Date(lastEnd.getTime() + OPS_COOLDOWN_MS);
   }
   return c.json({
     current: activeAsOwner,
@@ -6965,8 +7036,9 @@ app.post('/ops', async (c) => {
   const cooldownThreshold = new Date(now.getTime() - OPS_COOLDOWN_MS);
 
   const ops = await prisma.$transaction(async (tx) => {
+    // Un ops « actif » = non expiré ET pas terminé par 3 défis (endedAt null).
     const ownerActive = await tx.ops.findFirst({
-      where: { ownerLogin: me, expiresAt: { gt: now } },
+      where: { ownerLogin: me, expiresAt: { gt: now }, endedAt: null },
     });
     if (ownerActive) {
       throw new HTTPException(409, {
@@ -6981,18 +7053,24 @@ app.post('/ops', async (c) => {
     });
     const reset = meUser?.opsCooldownResetAt ?? null;
     const cooldownFloor = reset && reset > cooldownThreshold ? reset : cooldownThreshold;
-    const ownerCooldown = await tx.ops.findFirst({
-      where: { ownerLogin: me, expiresAt: { gt: cooldownFloor } },
+    // Cooldown ancré sur la FIN effective du dernier ops (3 défis ou 24h). Prisma
+    // ne sait pas coalescer endedAt/expiresAt dans un WHERE → on prend le dernier
+    // ops et on tranche en JS.
+    const lastOwnerOps = await tx.ops.findFirst({
+      where: { ownerLogin: me },
       orderBy: { expiresAt: 'desc' },
     });
-    if (ownerCooldown) {
-      const next = new Date(ownerCooldown.expiresAt.getTime() + OPS_COOLDOWN_MS);
-      throw new HTTPException(409, {
-        message: `cooldown actif jusqu'au ${next.toISOString()}`,
-      });
+    if (lastOwnerOps) {
+      const end = opsEffectiveEnd(lastOwnerOps);
+      if (end > cooldownFloor) {
+        const next = new Date(end.getTime() + OPS_COOLDOWN_MS);
+        throw new HTTPException(409, {
+          message: `cooldown actif jusqu'au ${next.toISOString()}`,
+        });
+      }
     }
     const targetTargeted = await tx.ops.findFirst({
-      where: { targetLogin: target, expiresAt: { gt: now } },
+      where: { targetLogin: target, expiresAt: { gt: now }, endedAt: null },
     });
     if (targetTargeted) {
       throw new HTTPException(409, {
@@ -7062,11 +7140,11 @@ app.get('/ops/user/:login', async (c) => {
   const now = new Date();
   const [asOwner, asTarget] = await Promise.all([
     prisma.ops.findFirst({
-      where: { ownerLogin: login, expiresAt: { gt: now } },
+      where: { ownerLogin: login, expiresAt: { gt: now }, endedAt: null },
       include: { target: { select: { login: true, imageUrl: true } } },
     }),
     prisma.ops.findFirst({
-      where: { targetLogin: login, expiresAt: { gt: now } },
+      where: { targetLogin: login, expiresAt: { gt: now }, endedAt: null },
       include: { owner: { select: { login: true, imageUrl: true } } },
     }),
   ]);
@@ -7471,7 +7549,14 @@ app.delete('/admin/challenges/:id', async (c) => {
   const { id } = c.req.param();
   const row = await prisma.challenge.findUnique({ where: { id } });
   if (!row) throw new HTTPException(404, { message: 'challenge not found' });
-  await prisma.challenge.delete({ where: { id } });
+  // Duel d'ops : rembourser ses paris AVANT le delete (le cascade les effacerait
+  // sinon, mise perdue), puis supprimer.
+  const refunded = await prisma.$transaction(async (tx) => {
+    const r = row.opsId ? await refundBetsTx(tx, { targetType: 'ops', challengeId: id }) : [];
+    await tx.challenge.delete({ where: { id } });
+    return r;
+  });
+  if (refunded.length) emit([...new Set(refunded)], { type: 'panel:update', payload: {} });
   void logAdminAction(c, {
     actor: me, actorRole: await getUserRole(me),
     action: 'DELETE_CHALLENGE',
@@ -7678,11 +7763,14 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
     // Validation du score selon la discipline du tournoi (même règle que record/confirm).
     const tour = await tx.tournament.findUnique({ where: { id }, select: { game: true } });
     const scoreErr = validateTournamentScore(parseGameId(tour?.game), scoreA, scoreB, {
-      freeGoals: m.stage === 'league',
+      freeGoals: m.stage === 'league' || m.stage === 'bracket',
+      allowDraw: m.stage === 'league',
     });
     if (scoreErr) throw new HTTPException(400, { message: scoreErr });
 
-    const winnerLogin = scoreA > scoreB ? m.playerALogin : m.playerBLogin;
+    // Nul possible en ligue (scores égaux) → pas de vainqueur.
+    const winnerLogin =
+      scoreA === scoreB ? null : scoreA > scoreB ? m.playerALogin : m.playerBLogin;
     await tx.tournamentMatch.update({
       where: { id: matchId },
       data: {
@@ -7709,7 +7797,7 @@ app.post('/admin/tournaments/:id/matches/:matchId/force-result', async (c) => {
   });
 
   // Emits/notifs APRÈS commit (jamais dans la transaction) — calqués sur /confirm.
-  if (result.finished && result.prizeAwarded) {
+  if (result.finished && result.prizeAwarded && result.winnerLogin) {
     emit([result.winnerLogin], { type: 'panel:update', payload: {} });
   }
   if (result.betWinners.length) {
@@ -9434,28 +9522,30 @@ async function awardMatchEconomyTx(
 async function settleBetsTx(
   tx: Prisma.TransactionClient,
   where: Prisma.BetWhereInput,
-  winnerLogin: string,
+  winnerLogin: string | null,
 ): Promise<string[]> {
   const open = await tx.bet.findMany({ where: { ...where, status: 'open' } });
   const credited: string[] = [];
   const now = new Date();
   for (const b of open) {
-    const won = b.choiceLogin === winnerLogin;
-    const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : 0;
+    // Nul (winnerLogin null) : aucun pronostic gagnant → on rembourse la mise (push).
+    const isDraw = winnerLogin === null;
+    const won = !isDraw && b.choiceLogin === winnerLogin;
+    const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : isDraw ? b.stake : 0;
     if (payout > 0) {
       await grantCoinsTx(tx, b.bettorLogin, payout);
       credited.push(b.bettorLogin);
     }
     await tx.bet.update({
       where: { id: b.id },
-      data: { status: won ? 'won' : 'lost', payout, settledAt: now },
+      data: { status: won ? 'won' : isDraw ? 'refunded' : 'lost', payout, settledAt: now },
     });
   }
   return credited;
 }
 
 /** Règle les paris sur un match de bracket précis. */
-function settleMatchBetsTx(tx: Prisma.TransactionClient, matchId: string, winnerLogin: string) {
+function settleMatchBetsTx(tx: Prisma.TransactionClient, matchId: string, winnerLogin: string | null) {
   return settleBetsTx(tx, { targetType: 'match', matchId }, winnerLogin);
 }
 
@@ -9539,87 +9629,35 @@ function refundOpenBetsForTournamentTx(tx: Prisma.TransactionClient, tournamentI
 }
 
 // ─── Paris : duels d'OPS ─────────────────────────────────────────────────────
+// Chaque DUEL (un défi forcé né d'un ops) est un marché distinct : on parie sur
+// le vainqueur de CE match. Le règlement gagné/perdu a lieu au confirm du match
+// (cf. /matches/:id/confirm, via PendingMatch.challengeId → settleBetsTx). Ici on
+// ne gère que le FILET DE SÉCURITÉ : rembourser les paris des duels qui ne seront
+// jamais confirmés (ops terminé/expiré, ou défi refusé/annulé) — robuste aux
+// redémarrages (les timers d'expiration sont perdus à chaque relance).
 
-/** Forme minimale d'un ops nécessaire pour départager un duel. */
-type OpsDuelInfo = {
-  id: string;
-  ownerLogin: string;
-  targetLogin: string;
-  declaredAt: Date;
-  expiresAt: Date;
-};
-
-/**
- * Vainqueur d'un duel d'OPS = qui a gagné le PLUS de matchs classés 1v1 entre le
- * hunter (owner) et sa cible (target) pendant la fenêtre de l'ops
- * [declaredAt, expiresAt]. Renvoie le login gagnant, ou `null` en cas d'égalité
- * ou si aucun match n'a été joué (→ remboursement des paris).
- */
-async function opsDuelWinner(
-  tx: Prisma.TransactionClient,
-  ops: OpsDuelInfo,
-): Promise<string | null> {
-  const matches = await tx.playedMatch.findMany({
-    where: {
-      playedAt: { gte: ops.declaredAt, lte: ops.expiresAt },
-      OR: [
-        { playerALogin: ops.ownerLogin, playerBLogin: ops.targetLogin },
-        { playerALogin: ops.targetLogin, playerBLogin: ops.ownerLogin },
-      ],
-    },
-    select: { playerALogin: true, playerBLogin: true, winner: true, mode: true },
-  });
-  let ownerWins = 0;
-  let targetWins = 0;
-  for (const m of matches) {
-    if (m.mode === '2v2') continue; // OPS = mécanique strictement 1v1
-    const winnerLogin = m.winner === 'A' ? m.playerALogin : m.playerBLogin;
-    if (winnerLogin === ops.ownerLogin) ownerWins += 1;
-    else if (winnerLogin === ops.targetLogin) targetWins += 1;
-  }
-  if (ownerWins === targetWins) return null;
-  return ownerWins > targetWins ? ops.ownerLogin : ops.targetLogin;
-}
-
-/**
- * Règle les paris ouverts d'un duel d'ops : crédite ×2 les bons pronostics si un
- * vainqueur se dégage, rembourse tout le monde sinon (égalité / aucun match).
- * Renvoie les logins crédités (pour un emit après commit).
- */
-async function settleOpsDuelBetsTx(
-  tx: Prisma.TransactionClient,
-  ops: OpsDuelInfo,
-): Promise<string[]> {
-  const open = await tx.bet.findMany({
-    where: { targetType: 'ops', opsId: ops.id, status: 'open' },
-    select: { id: true },
-  });
-  if (open.length === 0) return [];
-  const winner = await opsDuelWinner(tx, ops);
-  if (winner === null) {
-    return refundBetsTx(tx, { targetType: 'ops', opsId: ops.id });
-  }
-  return settleBetsTx(tx, { targetType: 'ops', opsId: ops.id }, winner);
-}
-
-/**
- * Règlement paresseux : repère les ops EXPIRÉS qui portent encore des paris
- * ouverts et les solde (robuste aux redémarrages — les timers d'expiration sont
- * perdus à chaque relance). Appelé au démarrage, à l'expiration d'un ops et à
- * chaque consultation de la page Paris.
- */
 async function sweepExpiredOpsBets(): Promise<void> {
   const now = new Date();
-  const due = await prisma.ops.findMany({
-    where: { expiresAt: { lte: now }, bets: { some: { status: 'open' } } },
+  const dead = await prisma.bet.findMany({
+    where: {
+      targetType: 'ops',
+      status: 'open',
+      OR: [
+        // Ops terminé (3 défis) ou expiré (24h) : un duel encore ouvert ne sera
+        // plus confirmé → remboursement. (Couvre aussi les anciens paris « par
+        // ops » d'avant le passage aux paris par duel — challengeId null.)
+        { ops: { endedAt: { not: null } } },
+        { ops: { expiresAt: { lte: now } } },
+        // Le défi lui-même est mort (refusé/annulé) sans avoir été joué.
+        { challenge: { status: { in: ['declined', 'cancelled'] } } },
+      ],
+    },
+    select: { id: true },
   });
-  if (due.length === 0) return;
-  const credited = await prisma.$transaction(async (tx) => {
-    const acc: string[] = [];
-    for (const ops of due) acc.push(...(await settleOpsDuelBetsTx(tx, ops)));
-    return acc;
-  });
-  if (credited.length) emit([...new Set(credited)], { type: 'panel:update', payload: {} });
+  if (dead.length === 0) return;
+  const ids = dead.map((b) => b.id);
+  const refunded = await prisma.$transaction((tx) => refundBetsTx(tx, { id: { in: ids } }));
+  if (refunded.length) emit([...new Set(refunded)], { type: 'panel:update', payload: {} });
 }
 
 /**
@@ -9705,7 +9743,7 @@ app.get('/bets', async (c) => {
   // l'historique « Mes paris » reflète immédiatement les gains/remboursements.
   await sweepExpiredOpsBets();
   const now = new Date();
-  const [user, myBetsRaw, openTours, activeOps] = await Promise.all([
+  const [user, myBetsRaw, openTours, openDuelChallenges] = await Promise.all([
     prisma.user.findUnique({ where: { login: me }, select: { leagueCoins: true } }),
     prisma.bet.findMany({
       where: { bettorLogin: me },
@@ -9728,47 +9766,45 @@ app.get('/bets', async (c) => {
       orderBy: { createdAt: 'desc' },
       include: { entries: { select: { login: true } } },
     }),
-    // Duels d'ops en cours auxquels JE ne participe pas (ni hunter ni cible).
-    prisma.ops.findMany({
-      where: { expiresAt: { gt: now }, ownerLogin: { not: me }, targetLogin: { not: me } },
-      orderBy: { declaredAt: 'desc' },
+    // Duels d'ops PARIABLES : chaque défi forcé encore À JOUER (status 'accepted')
+    // d'un ops actif, auquel JE ne participe pas (ni traqueur ni cible). Un duel =
+    // un marché distinct. Le marché se ferme dès que le défi est enregistré
+    // (status 'recorded' → match en cours) ou refusé/annulé.
+    prisma.challenge.findMany({
+      where: {
+        opsId: { not: null },
+        status: 'accepted',
+        challengerLogin: { not: me },
+        opponentLogin: { not: me },
+        ops: { expiresAt: { gt: now }, endedAt: null },
+      },
+      orderBy: { createdAt: 'desc' },
       include: {
-        owner: { select: { login: true, imageUrl: true } },
-        target: { select: { login: true, imageUrl: true } },
+        challenger: { select: { login: true, imageUrl: true } },
+        opponent: { select: { login: true, imageUrl: true } },
+        ops: { select: { expiresAt: true } },
       },
     }),
   ]);
-  // Marché d'un duel ouvert tant qu'AUCUN match n'a été joué entre les deux
-  // depuis la déclaration (comme les tournois, on ne parie qu'au tout début), et
-  // si je n'ai pas déjà un pari ouvert dessus.
-  const myOpenOpsIds = new Set(
-    myBetsRaw.filter((b) => b.targetType === 'ops' && b.status === 'open').map((b) => b.opsId),
+  // Je ne peux pas reparier sur un duel où j'ai déjà un pari ouvert.
+  const myOpenDuelIds = new Set(
+    myBetsRaw
+      .filter((b) => b.targetType === 'ops' && b.status === 'open')
+      .map((b) => b.challengeId),
   );
-  const openOpsDuels = (
-    await Promise.all(
-      activeOps.map(async (o) => {
-        if (myOpenOpsIds.has(o.id)) return null;
-        const played = await prisma.playedMatch.count({
-          where: {
-            playedAt: { gte: o.declaredAt },
-            OR: [
-              { playerALogin: o.ownerLogin, playerBLogin: o.targetLogin },
-              { playerALogin: o.targetLogin, playerBLogin: o.ownerLogin },
-            ],
-          },
-        });
-        if (played > 0) return null; // le duel a commencé → marché fermé
-        return {
-          id: o.id,
-          ownerLogin: o.ownerLogin,
-          targetLogin: o.targetLogin,
-          ownerImageUrl: o.owner.imageUrl,
-          targetImageUrl: o.target.imageUrl,
-          expiresAt: o.expiresAt,
-        };
-      }),
-    )
-  ).filter((x): x is NonNullable<typeof x> => x !== null);
+  const openOpsDuels = openDuelChallenges
+    .filter((ch) => !myOpenDuelIds.has(ch.id))
+    .map((ch) => ({
+      // `id` = id du DUEL (le défi forcé) sur lequel on parie.
+      id: ch.id,
+      opsId: ch.opsId,
+      ownerLogin: ch.challengerLogin,
+      targetLogin: ch.opponentLogin,
+      ownerImageUrl: ch.challenger.imageUrl,
+      targetImageUrl: ch.opponent.imageUrl,
+      game: ch.game,
+      expiresAt: ch.ops?.expiresAt ?? null,
+    }));
   return c.json({
     coins: user?.leagueCoins ?? 0,
     myBets: myBetsRaw.map((b) => ({
@@ -9779,6 +9815,7 @@ app.get('/bets', async (c) => {
       game: b.tournament?.game ?? null,
       matchId: b.matchId,
       opsId: b.opsId,
+      challengeId: b.challengeId,
       opsOwnerLogin: b.ops?.ownerLogin ?? null,
       opsTargetLogin: b.ops?.targetLogin ?? null,
       choiceLogin: b.choiceLogin,
@@ -9875,10 +9912,11 @@ app.post('/bets', async (c) => {
   return c.json({ bet: result.bet, coins: result.balance }, 201);
 });
 
-// Pari sur l'issue d'un duel d'OPS : on pronostique le hunter (owner) OU la cible
-// (target). Vainqueur du duel = qui gagne le plus de matchs pendant l'ops.
+// Pari sur l'issue d'un DUEL d'OPS précis (un défi forcé) : on pronostique le
+// traqueur (challenger) OU la cible (opponent). Le gagnant du pari = le vainqueur
+// du match de ce duel (réglé au confirm). `challengeId` = id du duel parié.
 const PlaceOpsBetSchema = z.object({
-  opsId: z.string().min(1),
+  challengeId: z.string().min(1),
   choiceLogin: z.string().min(1),
   stake: z.number().int().positive(),
 });
@@ -9888,38 +9926,32 @@ app.post('/bets/ops', async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceOpsBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  const { opsId, choiceLogin, stake } = parsed.data;
+  const { challengeId, choiceLogin, stake } = parsed.data;
   const result = await prisma.$transaction(async (tx) => {
-    const ops = await tx.ops.findUnique({ where: { id: opsId } });
-    if (!ops) throw new HTTPException(404, { message: 'duel introuvable' });
-    // Marché ouvert uniquement tant que l'ops est actif.
-    if (ops.expiresAt <= new Date()) {
+    const ch = await tx.challenge.findUnique({
+      where: { id: challengeId },
+      include: { ops: true },
+    });
+    if (!ch || !ch.opsId || !ch.ops) throw new HTTPException(404, { message: 'duel introuvable' });
+    // Marché ouvert uniquement tant que le défi est À JOUER (accepté, pas encore
+    // enregistré) et que l'ops parent est encore actif.
+    if (ch.status !== 'accepted') {
+      throw new HTTPException(409, { message: 'les paris sont fermés : le duel a déjà commencé' });
+    }
+    if (ch.ops.endedAt || ch.ops.expiresAt <= new Date()) {
       throw new HTTPException(409, { message: 'les paris sont fermés : le duel est terminé' });
     }
     // Les deux protagonistes ne peuvent pas parier sur leur propre duel.
-    if (me === ops.ownerLogin || me === ops.targetLogin) {
+    if (me === ch.challengerLogin || me === ch.opponentLogin) {
       throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre duel' });
     }
     // Le pronostic doit être l'un des deux duellistes.
-    if (choiceLogin !== ops.ownerLogin && choiceLogin !== ops.targetLogin) {
+    if (choiceLogin !== ch.challengerLogin && choiceLogin !== ch.opponentLogin) {
       throw new HTTPException(400, { message: 'le pronostic doit être un des deux duellistes' });
-    }
-    // On ne parie qu'AU DÉBUT : dès qu'un match a été joué entre eux, marché fermé.
-    const played = await tx.playedMatch.count({
-      where: {
-        playedAt: { gte: ops.declaredAt },
-        OR: [
-          { playerALogin: ops.ownerLogin, playerBLogin: ops.targetLogin },
-          { playerALogin: ops.targetLogin, playerBLogin: ops.ownerLogin },
-        ],
-      },
-    });
-    if (played > 0) {
-      throw new HTTPException(409, { message: 'les paris sont fermés : le duel a déjà commencé' });
     }
     // Un seul pari ouvert par duel.
     const dup = await tx.bet.findFirst({
-      where: { bettorLogin: me, status: 'open', opsId },
+      where: { bettorLogin: me, status: 'open', challengeId },
     });
     if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur ce duel' });
 
@@ -9935,7 +9967,8 @@ app.post('/bets/ops', async (c) => {
         targetType: 'ops',
         tournamentId: null,
         matchId: null,
-        opsId,
+        opsId: ch.opsId,
+        challengeId,
         choiceLogin,
         stake,
       },
