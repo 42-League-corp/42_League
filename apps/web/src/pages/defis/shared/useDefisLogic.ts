@@ -59,7 +59,9 @@ export function useDefisLogic(): DefisLogic {
     const inc: Challenge[] = [];
     const out: Challenge[] = [];
     const acc: Challenge[] = [];
-    for (const c of challenges) {
+    // Plus récents en haut : on trie la source par date décroissante.
+    const sorted = [...challenges].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    for (const c of sorted) {
       if (c.status === 'accepted') {
         acc.push(c);
       } else if (c.status === 'pending') {
@@ -81,7 +83,9 @@ export function useDefisLogic(): DefisLogic {
   const { pendingToConfirm, pendingWaiting } = useMemo(() => {
     const toConfirm: PendingMatch[] = [];
     const waiting: PendingMatch[] = [];
-    for (const p of pending) {
+    // Plus récents en haut : on trie la source par date de déclaration décroissante.
+    const sorted = [...pending].sort((a, b) => +new Date(b.declaredAt) - +new Date(a.declaredAt));
+    for (const p of sorted) {
       if (p.mode === '2v2') {
         // 2v2 : les 3 NON-déclarants (coéquipier du déclarant + les 2 adversaires)
         // confirment chacun leur présence — c'est l'anti-farming du back, qui exige
@@ -108,7 +112,9 @@ export function useDefisLogic(): DefisLogic {
   const { ffaToConfirm, ffaWaiting } = useMemo(() => {
     const toConfirm: PendingFfa[] = [];
     const waiting: PendingFfa[] = [];
-    for (const f of pendingFfas) {
+    // Plus récents en haut : on trie la source par date décroissante.
+    const sorted = [...pendingFfas].sort((a, b) => +new Date(b.declaredAt) - +new Date(a.declaredAt));
+    for (const f of sorted) {
       // Les fléchettes réutilisent les tables FFA (game='flechettes') ; elles
       // ont leur propre source (pendingDarts) et ne doivent JAMAIS apparaître
       // dans un flux/carte Smash.
@@ -125,7 +131,9 @@ export function useDefisLogic(): DefisLogic {
   const { dartsToConfirm, dartsWaiting } = useMemo(() => {
     const toConfirm: PendingFfa[] = [];
     const waiting: PendingFfa[] = [];
-    for (const d of pendingDarts) {
+    // Plus récents en haut : on trie la source par date décroissante.
+    const sorted = [...pendingDarts].sort((a, b) => +new Date(b.declaredAt) - +new Date(a.declaredAt));
+    for (const d of sorted) {
       const mine = d.participants.find((p) => p.login === myLogin);
       if (!mine) continue;
       if (mine.confirmed) waiting.push(d);

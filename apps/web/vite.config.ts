@@ -86,11 +86,17 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              // Avatars 42 — cache long.
+              // Avatars 42 — StaleWhileRevalidate : sert le cache instantanément
+              // (perf) MAIS revalide en arrière-plan à chaque chargement. En
+              // CacheFirst, une réponse opaque cassée (hoquet CDN, fetch partiel)
+              // restait servie 30 j → pp absentes jusqu'au Ctrl+Shift+R qui bypass
+              // le SW. SWR auto-répare au rechargement suivant. cacheName bumpé
+              // pour repartir d'un cache propre côté clients déjà empoisonnés.
               urlPattern: /^https:\/\/cdn\.intra\.42\.fr\//,
-              handler: 'CacheFirst',
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'avatars-42',
+                cacheName: 'avatars-42-v2',
+                cacheableResponse: { statuses: [0, 200] },
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
               },
             },

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useLeagueData } from '../hooks/useLeagueData';
+import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
 import { api } from '../lib/api';
 import { announcementKindMeta } from '../lib/announcements';
@@ -25,6 +26,22 @@ export function AnnouncementPopup() {
   // Snapshot figé à l'ouverture : on ne veut pas que la liste change sous nos
   // pieds quand `refresh` vide me.unseenAnnouncements après l'accusé de lecture.
   const queue = useMemo(() => me?.unseenAnnouncements ?? [], [me?.unseenAnnouncements]);
+
+  // Temps réel : quand le /god publie une annonce, on recharge `me` → la file se
+  // remplit sans refresh manuel (le serveur broadcaste `announcement:created`).
+  useServerEvents(refresh, ['announcement:created']);
+
+  // Quand de NOUVELLES annonces arrivent (file qui change pour du contenu inédit),
+  // on ré-ouvre le popup même si le joueur en avait déjà fermé d'anciennes.
+  const idsKey = queue.map((a) => a.id).join(',');
+  const prevIdsKey = useRef(idsKey);
+  useEffect(() => {
+    if (idsKey && idsKey !== prevIdsKey.current) {
+      setDismissed(false);
+      setIndex(0);
+    }
+    prevIdsKey.current = idsKey;
+  }, [idsKey]);
 
   // Ne pas gêner l'onboarding du tout premier login (modale prioritaire).
   const onboarded = !!me?.user?.onboardedAt;

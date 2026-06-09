@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, type LucideIcon } from 'lucide-react';
 import { api, type AppNotification } from '../lib/api';
@@ -100,6 +101,7 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('todo');
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -128,7 +130,12 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      // Le panneau est rendu via portal (hors du containerRef), donc on teste
+      // les deux : clic dans la cloche OU dans le panneau → on ne ferme pas.
+      if (containerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -175,8 +182,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
         )}
       </button>
 
-      {open && (
+      {open && renderPanel(
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="false"
           aria-label={t('notif.title')}
@@ -286,4 +294,16 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
       )}
     </div>
   );
+
+  /**
+   * Variante mobile (« down ») : le panneau est en `position: fixed`, mais il est
+   * monté à l'intérieur du header `.glass` (backdrop-filter) qui crée un contexte
+   * d'empilement ET piège le `fixed` dans sa boîte → le panneau passerait DERRIÈRE
+   * le contenu/les images de la page malgré son z-index énorme. On le rend donc via
+   * portal sur `document.body` pour qu'il échappe à ce contexte. La variante « up »
+   * (desktop) est en `position: absolute` ancrée sur la cloche → on la garde inline.
+   */
+  function renderPanel(node: ReactNode): ReactNode {
+    return placement === 'down' ? createPortal(node, document.body) : node;
+  }
 }
