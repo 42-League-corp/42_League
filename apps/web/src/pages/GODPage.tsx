@@ -986,6 +986,10 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                         // sinon un superadmin ne peut jamais reset son propre cooldown.
                         <div className="flex items-center gap-1.5 justify-end flex-wrap">
                           <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
+                          {/* Un SUPERADMIN peut éditer l'ELO/les stats d'un autre superadmin (et les siennes) — le rôle et le ban restent verrouillés. */}
+                          {myRole === 'SUPERADMIN' && (
+                            <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
+                          )}
                           <Btn onClick={() => resetOpsCooldown(u.login)} disabled={pending === u.login} variant="ghost" className="border border-red-500/40 text-red-400">{t('god.users.resetCooldown')}</Btn>
                         </div>
                       ) : (
