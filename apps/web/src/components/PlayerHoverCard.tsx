@@ -63,10 +63,13 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
       {/* Titre équipé — bannière dorée centrée en HAUT de la carte. */}
       {entry?.title && (
         <div className="mb-2.5 flex justify-center">
-          <span className="inline-flex items-center gap-1 max-w-full text-gold italic text-xs font-bold truncate">
-            <span className="text-gold/70 leading-none">❝</span>
+          <span
+            className="inline-flex items-center gap-1 max-w-full italic text-xs font-bold truncate"
+            style={{ color: entry.titleColor ?? '#ffc94a' }}
+          >
+            <span className="opacity-70 leading-none">❝</span>
             <span className="truncate">{entry.title}</span>
-            <span className="text-gold/70 leading-none">❞</span>
+            <span className="opacity-70 leading-none">❞</span>
           </span>
         </div>
       )}

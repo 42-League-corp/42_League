@@ -146,7 +146,7 @@ export function ProfilDesktop() {
               className="absolute inset-0 pointer-events-none"
               style={{ backgroundImage: `url(${equippedBanner})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/45" />
+            <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/55" />
           </>
         )}
         {/* Halo conique animé très discret (coupé si prefers-reduced-motion). */}
@@ -172,13 +172,13 @@ export function ProfilDesktop() {
         <div className="relative z-10 pt-3.5 pb-1 flex items-center justify-center px-5">
           <span
             className="inline-flex items-center gap-1.5 max-w-[80%]"
-            style={effectiveTitleColor ? { color: effectiveTitleColor } : undefined}
+            style={isTarnished ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
           >
-            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❝</span>
-            <span className={`italic text-lg font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold'}`}>
+            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❝</span>
+            <span className={`italic text-lg font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : ''}`}>
               {titleLabel}
             </span>
-            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❞</span>
+            <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
           </span>
           <BannerPicker className="absolute left-5" />
           <TitlePicker className="absolute right-5" />
@@ -217,7 +217,7 @@ export function ProfilDesktop() {
             </div>
             {realName && <div className="text-xs text-muted-2 font-mono truncate">@{u.login}</div>}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/60 border border-border/60 rounded-full px-2.5 py-1">
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-2 font-bold uppercase tracking-wider bg-bg-1/80 border border-border/60 rounded-full px-2.5 py-1">
                 <MapPin className="w-3 h-3 text-gold/70" strokeWidth={2.5} />
                 {u.campus ?? '—'}
               </span>
@@ -227,7 +227,7 @@ export function ProfilDesktop() {
                   animate={{ scale: 1, rotate: 0 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 16, delay: 0.25 }}
                   className={`inline-flex items-center gap-1 font-mono text-[11px] font-extrabold tabular-nums rounded-full px-2.5 py-1 ${
-                    isTop1 ? 'metal-plate-gold shadow-gold-glow' : 'bg-bg-1/60 text-gold border border-gold/40'
+                    isTop1 ? 'metal-plate-gold shadow-gold-glow' : 'bg-bg-1/80 text-gold border border-gold/40'
                   }`}
                 >
                   {isTop1 && <Crown className="w-3 h-3" strokeWidth={2.5} />}#{myRank}

@@ -151,7 +151,7 @@ export function ProfileHeroCard({
             className="absolute inset-0 pointer-events-none"
             style={{ backgroundImage: `url(${equippedBanner})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
           />
-          <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/45" />
+          <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/55" />
         </>
       )}
       {/* Tubes laiton décoratifs */}
@@ -186,13 +186,13 @@ export function ProfileHeroCard({
         <div className="relative flex items-center justify-center gap-1.5 mb-4">
           <span
             className="inline-flex items-center gap-1.5 max-w-[80%] min-w-0"
-            style={effectiveTitleColor ? { color: effectiveTitleColor } : undefined}
+            style={isTarnished ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
           >
-            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❝</span>
-            <span className={`italic text-base font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold'}`}>
+            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❝</span>
+            <span className={`italic text-base font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : ''}`}>
               {titleLabel}
             </span>
-            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : effectiveTitleColor ? '' : 'text-gold/70'}`}>❞</span>
+            <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
           </span>
           {isMe && <TitlePicker className="shrink-0" />}
           {isMe && <BannerPicker className="absolute left-0" />}

@@ -171,13 +171,13 @@ export function ProfilePreviewModal({
               <div className="relative z-10 pt-5 pb-1 flex items-center justify-center px-6">
                 <span
                   className="inline-flex items-center gap-1.5 max-w-[85%]"
-                  style={titleColor ? { color: titleColor } : undefined}
+                  style={isTarnished ? undefined : { color: titleColor ?? '#ffc94a' }}
                 >
-                  <span className={`text-xl leading-none opacity-70 ${isTarnished ? 'text-muted-2' : titleColor ? '' : 'text-gold/70'}`}>❝</span>
-                  <span className={`italic text-xl font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : titleColor ? '' : 'text-gold'}`}>
+                  <span className={`text-xl leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❝</span>
+                  <span className={`italic text-xl font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : ''}`}>
                     {titleLabel}
                   </span>
-                  <span className={`text-xl leading-none opacity-70 ${isTarnished ? 'text-muted-2' : titleColor ? '' : 'text-gold/70'}`}>❞</span>
+                  <span className={`text-xl leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
                 </span>
               </div>
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useLeagueData } from './useLeagueData';
+import { useAuth } from './useAuth';
 import { OPS_FORCED_MATCHES, type Ops } from '../lib/api';
 
 export interface OpsStatus {
@@ -21,6 +22,14 @@ export interface OpsStatus {
    * en rouge fluo clignotant les cartes de duel d'ops, des deux côtés.
    */
   isOpsWith: (login: string | null | undefined) => boolean;
+  /**
+   * `true` UNIQUEMENT pour un vrai duel d'ops : la confrontation entre le traqueur
+   * et sa cible. Le couple {a, b} doit être exactement {moi, mon adversaire d'ops}.
+   * Plus strict que `isOpsWith` : un match qui ne fait que *contenir* un participant
+   * d'ops (sans m'opposer à lui) ne clignote pas. C'est le test à utiliser sur les
+   * cartes de défi/match.
+   */
+  isOpsDuel: (a: string | null | undefined, b: string | null | undefined) => boolean;
 }
 
 /**
@@ -30,10 +39,15 @@ export interface OpsStatus {
  */
 export function useOpsStatus(): OpsStatus {
   const { opsMe } = useLeagueData();
+  const { login: myLogin } = useAuth();
 
   return useMemo(() => {
-    const hunter = opsMe?.targetedBy ?? null;
-    const prey = opsMe?.current ?? null;
+    // Un ops expiré ne doit plus rien faire clignoter.
+    const now = Date.now();
+    const active = (o: Ops | null | undefined): Ops | null =>
+      o && new Date(o.expiresAt).getTime() > now ? o : null;
+    const hunter = active(opsMe?.targetedBy);
+    const prey = active(opsMe?.current);
     const left = (o: Ops | null) =>
       o ? Math.max(0, OPS_FORCED_MATCHES - (o.forcedUsed ?? 0)) : 0;
     // Logins avec lesquels je suis en ops actif : ma proie (je traque) et/ou mon
@@ -41,6 +55,7 @@ export function useOpsStatus(): OpsStatus {
     const opsLogins = new Set<string>();
     if (prey) opsLogins.add(prey.targetLogin);
     if (hunter) opsLogins.add(hunter.ownerLogin);
+    const isOpsWith = (login: string | null | undefined) => !!login && opsLogins.has(login);
     return {
       amTarget: !!hunter,
       amHunter: !!prey,
@@ -48,7 +63,13 @@ export function useOpsStatus(): OpsStatus {
       prey,
       forcedLeftAsTarget: left(hunter),
       forcedLeftAsHunter: left(prey),
-      isOpsWith: (login) => !!login && opsLogins.has(login),
+      isOpsWith,
+      // Vrai duel d'ops = le couple m'oppose, moi, à mon adversaire d'ops. On exige
+      // qu'un côté soit moi ET l'autre un login d'ops — sinon un simple match qui
+      // « touche » un participant d'ops (sans me concerner) clignoterait à tort.
+      isOpsDuel: (a, b) =>
+        !!myLogin &&
+        ((a === myLogin && isOpsWith(b)) || (b === myLogin && isOpsWith(a))),
     };
-  }, [opsMe]);
+  }, [opsMe, myLogin]);
 }

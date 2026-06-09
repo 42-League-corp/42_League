@@ -26,16 +26,6 @@ import { GAME_META } from '../lib/gameMeta';
 import { pickRating } from '../lib/gameStats';
 import { useT } from '../lib/i18n';
 import { UniverseTransition } from '../components/UniverseTransition';
-import type { Game } from '../lib/gameMode';
-
-/** Totem vertical (PNG transparent) affiché en fond de la sidebar par univers. */
-const SIDEBAR_PROP: Record<Game, string> = {
-  babyfoot: '/universe/babyfoot-prop.png',
-  smash: '/universe/smash-prop.png',
-  chess: '/universe/chess-prop.png',
-  streetfighter: '/universe/streetfighter-prop.png',
-  flechettes: '/universe/flechettes-prop.png',
-};
 
 interface NavDef {
   to: string;
@@ -96,28 +86,6 @@ export function DesktopShell({ children }: DesktopShellProps) {
       <aside className="relative flex flex-col w-64 h-dvh z-20 no-select overflow-hidden">
         {/* Fond + grille HUD */}
         <div className="absolute inset-0 bg-gradient-to-b from-bg-1 via-bg-1/95 to-bg-0 hud-grid" />
-
-        {/* Totem vertical de l'univers — en fond de la sidebar, derrière la nav.
-            Masqué en dégradé vers le haut pour ne pas gêner les liens ; change
-            avec l'univers (croisé via key → léger fondu). */}
-        <img
-          key={game}
-          src={SIDEBAR_PROP[game]}
-          alt=""
-          aria-hidden
-          draggable={false}
-          decoding="async"
-          className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto w-[92%] select-none object-contain animate-backdrop-in"
-          style={{
-            opacity: 0.38,
-            maskImage: 'linear-gradient(to top, black 30%, transparent 82%)',
-            WebkitMaskImage: 'linear-gradient(to top, black 30%, transparent 82%)',
-            filter: 'drop-shadow(0 0 24px rgba(255,201,74,0.22))',
-          }}
-        />
-        {/* Voile sombre à la base : protège la lisibilité du bloc profil posé
-            par-dessus le totem. */}
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-bg-0 via-bg-0/70 to-transparent pointer-events-none" />
 
         {/* Bordure droite « tube laiton » */}
         <div className="absolute top-0 bottom-0 right-0 w-[3px] brass-pipe pointer-events-none" />

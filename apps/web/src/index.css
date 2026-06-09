@@ -296,29 +296,59 @@
       0 4px 16px rgba(0, 0, 0, 0.4);
   }
 
-  /* OPS — duel d'ops : bord ROUGE FLUO BRILLANT CLIGNOTANT, quel que soit le mode
-     de jeu et l'état (en attente d'acceptation, de score, programmé…). Posée sur
-     les cartes de défi/match qui opposent un traqueur et sa cible, des deux côtés
-     (attaquant ET victime). !important pour écraser les bordures gold/border des
-     cartes existantes pendant toute la durée de l'animation. */
+  /* OPS — vrai duel d'ops (traqueur ⚔ cible) : la ligne devient ROUGE et un halo
+     rouge pulse doucement. Réservé aux cartes qui M'opposent à mon adversaire d'ops
+     (cf. isOpsDuel) — pas à tous les matchs qui contiennent un participant d'ops.
+     Bord + fond rouges fixes (« ligne en rouge »), seul le halo est animé.
+
+     Perf : on n'anime QUE box-shadow (propriété compositée — pas de reflow ni de
+     repaint de bordure à chaque frame, contrairement à l'ancienne anim qui faisait
+     clignoter border-color !important). Cadence ralentie à 1,6 s = plus lisible et
+     beaucoup moins agressif. */
   .ops-duel {
-    border-color: #ff1f4f !important;
-    animation: ops-flash 0.85s ease-in-out infinite !important;
+    position: relative;
+    border-color: #ff2d55 !important;
+    background-color: rgba(255, 45, 85, 0.06) !important;
+    animation: ops-flash 1.6s ease-in-out infinite;
+    will-change: box-shadow;
   }
   @keyframes ops-flash {
     0%,
     100% {
-      border-color: rgba(255, 45, 85, 0.55);
       box-shadow:
-        0 0 6px rgba(255, 45, 85, 0.55),
-        0 0 14px rgba(255, 45, 85, 0.28);
+        0 0 0 1px rgba(255, 45, 85, 0.45),
+        0 0 8px rgba(255, 45, 85, 0.22);
     }
     50% {
-      border-color: #ff2d6b;
       box-shadow:
-        0 0 24px rgba(255, 45, 85, 1),
-        0 0 52px rgba(255, 45, 85, 0.6),
-        inset 0 0 16px rgba(255, 45, 85, 0.28);
+        0 0 0 1px rgba(255, 45, 85, 0.9),
+        0 0 22px rgba(255, 45, 85, 0.55);
+    }
+  }
+  /* Badge explicite « DUEL D'OPS » épinglé dans le coin haut-droit (à l'intérieur
+     du cadre pour ne jamais être rogné par un overflow-hidden), pour préciser de
+     quoi il s'agit en plus de l'animation. */
+  .ops-duel::after {
+    content: '⚔ DUEL D\'OPS';
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    z-index: 2;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    background: #ff2d55;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(255, 45, 85, 0.7);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ops-duel {
+      animation: none;
     }
   }
 

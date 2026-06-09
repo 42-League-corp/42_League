@@ -568,7 +568,10 @@ export function LeaderboardDesktop() {
                           )}
                         </PlayerLink>
                         {u.title && (
-                          <div className="text-[10px] text-gold italic mt-0.5 ml-10 truncate">
+                          <div
+                            className="text-[10px] italic mt-0.5 ml-10 truncate"
+                            style={{ color: u.titleColor ?? '#ffc94a' }}
+                          >
                             « {u.title} »
                           </div>
                         )}
