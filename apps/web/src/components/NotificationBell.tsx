@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, type LucideIcon } from 'lucide-react';
@@ -102,6 +102,10 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   const [tab, setTab] = useState<Tab>('todo');
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Position fixe du panneau desktop (« up ») : calculée depuis la cloche pour pouvoir
+  // le rendre via portal sur document.body (sinon il est rogné par l'overflow-hidden
+  // de la sidebar et son z-index reste piégé dans le contexte d'empilement z-20).
+  const [coords, setCoords] = useState<{ left: number; bottom: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -143,6 +147,25 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
 
   // Fermeture sur Échap quand le panneau est ouvert.
   useEscapeKey(open, () => setOpen(false));
+
+  // Desktop (« up ») : mesure la cloche pour ancrer le panneau (à sa droite, aligné en
+  // bas) en coordonnées viewport. Recalculé à l'ouverture, au resize et au scroll.
+  useLayoutEffect(() => {
+    if (!open || placement !== 'up') return;
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setCoords({ left: r.right + 8, bottom: window.innerHeight - r.bottom });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open, placement]);
 
   const markAll = async () => {
     setUnread(0);
@@ -188,11 +211,17 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
           role="dialog"
           aria-modal="false"
           aria-label={t('notif.title')}
-          style={{ zIndex: 2147483645 }}
+          style={
+            placement === 'up'
+              ? { zIndex: 2147483645, position: 'fixed', left: coords?.left, bottom: coords?.bottom }
+              : { zIndex: 2147483645 }
+          }
           className={`rounded-xl overflow-hidden animate-pop bg-bg-0 border border-gold/25 shadow-2xl shadow-black/60 ${
             placement === 'up'
-              ? // Desktop : ancré SUR la cloche, ouvre à droite, aligné en bas.
-                'absolute w-80 max-w-[calc(100vw-1.5rem)] bottom-0 left-full ml-2'
+              ? // Desktop : porté via portal sur document.body, ancré à DROITE de la
+                // cloche (coordonnées viewport calculées plus haut) → échappe à
+                // l'overflow-hidden de la sidebar et passe au premier plan.
+                'w-80 max-w-[calc(100vw-1.5rem)]'
               : // Mobile : la cloche n'est pas au bord droit (GOD + avatar à sa
                 // droite), donc on n'ancre PAS sur l'icône (le panneau partirait
                 // hors écran). On le fixe au viewport : collé au bord droit sous
@@ -296,14 +325,14 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   );
 
   /**
-   * Variante mobile (« down ») : le panneau est en `position: fixed`, mais il est
-   * monté à l'intérieur du header `.glass` (backdrop-filter) qui crée un contexte
-   * d'empilement ET piège le `fixed` dans sa boîte → le panneau passerait DERRIÈRE
-   * le contenu/les images de la page malgré son z-index énorme. On le rend donc via
-   * portal sur `document.body` pour qu'il échappe à ce contexte. La variante « up »
-   * (desktop) est en `position: absolute` ancrée sur la cloche → on la garde inline.
+   * Les DEUX variantes sont rendues via portal sur `document.body`. Sinon le panneau
+   * est piégé dans le contexte d'empilement de son conteneur (header `.glass` en
+   * mobile, sidebar `overflow-hidden` + `z-20` en desktop) et son z-index énorme ne
+   * sert à rien : il passe DERRIÈRE le contenu de la page / est rogné. Le portal le
+   * sort de ces boîtes ; le « up » est positionné en coordonnées viewport (cf. coords),
+   * le « down » reste collé au bord droit du viewport.
    */
   function renderPanel(node: ReactNode): ReactNode {
-    return placement === 'down' ? createPortal(node, document.body) : node;
+    return createPortal(node, document.body);
   }
 }
