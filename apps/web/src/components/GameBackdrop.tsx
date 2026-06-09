@@ -37,19 +37,21 @@ const ART: Record<Game, UniverseArt> = {
 // Paramètres visuels par phase de transition.
 // En commençant la révélation dès la phase "exit", on tire parti des ~380 ms
 // de dispersion des blocs pour montrer l'image — sans allonger l'animation.
+type PhaseStyle = { filter: string; scrim: number; vignette: number; scale: number; filterDur: number; scrimDur: number };
+
 const PHASE_STYLES = {
   idle:   { filter: 'blur(3px) saturate(1.03) brightness(0.55)', scrim: 0.42, vignette: 1.0, scale: 1.06, filterDur: 340, scrimDur: 320 },
   exit:   { filter: 'blur(1px) saturate(1.08) brightness(0.75)', scrim: 0.18, vignette: 0.6, scale: 1.03, filterDur: 460, scrimDur: 420 },
   reveal: { filter: 'blur(0px) saturate(1.15) brightness(0.92)', scrim: 0.03, vignette: 0.2, scale: 1.00, filterDur: 220, scrimDur: 200 },
   enter:  { filter: 'blur(2px) saturate(1.05) brightness(0.68)', scrim: 0.30, vignette: 0.8, scale: 1.04, filterDur: 340, scrimDur: 360 },
-} as const satisfies Record<string, { filter: string; scrim: number; vignette: number; scale: number; filterDur: number; scrimDur: number }>;
+} as const satisfies Record<string, PhaseStyle>;
 
 function GameBackdropImpl() {
   const { game } = useGameMode();
   const phase = useTransitionPhase();
 
   // Fallback sur idle si phase inconnue.
-  const ps = (PHASE_STYLES as Record<string, typeof PHASE_STYLES.idle>)[phase] ?? PHASE_STYLES.idle;
+  const ps = (PHASE_STYLES as Record<string, PhaseStyle>)[phase] ?? PHASE_STYLES.idle;
 
   // Précharge les 5 photos une fois → cross-fade instantané ensuite.
   useEffect(() => {
