@@ -2897,6 +2897,7 @@ function SeasonsTab() {
       const r = await api.syncEloFromProd();
       setMsg(
         t('god.season.syncDone')
+          .replace('{prodCount}', String(r.prodCount))
           .replace('{updated}', String(r.updated))
           .replace('{created}', String(r.created))
           .replace('{skipped}', String(r.skipped.length)),

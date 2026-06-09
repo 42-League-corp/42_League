@@ -1028,7 +1028,7 @@ export const api = {
   // Synchro ELO/stats prod → staging (staging only, superadmin). Renvoie les
   // compteurs de comptes mis à jour / créés / sautés.
   syncEloFromProd: () =>
-    request<{ updated: number; created: number; skipped: string[] }>(
+    request<{ prodCount: number; updated: number; created: number; skipped: string[] }>(
       '/admin/seasons/sync-elo-from-prod',
       { method: 'POST' },
     ),

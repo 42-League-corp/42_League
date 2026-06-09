@@ -2086,12 +2086,17 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
   const prod = new PrismaClient({ datasources: { db: { url: prodUrl } } });
   let updated = 0;
   let created = 0;
+  let prodCount = 0;
   const skipped: string[] = [];
   try {
     const prodUsers = await prod.user.findMany({
       where: VISIBLE_USER_WHERE,
       select: PROD_ELO_SELECT,
     });
+    prodCount = prodUsers.length;
+    // Diagnostic : si ce nombre est anormalement bas (ex. 4) alors que la prod est
+    // peuplée, c'est que PROD_READONLY_URL pointe vers la mauvaise base/schéma.
+    console.log(`[sync-elo-from-prod] ${prodCount} utilisateurs lus depuis la prod`);
     for (const u of prodUsers) {
       // Uniquement l'ELO + les compteurs — jamais rôle/permissions/coins.
       const stats = {
@@ -2138,9 +2143,11 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
           });
           created++;
         }
-      } catch {
+      } catch (e) {
         // Collision (ftId déjà pris par un autre login en staging, etc.) → on
-        // saute ce joueur sans casser toute la synchro.
+        // saute ce joueur sans casser toute la synchro. On LOG l'erreur réelle :
+        // sans ça, un échec systématique des create reste invisible.
+        console.warn(`[sync-elo-from-prod] skip ${u.login}:`, e instanceof Error ? e.message : e);
         skipped.push(u.login);
       }
     }
@@ -2153,11 +2160,11 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     actorRole: await getUserRole(me),
     action: 'SYNC_ELO_FROM_PROD',
     target: 'prod',
-    payload: { updated, created, skipped: skipped.length },
+    payload: { prodCount, updated, created, skipped: skipped.length },
   });
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
-  return c.json({ updated, created, skipped });
+  return c.json({ prodCount, updated, created, skipped });
 });
 
 // Supprime une saison : retire le classement figé, les badges champion liés, et
