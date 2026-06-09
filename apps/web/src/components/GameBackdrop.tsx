@@ -27,11 +27,11 @@ interface UniverseArt {
 }
 
 const ART: Record<Game, UniverseArt> = {
-  babyfoot:      { bg: '/universe/babyfoot.jpg',      prop: '/universe/babyfoot-prop.png',      symbol: '/universe/babyfoot-symbol.png' },
-  smash:         { bg: '/universe/smash.jpg',         prop: '/universe/smash-prop.png',         symbol: '/universe/smash-symbol.png' },
-  chess:         { bg: '/universe/chess.jpg',         prop: '/universe/chess-prop.png',         symbol: '/universe/chess-symbol.png' },
-  streetfighter: { bg: '/universe/streetfighter.jpg', prop: '/universe/streetfighter-prop.png', symbol: '/universe/streetfighter-symbol.png' },
-  flechettes:    { bg: '/universe/flechettes.jpg',    prop: '/universe/flechettes-prop.png',    symbol: '/universe/flechettes-symbol.png' },
+  babyfoot:      { bg: '/universe/babyfoot.webp',      prop: '/universe/babyfoot-prop.png',      symbol: '/universe/babyfoot-symbol.png' },
+  smash:         { bg: '/universe/smash.webp',         prop: '/universe/smash-prop.png',         symbol: '/universe/smash-symbol.png' },
+  chess:         { bg: '/universe/chess.webp',         prop: '/universe/chess-prop.png',         symbol: '/universe/chess-symbol.png' },
+  streetfighter: { bg: '/universe/streetfighter.webp', prop: '/universe/streetfighter-prop.png', symbol: '/universe/streetfighter-symbol.png' },
+  flechettes:    { bg: '/universe/flechettes.webp',    prop: '/universe/flechettes-prop.png',    symbol: '/universe/flechettes-symbol.png' },
 };
 
 // Paramètres visuels par phase de transition.
