@@ -311,9 +311,72 @@ export function TournoiDetailPage() {
     setShowCeremony(true);
   };
 
+  // ── Salle de contrôle : méta de pilotage partagées avec l'écran TV live ──
+  const liveHref = `/live-tournament/${tournament.id}`;
+  const hasBracketMatches = (tournament.matches ?? []).some((m) => (m.stage ?? 'bracket') === 'bracket');
+  const phaseLabel =
+    tournament.status === 'registration'
+      ? t('tournois.status.registration')
+      : tournament.status === 'finished'
+        ? t('tournois.status.finished')
+        : tournament.status === 'cancelled'
+          ? t('tournois.status.cancelled')
+          : tournament.format === 'league'
+            ? hasBracketMatches ? 'Phase finale' : 'Phase de ligue'
+            : tournament.format === 'pools'
+              ? hasBracketMatches ? 'Phase finale' : 'Poules'
+              : 'Élimination directe';
+  const cockpitMode = is2v2 ? '2v2' : '1v1';
+
   return (
     <Panel title={tournament.name} sub={sub}>
       <BackLink />
+
+      {/* Barre de commande — console de pilotage : statut/phase, méta, et accès direct
+          à l'écran TV live. La page de contrôle et l'écran live partagent les données
+          (SSE) → toute action ici se reflète instantanément sur la TV. */}
+      <div className="mb-5 rounded-xl border border-gold/25 bg-gradient-to-r from-bg-2/60 to-bg-1/40 p-3 flex flex-wrap items-center gap-3">
+        <span
+          className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${
+            tournament.status === 'in_progress'
+              ? 'bg-red/15 text-red border border-red/40'
+              : tournament.status === 'finished'
+                ? 'bg-gold/15 text-gold border border-gold/40'
+                : 'bg-bg-1 text-muted-2 border border-border'
+          }`}
+        >
+          {tournament.status === 'in_progress' && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-red animate-pulse mr-1.5 align-middle" />
+          )}
+          {phaseLabel}
+        </span>
+        <div className="flex items-center gap-3 text-[11px] text-muted-2 font-mono uppercase tracking-wide">
+          <span>{cockpitMode}</span>
+          <span className="text-border">·</span>
+          <span>{entriesCount}/{tournament.capacity}</span>
+          {tournament.kind === 'official' && (
+            <>
+              <span className="text-border">·</span>
+              <span className="text-gold">Officiel</span>
+            </>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Accès TV : nouvel onglet pour garder la console ouverte pendant le live. */}
+          <Link
+            to={liveHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-b from-gold to-gold-dim text-[#1a0d00] font-extrabold text-sm uppercase tracking-wider shadow-gold-glow hover:brightness-110 transition tap-transparent"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1a0d00]/50" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#1a0d00]" />
+            </span>
+            Écran TV Live
+          </Link>
+        </div>
+      </div>
 
       {/* Cérémonie médiévale au lancement (registration → in_progress). */}
       {showCeremony && (
@@ -596,60 +659,71 @@ export function TournoiDetailPage() {
       )}
 
       {tournament.status !== 'registration' && (
-        <>
-          {tournament.winner && tournament.status === 'finished' && (
-            <div className="border border-gold/40 bg-gold/5 rounded p-5 mb-6 text-center">
-              <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
-                {t('tournois.detail.winner')}
-              </div>
-              <PlayerLink login={tournament.winner.login} className="inline-flex flex-col gap-2 text-base">
-                <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
-                <span className="font-extrabold text-text-strong">{tournament.winner.login}</span>
-              </PlayerLink>
-            </div>
-          )}
-
-          {/* Onglets (tournoi en cours) : suivre le bracket ou parier. */}
-          {tournament.status === 'in_progress' && (
-            <div className="mb-5 max-w-xs">
-              <RankingScopeToggle<'bracket' | 'bets'>
-                value={detailTab}
-                onChange={setDetailTab}
-                choices={[
-                  { value: 'bracket', label: t('tournois.tab.bracket') },
-                  { value: 'bets', label: t('tournois.tab.bets') },
-                ]}
+        // Cockpit : surface de pilotage (bracket / ligue / paris) à gauche, console
+        // d'actions à droite (onglets, état, zone admin). Empilé sur mobile (la
+        // console passe au-dessus pour garder les commandes à portée).
+        <div className="grid xl:grid-cols-[1fr_300px] gap-5 items-start">
+          <div className="min-w-0 order-2 xl:order-1">
+            {tournament.status === 'in_progress' && detailTab === 'bets' ? (
+              <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
+            ) : (
+              <PoolsAndBracket
+                tournament={tournament}
+                myLogin={myLogin ?? null}
+                canManage={isOrganizer || isAdmin}
+                canOfficiate={canOfficiate}
+                onChange={refreshSilent}
               />
-            </div>
-          )}
+            )}
+          </div>
 
-          {tournament.status === 'in_progress' && detailTab === 'bets' ? (
-            <TournamentBets tournament={tournament} myLogin={myLogin ?? null} />
-          ) : (
-            <PoolsAndBracket
-              tournament={tournament}
-              myLogin={myLogin ?? null}
-              canManage={isOrganizer || isAdmin}
-              canOfficiate={canOfficiate}
-              onChange={refreshSilent}
-            />
-          )}
+          <aside className="order-1 xl:order-2 flex flex-col gap-3 xl:sticky xl:top-2">
+            {tournament.winner && tournament.status === 'finished' && (
+              <div className="border border-gold/40 bg-gold/5 rounded-xl p-5 text-center">
+                <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
+                  {t('tournois.detail.winner')}
+                </div>
+                <PlayerLink login={tournament.winner.login} className="inline-flex flex-col gap-2 text-base">
+                  <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
+                  <span className="font-extrabold text-text-strong">{tournament.winner.login}</span>
+                </PlayerLink>
+              </div>
+            )}
 
-          {tournament.status === 'in_progress' &&
-            detailTab === 'bracket' &&
-            (isOrganizer || isAdmin) && (
-              <div className="mt-6 pt-4 border-t border-border/40 flex justify-end gap-2">
+            {/* Onglets (tournoi en cours) : suivre le bracket ou parier. */}
+            {tournament.status === 'in_progress' && (
+              <div className="rounded-xl border border-border/60 bg-bg-2/40 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+                  {t('tournois.detail.tournament')}
+                </div>
+                <RankingScopeToggle<'bracket' | 'bets'>
+                  value={detailTab}
+                  onChange={setDetailTab}
+                  choices={[
+                    { value: 'bracket', label: t('tournois.tab.bracket') },
+                    { value: 'bets', label: t('tournois.tab.bets') },
+                  ]}
+                />
+              </div>
+            )}
+
+            {tournament.status === 'in_progress' && (isOrganizer || isAdmin) && (
+              <div className="rounded-xl border border-red/20 bg-red/[0.04] p-3 flex flex-col gap-2">
+                <div className="text-[10px] uppercase tracking-wider text-red/80 font-extrabold">
+                  {t('tournois.detail.tournament')}
+                </div>
                 {canReshuffle && (
-                  <Button size="sm" variant="ghost" onClick={handleReshuffle}>
+                  <Button size="sm" variant="ghost" onClick={handleReshuffle} className="w-full">
                     {t('tournois.detail.reshuffle')}
                   </Button>
                 )}
-                <Button size="sm" variant="danger" onClick={handleCancel}>
+                <Button size="sm" variant="danger" onClick={handleCancel} className="w-full">
                   {t('tournois.detail.deleteTournament')}
                 </Button>
               </div>
             )}
-        </>
+          </aside>
+        </div>
       )}
     </Panel>
   );
