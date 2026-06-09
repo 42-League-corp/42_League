@@ -766,6 +766,16 @@ export interface Tournament {
   leagueQualifyCount?: number | null;
 }
 
+/**
+ * Tournoi enrichi pour l'écran TV live (`GET /tournaments/:id/live`) : ajoute la
+ * cagnotte des paris « vainqueur du tournoi » agrégée par login (`betPool`), d'où la
+ * page dérive la « HYPE » de chaque duel.
+ */
+export interface LiveTournament extends Tournament {
+  betPool?: Record<string, number>;
+  betTotalCoins?: number;
+}
+
 /** Récompense passée à la création d'un tournoi officiel (cf. backend). */
 export type TournamentPrize =
   | { kind: 'none' }
@@ -1252,6 +1262,12 @@ export const api = {
     request<Tournament[]>(`/tournaments${game && game !== 'babyfoot' ? `?game=${game}` : ''}`),
   tournament: (id: string) =>
     request<Tournament>(`/tournaments/${encodeURIComponent(id)}`),
+  // Variante « écran TV / live » : tournoi + cagnotte des paris agrégée par participant.
+  tournamentLive: (id: string) =>
+    request<LiveTournament>(`/tournaments/${encodeURIComponent(id)}/live`),
+  // Remontée d'une erreur client (page live) vers Discord. Best-effort : 204 attendu.
+  reportClientError: (payload: { message: string; context?: string; stack?: string }) =>
+    request<void>('/client-errors', { method: 'POST', body: JSON.stringify(payload) }),
   createTournament: (input: {
     name: string;
     capacity: number;
