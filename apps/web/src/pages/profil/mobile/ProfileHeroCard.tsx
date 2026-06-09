@@ -148,10 +148,27 @@ export function ProfileHeroCard({
         <>
           <div
             aria-hidden
-            className="absolute inset-0 pointer-events-none"
-            style={{ backgroundImage: `url(${equippedBanner})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            className="absolute inset-0 pointer-events-none scale-105"
+            style={{
+              backgroundImage: `url(${equippedBanner})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              // Léger flou + désaturation : la bannière reste reconnaissable mais
+              // ses détails ne « mangent » plus le texte par-dessus.
+              filter: 'blur(2px) saturate(0.85)',
+            }}
           />
-          <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/55" />
+          {/* Voile lisibilité : assombrissement global + dégradé renforcé en haut
+              (titre) et en bas (stats) → contraste garanti du texte. */}
+          <div aria-hidden className="absolute inset-0 pointer-events-none bg-black/60" />
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 35%, rgba(0,0,0,0.2) 65%, rgba(0,0,0,0.6) 100%)',
+            }}
+          />
         </>
       )}
       {/* Tubes laiton décoratifs */}
