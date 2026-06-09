@@ -745,7 +745,7 @@ model ShopInventory {
 // entre deux utilisations (anti-ops : ANTI_OPS_USE_COOLDOWN_MS).
 model ConsumableInventory {
   userLogin  String    @map("user_login")
-  kind       String // 'anti_ops' | 'elo_mult'
+  kind       String // 'anti_ops' | 'elo_mult' | 'force_duel'
   quantity   Int       @default(0)
   lastUsedAt DateTime? @map("last_used_at")
 

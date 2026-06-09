@@ -177,8 +177,8 @@ export const ShopItemCreateSchema = z
     }
     if (d.category === 'consumable') {
       const kind = d.payload && typeof d.payload.kind === 'string' ? d.payload.kind : '';
-      if (kind !== 'anti_ops' && kind !== 'elo_mult') {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind doit être 'anti_ops' ou 'elo_mult'" });
+      if (kind !== 'anti_ops' && kind !== 'elo_mult' && kind !== 'force_duel') {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind doit être 'anti_ops', 'elo_mult' ou 'force_duel'" });
       }
     }
   });

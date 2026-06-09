@@ -3898,7 +3898,13 @@ function AnnouncementsTab() {
       .finally(() => setLoading(false));
   }, [t]);
 
-  useEffect(() => { load(); }, [load]);
+  // Chargement initial + rafraîchissement silencieux périodique : la liste (et
+  // surtout les compteurs « vu(s) ») reste à jour sans avoir à recharger la page.
+  useEffect(() => {
+    load();
+    const id = window.setInterval(() => load(true), 15000);
+    return () => window.clearInterval(id);
+  }, [load]);
 
   async function handleCreate() {
     setError('');
@@ -4032,6 +4038,7 @@ function AnnouncementsTab() {
 const CONSUMABLE_LABEL: Record<ConsumableKind, string> = {
   anti_ops: 'Anti-OPS',
   elo_mult: "Multiplicateur d'ELO",
+  force_duel: 'Main du Destin',
 };
 
 /** Onglet GOD : gestion des consommables, badges libres et titre d'un joueur. */
@@ -4131,7 +4138,10 @@ function ItemsAdminTab() {
                   <span className="text-sm font-bold text-zinc-100 tabular-nums w-10 text-center">×{c.quantity}</span>
                   <Btn onClick={() => grant(c.kind, 1)}>+1</Btn>
                   <Btn variant="danger" onClick={() => grant(c.kind, -1)}>-1</Btn>
-                  <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
+                  {/* La Main du Destin exige deux cibles : pas de « forçage » admin sans contexte. */}
+                  {c.kind !== 'force_duel' && (
+                    <Btn variant="warn" onClick={() => force(c.kind)}>Forcer l'usage</Btn>
+                  )}
                   {c.kind === 'elo_mult' && data.eloMultArmed && (
                     <span className="text-xs text-amber-400">armé</span>
                   )}
