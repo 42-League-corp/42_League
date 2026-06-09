@@ -878,6 +878,19 @@ function PoolsAndBracket({
   };
   const showAnnounce = canManage && !isChess && hasBracket && !!announceTarget;
 
+  // Officiant : échange de deux joueurs du bracket par drag-and-drop. Le backend
+  // valide (matchs non confirmés), reset l'état des matchs touchés et rembourse les
+  // paris ouverts ; on recharge ensuite l'arbre.
+  const handleSwapBracket = async (loginA: string, loginB: string) => {
+    try {
+      await api.swapBracketPlayers(tournament.id, loginA, loginB);
+      flash.show(t('tournois.flash.swapped'));
+      await onChange();
+    } catch (err) {
+      flash.show(err instanceof Error ? err.message : String(err), 'error');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {isLeague && (
@@ -949,6 +962,14 @@ function PoolsAndBracket({
             )}
           </div>
 
+          {/* Officiant : indice drag-and-drop pour échanger deux joueurs. */}
+          {canOfficiate && (
+            <p className="text-[11px] text-muted-2 mb-2 flex items-center gap-1.5">
+              <span aria-hidden>↔</span>
+              {t('tournois.bracket.swapHint')}
+            </p>
+          )}
+
           {/* Arbre visuel (vue d'ensemble cliquable). */}
           <BracketTree
             matches={bracketMatchesFlat}
@@ -957,6 +978,8 @@ function PoolsAndBracket({
             activeMatchId={tournament.activeMatchId ?? null}
             onSelectMatch={(m) => setSelectedMatchId((cur) => (cur === m.id ? null : m.id))}
             selectedMatchId={selectedMatchId}
+            canSwap={canOfficiate}
+            onSwap={handleSwapBracket}
           />
 
           {/* Détail du match sélectionné : duel (toss → avantage) puis saisie du score. */}

@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
 import { Avatar } from '../Avatar';
 import type { TournamentMatch, TournamentEntry } from '../../lib/api';
 
@@ -17,6 +29,10 @@ export interface BracketTreeProps {
   // Match désigné « en cours » (« match suivant ») : mis en avant (anneau doré
   // pulsé + badge « EN COURS »).
   activeMatchId?: string | null;
+  // Officiant : autorise le drag-and-drop pour échanger deux joueurs du bracket.
+  canSwap?: boolean;
+  // Appelé quand on lâche un joueur sur un autre (échange demandé).
+  onSwap?: (loginA: string, loginB: string) => void;
 }
 
 // Dimensions de layout (px). Un match est une carte de hauteur fixe ;
@@ -59,7 +75,26 @@ export default function BracketTree({
   onSelectMatch,
   selectedMatchId,
   activeMatchId,
+  canSwap = false,
+  onSwap,
 }: BracketTreeProps) {
+  // Drag-and-drop d'échange (officiant) : une pression-déplacement déclenche le
+  // drag ; un simple tap continue de sélectionner le match (contrainte d'activation).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+  );
+  // Login en cours de glissement : rendu dans un DragOverlay flottant (les cartes
+  // sont `overflow-hidden`, donc la ligne ne peut pas « sortir » d'elle-même).
+  const [activeDrag, setActiveDrag] = useState<string | null>(null);
+  const handleDragEnd = (e: DragEndEvent) => {
+    setActiveDrag(null);
+    const a = e.active?.id;
+    const b = e.over?.id;
+    if (canSwap && onSwap && typeof a === 'string' && typeof b === 'string' && a !== b) {
+      onSwap(a, b);
+    }
+  };
   // Index avatar/imageUrl par login.
   const avatarOf = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -177,6 +212,12 @@ export default function BracketTree({
   }
 
   return (
+   <DndContext
+     sensors={sensors}
+     onDragStart={(e: DragStartEvent) => setActiveDrag(typeof e.active.id === 'string' ? e.active.id : null)}
+     onDragCancel={() => setActiveDrag(null)}
+     onDragEnd={handleDragEnd}
+   >
     <div className="overflow-x-auto -mx-4 px-4 pb-2">
       {/* En-têtes de tour alignés sur les colonnes. */}
       <div className="relative" style={{ width: totalWidth, height: 24 }}>
@@ -230,6 +271,7 @@ export default function BracketTree({
                 selected={selectedMatchId === m.id}
                 active={activeMatchId === m.id}
                 onSelect={onSelectMatch}
+                canSwap={canSwap}
               />
             </div>
           ));
@@ -264,6 +306,16 @@ export default function BracketTree({
         </AnimatePresence>
       </div>
     </div>
+    {/* Aperçu flottant du joueur glissé (non rogné par les cartes). */}
+    <DragOverlay dropAnimation={null}>
+      {activeDrag ? (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-gold/60 bg-bg-2 shadow-[0_8px_24px_rgba(0,0,0,0.5)] cursor-grabbing">
+          <Avatar login={activeDrag} imageUrl={avatarOf.get(activeDrag) ?? null} size="sm" />
+          <span className="text-sm text-text-strong font-semibold truncate max-w-[140px]">{activeDrag}</span>
+        </div>
+      ) : null}
+    </DragOverlay>
+   </DndContext>
   );
 }
 
@@ -274,6 +326,7 @@ function MatchCard({
   selected,
   active,
   onSelect,
+  canSwap = false,
 }: {
   match: TournamentMatch;
   avatarOf: Map<string, string | null>;
@@ -281,11 +334,14 @@ function MatchCard({
   selected: boolean;
   active: boolean;
   onSelect?: (m: TournamentMatch) => void;
+  canSwap?: boolean;
 }) {
   const winnerA = !!(match.winnerLogin && match.winnerLogin === match.playerALogin);
   const winnerB = !!(match.winnerLogin && match.winnerLogin === match.playerBLogin);
   const done = !!match.confirmedAt;
   const clickable = !!onSelect;
+  // Échange autorisé sur ce match tant qu'il n'est pas confirmé.
+  const swappable = canSwap && !done;
 
   return (
     <div className="relative">
@@ -322,6 +378,8 @@ function MatchCard({
           winner={winnerA}
           loser={done && !winnerA && !!match.playerALogin}
           avatarUrl={match.playerALogin ? avatarOf.get(match.playerALogin) ?? null : null}
+          swappable={swappable && !!match.playerALogin}
+          fallbackId={`${match.id}:A`}
         />
         <div className="h-px bg-border/40" />
         <SlotRow
@@ -331,6 +389,8 @@ function MatchCard({
           winner={winnerB}
           loser={done && !winnerB && !!match.playerBLogin}
           avatarUrl={match.playerBLogin ? avatarOf.get(match.playerBLogin) ?? null : null}
+          swappable={swappable && !!match.playerBLogin}
+          fallbackId={`${match.id}:B`}
         />
       </motion.div>
     </div>
@@ -344,6 +404,8 @@ function SlotRow({
   winner,
   loser,
   avatarUrl,
+  swappable = false,
+  fallbackId = 'noop',
 }: {
   login: string | null;
   partnerName?: string | null;
@@ -351,12 +413,30 @@ function SlotRow({
   winner: boolean;
   loser: boolean;
   avatarUrl: string | null;
+  swappable?: boolean;
+  fallbackId?: string;
 }) {
+  // Drag-and-drop d'échange : l'identifiant DnD est le login (unique parmi les
+  // lignes échangeables). Les lignes verrouillées portent un id neutre, désactivé.
+  const dndId = swappable && login ? login : fallbackId;
+  const drag = useDraggable({ id: dndId, disabled: !swappable });
+  const drop = useDroppable({ id: dndId, disabled: !swappable });
+  const setRefs = (node: HTMLElement | null) => {
+    drag.setNodeRef(node);
+    drop.setNodeRef(node);
+  };
+  // Le déplacement visuel est porté par le DragOverlay : la ligne d'origine reste
+  // en place, juste estompée tant qu'on la glisse.
   return (
     <div
+      ref={setRefs}
+      {...(swappable ? drag.listeners : {})}
+      {...(swappable ? drag.attributes : {})}
       className={`relative flex items-center justify-between gap-2 px-2.5 py-2.5 transition-opacity ${
         winner ? 'bg-gold/[0.07]' : ''
-      } ${loser ? 'opacity-45' : ''}`}
+      } ${loser ? 'opacity-45' : ''} ${swappable ? 'cursor-grab active:cursor-grabbing touch-none' : ''} ${
+        drag.isDragging ? 'opacity-30' : ''
+      } ${drop.isOver && !drag.isDragging ? 'ring-2 ring-gold ring-inset bg-gold/[0.12]' : ''}`}
     >
       {/* Liseré gagnant + animation de montée de la pp. */}
       {winner && (

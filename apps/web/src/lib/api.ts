@@ -1343,6 +1343,13 @@ export const api = {
       `/tournaments/${encodeURIComponent(id)}/reshuffle`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  // Officiant : échange deux joueurs dans le bracket (drag-and-drop). Validé tant
+  // qu'aucun des deux matchs n'est confirmé.
+  swapBracketPlayers: (id: string, loginA: string, loginB: string) =>
+    request<{ id: string; swapped: true }>(
+      `/tournaments/${encodeURIComponent(id)}/bracket/swap`,
+      { method: 'POST', body: JSON.stringify({ loginA, loginB }) },
+    ),
   cancelTournament: (id: string) =>
     request<{ id: string; cancelled: true }>(
       `/tournaments/${encodeURIComponent(id)}/cancel`,

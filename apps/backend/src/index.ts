@@ -6164,6 +6164,100 @@ app.post('/tournaments/:id/reshuffle', async (c) => {
   return c.json({ id, reshuffled: true });
 });
 
+// Officiant : ÉCHANGE deux joueurs dans le bracket (drag-and-drop côté front).
+// Possible tant qu'aucun des deux matchs concernés n'est confirmé. On localise
+// chaque joueur à sa position COURANTE (le round le plus avancé où il figure — un
+// vainqueur apparaît aussi dans son match précédent, déjà confirmé), on intervertit,
+// et comme la composition change on remet à zéro l'état transitoire des matchs
+// touchés (score saisi non confirmé, pile-ou-face) et on rembourse les paris ouverts.
+app.post('/tournaments/:id/bracket/swap', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const owner = await prisma.tournament.findUnique({
+    where: { id },
+    select: { createdByLogin: true, kind: true, activeMatchId: true },
+  });
+  if (!owner) throw new HTTPException(404, { message: 'tournament not found' });
+  const ownerIsFriendlyOrganizer = owner.createdByLogin === me && owner.kind === 'friendly';
+  if (!(await isAdminLogin(me)) && !ownerIsFriendlyOrganizer) {
+    throw new HTTPException(403, { message: 'admins or the organizer of a friendly tournament only' });
+  }
+  const body = await c.req.json().catch(() => null);
+  const loginA = typeof body?.loginA === 'string' ? body.loginA : '';
+  const loginB = typeof body?.loginB === 'string' ? body.loginB : '';
+  if (!loginA || !loginB || loginA === loginB) {
+    throw new HTTPException(400, { message: 'deux joueurs distincts requis' });
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const matches = await tx.tournamentMatch.findMany({
+      where: {
+        tournamentId: id,
+        stage: 'bracket',
+        OR: [
+          { playerALogin: { in: [loginA, loginB] } },
+          { playerBLogin: { in: [loginA, loginB] } },
+        ],
+      },
+    });
+    type Pos = { matchId: string; round: number; side: 'A' | 'B'; confirmed: boolean };
+    const locate = (login: string): Pos | null => {
+      let best: Pos | null = null;
+      for (const m of matches) {
+        const side = m.playerALogin === login ? 'A' : m.playerBLogin === login ? 'B' : null;
+        if (!side) continue;
+        if (!best || m.round > best.round) {
+          best = { matchId: m.id, round: m.round, side, confirmed: !!m.confirmedAt };
+        }
+      }
+      return best;
+    };
+    const a = locate(loginA);
+    const b = locate(loginB);
+    if (!a || !b) throw new HTTPException(404, { message: 'joueur introuvable dans le bracket' });
+    if (a.matchId === b.matchId) {
+      throw new HTTPException(409, { message: 'les deux joueurs sont déjà dans le même match' });
+    }
+    if (a.confirmed || b.confirmed) {
+      throw new HTTPException(409, { message: 'un des matchs est déjà confirmé — échange impossible' });
+    }
+    // État transitoire caduc (la composition change) : score saisi non confirmé,
+    // pile-ou-face, et réouverture du marché de paris.
+    const reset = {
+      scoreA: null, scoreB: null, recordedByLogin: null, recordedAt: null, winnerLogin: null,
+      tossWinnerLogin: null, tossSide: null, advantagePick: null, tossAt: null, betsLockedAt: null,
+    };
+    await tx.tournamentMatch.update({
+      where: { id: a.matchId },
+      data: a.side === 'A' ? { ...reset, playerALogin: loginB } : { ...reset, playerBLogin: loginB },
+    });
+    await tx.tournamentMatch.update({
+      where: { id: b.matchId },
+      data: b.side === 'A' ? { ...reset, playerALogin: loginA } : { ...reset, playerBLogin: loginA },
+    });
+    // Un des matchs touchés était « en cours » → on retire l'écran VERSUS partagé.
+    if (owner.activeMatchId === a.matchId || owner.activeMatchId === b.matchId) {
+      await tx.tournament.update({ where: { id }, data: { activeMatchId: null } });
+    }
+    const bettors = await refundBetsTx(tx, {
+      targetType: 'match',
+      matchId: { in: [a.matchId, b.matchId] },
+    });
+    return { bettors };
+  });
+
+  if (result.bettors.length) emit(result.bettors, { type: 'panel:update', payload: {} });
+  broadcast({ type: 'tournament:update', payload: {} });
+  void logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'EDIT_MATCH',
+    target: `${loginA} <> ${loginB}`,
+    payload: { forced: 'bracket-swap', tournamentId: id, loginA, loginB },
+  });
+  return c.json({ id, swapped: true });
+});
+
 // Annulation par l'organisateur (ou un admin) : le tournoi est supprimé pour de bon
 // et disparaît des listes (cascade → entries + matchs). Pas de statut « annulé ».
 app.post('/tournaments/:id/cancel', async (c) => {
