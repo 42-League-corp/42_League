@@ -97,6 +97,10 @@ const GODPage = lazy(() =>
 const AboutPage = lazy(() =>
   import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })),
 );
+// Écran TV live (plein écran, hors AppShell : ni nav ni scroll).
+const LiveTournamentPage = lazy(() =>
+  import('./pages/LiveTournamentPage').then((m) => ({ default: m.LiveTournamentPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
@@ -145,6 +149,19 @@ export function App() {
             />
           )}
           <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
+          {/* Écran TV live — plein écran, hors AppShell. Authentifié (la TV est connectée). */}
+          <Route
+            path="/live-tournament/:id?"
+            element={
+              authenticated ? (
+                <Suspense fallback={<PageSkeleton />}>
+                  <LiveTournamentPage />
+                </Suspense>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
           <Route
             path="*"
             element={
