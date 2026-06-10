@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Search } from 'lucide-react';
 import { Button } from './Button';
@@ -145,49 +146,55 @@ export function FavoriteCharsEditor({ games, initial, onClose, onSaved }: Favori
     }
   };
 
-  return (
+  // Rendu via un PORTAL sur <body> : sinon le `position: fixed` se calerait sur le
+  // premier ancêtre transformé (cartes/pages animées en motion = `transform`) au
+  // lieu du viewport → la modale partait hors écran sur mobile selon l'endroit du
+  // déclencheur. Le conteneur flex centre la modale ; `max-h-[88dvh]` + zone de
+  // scroll interne garantissent qu'elle tient toujours à l'écran (header & bouton
+  // « Enregistrer » toujours visibles, la grille de persos scrolle).
+  return createPortal(
     <AnimatePresence>
-      <>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[120] bg-[#0b0906]/80 backdrop-blur-sm"
-          onClick={onClose}
-          aria-hidden
-        />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0b0906]/80 backdrop-blur-sm"
+        onClick={onClose}
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.92, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 12 }}
           transition={{ type: 'spring', stiffness: 460, damping: 36 }}
-          className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-[120] mx-auto max-w-md"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-md max-h-[88dvh] flex flex-col rounded-2xl overflow-hidden border border-gold/30 bg-bg-1 shadow-2xl"
         >
-          <div className="relative rounded-2xl overflow-hidden border border-gold/30 bg-bg-1 shadow-2xl">
-            <button
-              type="button"
-              aria-label="Fermer"
-              onClick={onClose}
-              className="absolute top-4 right-4 z-10 w-7 h-7 rounded-full flex items-center justify-center text-muted hover:text-text hover:bg-white/5 transition-colors tap-transparent"
-            >
-              <X className="w-4 h-4" strokeWidth={2.5} />
-            </button>
-            <div className="px-5 pt-5 pb-5 space-y-4">
-              <div className="font-display text-lg font-black text-text-strong">{t('favorites.editTitle')}</div>
-              <p className="text-xs text-muted-2 -mt-2">{t('favorites.editHint')}</p>
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto scrollbar-none">
-                {games.map((g) => (
-                  <CharMultiGrid key={g} game={g} selected={sel[g] ?? []} onToggle={(id) => toggle(g, id)} />
-                ))}
-              </div>
-              <Button loading={busy} onClick={save} className="w-full py-3">
-                {t('favorites.save')}
-              </Button>
-            </div>
+          <button
+            type="button"
+            aria-label="Fermer"
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 w-7 h-7 rounded-full flex items-center justify-center text-muted hover:text-text hover:bg-white/5 transition-colors tap-transparent"
+          >
+            <X className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+          <div className="px-5 pt-5 pb-3 shrink-0">
+            <div className="font-display text-lg font-black text-text-strong">{t('favorites.editTitle')}</div>
+            <p className="text-xs text-muted-2 mt-1">{t('favorites.editHint')}</p>
+          </div>
+          <div className="px-5 space-y-4 overflow-y-auto scrollbar-none flex-1 min-h-0">
+            {games.map((g) => (
+              <CharMultiGrid key={g} game={g} selected={sel[g] ?? []} onToggle={(id) => toggle(g, id)} />
+            ))}
+          </div>
+          <div className="px-5 pt-3 pb-5 shrink-0">
+            <Button loading={busy} onClick={save} className="w-full py-3">
+              {t('favorites.save')}
+            </Button>
           </div>
         </motion.div>
-      </>
-    </AnimatePresence>
+      </motion.div>
+    </AnimatePresence>,
+    document.body,
   );
 }
