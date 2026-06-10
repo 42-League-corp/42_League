@@ -110,7 +110,10 @@ export function PlayerRankCard({
           {host && <OnlineBadge host={host} />}
         </div>
         {entry.title && (
-          <div className="text-[10px] italic truncate" style={{ color: entry.titleColor ?? '#ffc94a' }}>« {entry.title} »</div>
+          <div
+            className={`text-[10px] italic truncate ${entry.titleColor === 'rainbow' ? 'title-rainbow' : ''}`}
+            style={entry.titleColor === 'rainbow' ? undefined : { color: entry.titleColor ?? '#ffc94a' }}
+          >« {entry.title} »</div>
         )}
         <div className="mt-1">
           <WinRateBar wins={wins} losses={losses} variant="compact" />

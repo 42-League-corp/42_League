@@ -266,6 +266,7 @@ export interface AdminUserItems {
 export type CoinTxType =
   | 'match'
   | 'quest'
+  | 'streak'
   | 'bet_place'
   | 'bet_win'
   | 'bet_refund'
@@ -276,6 +277,15 @@ export type CoinTxType =
   | 'mystery_box'
   | 'sheldon_reward'
   | 'admin_grant';
+
+/** Lot tiré dans une Boîte Mystère (objet gagné) — null si rien de nouveau. */
+export interface MysteryReward {
+  id: string;
+  name: string;
+  category: string;
+  color: string | null;
+  rarity: string | null;
+}
 
 /** Une ligne de l'annuaire « suivi des coins » (liste cliquable de Shop GOD). */
 export interface ShopUserRow {
@@ -424,12 +434,26 @@ export interface AnnouncementInput {
   active?: boolean;
 }
 
+/** Série d'assiduité ranked d'un joueur (vue front, cf. /me). */
+export interface StreakView {
+  /** Jours consécutifs avec ≥1 match classé (0 si la série est rompue). */
+  current: number;
+  /** Record perso de série (flex). */
+  best: number;
+  /** True si le +10% d'ELO sur les gains est actif (série ≥ 3 jours). */
+  eloActive: boolean;
+  /** Prochain palier de coins à atteindre. */
+  next: { day: number; coins: number };
+}
+
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   /** Solde de League Coins de l'utilisateur (défaut 0). */
   coins?: number;
+  /** Série d'assiduité ranked : série courante, record, bonus ELO, prochain palier. */
+  streak?: StreakView;
   /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
   consentRequired?: boolean;
   /** True si le login est autorisé sur l'env staging (cf. STAGING_ALLOWED backend). */
@@ -1852,7 +1876,7 @@ export const api = {
 
   shop: () => request<ShopResponse>('/shop'),
   buyShopItem: (id: string) =>
-    request<{ ok: true; coins: number }>(`/shop/${encodeURIComponent(id)}/buy`, {
+    request<{ ok: true; coins: number; reward?: MysteryReward | null }>(`/shop/${encodeURIComponent(id)}/buy`, {
       method: 'POST',
       body: JSON.stringify({}),
     }),

@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
+import { MysteryRevealModal } from '../components/shop/MysteryRevealModal';
 import { QuestsPanel } from './profil/QuestsPanel';
 import { BetsPanel } from './profil/BetsPanel';
 import { InventoryPanel } from './profil/InventoryPanel';
@@ -32,6 +33,7 @@ import { useT } from '../lib/i18n';
 import {
   api,
   type InventoryEntry,
+  type MysteryReward,
   type ShopCategory,
   type ShopItemData,
 } from '../lib/api';
@@ -395,6 +397,8 @@ export function ShopPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   // Objet en cours de prévisualisation sur la carte de profil (modal).
   const [preview, setPreview] = useState<ShopItemData | null>(null);
+  // Révélation de Boîte Mystère : { reward } pendant l'animation, null = fermé.
+  const [reveal, setReveal] = useState<{ reward: MysteryReward | null } | null>(null);
   // État mensuel des consommables (kind → achats restants ce mois). Décrémente à
   // l'achat (rechargé après chaque buy), reset au 1er du mois (clé mois côté serveur).
   const [monthly, setMonthly] = useState<Record<string, { used: number; cap: number }>>(
@@ -455,9 +459,15 @@ export function ShopPage() {
       try {
         const res = await api.buyShopItem(item.id);
         setCoins(res.coins);
-        setOwned((prev) => new Set(prev).add(item.id));
         trackEvent('shop.buy');
-        show(t('shop.bought'));
+        if (item.category === 'mystery_box') {
+          // Boîte Mystère : on révèle le lot via une animation dédiée (et on
+          // n'ajoute rien à `owned` — la boîte est un consommable).
+          setReveal({ reward: res.reward ?? null });
+        } else {
+          setOwned((prev) => new Set(prev).add(item.id));
+          show(t('shop.bought'));
+        }
         void refresh();
         void load();
       } catch (err) {
@@ -812,6 +822,9 @@ export function ShopPage() {
       {preview && me && (
         <ProfilePreviewModal item={preview} me={me} onClose={() => setPreview(null)} />
       )}
+
+      {/* Révélation animée d'une Boîte Mystère */}
+      {reveal && <MysteryRevealModal reward={reveal.reward} onClose={() => setReveal(null)} />}
     </div>
   );
 }

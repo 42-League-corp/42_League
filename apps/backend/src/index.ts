@@ -727,6 +727,8 @@ async function getOrCreateUser(login: string, profile?: FtProfile) {
       campus: profile?.campus ?? null,
       imageUrl: profile?.imageUrl ?? null,
       role: forceSuperAdmin ? 'SUPERADMIN' : 'USER',
+      // Pécule de bienvenue : tout nouvel inscrit démarre avec 300 League Coins.
+      leagueCoins: 300,
     },
   });
   if (!user.imageUrl) {
@@ -1162,6 +1164,8 @@ app.get('/me', async (c) => {
     equippedBanner: cosmetics.equippedBanner,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
+    // Série d'assiduité ranked : série courante, record, bonus ELO actif, prochain palier.
+    streak: streakView(user),
     isAdmin: isAdmin(login),
     // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
     // pour la barrière staging sans dupliquer la liste blanche.
@@ -8920,7 +8924,7 @@ app.post('/shop/:id/buy', async (c) => {
   const isMysteryBox = item.category === 'mystery_box';
   const isSheldon = isSheldonApostle(item);
   const consumableKind = consumableKindOf(item);
-  const coins = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
     if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
 
@@ -8957,7 +8961,7 @@ app.post('/shop/:id/buy', async (c) => {
         refId: item.id,
         meta: { name: item.name, kind: consumableKind },
       });
-      return updated.leagueCoins;
+      return { coins: updated.leagueCoins, reward: null };
     }
 
     // La mystery box est consommable (achat répété autorisé) — pas de check doublon.
@@ -8989,7 +8993,7 @@ app.post('/shop/:id/buy', async (c) => {
         refId: item.id,
         meta: { name: item.name },
       });
-      return updated.leagueCoins;
+      return { coins: updated.leagueCoins, reward: null };
     }
     if (user.leagueCoins < item.price) {
       throw new HTTPException(400, { message: 'solde insuffisant' });
@@ -9005,19 +9009,46 @@ app.post('/shop/:id/buy', async (c) => {
       data: updateData,
       select: { leagueCoins: true },
     });
-    if (!isMysteryBox) {
+    // ── Boîte Mystère : tirage du lot ──────────────────────────────────────
+    // 1 chance sur 10 → titre « Mysterious » (arc-en-ciel) s'il ne l'a pas déjà ;
+    // sinon un cosmétique aléatoire (titre/bannière/badge) qu'il ne possède pas
+    // encore. Si l'inventaire est déjà complet, aucun lot (cas marginal).
+    let mysteryReward:
+      | { id: string; name: string; category: string; color: string | null; rarity: string | null }
+      | null = null;
+    if (isMysteryBox) {
+      const ownedRows = await tx.shopInventory.findMany({ where: { userLogin: login }, select: { itemId: true } });
+      const owned = new Set(ownedRows.map((r) => r.itemId));
+      let prize: typeof item | null = null;
+      if (!owned.has('title-mysterious') && Math.random() < 0.1) {
+        prize = await tx.shopItem.findUnique({ where: { id: 'title-mysterious' } });
+      }
+      if (!prize) {
+        const pool = await tx.shopItem.findMany({
+          where: { category: { in: ['title', 'banner', 'badge'] }, active: true, id: { notIn: [...owned] } },
+        });
+        const eligible = pool.filter((p) => p.id !== 'title-mysterious' && !isSheldonApostle(p));
+        if (eligible.length > 0) prize = eligible[Math.floor(Math.random() * eligible.length)] ?? null;
+      }
+      if (prize && !owned.has(prize.id)) {
+        await tx.shopInventory.create({ data: { userLogin: login, itemId: prize.id } });
+        mysteryReward = { id: prize.id, name: prize.name, category: prize.category, color: prize.color, rarity: prize.rarity };
+      }
+    } else {
       await tx.shopInventory.create({ data: { userLogin: login, itemId } });
     }
     await logCoinTx(tx, login, -item.price, updated.leagueCoins, {
       type: isMysteryBox ? 'mystery_box' : 'shop_purchase',
       refId: item.id,
-      meta: { name: item.name, category: item.category },
+      meta: isMysteryBox
+        ? { name: item.name, category: item.category, won: mysteryReward?.name ?? null, wonId: mysteryReward?.id ?? null }
+        : { name: item.name, category: item.category },
     });
-    return updated.leagueCoins;
+    return { coins: updated.leagueCoins, reward: mysteryReward };
   });
 
   emit([login], { type: 'panel:update', payload: {} });
-  return c.json({ ok: true, coins });
+  return c.json({ ok: true, coins: result.coins, reward: result.reward });
 });
 
 // GET /me/inventory — inventaire détaillé du joueur courant (objet + état équipé).
@@ -9205,6 +9236,81 @@ function monthKey(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// ─── Série d'assiduité ranked (streak) ───────────────────────────────────────
+// Jours calendaires (UTC, comme isoWeekKey/monthKey) où le joueur a joué ≥1 match
+// CLASSÉ. Tolérance : 1 jour de grâce — la série continue tant que l'écart entre
+// deux jours joués reste ≤ 2 (donc on peut sauter UN jour), et se réinitialise à
+// partir de 2 jours manqués. ≥3 jours (« plus de 2 ») → +10% sur les GAINS d'ELO.
+// Récompenses de coins en paliers à J3 / J7 / J14 / J30 (puis tous les 30 jours).
+const STREAK_MIN_FOR_ELO = 3;
+const STREAK_ELO_GAIN_BONUS = 0.1; // +10% appliqué au delta d'ELO POSITIF
+const STREAK_MILESTONES: Record<number, number> = { 3: 50, 7: 150, 14: 400, 30: 1000 };
+
+/** Clé de jour UTC "YYYY-MM-DD" (même fuseau que isoWeekKey/monthKey). */
+function dayKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** Nombre de jours calendaires (UTC) entre deux dayKeys (b − a). */
+function dayDiff(a: string, b: string): number {
+  const pa = a.split('-');
+  const pb = b.split('-');
+  const ua = Date.UTC(Number(pa[0]), Number(pa[1]) - 1, Number(pa[2]));
+  const ub = Date.UTC(Number(pb[0]), Number(pb[1]) - 1, Number(pb[2]));
+  return Math.round((ub - ua) / 86_400_000);
+}
+
+/**
+ * Fait avancer la série compte tenu du dernier jour joué `prevDay`. Tolérance
+ * d'1 jour de grâce : continue si l'écart ≤ 2 jours (un jour sauté toléré), reset
+ * au-delà. `isNewDay` = premier match classé du jour (→ palier de coins éventuel).
+ * Fonction pure : la lecture (bonus ELO) et l'écriture (au règlement) partagent
+ * exactement le même calcul à partir de l'état stocké.
+ */
+function advanceStreak(
+  prevStreak: number,
+  prevDay: string | null,
+  today: string,
+): { streak: number; isNewDay: boolean } {
+  if (prevDay === today) return { streak: Math.max(1, prevStreak), isNewDay: false };
+  if (prevDay == null) return { streak: 1, isNewDay: true };
+  const diff = dayDiff(prevDay, today);
+  if (diff <= 0) return { streak: Math.max(1, prevStreak), isNewDay: false }; // garde-fou horloge
+  if (diff <= 2) return { streak: prevStreak + 1, isNewDay: true }; // grâce d'1 jour
+  return { streak: 1, isNewDay: true }; // 2+ jours manqués → reset
+}
+
+/** Coins du palier atteint à `streak` jours (0 si pas un palier). 1000 tous les 30 j au-delà. */
+function streakMilestoneCoins(streak: number): number {
+  const m = STREAK_MILESTONES[streak];
+  if (m) return m;
+  if (streak > 30 && streak % 30 === 0) return 1000;
+  return 0;
+}
+
+/**
+ * Vue « série » pour le front : série COURANTE (0 si rompue — au-delà de la grâce),
+ * record perso, bonus ELO actif (+10%), et prochain palier de coins à viser.
+ */
+function streakView(
+  u: { rankedStreak: number; rankedStreakBest: number; rankedStreakDay: string | null } | null,
+  now: Date = new Date(),
+): { current: number; best: number; eloActive: boolean; next: { day: number; coins: number } } {
+  const today = dayKey(now);
+  const diff = u?.rankedStreakDay != null ? dayDiff(u.rankedStreakDay, today) : null;
+  // Vivante tant que l'écart au dernier jour joué reste dans la grâce (0..2 jours).
+  const alive = diff != null && diff >= 0 && diff <= 2;
+  const current = alive ? (u?.rankedStreak ?? 0) : 0;
+  const eloActive = current >= STREAK_MIN_FOR_ELO;
+  const keys = [3, 7, 14, 30];
+  let next: { day: number; coins: number } | null = null;
+  for (const k of keys) {
+    if (k > current) { next = { day: k, coins: STREAK_MILESTONES[k] ?? 0 }; break; }
+  }
+  if (!next) next = { day: (Math.floor(current / 30) + 1) * 30, coins: 1000 };
+  return { current, best: u?.rankedStreakBest ?? 0, eloActive, next };
+}
+
 /** Type de consommable d'un objet boutique (via payload.kind), sinon null. */
 function consumableKindOf(item: { category: string; payload: Prisma.JsonValue | null }): ConsumableKind | null {
   if (item.category !== 'consumable') return null;
@@ -9213,14 +9319,34 @@ function consumableKindOf(item: { category: string; payload: Prisma.JsonValue | 
   return typeof kind === 'string' && isConsumableKind(kind) ? kind : null;
 }
 
-/** Applique le x2 d'ELO « EN FEU » sur le delta final d'un joueur (après
- *  dégressivité anti-farming), si sa fenêtre de boost est ouverte. La fenêtre
- *  n'est PAS consommée : elle reste active jusqu'à `eloMultUntil` (tous les scores
- *  des 6 h sont doublés). Gain ET perte sont doublés. */
-async function applyEloMultTx(tx: Prisma.TransactionClient, login: string, delta: number): Promise<number> {
+/** Applique les multiplicateurs d'ELO d'un joueur sur son delta final (après
+ *  dégressivité anti-farming) :
+ *   • Série d'assiduité : +10% sur le GAIN (delta positif) tant que la série est
+ *     active (≥3 jours, en comptant le match du jour). Sans effet sur les pertes.
+ *   • « EN FEU » : ×2 (gain ET perte) tant que la fenêtre de boost est ouverte.
+ *  Les deux se cumulent (un gain en feu + série = ×2 ×1,1). La fenêtre EN FEU
+ *  n'est PAS consommée (tous les scores des 6 h en profitent). */
+async function applyEloMultTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  delta: number,
+  now: Date = new Date(),
+): Promise<number> {
   if (delta === 0) return delta;
-  const u = await tx.user.findUnique({ where: { login }, select: { eloMultUntil: true } });
-  return u && isEloMultActive(u) ? delta * ELO_MULT_FACTOR : delta;
+  const u = await tx.user.findUnique({
+    where: { login },
+    select: { eloMultUntil: true, rankedStreak: true, rankedStreakDay: true },
+  });
+  if (!u) return delta;
+  let d = delta;
+  // Série active ⇒ +10% sur les GAINS uniquement. On compte le match du jour
+  // (advanceStreak) pour que dès le 3e jour le bonus s'applique sur tous ses matchs.
+  if (d > 0) {
+    const eff = advanceStreak(u.rankedStreak, u.rankedStreakDay, dayKey(now)).streak;
+    if (eff >= STREAK_MIN_FOR_ELO) d *= 1 + STREAK_ELO_GAIN_BONUS;
+  }
+  if (isEloMultActive(u, now)) d *= ELO_MULT_FACTOR;
+  return Math.round(d);
 }
 
 /** Ajuste (±) la quantité d'un consommable détenu, bornée à 0. Renvoie la qté. */
@@ -9688,6 +9814,7 @@ app.delete('/admin/announcements/:id', async (c) => {
 type CoinTxType =
   | 'match'
   | 'quest'
+  | 'streak'
   | 'bet_place'
   | 'bet_win'
   | 'bet_refund'
@@ -9903,6 +10030,36 @@ async function awardMatchEconomyTx(
         type: 'match',
         meta: { game, won: p.won },
       });
+    // Série d'assiduité ranked : avance le compteur (1×/jour) et verse le palier
+    // atteint, le cas échéant. Indépendant des quêtes : on le fait même sur un
+    // rematch dégressé (jouer compte pour l'assiduité), mais c'est idempotent dans
+    // la journée (même jour → isNewDay false → ni mise à jour ni coins en double).
+    const today = dayKey(playedAt);
+    const cur = await tx.user.findUnique({
+      where: { login: p.login },
+      select: { rankedStreak: true, rankedStreakBest: true, rankedStreakDay: true },
+    });
+    if (cur) {
+      const adv = advanceStreak(cur.rankedStreak, cur.rankedStreakDay, today);
+      if (adv.isNewDay) {
+        await tx.user.update({
+          where: { login: p.login },
+          data: {
+            rankedStreak: adv.streak,
+            rankedStreakDay: today,
+            rankedStreakBest: Math.max(cur.rankedStreakBest, adv.streak),
+          },
+        });
+        const reward = streakMilestoneCoins(adv.streak);
+        if (reward > 0) {
+          await grantCoinsTx(tx, p.login, reward, {
+            type: 'streak',
+            refId: `streak-${adv.streak}`,
+            meta: { streak: adv.streak },
+          });
+        }
+      }
+    }
     // Les rematchs dégressés ne font pas avancer les quêtes hebdo (sinon farmables
     // en boucle à coût nul). Le 1er match du jour contre un adversaire compte plein.
     if (!countForQuests) continue;
@@ -11037,6 +11194,25 @@ if (process.env.NODE_ENV !== 'test') {
         color: null,
       },
     }).catch((err) => console.error('failed to upsert mystery box', err));
+    // Titre « Mysterious » — exclusivité Boîte Mystère (1 chance sur 10), JAMAIS
+    // achetable directement (active=false → hors vitrine + 404 sur /buy). Couleur
+    // sentinelle 'rainbow' → le front le rend en dégradé arc-en-ciel animé.
+    prisma.shopItem.upsert({
+      where: { id: 'title-mysterious' },
+      update: { color: 'rainbow', rarity: 'legendary', payload: { title: 'Mysterious' } },
+      create: {
+        id: 'title-mysterious',
+        name: 'Titre « Mysterious »',
+        description: 'Titre arc-en-ciel animé — 1 chance sur 10 dans la Boîte Mystère.',
+        category: 'title',
+        price: 0,
+        rarity: 'legendary',
+        active: false,
+        sortOrder: 0,
+        color: 'rainbow',
+        payload: { title: 'Mysterious' },
+      },
+    }).catch((err) => console.error('failed to upsert mysterious title', err));
     // Upsert des consommables — items permanents du shop (ids stables). On rafraîchit
     // nom/desc/prix/rareté mais on ne touche pas au reste (payload.kind = type).
     for (const ci of CONSUMABLE_ITEMS) {
