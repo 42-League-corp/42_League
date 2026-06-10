@@ -23,8 +23,9 @@ ARG CONTRIBUTOR_STATS="{}"
 ENV CONTRIBUTOR_STATS=${CONTRIBUTOR_STATS}
 LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="backend"
 
-# FIX PRISMA : OpenSSL est aussi requis à l'exécution
-RUN apk add --no-cache openssl libc6-compat
+# Durcissement : on met à jour les paquets Alpine (CVE OS : openssl, libxml2, …)
+# puis on installe ce qu'il faut à l'exécution (OpenSSL requis par Prisma).
+RUN apk upgrade --no-cache && apk add --no-cache openssl libc6-compat
 
 WORKDIR /app
 
