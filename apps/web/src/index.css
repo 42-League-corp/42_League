@@ -711,3 +711,25 @@
     animation: none;
   }
 }
+
+/* ── Clignotement très doux ──────────────────────────────────────────────────
+   Pulsation lente et de faible amplitude (ease-in-out) pensée pour NE PAS attirer
+   l'œil : utilisée pour les annonces non lues dans la cloche et sa pastille rouge.
+   Respecte prefers-reduced-motion. */
+@keyframes soft-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+.soft-blink {
+  animation: soft-blink 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .soft-blink {
+    animation: none;
+  }
+}
