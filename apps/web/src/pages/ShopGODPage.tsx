@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift, Gem, Search, ChevronRight } from 'lucide-react';
 import {
@@ -506,12 +506,66 @@ function Avatar({ url, name }: { url: string | null; name: string }) {
   );
 }
 
+type PlayerSortKey = 'name' | 'coins' | 'itemsOwned' | 'txCount';
+
+// En-tête de colonne triable (clic pour trier ; flèche sur la colonne active).
+function SortTh({
+  label,
+  k,
+  sort,
+  onSort,
+  align,
+}: {
+  label: string;
+  k: PlayerSortKey;
+  sort: { key: PlayerSortKey; dir: 'asc' | 'desc' };
+  onSort: (k: PlayerSortKey) => void;
+  align: 'left' | 'right';
+}) {
+  const active = sort.key === k;
+  return (
+    <th className={`py-2 px-3 ${align === 'left' ? 'text-left' : 'text-right'}`}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-zinc-200 ${
+          align === 'right' ? 'flex-row-reverse' : ''
+        } ${active ? 'text-zinc-200' : 'text-zinc-500'}`}
+      >
+        <span>{label}</span>
+        <span className="text-[9px] w-2">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
+  );
+}
+
 function PlayersSection() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<ShopUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  // Tri par colonne (clic sur l'en-tête). Défaut : les plus riches en premier.
+  const [sort, setSort] = useState<{ key: PlayerSortKey; dir: 'asc' | 'desc' }>({
+    key: 'coins',
+    dir: 'desc',
+  });
+  const toggleSort = (key: PlayerSortKey) =>
+    setSort((p) =>
+      p.key === key
+        ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'name' ? 'asc' : 'desc' },
+    );
+  const sortedRows = useMemo(() => {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let cmp = 0;
+      if (sort.key === 'name') cmp = nameOf(a).localeCompare(nameOf(b));
+      else cmp = (a[sort.key] ?? 0) - (b[sort.key] ?? 0);
+      if (cmp === 0) cmp = b.coins - a.coins; // départage stable par solde
+      return cmp * dir;
+    });
+  }, [rows, sort]);
 
   // Recherche débounced côté serveur (login / prénom / nom).
   useEffect(() => {
@@ -553,15 +607,15 @@ function PlayersSection() {
             <table className="w-full text-sm font-mono border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
-                  <th className="text-left py-2 px-3">Joueur</th>
-                  <th className="text-right py-2 px-3">Solde</th>
-                  <th className="text-right py-2 px-3">Objets</th>
-                  <th className="text-right py-2 px-3">Mouvements</th>
+                  <SortTh label="Joueur" k="name" sort={sort} onSort={toggleSort} align="left" />
+                  <SortTh label="Solde" k="coins" sort={sort} onSort={toggleSort} align="right" />
+                  <SortTh label="Objets" k="itemsOwned" sort={sort} onSort={toggleSort} align="right" />
+                  <SortTh label="Mouvements" k="txCount" sort={sort} onSort={toggleSort} align="right" />
                   <th className="py-2 px-3" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((u) => (
+                {sortedRows.map((u) => (
                   <tr
                     key={u.login}
                     onClick={() => navigate(`/shop-god/u/${encodeURIComponent(u.login)}`)}

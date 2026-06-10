@@ -18,6 +18,7 @@ export const dict: Record<Lang, Dict> = {
     // Sélecteur de saison
     'lb.season.current': 'En cours',
     'lb.season.currentLong': 'Saison en cours',
+    'hist.season.all': 'Toutes les saisons',
     // Vue figée d'une saison passée
     'lb.snapshot.empty': 'Aucun classement archivé pour cette saison.',
     'lb.snapshot.emptyShort': 'Aucun classement archivé.',
@@ -66,6 +67,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.opsOf': 'Ops by',
     'lb.season.current': 'Current',
     'lb.season.currentLong': 'Current season',
+    'hist.season.all': 'All seasons',
     'lb.snapshot.empty': 'No archived ranking for this season.',
     'lb.snapshot.emptyShort': 'No archived ranking.',
     'lb.unranked.empty': 'No games played yet.',
@@ -105,6 +107,7 @@ export const dict: Record<Lang, Dict> = {
     'lb.opsOf': 'Ops de',
     'lb.season.current': 'Actual',
     'lb.season.currentLong': 'Temporada actual',
+    'hist.season.all': 'Todas las temporadas',
     'lb.snapshot.empty': 'No hay clasificación archivada para esta temporada.',
     'lb.snapshot.emptyShort': 'No hay clasificación archivada.',
     'lb.unranked.empty': 'Aún no se ha jugado ninguna partida.',

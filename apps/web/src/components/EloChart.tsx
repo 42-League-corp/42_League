@@ -377,9 +377,10 @@ export function EloChart({
   });
 
   if (points.length < 2 || !geo) {
+    // Graphe cloisonné à la saison active : vide = aucun match joué cette saison.
     return (
       <div className="flex items-center justify-center text-xs text-muted-2 italic" style={{ height: H }}>
-        {t('profil.notEnoughMatches')}
+        {activeSeasonId ? t('profil.eloEmptySeason') : t('profil.notEnoughMatches')}
       </div>
     );
   }

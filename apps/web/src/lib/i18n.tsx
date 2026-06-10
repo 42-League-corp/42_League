@@ -160,6 +160,7 @@ const fr: Dict = {
   'profil.recent': 'Derniers matchs',
   'profil.eloEvolution': 'Évolution ELO',
   'profil.notEnoughMatches': 'Pas encore assez de matches',
+  'profil.eloEmptySeason': 'Aucun match pour le moment pour cette saison',
   'profil.notRegistered': "n'est pas inscrit dans la league.",
   'profil.subtitle': 'Profil 42 League',
 
@@ -373,6 +374,7 @@ const en: Dict = {
   'profil.recent': 'Recent matches',
   'profil.eloEvolution': 'ELO progression',
   'profil.notEnoughMatches': 'Not enough matches yet',
+  'profil.eloEmptySeason': 'No match yet this season',
   'profil.notRegistered': 'is not registered in the league.',
   'profil.subtitle': '42 League profile',
 
@@ -582,6 +584,7 @@ const es: Dict = {
   'profil.recent': 'Últimas partidas',
   'profil.eloEvolution': 'Evolución ELO',
   'profil.notEnoughMatches': 'Aún no hay suficientes partidas',
+  'profil.eloEmptySeason': 'Aún no hay partidas esta temporada',
   'profil.notRegistered': 'no está inscrito en la liga.',
   'profil.subtitle': 'Perfil 42 League',
 

@@ -73,25 +73,34 @@ export interface HistoriqueData {
  * en rejouant MES matchs dans l'ordre chronologique. Les FFA déplacent l'ELO mais
  * N'ENTRENT PAS dans le calcul du win-rate (ils ont un rang, pas un binaire V/D).
  */
-export function useHistoriqueLogic(): HistoriqueData {
-  const { matches: allMatches, playedFfas: allFfas, playedDarts: allDarts, me, refresh } = useLeagueData();
+/**
+ * @param seasonFilter '' = saison en cours (active), 'all' = tout l'historique,
+ *   sinon l'id d'une saison précise. Permet de cloisonner l'historique par saison
+ *   (cohérent avec le reset de saison : par défaut on ne voit que la saison en cours).
+ */
+export function useHistoriqueLogic(seasonFilter: string = ''): HistoriqueData {
+  const { matches: allMatches, playedFfas: allFfas, playedDarts: allDarts, me, refresh, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
 
-  // Historique filtré par discipline (mode courant).
+  // Saison effective : '' → saison active ; 'all' → aucune restriction (null) ;
+  // sinon la saison demandée. null = on ne filtre pas par saison.
+  const seasonId = seasonFilter === '' ? activeSeasonId : seasonFilter === 'all' ? null : seasonFilter;
+
+  // Historique filtré par discipline (mode courant) ET par saison.
   const matches = useMemo(
-    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
-    [allMatches, game],
+    () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game && (!seasonId || m.seasonId === seasonId)),
+    [allMatches, game, seasonId],
   );
   // Les FFA n'existent qu'en Smash : présents seulement dans ce mode.
   const ffas = useMemo(
-    () => allFfas.filter((f) => (f.game ?? 'smash') === game),
-    [allFfas, game],
+    () => allFfas.filter((f) => (f.game ?? 'smash') === game && (!seasonId || f.seasonId === seasonId)),
+    [allFfas, game, seasonId],
   );
   // Les manches de fléchettes (game='flechettes') : présentes seulement dans ce mode.
   const darts = useMemo(
-    () => allDarts.filter((d) => (d.game ?? 'flechettes') === game),
-    [allDarts, game],
+    () => allDarts.filter((d) => (d.game ?? 'flechettes') === game && (!seasonId || d.seasonId === seasonId)),
+    [allDarts, game, seasonId],
   );
 
   const global = useMemo<GlobalItem[]>(() => {
