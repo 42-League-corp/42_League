@@ -18,6 +18,7 @@ import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
+import { PastTournamentPopover } from '../../components/tournois/PastTournamentPopover';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useIsMobile } from '../../hooks/useViewport';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -260,9 +261,10 @@ function TournoiCard({ t }: { t: Tournament }) {
   const fillPct = Math.min(100, Math.round((count / Math.max(1, t.capacity)) * 100));
   const isOfficial = t.kind === 'official';
   return (
+    <div className="group relative">
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
+      className="relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
       style={
         isOfficial
           ? {
@@ -348,8 +350,15 @@ function TournoiCard({ t }: { t: Tournament }) {
         {t.winner && (
           <div className="text-[10px] text-gold font-bold truncate">🏆 {t.winner.login}</div>
         )}
+        {t.status === 'finished' && (
+          <div className="mt-1 text-[9px] font-bold text-teal/90 group-hover:text-teal transition-colors">
+            Voir les résultats →
+          </div>
+        )}
       </div>
     </Link>
+      {t.status === 'finished' && <PastTournamentPopover t={t} />}
+    </div>
   );
 }
 

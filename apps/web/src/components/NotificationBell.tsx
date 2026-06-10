@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, type LucideIcon } from 'lucide-react';
+import { Bell, Swords, Trophy, Skull, UserPlus, CheckCheck, Flag, Users, Megaphone, type LucideIcon } from 'lucide-react';
 import { api, type AppNotification } from '../lib/api';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -32,6 +32,7 @@ const ICON_BY_TYPE: Record<string, LucideIcon> = {
   tournament: Trophy,
   ops_targeted: Skull,
   new_player: UserPlus,
+  announcement: Megaphone,
 };
 
 // Couleur de fond pour les notifs SANS jeu (sinon on prend la couleur du jeu).
@@ -42,8 +43,33 @@ const COLOR_BY_TYPE: Record<string, string> = {
   tournament: '#ffc94a',
   tournament_invite: '#ffc94a',
   badge: '#ffc94a',
+  announcement: '#c08a4a',
 };
 const NEUTRAL_BG = '#26334a';
+
+// ── Annonces dans la cloche ──────────────────────────────────────────────────
+// Les annonces générales (cf. AnnouncementPopup) remontent aussi dans la cloche,
+// comme des notifs synthétiques (id préfixé « ann: »). Leur état « lu » est suivi
+// en localStorage (pas de notif serveur par annonce). Tant qu'une annonce non lue
+// est présente, la pastille rouge clignote en douceur (cf. .soft-blink).
+const ANN_SEEN_KEY = 'bell:seenAnnouncements';
+function getSeenAnnouncements(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(ANN_SEEN_KEY) ?? '[]') as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function markAnnouncementsSeen(ids: string[]) {
+  if (ids.length === 0) return;
+  const s = getSeenAnnouncements();
+  for (const id of ids) s.add(id);
+  try {
+    localStorage.setItem(ANN_SEEN_KEY, JSON.stringify([...s]));
+  } catch {
+    /* quota plein / mode privé : on ignore */
+  }
+}
 const DARK = '#0b0f17';
 
 /** Couleur de fond pleine d'une notif : sa discipline, sinon un repli par type. */
@@ -98,6 +124,8 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
   const t = useT();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
+  // Annonces non lues (suivi localStorage) — pilote le clignotement de la pastille.
+  const [annUnread, setAnnUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('todo');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,12 +137,33 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
 
   const load = useCallback(async () => {
     try {
-      const res = await api.notifications();
+      const [res, anns] = await Promise.all([
+        api.notifications(),
+        api.announcements().catch(() => []),
+      ]);
       const visible = res.notifications.filter((n) => !HIDDEN_TYPES.has(n.type));
-      setItems(visible);
+      // Annonces actives → notifs synthétiques (id « ann:<id> »), lu = vu en local.
+      const seen = getSeenAnnouncements();
+      const annItems: AppNotification[] = anns
+        .filter((a) => a.active)
+        .map((a) => ({
+          id: `ann:${a.id}`,
+          type: 'announcement',
+          title: a.title,
+          body: a.body,
+          link: '/about',
+          game: null,
+          read: seen.has(a.id),
+          createdAt: a.createdAt,
+        }));
+      const merged = [...annItems, ...visible].sort(
+        (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+      );
+      setItems(merged);
       // Recalcule le non-lu à partir des seules notifs visibles (sinon la pastille
       // compterait des notifs de match qu'on n'affiche plus).
       setUnread(visible.filter((n) => !n.read).length);
+      setAnnUnread(annItems.filter((n) => !n.read).length);
     } catch {
       /* silencieux : la cloche ne doit pas casser l'app */
     }
@@ -169,12 +218,27 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
 
   const markAll = async () => {
     setUnread(0);
+    setAnnUnread(0);
+    // Annonces : marquées lues en local (id « ann:<id> » → on récupère l'<id>).
+    markAnnouncementsSeen(
+      items.filter((n) => n.id.startsWith('ann:')).map((n) => n.id.slice(4)),
+    );
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
     await api.markNotificationsRead().catch(() => {});
   };
 
   const onClickItem = async (n: AppNotification) => {
     setOpen(false);
+    // Annonce synthétique : pas de notif serveur → on la marque vue en local.
+    if (n.id.startsWith('ann:')) {
+      if (!n.read) {
+        markAnnouncementsSeen([n.id.slice(4)]);
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+        setAnnUnread((u) => Math.max(0, u - 1));
+      }
+      if (n.link) navigate(n.link);
+      return;
+    }
     if (!n.read) {
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
       setUnread((u) => Math.max(0, u - 1));
@@ -198,9 +262,13 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
         className="relative flex items-center justify-center w-9 h-9 rounded-lg text-muted-2 hover:text-gold hover:bg-bg-2/60 transition-colors"
       >
         <Bell className="w-5 h-5" strokeWidth={2.2} />
-        {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red text-white text-[9px] font-black tabular-nums ring-2 ring-bg-1">
-            {unread > 9 ? '9+' : unread}
+        {unread + annUnread > 0 && (
+          <span
+            className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red text-white text-[9px] font-black tabular-nums ring-2 ring-bg-1 ${
+              annUnread > 0 ? 'soft-blink' : ''
+            }`}
+          >
+            {unread + annUnread > 9 ? '9+' : unread + annUnread}
           </span>
         )}
       </button>
@@ -231,7 +299,7 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-gold/15 bg-bg-1">
             <span className="text-[11px] uppercase tracking-wider text-gold font-extrabold">{t('notif.title')}</span>
-            {unread > 0 && (
+            {unread + annUnread > 0 && (
               <button
                 onClick={markAll}
                 className="inline-flex items-center gap-1 text-[10px] text-muted-2 hover:text-gold transition-colors font-bold"
@@ -252,9 +320,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
               }`}
             >
               {t('notif.tab.todo')}
-              {unread > 0 && (
+              {unread + annUnread > 0 && (
                 <span className="min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red text-white text-[9px] font-black tabular-nums">
-                  {unread > 9 ? '9+' : unread}
+                  {unread + annUnread > 9 ? '9+' : unread + annUnread}
                 </span>
               )}
             </button>
@@ -289,7 +357,9 @@ export function NotificationBell({ placement = 'down' }: { placement?: 'up' | 'd
                     type="button"
                     onClick={() => onClickItem(n)}
                     style={{ backgroundColor: bg, color: fg, borderLeft: `3px solid ${base}` }}
-                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left rounded-lg transition-transform hover:scale-[1.01]"
+                    className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left rounded-lg transition-transform hover:scale-[1.01] ${
+                      n.type === 'announcement' && !n.read ? 'soft-blink' : ''
+                    }`}
                   >
                     <span className="mt-0.5 flex-shrink-0" style={{ color: fg }}>
                       <Icon className="w-4 h-4" strokeWidth={2.4} />
