@@ -13,6 +13,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { readFileSync } from 'node:fs';
 
 const execFileP = promisify(execFile);
 
@@ -101,11 +102,50 @@ function readFromEnv(): Record<string, ContributorStat> | null {
   }
 }
 
+/** `null` si toutes les stats sont nulles (source vide → on essaie la suivante). */
+function nonZeroOrNull(
+  s: Record<string, ContributorStat> | null,
+): Record<string, ContributorStat> | null {
+  if (!s) return null;
+  const total = Object.values(s).reduce((a, v) => a + v.added + v.deleted, 0);
+  return total > 0 ? s : null;
+}
+
+/**
+ * Repli FIABLE : fichier `contributor-stats.json` commité à la racine du backend
+ * (régénéré via `.github/scripts/contributor-stats.sh`). Embarqué dans l'image
+ * (cf. Dockerfile) → ne dépend pas de l'injection au build (CONTRIBUTOR_STATS,
+ * parfois `{}`). `null` si absent/invalide.
+ */
+function readFromFile(): Record<string, ContributorStat> | null {
+  try {
+    const raw = readFileSync(new URL('../contributor-stats.json', import.meta.url), 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, Partial<ContributorStat>>;
+    const out = emptyStats();
+    for (const [login, agg] of Object.entries(out)) {
+      const s = parsed[login];
+      if (!s) continue;
+      agg.added = Number(s.added) || 0;
+      agg.deleted = Number(s.deleted) || 0;
+      agg.net = agg.added - agg.deleted;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /** Stats de contributions par login, mises en cache 60 s. */
 export async function getContributorStats(): Promise<Record<string, ContributorStat>> {
   const now = Date.now();
   if (cache && now - cache.at < CACHE_TTL_MS) return cache.data;
-  const data = (await computeFromGit()) ?? readFromEnv() ?? emptyStats();
+  // Ordre : git (dev, vraiment à jour) → fichier commité → env injecté au build.
+  // Chaque source vide (toutes stats à 0) est ignorée au profit de la suivante.
+  const data =
+    nonZeroOrNull(await computeFromGit()) ??
+    nonZeroOrNull(readFromFile()) ??
+    nonZeroOrNull(readFromEnv()) ??
+    emptyStats();
   cache = { at: now, data };
   return data;
 }
