@@ -179,7 +179,7 @@ export function EloChart({
   maxPoints, height = 100,
 }: EloChartProps) {
   const t = useT();
-  const { leaderboard } = useLeagueData();
+  const { leaderboard, activeSeasonId } = useLeagueData();
   const imageByLogin = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const e of leaderboard) map.set(e.login, e.imageUrl);
@@ -201,8 +201,22 @@ export function EloChart({
   }, []);
 
   const history = useMemo(
-    () => computeEloHistory(matches.filter((m) => (m.game ?? 'babyfoot') === game), myLogin, currentElo),
-    [matches, myLogin, currentElo, game],
+    // Cloisonnement par saison : la courbe ne montre QUE la saison active (l'ELO
+    // est remis au plancher de grade à chaque clôture, le graphe repart donc à zéro
+    // chaque saison). `currentElo` étant l'ELO courant (post-reset + deltas de la
+    // saison), la reconstruction part bien du plancher de reprise. activeSeasonId
+    // null (pas encore chargé / aucune saison) → repli sur tout l'historique.
+    () =>
+      computeEloHistory(
+        matches.filter(
+          (m) =>
+            (m.game ?? 'babyfoot') === game &&
+            (!activeSeasonId || m.seasonId === activeSeasonId),
+        ),
+        myLogin,
+        currentElo,
+      ),
+    [matches, myLogin, currentElo, game, activeSeasonId],
   );
   const points = useMemo(() => (maxPoints ? history.slice(-maxPoints) : history), [history, maxPoints]);
 

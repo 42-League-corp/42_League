@@ -130,6 +130,8 @@ model User {
   // Économie de coins — progression des quêtes hebdo + paris placés.
   weeklyQuests              WeeklyQuestProgress[]   @relation("userQuests")
   bets                      Bet[]                   @relation("userBets")
+  // Journal des mouvements de coins (chaque gain/perte, pour le suivi GOD).
+  coinTransactions          CoinTransaction[]       @relation("userCoinTx")
   analyticsEvents           AnalyticsEvent[]        @relation("userAnalytics")
   // Annonces générales déjà vues (popup « une seule fois » par utilisateur).
   announcementsSeen         AnnouncementSeen[]      @relation("announcementsSeen")
@@ -910,6 +912,40 @@ model Bet {
   @@index([opsId, status])
   @@index([challengeId, status])
   @@map("bets")
+}
+
+// ─── Économie de coins : journal des mouvements (suivi GOD) ───────────────────
+//
+// Une ligne par mouvement de League Coins (crédit OU débit) d'un joueur. Alimenté
+// par grantCoinsTx (matchs, quêtes, paris, prix de tournoi, dons admin) et par les
+// achats boutique (qui court-circuitent grantCoinsTx). `amount` est le delta RÉEL
+// appliqué (signé : + gain, − perte) ; `balanceAfter` est le solde après le
+// mouvement. `type` qualifie la source ; `refId`/`meta` portent le contexte
+// (id de pari/match/tournoi/objet, libellé, auteur du don…). Purement historique :
+// jamais lu pour calculer un solde (la source de vérité reste User.leagueCoins).
+model CoinTransaction {
+  id           String   @id @default(uuid())
+  userLogin    String   @map("user_login")
+  // Delta réel appliqué au solde (signé). Peut différer du montant demandé si le
+  // débit a été borné à 0 (grantCoinsTx ne descend jamais sous 0).
+  amount       Int
+  balanceAfter Int      @map("balance_after")
+  // 'match' | 'quest' | 'bet_place' | 'bet_win' | 'bet_refund' | 'bet_reversal'
+  // | 'tournament_prize' | 'shop_purchase' | 'shop_consumable' | 'mystery_box'
+  // | 'sheldon_reward' | 'admin_grant'
+  type         String
+  // Id de l'entité liée (pari, match, tournoi, objet boutique…) selon `type`.
+  refId        String?  @map("ref_id")
+  // Contexte additionnel pour l'affichage (libellé, discipline, adversaire,
+  // nom d'objet, login de l'admin donateur…).
+  meta         Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation("userCoinTx", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userLogin, createdAt])
+  @@index([type])
+  @@map("coin_transaction")
 }
 
 // ─── Analytics : pages vues & événements d'usage (tableau de bord GOD) ────────

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, Github, Megaphone } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Shield, Terminal, Users, Crown, Github, Megaphone, Sparkles, Wrench } from 'lucide-react';
 import { Panel } from '../components/Panel';
 import { api, type ContributorStat, type AnnouncementData } from '../lib/api';
 import { announcementKindMeta } from '../lib/announcements';
@@ -11,7 +11,7 @@ import { useLeagueData } from '../hooks/useLeagueData';
 import { useGameMode } from '../hooks/useGameMode';
 import type { Game } from '../lib/gameMode';
 
-type Tab = 'rules' | 'announcements' | 'privacy' | 'tech' | 'team';
+type Tab = 'rules' | 'changelog' | 'announcements' | 'privacy' | 'tech' | 'team';
 
 export function AboutPage() {
   const t = useT();
@@ -24,6 +24,9 @@ export function AboutPage() {
       <div className="flex gap-1 p-1 rounded-xl bg-bg-2/60 border border-border/40 mb-5">
         <TabBtn active={tab === 'rules'} onClick={() => setTab('rules')} Icon={BookOpen}>
           {t('about.rules.title')}
+        </TabBtn>
+        <TabBtn active={tab === 'changelog'} onClick={() => setTab('changelog')} Icon={Sparkles}>
+          {t('about.changelog.title')}
         </TabBtn>
         {authenticated && (
           <TabBtn active={tab === 'announcements'} onClick={() => setTab('announcements')} Icon={Megaphone}>
@@ -43,6 +46,8 @@ export function AboutPage() {
 
       {tab === 'rules' ? (
         <RulesSection />
+      ) : tab === 'changelog' ? (
+        <ChangelogSection />
       ) : tab === 'announcements' ? (
         <AnnouncementsSection />
       ) : tab === 'privacy' ? (
@@ -104,6 +109,109 @@ function TabBtn({
       <Icon className="w-3.5 h-3.5 shrink-0 hidden sm:inline-flex" strokeWidth={2.5} />
       <span className="truncate">{children}</span>
     </button>
+  );
+}
+
+// ─── Changelog / notes de version ─────────────────────────────────────────────
+// Journal des évolutions, le plus récent en haut. Volontairement self-contained
+// (contenu factuel daté) : on ne le traduit pas entry par entry, seul l'en-tête
+// passe par i18n. À chaque livraison notable, on ajoute une entrée ici.
+
+type ChangeKind = 'feature' | 'fix';
+interface ChangeEntry {
+  kind: ChangeKind;
+  text: string;
+}
+interface Release {
+  version: string;
+  date: string;
+  changes: ChangeEntry[];
+}
+
+const CHANGELOG: Release[] = [
+  {
+    version: 'V1',
+    date: '10 juin 2026',
+    changes: [
+      {
+        kind: 'fix',
+        text: "OPS : impossible désormais de forcer plus de 3 matchs à une même cible. Le quota ne comptait que les matchs déjà soldés, ce qui laissait enchaîner des défis forcés au-delà de la limite.",
+      },
+      {
+        kind: 'feature',
+        text: "Classement par saison : les séries (en cours, plus longue série de victoires / de défaites) et le win-rate repartent de zéro à chaque nouvelle saison — au même titre que l'ELO.",
+      },
+      {
+        kind: 'feature',
+        text: "Courbe d'ELO remise à zéro à chaque nouvelle saison (elle ne retrace plus que la saison en cours).",
+      },
+      {
+        kind: 'feature',
+        text: "Classement : seuls les joueurs ayant disputé au moins une partie de la saison en cours y figurent. L'ELO de départ (1000) ne suffit plus à apparaître au classement.",
+      },
+    ],
+  },
+  {
+    version: 'V1',
+    date: '9 juin 2026',
+    changes: [
+      {
+        kind: 'feature',
+        text: "Saisons : clôture programmée automatique depuis le /GOD (date + heure → bascule automatique vers la saison suivante). Les League Coins sont conservés d'une saison à l'autre.",
+      },
+      { kind: 'feature', text: "Paris fermés dès le pile-ou-face d'un match." },
+      {
+        kind: 'feature',
+        text: "/GOD : sélecteur de mode pour consulter l'ELO par discipline dans la liste des joueurs.",
+      },
+      {
+        kind: 'feature',
+        text: "/GOD : un superadmin peut éditer l'ELO et les stats d'un autre superadmin (et les siennes).",
+      },
+    ],
+  },
+];
+
+function ChangelogSection() {
+  const t = useT();
+  return (
+    <Panel title={t('about.changelog.heading')} sub={t('about.changelog.sub')}>
+      <div className="flex flex-col gap-6">
+        {CHANGELOG.map((rel, i) => (
+          <div key={`${rel.version}-${rel.date}-${i}`} className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gold/12 border border-gold/30 text-gold text-[11px] font-extrabold uppercase tracking-[0.12em]">
+                <Crown className="w-3 h-3" strokeWidth={2.5} />
+                {rel.version}
+              </span>
+              <span className="text-xs font-bold text-muted-2">{rel.date}</span>
+              <div className="flex-1 h-px bg-gradient-to-r from-gold/20 to-transparent" />
+            </div>
+            <ul className="flex flex-col gap-2">
+              {rel.changes.map((c, j) => {
+                const isFix = c.kind === 'fix';
+                const Icon = isFix ? Wrench : Sparkles;
+                return (
+                  <li key={j} className="flex items-start gap-2.5">
+                    <span
+                      className={`mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide shrink-0 ${
+                        isFix
+                          ? 'bg-red/10 border border-red/30 text-red'
+                          : 'bg-teal/10 border border-teal/30 text-teal'
+                      }`}
+                    >
+                      <Icon className="w-2.5 h-2.5" strokeWidth={2.5} />
+                      {isFix ? 'Fix' : 'Nouveau'}
+                    </span>
+                    <span className="text-sm text-text leading-snug">{c.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 

@@ -31,6 +31,14 @@ import { getGame, subscribeGame } from '../lib/gameMode';
 export interface LeagueData {
   me: MeResponse | null;
   matches: PlayedMatch[];
+  /**
+   * Saison active (id) — sert à cloisonner par saison les stats DÉRIVÉES des matchs
+   * (séries / win-rate du classement, courbe ELO). L'historique `matches` reste
+   * complet (le GOAT et les snapshots de saisons passées en ont besoin) : ce sont
+   * les CONSOMMATEURS qui filtrent sur ce seasonId. null = pas encore chargé / aucune
+   * saison → repli sur l'historique complet.
+   */
+  activeSeasonId: string | null;
   pending: PendingMatch[];
   /** FFA Smash en attente de confirmation (tous joueurs confondus). */
   pendingFfas: PendingFfa[];
@@ -64,6 +72,7 @@ interface LeagueDataContextValue extends LeagueData {
 const EMPTY: LeagueData = {
   me: null,
   matches: [],
+  activeSeasonId: null,
   pending: [],
   pendingFfas: [],
   playedFfas: [],
@@ -114,7 +123,15 @@ const DOMAIN_FETCHERS: Record<Domain, () => Promise<Partial<LeagueData>>> = {
   },
   challenges: async () => ({ challenges: await api.challenges() }),
   // Classement ET tournois sont par jeu : on interroge ceux du mode courant.
-  leaderboard: async () => ({ leaderboard: await api.leaderboard(getGame()) }),
+  // On rafraîchit aussi la saison active ici : la clôture de saison émet un
+  // `leaderboard:update`, donc le passage à la nouvelle saison est capté sans reload.
+  leaderboard: async () => {
+    const [leaderboard, season] = await Promise.all([
+      api.leaderboard(getGame()),
+      api.currentSeason().catch(() => null),
+    ]);
+    return { leaderboard, activeSeasonId: season?.id ?? null };
+  },
   tournaments: async () => ({ tournaments: await api.tournaments(getGame()) }),
   ops: async () => {
     const [opsMe, allOps] = await Promise.all([
@@ -197,7 +214,7 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
           if (!silent) setLoading(false);
           return;
         }
-        const [matches, pending, pendingFfas, playedFfas, pendingDarts, playedDarts, challenges, leaderboard, tournaments, opsMe, allOps] =
+        const [matches, pending, pendingFfas, playedFfas, pendingDarts, playedDarts, challenges, leaderboard, tournaments, opsMe, allOps, currentSeason] =
           await Promise.all([
             api.playedMatches(),
             api.pendingMatches(),
@@ -210,10 +227,12 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
             api.tournaments(getGame()),
             api.opsMe().catch(() => null),
             api.opsList().catch(() => [] as Ops[]),
+            api.currentSeason().catch(() => null),
           ]);
         setData((prev) => ({
           me,
           matches,
+          activeSeasonId: currentSeason?.id ?? null,
           pending,
           pendingFfas,
           playedFfas,
