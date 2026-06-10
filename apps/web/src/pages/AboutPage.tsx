@@ -130,43 +130,50 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: 'V1',
+    version: 'V1.1',
     date: '10 juin 2026',
     changes: [
       {
         kind: 'fix',
-        text: "OPS : impossible désormais de forcer plus de 3 matchs à une même cible. Le quota ne comptait que les matchs déjà soldés, ce qui laissait enchaîner des défis forcés au-delà de la limite.",
+        text: "Boîte Mystère réparée : elle donne enfin un lot ! 1 chance sur 10 de décrocher le titre « Mysterious » (arc-en-ciel animé), sinon un cosmétique que tu ne possèdes pas encore — avec une animation de révélation qui dévoile ton gain.",
+      },
+      { kind: 'feature', text: "Nouveaux titres à couleur arc-en-ciel animée." },
+      {
+        kind: 'feature',
+        text: "La Boutique devient le QG des League Coins : onglets Boutique / Inventaire / Quêtes / Paris. Les quêtes hebdo et l'inventaire ont quitté le profil pour la boutique, et les cartes « comment gagner des coins » sont désormais cliquables.",
       },
       {
         kind: 'feature',
-        text: "Classement par saison : les séries (en cours, plus longue série de victoires / de défaites) et le win-rate repartent de zéro à chaque nouvelle saison — au même titre que l'ELO.",
+        text: "Tout nouvel inscrit démarre avec 300 League Coins (et les comptes à 0 ont été crédités à 300).",
       },
       {
         kind: 'feature',
-        text: "Courbe d'ELO remise à zéro à chaque nouvelle saison (elle ne retrace plus que la saison en cours).",
+        text: "Série d'assiduité ranked : jouer plusieurs jours d'affilée booste tes gains d'ELO et débloque des paliers de coins.",
       },
       {
         kind: 'feature',
-        text: "Classement : seuls les joueurs ayant disputé au moins une partie de la saison en cours y figurent. L'ELO de départ (1000) ne suffit plus à apparaître au classement.",
-      },
-    ],
-  },
-  {
-    version: 'V1',
-    date: '9 juin 2026',
-    changes: [
-      {
-        kind: 'feature',
-        text: "Saisons : clôture programmée automatique depuis le /GOD (date + heure → bascule automatique vers la saison suivante). Les League Coins sont conservés d'une saison à l'autre.",
-      },
-      { kind: 'feature', text: "Paris fermés dès le pile-ou-face d'un match." },
-      {
-        kind: 'feature',
-        text: "/GOD : sélecteur de mode pour consulter l'ELO par discipline dans la liste des joueurs.",
+        text: "Saisons : séries, win-rate, courbe d'ELO et trophées repartent de zéro à chaque nouvelle saison (le G.O.A.T, lui, reste cross-saison). Le classement n'affiche que les joueurs ayant disputé ≥ 1 partie de la saison ; clôture programmable depuis le /GOD ; les coins sont conservés d'une saison à l'autre.",
       },
       {
         kind: 'feature',
-        text: "/GOD : un superadmin peut éditer l'ELO et les stats d'un autre superadmin (et les siennes).",
+        text: "Historique (page dédiée et profil) filtrable par saison, et bloc « 7 derniers jours » du profil lié à la saison.",
+      },
+      {
+        kind: 'fix',
+        text: "OPS : impossible désormais de forcer plus de 3 matchs à une même cible (le quota tenait mal le compte des défis déjà lancés).",
+      },
+      { kind: 'fix', text: "Mobile : l'éditeur de personnages favoris ne sort plus de l'écran." },
+      {
+        kind: 'feature',
+        text: "Tournois : co-organisateurs (tous les droits) + noms d'équipe pour les duos ; paris sur l'issue des matchs (victoire/nul) ; retour en inscription et retrait d'un inscrit/duo. Paris fermés dès le pile-ou-face.",
+      },
+      {
+        kind: 'feature',
+        text: "/GOD : édition de l'ELO/stats d'un autre superadmin ; ELO par discipline dans la liste des joueurs ; suivi des coins (solde + historique) en sous-page dédiée, colonnes triables.",
+      },
+      {
+        kind: 'feature',
+        text: "Perf & design : images en WebP (≈ -10 Mo), nouveau mini-logo, icônes PWA recompressées, écrans et avatars chargés à la demande, compression nginx — l'app est nettement plus légère et rapide.",
       },
     ],
   },
