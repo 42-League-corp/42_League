@@ -29,7 +29,7 @@ export function PlayerPage() {
   const login = rawLogin ?? '';
   const navigate = useNavigate();
   const t = useT();
-  const { me, opsMe, matches, playedDarts, refresh } = useLeagueData();
+  const { me, opsMe, matches, playedDarts, refresh, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
   const flash = useFlash();
   const confirm = useConfirm();
@@ -106,7 +106,7 @@ export function PlayerPage() {
 
   // Mêmes stats que le profil perso (calcul pur partagé), isolées par discipline
   // depuis l'historique global — agencement strictement identique à `ProfilMobile`.
-  const { stats, recentMatches } = computeProfilStats(p.user, p.user.login, matches, game);
+  const { stats, recentMatches } = computeProfilStats(p.user, p.user.login, matches, game, activeSeasonId);
 
   return (
     <div className="space-y-5">

@@ -65,6 +65,10 @@ export function computeProfilStats(
   login: string,
   matches: PlayedMatch[],
   game: Game,
+  /** Saison active : le delta « 7 derniers jours » ne compte QUE ses matchs (il
+   *  repart de 0 à chaque saison — pas de gain/perte au 1er jour sans match joué).
+   *  null = pas de cloisonnement (repli). */
+  activeSeasonId: string | null = null,
 ): { stats: ProfilStats; recentMatches: PlayedMatch[] } {
   const mine = matches
     .filter(
@@ -103,7 +107,13 @@ export function computeProfilStats(
 
       if (m.countedForElo) {
         totalDelta += myDelta;
-        if (+new Date(m.playedAt) > sevenDaysAgo) {
+        // « 7 derniers jours » cloisonné à la saison active : au 1er jour d'une
+        // nouvelle saison (0 match joué), aucun gain/perte n'est affiché même si
+        // des matchs de la saison précédente tombent dans la fenêtre de 7 jours.
+        if (
+          +new Date(m.playedAt) > sevenDaysAgo &&
+          (!activeSeasonId || m.seasonId === activeSeasonId)
+        ) {
           delta7d += myDelta;
         }
       }
@@ -215,7 +225,7 @@ export function computeProfilStats(
 }
 
 export function useProfilLogic(): ProfilLogic {
-  const { me, matches } = useLeagueData();
+  const { me, matches, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
 
@@ -223,8 +233,8 @@ export function useProfilLogic(): ProfilLogic {
     if (!me?.user || !myLogin) {
       return { stats: EMPTY_STATS, recentMatches: [] as PlayedMatch[] };
     }
-    return computeProfilStats(me.user, myLogin, matches, game);
-  }, [me, myLogin, matches, game]);
+    return computeProfilStats(me.user, myLogin, matches, game, activeSeasonId);
+  }, [me, myLogin, matches, game, activeSeasonId]);
 
   return { myLogin, ...data };
 }
