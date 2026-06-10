@@ -90,37 +90,36 @@ export function MysteryRevealModal({
                 transition={{ type: 'spring', stiffness: 500, damping: 24 }}
                 className="flex flex-col items-center gap-3"
               >
-                {/* Gerbe d'étincelles */}
-                <div className="relative">
-                  {[...Array(8)].map((_, i) => (
-                    <motion.span
-                      key={i}
-                      initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                      animate={{ opacity: 0, x: Math.cos((i / 8) * Math.PI * 2) * 60, y: Math.sin((i / 8) * Math.PI * 2) * 60, scale: 0.3 }}
-                      transition={{ duration: 0.7, ease: 'easeOut' }}
-                      className="absolute left-1/2 top-1/2"
-                    >
-                      <Sparkles className="w-4 h-4" style={{ color: accent }} />
-                    </motion.span>
-                  ))}
-                  <div
-                    className="w-24 h-24 rounded-2xl flex items-center justify-center border-2"
-                    style={{
-                      borderColor: accent,
-                      background: isRainbow
-                        ? 'linear-gradient(135deg,rgba(255,92,124,0.18),rgba(165,94,234,0.18))'
-                        : `${accent}1f`,
-                      boxShadow: `0 0 30px ${accent}66`,
-                    }}
-                  >
-                    <Sparkles className="w-11 h-11" style={{ color: accent }} strokeWidth={1.8} />
-                  </div>
-                </div>
-
                 {reward ? (
                   <>
+                    {/* GAIN : gerbe d'étincelles + titre Mysterious */}
+                    <div className="relative">
+                      {[...Array(8)].map((_, i) => (
+                        <motion.span
+                          key={i}
+                          initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                          animate={{ opacity: 0, x: Math.cos((i / 8) * Math.PI * 2) * 60, y: Math.sin((i / 8) * Math.PI * 2) * 60, scale: 0.3 }}
+                          transition={{ duration: 0.7, ease: 'easeOut' }}
+                          className="absolute left-1/2 top-1/2"
+                        >
+                          <Sparkles className="w-4 h-4" style={{ color: accent }} />
+                        </motion.span>
+                      ))}
+                      <div
+                        className="w-24 h-24 rounded-2xl flex items-center justify-center border-2"
+                        style={{
+                          borderColor: accent,
+                          background: isRainbow
+                            ? 'linear-gradient(135deg,rgba(255,92,124,0.18),rgba(165,94,234,0.18))'
+                            : `${accent}1f`,
+                          boxShadow: `0 0 30px ${accent}66`,
+                        }}
+                      >
+                        <Sparkles className="w-11 h-11" style={{ color: accent }} strokeWidth={1.8} />
+                      </div>
+                    </div>
                     <div className="text-xs font-bold uppercase tracking-wider text-muted-2">
-                      {t('shop.bought')} 🎉
+                      Jackpot ! 🎉
                     </div>
                     <div
                       className={`font-display text-2xl font-black leading-tight ${isRainbow ? 'title-rainbow' : ''}`}
@@ -141,9 +140,17 @@ export function MysteryRevealModal({
                     </div>
                   </>
                 ) : (
-                  <div className="text-sm text-muted-2 font-medium max-w-[16rem]">
-                    Tu possèdes déjà tous les cosmétiques — rien de neuf cette fois. 🙈
-                  </div>
+                  <>
+                    {/* PERTE : -10 ELO, pas de lot (9 fois sur 10) */}
+                    <div className="w-24 h-24 rounded-2xl flex items-center justify-center border-2 border-red/50 bg-red/10 text-4xl">
+                      😬
+                    </div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-muted-2">Pas de chance…</div>
+                    <div className="font-display text-3xl font-black text-red leading-none">−10 ELO</div>
+                    <div className="text-[11px] text-muted-2 max-w-[15rem]">
+                      Le titre « Mysterious » se cache encore (1 chance sur 10). Retente ta chance !
+                    </div>
+                  </>
                 )}
               </motion.div>
             )}
