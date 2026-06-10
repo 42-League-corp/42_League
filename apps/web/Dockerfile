@@ -28,6 +28,9 @@ FROM public.ecr.aws/docker/library/nginx:alpine AS runner
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="frontend"
+# Durcissement : met à jour les paquets Alpine de l'image nginx (CVE OS :
+# openssl, libxml2, libcrypto, …) signalées par Trivy.
+RUN apk upgrade --no-cache
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 
 # Config nginx : SPA fallback + en-têtes de cache (assets hashés immuables 1 an,
