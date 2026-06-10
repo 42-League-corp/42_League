@@ -26,6 +26,7 @@ type Role = 'ADMIN' | 'SUPERADMIN';
 const TYPE_LABEL: Record<CoinTxType, string> = {
   match: 'Match',
   quest: 'Quête hebdo',
+  streak: 'Série d’assiduité',
   bet_place: 'Pari placé',
   bet_win: 'Pari gagné',
   bet_refund: 'Pari remboursé',
@@ -45,6 +46,8 @@ function TypeIcon({ type }: { type: CoinTxType }) {
       return <Swords className={cls} />;
     case 'quest':
       return <Target className={cls} />;
+    case 'streak':
+      return <Flame className={cls} />;
     case 'bet_place':
     case 'bet_win':
     case 'bet_refund':
@@ -90,6 +93,8 @@ function describe(t: CoinTransaction): string {
     }
     case 'quest':
       return `Récompense de quête${s('questId') ? ` (${s('questId')})` : ''}`;
+    case 'streak':
+      return `Palier de série — ${typeof m.streak === 'number' ? m.streak : '?'} jours`;
     case 'bet_place': {
       const tt = s('targetType');
       const target = tt === 'tournament' ? 'un tournoi' : tt === 'match' ? 'un match' : tt === 'ops' ? 'un duel d’OPS' : 'un pari';

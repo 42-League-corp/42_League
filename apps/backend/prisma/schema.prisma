@@ -59,6 +59,13 @@ model User {
   // de la dernière activation (limite : une activation par semaine).
   eloMultUntil        DateTime? @map("elo_mult_until")
   eloMultWeekKey      String?   @map("elo_mult_week_key")
+  // Série d'assiduité ranked : jours (UTC) consécutifs avec ≥1 match classé.
+  // `rankedStreakDay` = dernier jour joué ("YYYY-MM-DD"). Tolérance 1 jour de
+  // grâce (reset après 2 jours sans jouer). ≥3 jours → +10% sur les gains d'ELO ;
+  // paliers de coins à J3/J7/J14/J30. `rankedStreakBest` = record perso (flex).
+  rankedStreak        Int       @default(0) @map("ranked_streak")
+  rankedStreakBest    Int       @default(0) @map("ranked_streak_best")
+  rankedStreakDay     String?   @map("ranked_streak_day")
   // Reset admin du cooldown d'ops (cf. POST /admin/ops/:login/reset-cooldown).
   // Quand renseigné, tout ops dont `expiresAt` <= cette date est ignoré pour le
   // calcul du cooldown (POST /ops & GET /ops/me) : le joueur peut re-déclarer.

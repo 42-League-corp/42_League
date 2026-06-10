@@ -594,8 +594,10 @@ export function LeaderboardDesktop() {
                         </PlayerLink>
                         {u.title && (
                           <div
-                            className="text-[10px] italic mt-0.5 ml-10 truncate"
-                            style={{ color: u.titleColor ?? '#ffc94a' }}
+                            className={`text-[10px] italic mt-0.5 ml-10 truncate ${
+                              u.titleColor === 'rainbow' ? 'title-rainbow' : ''
+                            }`}
+                            style={u.titleColor === 'rainbow' ? undefined : { color: u.titleColor ?? '#ffc94a' }}
                           >
                             « {u.title} »
                           </div>

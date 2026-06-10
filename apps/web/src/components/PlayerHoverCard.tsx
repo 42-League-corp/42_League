@@ -64,8 +64,10 @@ export function PlayerHoverCard({ login, anchorRect }: { login: string; anchorRe
       {entry?.title && (
         <div className="mb-2.5 flex justify-center">
           <span
-            className="inline-flex items-center gap-1 max-w-full italic text-xs font-bold truncate"
-            style={{ color: entry.titleColor ?? '#ffc94a' }}
+            className={`inline-flex items-center gap-1 max-w-full italic text-xs font-bold truncate ${
+              entry.titleColor === 'rainbow' ? 'title-rainbow' : ''
+            }`}
+            style={entry.titleColor === 'rainbow' ? undefined : { color: entry.titleColor ?? '#ffc94a' }}
           >
             <span className="opacity-70 leading-none">❝</span>
             <span className="truncate">{entry.title}</span>
