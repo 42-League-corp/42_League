@@ -183,7 +183,10 @@ function ChangelogSection() {
   const t = useT();
   return (
     <Panel title={t('about.changelog.heading')} sub={t('about.changelog.sub')}>
-      <div className="flex flex-col gap-6">
+      {/* Liste déroulable : on borne la hauteur et on scrolle DANS la section pour
+          que toutes les entrées soient atteignables (sur mobile, les dernières
+          passaient sous la barre d'onglets du bas). */}
+      <div className="flex flex-col gap-6 max-h-[62vh] overflow-y-auto custom-scrollbar pr-1 -mr-1 overscroll-contain">
         {CHANGELOG.map((rel, i) => (
           <div key={`${rel.version}-${rel.date}-${i}`} className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
