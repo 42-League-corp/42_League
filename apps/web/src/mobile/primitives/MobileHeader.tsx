@@ -64,7 +64,7 @@ export function MobileHeader() {
             se fait via la tab bar (cliquer le logo provoquait un saut de mise en
             page persistant en haut des pages). */}
         <div className="flex items-center gap-1.5">
-          <img src="/icon-192.png" alt="42L" className="w-7 h-7 rounded-md" />
+          <img src="/mini-96.webp" alt="42L" width={28} height={28} className="w-7 h-7 rounded-md" loading="eager" decoding="async" />
         </div>
 
         {/* Titre de page animé — change avec la route */}
