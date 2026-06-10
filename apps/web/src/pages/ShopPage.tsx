@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Sparkles,
@@ -18,6 +19,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
+import { QuestsPanel } from './profil/QuestsPanel';
+import { BetsPanel } from './profil/BetsPanel';
 import { Panel } from '../components/Panel';
 import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
@@ -126,7 +129,7 @@ const EARN_METHODS: EarnMethod[] = [
   },
 ];
 
-function EarnGuide() {
+function EarnGuide({ onPick }: { onPick: (key: string) => void }) {
   const t = useT();
   return (
     <section className="relative overflow-hidden rounded-2xl p-5 border border-gold/25 bg-gradient-to-br from-bg-3/80 via-bg-2/70 to-bg-1/80">
@@ -154,9 +157,11 @@ function EarnGuide() {
         {EARN_METHODS.map((m, i) => {
           const Icon = m.icon;
           return (
-            <div
+            <button
               key={m.key}
-              className={`group relative overflow-hidden rounded-2xl border bg-bg-2/70 p-4 flex flex-col gap-3 transition-colors ${m.ring}`}
+              type="button"
+              onClick={() => onPick(m.key)}
+              className={`group relative overflow-hidden rounded-2xl border bg-bg-2/70 p-4 flex flex-col gap-3 text-left transition-colors cursor-pointer hover:brightness-110 active:scale-[0.99] ${m.ring}`}
             >
               {/* Lueur de fond propre à la méthode */}
               <div
@@ -193,7 +198,7 @@ function EarnGuide() {
               <p className="relative text-[11.5px] text-muted-2 leading-relaxed">
                 {t(`shop.earn.${m.key}.desc`)}
               </p>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -359,8 +364,22 @@ let shopCache: ShopSnapshot | null = readShopCache();
 
 export function ShopPage() {
   const t = useT();
+  const navigate = useNavigate();
   const { show } = useFlash();
   const { me, refresh } = useLeagueData();
+  // Onglets du shop : boutique (cosmétiques) · quêtes hebdo · paris. Les quêtes et
+  // paris vivent désormais ici (hub des League Coins), plus sur le profil.
+  const [tab, setTab] = useState<'shop' | 'quests' | 'bets'>('shop');
+  // Cible des cartes « comment gagner » : matchs → page Défis ; quêtes/paris →
+  // onglet correspondant (sans quitter le shop).
+  const pickEarn = useCallback(
+    (key: string) => {
+      if (key === 'match') navigate('/defis');
+      else if (key === 'quests') setTab('quests');
+      else if (key === 'bets') setTab('bets');
+    },
+    [navigate],
+  );
 
   const [coins, setCoins] = useState<number>(shopCache?.coins ?? me?.coins ?? 0);
   const [items, setItems] = useState<ShopItemData[]>(shopCache?.items ?? []);
@@ -520,8 +539,36 @@ export function ShopPage() {
         </div>
       </Panel>
 
+      {/* ── Onglets : Boutique · Quêtes · Paris ────────────────────────── */}
+      <div className="flex gap-1 p-1 rounded-xl bg-bg-2/60 border border-border/40">
+        {([
+          { v: 'shop' as const, label: t('shop.title'), Icon: Gem },
+          { v: 'quests' as const, label: t('profil.tab.quests'), Icon: Target },
+          { v: 'bets' as const, label: t('profil.tab.bets'), Icon: Dices },
+        ]).map(({ v, label, Icon }) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setTab(v)}
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-extrabold uppercase tracking-[0.1em] transition-all ${
+              tab === v
+                ? 'bg-gold/10 border border-gold/30 text-gold shadow-[inset_0_1px_0_rgba(255,215,120,0.12)]'
+                : 'text-muted-2 hover:text-text'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === 'quests' && <QuestsPanel />}
+      {tab === 'bets' && <BetsPanel />}
+
+      {tab === 'shop' && (
+        <>
       {/* ── Guide « comment gagner des coins » ─────────────────────────── */}
-      <EarnGuide />
+      <EarnGuide onPick={pickEarn} />
 
       {/* ── Barres de filtres : catégorie + tri ────────────────────────── */}
       {!loading && visibleItems.length > 0 && (
@@ -754,6 +801,8 @@ export function ShopPage() {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Aperçu du cosmétique appliqué sur la carte de profil */}
