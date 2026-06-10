@@ -12,7 +12,6 @@ import { FollowLists } from '../../components/FollowLists';
 import { EloChart } from '../../components/EloChart';
 import { SectionHeader } from './shared/SectionHeader';
 import { RankingScopeToggle } from '../leaderboard/RankingScopeToggle';
-import { QuestsPanel } from './QuestsPanel';
 import { BetsPanel } from './BetsPanel';
 import { InventoryPanel } from './InventoryPanel';
 import { useProfilLogic } from './shared/useProfilLogic';
@@ -34,8 +33,7 @@ export function ProfilMobile() {
   // Deep-link `?tab=bets` (ex. depuis une notif « parie sur ce duel »).
   const [params] = useSearchParams();
   const queryTab = params.get('tab');
-  const initialTab: ProfilTab =
-    queryTab === 'bets' || queryTab === 'quests' ? queryTab : 'profile';
+  const initialTab: ProfilTab = queryTab === 'bets' ? 'bets' : 'profile';
   const [tab, setTab] = useState<ProfilTab>(initialTab);
 
   if (!me?.user) {
@@ -60,18 +58,17 @@ export function ProfilMobile() {
             série de victoires → « calme-toi le sweat »). Cf. lib/playerReactions. */}
         <PlayerReactionOverlay signals={stats} />
 
-        {/* Onglets : profil · quêtes hebdo · paris */}
+        {/* Onglets : profil · paris. Les quêtes hebdo ont migré dans la Boutique
+            (hub des League Coins). */}
         <RankingScopeToggle<ProfilTab>
-          value={tab}
+          value={tab === 'quests' ? 'profile' : tab}
           onChange={setTab}
           choices={[
             { value: 'profile', label: t('profil.tab.profile') },
-            { value: 'quests', label: t('profil.tab.quests') },
             { value: 'bets', label: t('profil.tab.bets') },
           ]}
         />
 
-        {tab === 'quests' && <QuestsPanel />}
         {tab === 'bets' && <BetsPanel />}
 
         {tab === 'profile' && (
