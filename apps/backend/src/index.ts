@@ -9006,53 +9006,52 @@ app.post('/shop/:id/buy', async (c) => {
     if (user.leagueCoins < item.price) {
       throw new HTTPException(400, { message: 'solde insuffisant' });
     }
-    const updateData: Parameters<typeof tx.user.update>[0]['data'] = {
-      leagueCoins: { decrement: item.price },
-    };
+
+    // ── Boîte Mystère : un PARI ────────────────────────────────────────────
+    // 1 chance sur 10 → on décroche le titre « Mysterious » (arc-en-ciel animé),
+    // sans perte d'ELO. 9 fois sur 10 → on perd 10 ELO et rien d'autre. Si on
+    // possède déjà le titre, c'est forcément une perte (impossible de le re-gagner).
     if (isMysteryBox) {
-      updateData.elo = { decrement: 10 };
+      const ownsTitle = await tx.shopInventory.findUnique({
+        where: { userLogin_itemId: { userLogin: login, itemId: 'title-mysterious' } },
+      });
+      const won = !ownsTitle && Math.random() < 0.1;
+      const updated = await tx.user.update({
+        where: { login },
+        data: { leagueCoins: { decrement: item.price }, ...(won ? {} : { elo: { decrement: 10 } }) },
+        select: { leagueCoins: true },
+      });
+      let reward:
+        | { id: string; name: string; category: string; color: string | null; rarity: string | null }
+        | null = null;
+      if (won) {
+        await tx.shopInventory.create({ data: { userLogin: login, itemId: 'title-mysterious' } });
+        const title = await tx.shopItem.findUnique({ where: { id: 'title-mysterious' } });
+        if (title) {
+          reward = { id: title.id, name: title.name, category: title.category, color: title.color, rarity: title.rarity };
+        }
+      }
+      await logCoinTx(tx, login, -item.price, updated.leagueCoins, {
+        type: 'mystery_box',
+        refId: item.id,
+        meta: { name: item.name, won, eloLost: won ? 0 : 10 },
+      });
+      return { coins: updated.leagueCoins, reward };
     }
+
+    // ── Achat cosmétique normal ────────────────────────────────────────────
     const updated = await tx.user.update({
       where: { login },
-      data: updateData,
+      data: { leagueCoins: { decrement: item.price } },
       select: { leagueCoins: true },
     });
-    // ── Boîte Mystère : tirage du lot ──────────────────────────────────────
-    // 1 chance sur 10 → titre « Mysterious » (arc-en-ciel) s'il ne l'a pas déjà ;
-    // sinon un cosmétique aléatoire (titre/bannière/badge) qu'il ne possède pas
-    // encore. Si l'inventaire est déjà complet, aucun lot (cas marginal).
-    let mysteryReward:
-      | { id: string; name: string; category: string; color: string | null; rarity: string | null }
-      | null = null;
-    if (isMysteryBox) {
-      const ownedRows = await tx.shopInventory.findMany({ where: { userLogin: login }, select: { itemId: true } });
-      const owned = new Set(ownedRows.map((r) => r.itemId));
-      let prize: typeof item | null = null;
-      if (!owned.has('title-mysterious') && Math.random() < 0.1) {
-        prize = await tx.shopItem.findUnique({ where: { id: 'title-mysterious' } });
-      }
-      if (!prize) {
-        const pool = await tx.shopItem.findMany({
-          where: { category: { in: ['title', 'banner', 'badge'] }, active: true, id: { notIn: [...owned] } },
-        });
-        const eligible = pool.filter((p) => p.id !== 'title-mysterious' && !isSheldonApostle(p));
-        if (eligible.length > 0) prize = eligible[Math.floor(Math.random() * eligible.length)] ?? null;
-      }
-      if (prize && !owned.has(prize.id)) {
-        await tx.shopInventory.create({ data: { userLogin: login, itemId: prize.id } });
-        mysteryReward = { id: prize.id, name: prize.name, category: prize.category, color: prize.color, rarity: prize.rarity };
-      }
-    } else {
-      await tx.shopInventory.create({ data: { userLogin: login, itemId } });
-    }
+    await tx.shopInventory.create({ data: { userLogin: login, itemId } });
     await logCoinTx(tx, login, -item.price, updated.leagueCoins, {
-      type: isMysteryBox ? 'mystery_box' : 'shop_purchase',
+      type: 'shop_purchase',
       refId: item.id,
-      meta: isMysteryBox
-        ? { name: item.name, category: item.category, won: mysteryReward?.name ?? null, wonId: mysteryReward?.id ?? null }
-        : { name: item.name, category: item.category },
+      meta: { name: item.name, category: item.category },
     });
-    return { coins: updated.leagueCoins, reward: mysteryReward };
+    return { coins: updated.leagueCoins, reward: null };
   });
 
   emit([login], { type: 'panel:update', payload: {} });

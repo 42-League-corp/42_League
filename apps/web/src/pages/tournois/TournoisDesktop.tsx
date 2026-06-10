@@ -18,7 +18,7 @@ import { tournamentArt, safeImageUrl } from '../../lib/tournamentArt';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
-import { PastTournamentPopover } from '../../components/tournois/PastTournamentPopover';
+import { PastTournamentHover } from '../../components/tournois/PastTournamentPopover';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useIsMobile } from '../../hooks/useViewport';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -260,11 +260,10 @@ function TournoiCard({ t }: { t: Tournament }) {
   const isLeague = t.format === 'league';
   const fillPct = Math.min(100, Math.round((count / Math.max(1, t.capacity)) * 100));
   const isOfficial = t.kind === 'official';
-  return (
-    <div className="group relative">
+  const card = (
     <Link
       to={`/tournaments/${encodeURIComponent(t.id)}`}
-      className="relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
+      className="group relative block rounded-xl overflow-hidden card-hud hover-glow transition-all duration-200 hover:-translate-y-0.5"
       style={
         isOfficial
           ? {
@@ -357,9 +356,8 @@ function TournoiCard({ t }: { t: Tournament }) {
         )}
       </div>
     </Link>
-      {t.status === 'finished' && <PastTournamentPopover t={t} />}
-    </div>
   );
+  return t.status === 'finished' ? <PastTournamentHover t={t}>{card}</PastTournamentHover> : card;
 }
 
 // ─── Modal de création (paramètres) ──────────────────────────────────────────
