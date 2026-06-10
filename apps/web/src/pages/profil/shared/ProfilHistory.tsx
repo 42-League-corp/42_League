@@ -8,6 +8,7 @@ import { useLeagueData } from '../../../hooks/useLeagueData';
 import { useI18n, useT } from '../../../lib/i18n';
 import type { MyDartsStat } from '../../historique/shared/useHistoriqueLogic';
 import { MyDartsCard } from '../../historique/shared/MatchCards';
+import { SeasonFilterSelect } from '../../../components/SeasonFilterSelect';
 import { RecentMatchRow } from './RecentMatchRow';
 
 // Catégorie filtrable : une discipline (Game, dont 'flechettes') OU le 2v2 babyfoot
@@ -72,8 +73,12 @@ export function ProfilHistory({
 }: ProfilHistoryProps) {
   const t = useT();
   const { lang } = useI18n();
-  const { leaderboard } = useLeagueData();
+  const { leaderboard, activeSeasonId } = useLeagueData();
   const [filter, setFilter] = useState<Filter>('all');
+  // '' = saison en cours (défaut), 'all' = toutes, sinon une saison passée.
+  const [seasonFilter, setSeasonFilter] = useState('');
+  const seasonId =
+    seasonFilter === '' ? activeSeasonId : seasonFilter === 'all' ? null : seasonFilter;
 
   const imgByLogin = useMemo(
     () => new Map(leaderboard.map((u) => [u.login, u.imageUrl ?? null])),
@@ -81,13 +86,15 @@ export function ProfilHistory({
   );
 
   // Tous mes éléments (matchs + fléchettes), du plus récent au plus ancien.
+  // Cloisonné par saison (défaut : saison en cours).
   const items = useMemo<HistItem[]>(() => {
     const mineMatches = matches.filter(
       (m) =>
-        m.playerALogin === login ||
-        m.playerBLogin === login ||
-        m.playerA2Login === login ||
-        m.playerB2Login === login,
+        (!seasonId || m.seasonId === seasonId) &&
+        (m.playerALogin === login ||
+          m.playerBLogin === login ||
+          m.playerA2Login === login ||
+          m.playerB2Login === login),
     );
     const matchItems: HistItem[] = mineMatches.map((m) => ({
       kind: 'match',
@@ -97,6 +104,7 @@ export function ProfilHistory({
       match: m,
     }));
     const dartItems: HistItem[] = darts
+      .filter((d) => !seasonId || d.seasonId === seasonId)
       .map((d): HistItem | null => {
         const me = d.participants.find((p) => p.login === login);
         if (!me) return null;
@@ -110,7 +118,7 @@ export function ProfilHistory({
       })
       .filter((x): x is HistItem => x !== null);
     return [...matchItems, ...dartItems].sort((a, b) => b.at - a.at);
-  }, [matches, darts, login]);
+  }, [matches, darts, login, seasonId]);
 
   // Catégories réellement présentes (pour n'afficher que ces onglets).
   const categories = useMemo(() => {
@@ -131,12 +139,14 @@ export function ProfilHistory({
     return pickRating(user, filter).elo;
   }, [user, filter]);
 
-  if (items.length === 0) {
-    return <div className="text-center py-6 text-sm text-muted-2">{t('profil.noMatchYet')}</div>;
-  }
-
   return (
     <div>
+      {/* Sélecteur de saison — toujours visible (pour revenir à « toutes » même si
+          la saison en cours est vide). */}
+      <div className="flex justify-end mb-3">
+        <SeasonFilterSelect value={seasonFilter} onChange={setSeasonFilter} />
+      </div>
+
       {/* Filtre par catégorie — uniquement si le joueur a touché à ≥2 catégories. */}
       {categories.length >= 2 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3">

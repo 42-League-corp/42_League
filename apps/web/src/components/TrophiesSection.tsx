@@ -232,8 +232,16 @@ interface TrophiesSectionProps {
 }
 
 export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
-  const { leaderboard, matches } = useLeagueData();
+  const { leaderboard, matches: allMatches, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
+  // Trophées cloisonnés à la saison active : ils se gagnent sur la saison en cours
+  // et repartent de zéro à chaque clôture (comme l'ELO et les stats du classement).
+  // L'historique complet reste dispo pour le GOAT (cross-saison). activeSeasonId
+  // null (pas encore chargé / aucune saison) → repli sur tout l'historique.
+  const matches = useMemo(
+    () => (activeSeasonId ? allMatches.filter((m) => m.seasonId === activeSeasonId) : allMatches),
+    [allMatches, activeSeasonId],
+  );
   const [view, setView] = useState<'mode' | 'mix' | 'teams' | 'ffa'>('mode');
   const trophies = useMemo(
     () => computeTrophies(leaderboard, matches, game),
@@ -258,8 +266,14 @@ export function TrophiesSection({ title = 'Trophées' }: TrophiesSectionProps) {
   }, [view, ffas]);
 
   const ffaTrophies = useMemo(
-    () => (ffas ? computeFfaTrophies(ffas, leaderboard) : []),
-    [ffas, leaderboard],
+    () =>
+      ffas
+        ? computeFfaTrophies(
+            activeSeasonId ? ffas.filter((f) => f.seasonId === activeSeasonId) : ffas,
+            leaderboard,
+          )
+        : [],
+    [ffas, leaderboard, activeSeasonId],
   );
 
   // Onglet « Mix » : trophées inter-jeux → nécessite les 3 classements.

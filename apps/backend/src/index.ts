@@ -2124,6 +2124,16 @@ async function performSeasonRollover(newName: string) {
             matchesPlayedSf: 0,
             eloFlechettes: resetEloFor('flechettes', u.login, u.eloFlechettes),
             matchesPlayedFlechettes: 0,
+            // Trophées remis à zéro pour la nouvelle saison : titres de tournois par
+            // discipline (compteurs « palmarès »/trophées) + dodges (trophées « hontes »).
+            // L'historique des matchs/tournois n'est pas purgé → GOAT et snapshots de
+            // saisons passées restent cross-saison.
+            tournamentsWon: 0,
+            tournamentsWonSmash: 0,
+            tournamentsWonChess: 0,
+            tournamentsWonSf: 0,
+            tournamentsWonFlechettes: 0,
+            dodgeCount: 0,
           },
         });
       }

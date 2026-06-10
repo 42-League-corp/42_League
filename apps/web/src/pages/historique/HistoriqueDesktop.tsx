@@ -1,9 +1,10 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Globe2, User, TrendingDown, TrendingUp } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
+import { SeasonFilterSelect } from '../../components/SeasonFilterSelect';
 import { useHistoriqueLogic } from './shared/useHistoriqueLogic';
 import { GlobalMatchCard, MyMatchCard, GlobalFfaCard, MyFfaCard } from './shared/MatchCards';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -21,7 +22,9 @@ import { GAME_META } from '../../lib/gameMeta';
 export function HistoriqueDesktop() {
   const t = useT();
   const { lang } = useI18n();
-  const data = useHistoriqueLogic();
+  // '' = saison en cours (défaut), 'all' = toutes, sinon une saison passée.
+  const [seasonFilter, setSeasonFilter] = useState('');
+  const data = useHistoriqueLogic(seasonFilter);
   const { game } = useGameMode();
   const { leaderboard } = useLeagueData();
 
@@ -55,6 +58,9 @@ export function HistoriqueDesktop() {
 
   return (
     <Panel title={t('panel.history.title')} sub={t('history.global.sub')} accent="history">
+      <div className="flex justify-end mb-4">
+        <SeasonFilterSelect value={seasonFilter} onChange={setSeasonFilter} />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:items-start">
         {/* ─── Colonne GLOBALE ─────────────────────────────────────────── */}
         <HistoColumn

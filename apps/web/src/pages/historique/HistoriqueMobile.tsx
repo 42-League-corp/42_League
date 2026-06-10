@@ -3,6 +3,7 @@ import { PullToRefresh } from '../../mobile/primitives/PullToRefresh';
 import { SegmentedControl, type SegmentChoice } from '../../mobile/primitives/SegmentedControl';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useI18n, useT } from '../../lib/i18n';
+import { SeasonFilterSelect } from '../../components/SeasonFilterSelect';
 import { useHistoriqueLogic } from './shared/useHistoriqueLogic';
 import { HistoriqueList, type HistoTab } from './shared/HistoriqueList';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -11,7 +12,8 @@ import { GAME_META } from '../../lib/gameMeta';
 export function HistoriqueMobile() {
   const t = useT();
   const { lang } = useI18n();
-  const data = useHistoriqueLogic();
+  const [seasonFilter, setSeasonFilter] = useState('');
+  const data = useHistoriqueLogic(seasonFilter);
   const { game } = useGameMode();
   const { leaderboard } = useLeagueData();
   const [tab, setTab] = useState<HistoTab>('global');
@@ -29,6 +31,9 @@ export function HistoriqueMobile() {
   return (
     <PullToRefresh onRefresh={data.refresh}>
       <div className="space-y-4">
+        <div className="flex justify-end">
+          <SeasonFilterSelect value={seasonFilter} onChange={setSeasonFilter} />
+        </div>
         <SegmentedControl<HistoTab> value={tab} onChange={setTab} choices={choices} />
         <HistoriqueList
           tab={tab}
