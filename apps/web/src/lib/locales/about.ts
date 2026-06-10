@@ -14,6 +14,9 @@ export const dict: Record<Lang, Dict> = {
   fr: {
     // Onglets
     'about.rules.title': 'Règles',
+    'about.changelog.title': 'Nouveautés',
+    'about.changelog.heading': 'Notes de version',
+    'about.changelog.sub': 'Les dernières évolutions de la League.',
     'about.privacy.title': 'Confidentialité',
     'about.tech.title': 'Technique',
     'about.team.title': 'Équipe',
@@ -107,6 +110,9 @@ export const dict: Record<Lang, Dict> = {
   en: {
     // Tabs
     'about.rules.title': 'Rules',
+    'about.changelog.title': "What's new",
+    'about.changelog.heading': 'Release notes',
+    'about.changelog.sub': 'The latest changes to the League.',
     'about.privacy.title': 'Privacy',
     'about.tech.title': 'Tech',
     'about.team.title': 'Team',
@@ -200,6 +206,9 @@ export const dict: Record<Lang, Dict> = {
   es: {
     // Pestañas
     'about.rules.title': 'Reglas',
+    'about.changelog.title': 'Novedades',
+    'about.changelog.heading': 'Notas de versión',
+    'about.changelog.sub': 'Los últimos cambios de la League.',
     'about.privacy.title': 'Privacidad',
     'about.tech.title': 'Técnica',
     'about.team.title': 'Equipo',

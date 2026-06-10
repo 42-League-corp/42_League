@@ -19,11 +19,18 @@ type LeaderboardTab = 'personal' | 'teams';
 
 export function LeaderboardMobile() {
   const t = useT();
-  const { leaderboard, matches: allMatches, me, allOps, locations, refresh } = useLeagueData();
+  const { leaderboard, matches: allMatches, me, allOps, locations, refresh, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
   const matches = useMemo(
     () => allMatches.filter((m) => (m.game ?? 'babyfoot') === game),
     [allMatches, game],
+  );
+  // Stats LIVE cloisonnées à la saison active (V/D & win-rate repartent de zéro à
+  // chaque saison, comme l'ELO). On garde `matches` complet pour les snapshots de
+  // saisons passées. activeSeasonId null → repli sur tout l'historique.
+  const liveMatches = useMemo(
+    () => (activeSeasonId ? matches.filter((m) => m.seasonId === activeSeasonId) : matches),
+    [matches, activeSeasonId],
   );
   const myLogin = me?.login;
   const [query, setQuery] = useState('');
@@ -101,7 +108,7 @@ export function LeaderboardMobile() {
       return map;
     }
     for (const u of leaderboard) map.set(u.login, { wins: 0, losses: 0 });
-    for (const m of matches) {
+    for (const m of liveMatches) {
       if (m.winner === 'draw') continue; // nulle : ni V ni D
       for (const login of [m.playerALogin, m.playerBLogin]) {
         const cur = map.get(login);
@@ -113,7 +120,7 @@ export function LeaderboardMobile() {
       }
     }
     return map;
-  }, [standings, leaderboard, matches]);
+  }, [standings, leaderboard, liveMatches]);
 
   // Win rate par login — abscisse du nuage de points.
   const winRates = useMemo(() => {
@@ -127,10 +134,15 @@ export function LeaderboardMobile() {
 
   // Tri par rang officiel (ELO) — comme la vue desktop. En saison passée, on
   // affiche le classement figé (mêmes composants, photos grisées).
-  const sortedLeaderboard = useMemo(
-    () => [...(viewingPast ? pastEntries : leaderboard)].sort((a, b) => a.rank - b.rank),
-    [viewingPast, pastEntries, leaderboard],
-  );
+  const sortedLeaderboard = useMemo(() => {
+    if (viewingPast) return [...pastEntries].sort((a, b) => a.rank - b.rank);
+    // LIVE : seuls les joueurs avec ≥ 1 partie cette saison (ELO de base 1000
+    // insuffisant). Rangs re-numérotés en contigu par ELO décroissant.
+    return leaderboard
+      .filter((u) => (u.matchesPlayed ?? 0) > 0)
+      .sort((a, b) => a.rank - b.rank)
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+  }, [viewingPast, pastEntries, leaderboard]);
 
   // Top 3 par rang → podium (or / argent / bronze cohérents avec l'ELO).
   const top3 = sortedLeaderboard.slice(0, 3);
@@ -238,6 +250,13 @@ export function LeaderboardMobile() {
           <Podium top3={top3} statsByLogin={podiumStats} past={viewingPast} />
         )}
 
+        {/* Rappel : il faut ≥ 1 partie pour être classé (live, vue liste). */}
+        {!viewingPast && viewMode === 'list' && (
+          <p className="text-[11px] text-muted-2/80 text-center leading-snug px-2">
+            {t('lb.unranked.note')}
+          </p>
+        )}
+
         {/* Barre d'outils : bascule liste / nuage / G.O.A.T + accès Paliers.
             G.O.A.T masqué pour la BETA (pas d'historique de matchs taggé). */}
         <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -263,7 +282,7 @@ export function LeaderboardMobile() {
           </>
         ) : sortedLeaderboard.length === 0 ? (
           <div className="text-center text-muted-2 py-10 text-sm">
-            {viewingPast ? t('lb.snapshot.emptyShort') : t('lb.search.empty')}
+            {viewingPast ? t('lb.snapshot.emptyShort') : t('lb.unranked.empty')}
           </div>
         ) : (
         <>
@@ -275,9 +294,9 @@ export function LeaderboardMobile() {
             transition={{ delay: 0.3 }}
             className="flex items-center justify-around py-2 px-3 rounded-2xl card-hud"
           >
-            <Stat label={t('lb.stat.players')} value={leaderboard.length} />
+            <Stat label={t('lb.stat.players')} value={sortedLeaderboard.length} />
             <div className="w-px h-8 bg-border" />
-            <Stat label={t('lb.stat.matches')} value={matches.length} />
+            <Stat label={t('lb.stat.matches')} value={liveMatches.length} />
             {myRank && (
               <>
                 <div className="w-px h-8 bg-border" />

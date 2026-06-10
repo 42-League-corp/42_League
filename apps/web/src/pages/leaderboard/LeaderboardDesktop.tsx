@@ -215,7 +215,7 @@ type SortDir = 'asc' | 'desc';
  */
 export function LeaderboardDesktop() {
   const t = useT();
-  const { leaderboard, matches: allMatches, me, allOps, locations } = useLeagueData();
+  const { leaderboard, matches: allMatches, me, allOps, locations, activeSeasonId } = useLeagueData();
   const { game } = useGameMode();
   const myLogin = me?.login;
 
@@ -228,9 +228,19 @@ export function LeaderboardDesktop() {
   // les matchs de ce jeu uniquement. Calcul lourd déporté dans une fonction cachée
   // au niveau module (cf. computeLeaderboardStats) → instantané en revenant sur la
   // page tant que les données n'ont pas changé.
+  //
+  // Cloisonnement par saison : les séries / win-rate du classement LIVE ne comptent
+  // que les matchs de la saison active (l'ELO ayant déjà été reset à la clôture, les
+  // stats doivent repartir de zéro elles aussi). On garde `allMatches` complet pour
+  // le GOAT (cross-saison) et les snapshots de saisons passées. activeSeasonId null
+  // (pas encore chargé / aucune saison) → repli sur tout l'historique.
+  const liveMatches = useMemo(
+    () => (activeSeasonId ? allMatches.filter((m) => m.seasonId === activeSeasonId) : allMatches),
+    [allMatches, activeSeasonId],
+  );
   const { stats: statsByLogin } = useMemo(
-    () => computeLeaderboardStats(allMatches, leaderboard, game),
-    [allMatches, leaderboard, game],
+    () => computeLeaderboardStats(liveMatches, leaderboard, game),
+    [liveMatches, leaderboard, game],
   );
 
   // ─── Vue (liste / nuage) ─────────────────────────────────────────────────
@@ -285,7 +295,17 @@ export function LeaderboardDesktop() {
     entries: LeaderboardEntry[];
     rowStats: Map<string, PlayerStats>;
   }>(() => {
-    if (!standings) return { entries: leaderboard, rowStats: statsByLogin };
+    if (!standings) {
+      // Vue LIVE : seuls les joueurs ayant disputé ≥ 1 partie cette saison sont
+      // classés — l'ELO de base (1000) ne suffit pas à figurer au classement. On
+      // re-numérote les rangs de façon contiguë par ELO décroissant (le back classe
+      // TOUS les joueurs, y compris ceux à 0 partie qui, après reset au plancher de
+      // grade, peuvent squatter un rang). `leaderboard` est déjà trié par ELO desc.
+      const ranked = leaderboard
+        .filter((u) => (u.matchesPlayed ?? 0) > 0)
+        .map((u, i) => ({ ...u, rank: i + 1 }));
+      return { entries: ranked, rowStats: statsByLogin };
+    }
     const e = standings.map(
       (s): LeaderboardEntry => ({
         rank: s.rank,
@@ -481,9 +501,14 @@ export function LeaderboardDesktop() {
             <GradesNavButton />
           </div>
         </div>
+        {!viewingPast && (
+          <p className="text-[11px] text-muted-2/80 mb-3 -mt-1 leading-snug">
+            {t('lb.unranked.note')}
+          </p>
+        )}
         {entries.length === 0 ? (
           <div className="text-center text-muted-2 py-10">
-            {viewingPast ? t('lb.snapshot.empty') : t('lb.empty')}
+            {viewingPast ? t('lb.snapshot.empty') : t('lb.unranked.empty')}
           </div>
         ) : viewMode === 'goat' && seasonHasMatches ? (
           viewingPast ? <GoatView leaderboard={entries} matches={seasonMatches} /> : <GoatView />

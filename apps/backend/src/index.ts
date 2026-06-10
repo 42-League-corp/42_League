@@ -4301,7 +4301,18 @@ app.post('/challenges', async (c) => {
       forcedUsed: { lt: OPS_FORCED_MATCHES },
     },
   });
-  const isForced = !!forcedOps;
+  // Le quota de 3 ne se mesure PAS qu'au compteur `forcedUsed` (incrémenté seulement
+  // au confirm/refus) : sinon le traqueur peut spammer N défis forcés tant qu'aucun
+  // n'est encore consommé (tous nés 'accepted' → cible piégée sur > 3 matchs). On
+  // compte donc aussi les défis forcés DÉJÀ EN VOL sur cet ops (créés mais pas
+  // encore soldés : pending / accepted / recorded — ils consommeront un slot). Le
+  // défi n'est forcé que si forcedUsed + en-vol < 3.
+  const outstandingForced = forcedOps
+    ? await prisma.challenge.count({
+        where: { opsId: forcedOps.id, status: { in: ['pending', 'accepted', 'recorded'] } },
+      })
+    : 0;
+  const isForced = !!forcedOps && forcedOps.forcedUsed + outstandingForced < OPS_FORCED_MATCHES;
 
   const challenge = await prisma.challenge.create({
     data: {
@@ -5156,7 +5167,11 @@ async function settleConfirmedTournamentMatch(
     // Récompense (tournois officiels) — versée à CHAQUE membre de l'équipe gagnante.
     // Cosmétique → inventaire SANS auto-équipement.
     if (tour.kind === 'official' && tour.prizeKind === 'coins' && tour.prizeCoins) {
-      for (const w of winners) await grantCoinsTx(tx, w, tour.prizeCoins);
+      for (const w of winners)
+        await grantCoinsTx(tx, w, tour.prizeCoins, {
+          type: 'tournament_prize',
+          meta: { kind: 'champion', game: tour.game },
+        });
       prizeAwarded = true;
     } else if (tour.kind === 'official' && tour.prizeKind === 'cosmetic' && tour.prizeItemId) {
       for (const w of winners) await grantItemTx(tx, w, tour.prizeItemId, false);
@@ -6164,7 +6179,11 @@ app.post('/tournaments/:id/league/matches/:matchId/edit-score', async (c) => {
     });
     for (const b of settled) {
       if (b.payout > 0) {
-        await grantCoinsTx(tx, b.bettorLogin, -b.payout);
+        await grantCoinsTx(tx, b.bettorLogin, -b.payout, {
+          type: 'bet_reversal',
+          refId: b.id,
+          meta: { targetType: 'match', matchId: b.matchId, choiceLogin: b.choiceLogin, reason: 'score_corrected' },
+        });
         touched.add(b.bettorLogin);
       }
       await tx.bet.update({ where: { id: b.id }, data: { status: 'open', payout: 0, settledAt: null } });
@@ -6360,7 +6379,11 @@ app.post('/tournaments/:id/league/undo-finalize', async (c) => {
     const touched = new Set<string>();
     for (const b of settled) {
       if (b.payout > 0) {
-        await grantCoinsTx(tx, b.bettorLogin, -b.payout);
+        await grantCoinsTx(tx, b.bettorLogin, -b.payout, {
+          type: 'bet_reversal',
+          refId: b.id,
+          meta: { targetType: 'tournament', tournamentId: b.tournamentId, choiceLogin: b.choiceLogin, reason: 'final_reopened' },
+        });
         touched.add(b.bettorLogin);
       }
       await tx.bet.update({
@@ -8927,6 +8950,11 @@ app.post('/shop/:id/buy', async (c) => {
         update: { count: { increment: 1 } },
         create: { userLogin: login, kind: consumableKind, monthKey: mk, count: 1 },
       });
+      await logCoinTx(tx, login, -item.price, updated.leagueCoins, {
+        type: 'shop_consumable',
+        refId: item.id,
+        meta: { name: item.name, kind: consumableKind },
+      });
       return updated.leagueCoins;
     }
 
@@ -8954,6 +8982,11 @@ app.post('/shop/:id/buy', async (c) => {
       await tx.shopInventory.create({ data: { userLogin: login, itemId, equipped: true } });
       const titleStr = titleOfItem(item);
       if (titleStr) await tx.user.update({ where: { login }, data: { title: titleStr } });
+      await logCoinTx(tx, login, SHELDON_REWARD, updated.leagueCoins, {
+        type: 'sheldon_reward',
+        refId: item.id,
+        meta: { name: item.name },
+      });
       return updated.leagueCoins;
     }
     if (user.leagueCoins < item.price) {
@@ -8973,6 +9006,11 @@ app.post('/shop/:id/buy', async (c) => {
     if (!isMysteryBox) {
       await tx.shopInventory.create({ data: { userLogin: login, itemId } });
     }
+    await logCoinTx(tx, login, -item.price, updated.leagueCoins, {
+      type: isMysteryBox ? 'mystery_box' : 'shop_purchase',
+      refId: item.id,
+      meta: { name: item.name, category: item.category },
+    });
     return updated.leagueCoins;
   });
 
@@ -9638,16 +9676,71 @@ app.delete('/admin/announcements/:id', async (c) => {
 // admin ET par le settlement des récompenses de tournoi (dans la transaction de
 // finale). Ne PAS appeler emit ici — le faire après commit côté appelant.
 
-/** Crédite/débite des League Coins. Retourne le nouveau solde, ou null si joueur absent. */
+// Source d'un mouvement de coins (cf. modèle CoinTransaction). Sert au journal
+// de suivi GOD : chaque crédit/débit est rangé sous l'un de ces types.
+type CoinTxType =
+  | 'match'
+  | 'quest'
+  | 'bet_place'
+  | 'bet_win'
+  | 'bet_refund'
+  | 'bet_reversal'
+  | 'tournament_prize'
+  | 'shop_purchase'
+  | 'shop_consumable'
+  | 'mystery_box'
+  | 'sheldon_reward'
+  | 'admin_grant';
+
+interface CoinTxEntry {
+  type: CoinTxType;
+  refId?: string | null;
+  meta?: Prisma.InputJsonValue;
+}
+
+/**
+ * Écrit une ligne au journal des mouvements de coins. Purement historique (jamais
+ * relu pour un solde). `amount` = delta RÉEL appliqué (signé) ; un delta nul n'est
+ * pas journalisé (ex. débit borné à 0 sans effet).
+ */
+async function logCoinTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  amount: number,
+  balanceAfter: number,
+  entry: CoinTxEntry,
+): Promise<void> {
+  if (amount === 0) return;
+  await tx.coinTransaction.create({
+    data: {
+      id: randomUUID(),
+      userLogin: login,
+      amount,
+      balanceAfter,
+      type: entry.type,
+      refId: entry.refId ?? null,
+      meta: entry.meta ?? undefined,
+    },
+  });
+}
+
+/**
+ * Crédite/débite des League Coins. Retourne le nouveau solde, ou null si joueur
+ * absent. Si `entry` est fourni, journalise le mouvement RÉEL (delta après bornage
+ * à 0) dans CoinTransaction pour le suivi GOD.
+ */
 async function grantCoinsTx(
   tx: Prisma.TransactionClient,
   login: string,
   amount: number,
+  entry?: CoinTxEntry,
 ): Promise<number | null> {
   const target = await tx.user.findUnique({ where: { login }, select: { leagueCoins: true } });
   if (!target) return null;
   const next = Math.max(0, target.leagueCoins + amount);
+  const delta = next - target.leagueCoins;
   await tx.user.update({ where: { login }, data: { leagueCoins: next } });
+  if (entry) await logCoinTx(tx, login, delta, next, entry);
   return next;
 }
 
@@ -9798,7 +9891,11 @@ async function awardMatchEconomyTx(
   for (const p of participants) {
     const base = p.won ? COINS_PER_MATCH_WON : COINS_PER_MATCH_PLAYED;
     const coins = Math.max(0, Math.round(base * coinFactor));
-    if (coins > 0) await grantCoinsTx(tx, p.login, coins);
+    if (coins > 0)
+      await grantCoinsTx(tx, p.login, coins, {
+        type: 'match',
+        meta: { game, won: p.won },
+      });
     // Les rematchs dégressés ne font pas avancer les quêtes hebdo (sinon farmables
     // en boucle à coût nul). Le 1er match du jour contre un adversaire compte plein.
     if (!countForQuests) continue;
@@ -9851,7 +9948,18 @@ async function settleBetsTx(
     const won = !isDraw && b.choiceLogin === winnerLogin;
     const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : isDraw ? b.stake : 0;
     if (payout > 0) {
-      await grantCoinsTx(tx, b.bettorLogin, payout);
+      await grantCoinsTx(tx, b.bettorLogin, payout, {
+        type: isDraw ? 'bet_refund' : 'bet_win',
+        refId: b.id,
+        meta: {
+          targetType: b.targetType,
+          tournamentId: b.tournamentId,
+          matchId: b.matchId,
+          opsId: b.opsId,
+          choiceLogin: b.choiceLogin,
+          stake: b.stake,
+        },
+      });
       credited.push(b.bettorLogin);
     }
     await tx.bet.update({
@@ -9887,7 +9995,11 @@ async function settleMatchBetsTx(
       b.choiceLogin === DRAW_CHOICE ? winnerLogin === null : b.choiceLogin === winnerLogin;
     const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : 0;
     if (payout > 0) {
-      await grantCoinsTx(tx, b.bettorLogin, payout);
+      await grantCoinsTx(tx, b.bettorLogin, payout, {
+        type: 'bet_win',
+        refId: b.id,
+        meta: { targetType: 'match', matchId: b.matchId, choiceLogin: b.choiceLogin, stake: b.stake },
+      });
       credited.push(b.bettorLogin);
     }
     await tx.bet.update({
@@ -9921,7 +10033,17 @@ async function settleTournamentBetsForPick(
   for (const b of open) {
     const payout = betPayout(b.stake, roundsWon, totalRounds, finalMult);
     if (payout > 0) {
-      await grantCoinsTx(tx, b.bettorLogin, payout);
+      await grantCoinsTx(tx, b.bettorLogin, payout, {
+        type: 'bet_win',
+        refId: b.id,
+        meta: {
+          targetType: 'tournament',
+          tournamentId: b.tournamentId,
+          choiceLogin: b.choiceLogin,
+          stake: b.stake,
+          roundsWon,
+        },
+      });
       credited.push(b.bettorLogin);
     }
     await tx.bet.update({
@@ -9945,7 +10067,11 @@ async function payCashPrizeTx(
 ): Promise<void> {
   const amount = cashPrizeForRounds(roundsWon, totalRounds, base);
   if (amount <= 0) return;
-  for (const login of members) await grantCoinsTx(tx, login, amount);
+  for (const login of members)
+    await grantCoinsTx(tx, login, amount, {
+      type: 'tournament_prize',
+      meta: { kind: 'cash_prize' },
+    });
 }
 
 /**
@@ -9962,7 +10088,19 @@ async function refundBetsTx(
   const refunded: string[] = [];
   const now = new Date();
   for (const b of open) {
-    await grantCoinsTx(tx, b.bettorLogin, b.stake);
+    await grantCoinsTx(tx, b.bettorLogin, b.stake, {
+      type: 'bet_refund',
+      refId: b.id,
+      meta: {
+        targetType: b.targetType,
+        tournamentId: b.tournamentId,
+        matchId: b.matchId,
+        opsId: b.opsId,
+        choiceLogin: b.choiceLogin,
+        stake: b.stake,
+        reason: 'cancelled',
+      },
+    });
     await tx.bet.update({
       where: { id: b.id },
       data: { status: 'refunded', payout: b.stake, settledAt: now },
@@ -10077,7 +10215,11 @@ app.post('/quests/:id/claim', async (c) => {
       create: { login: me, weekKey, claimed: [quest.id] },
       update: { claimed: { push: quest.id } },
     });
-    const coins = await grantCoinsTx(tx, me, quest.reward);
+    const coins = await grantCoinsTx(tx, me, quest.reward, {
+      type: 'quest',
+      refId: quest.id,
+      meta: { questId: quest.id, metric: quest.metric },
+    });
     return { coins: coins ?? 0 };
   });
   emit([me], { type: 'panel:update', payload: {} });
@@ -10239,7 +10381,10 @@ app.post('/bets', async (c) => {
     const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
     if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
     if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
-    await grantCoinsTx(tx, me, -stake);
+    await grantCoinsTx(tx, me, -stake, {
+      type: 'bet_place',
+      meta: { targetType: 'tournament', tournamentId, choiceLogin, stake },
+    });
 
     const bet = await tx.bet.create({
       data: {
@@ -10306,7 +10451,11 @@ app.post('/bets/ops', async (c) => {
     const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
     if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
     if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
-    await grantCoinsTx(tx, me, -stake);
+    await grantCoinsTx(tx, me, -stake, {
+      type: 'bet_place',
+      refId: challengeId,
+      meta: { targetType: 'ops', challengeId, opsId: ch.opsId, choiceLogin, stake },
+    });
 
     const bet = await tx.bet.create({
       data: {
@@ -10388,7 +10537,11 @@ app.post('/bets/match', async (c) => {
     const u = await tx.user.findUnique({ where: { login: me }, select: { leagueCoins: true } });
     if (!u) throw new HTTPException(404, { message: 'utilisateur introuvable' });
     if (u.leagueCoins < stake) throw new HTTPException(409, { message: 'solde insuffisant' });
-    await grantCoinsTx(tx, me, -stake);
+    await grantCoinsTx(tx, me, -stake, {
+      type: 'bet_place',
+      refId: matchId,
+      meta: { targetType: 'match', tournamentId: m.tournamentId, matchId, choiceLogin, stake },
+    });
     const bet = await tx.bet.create({
       data: {
         id: randomUUID(),
@@ -10422,10 +10575,171 @@ app.post('/admin/shop/grant', async (c) => {
     throw new HTTPException(400, { message: parsed.error.message });
   }
   const { login, amount } = parsed.data;
-  const next = await prisma.$transaction((tx) => grantCoinsTx(tx, login, amount));
+  const next = await prisma.$transaction((tx) =>
+    grantCoinsTx(tx, login, amount, { type: 'admin_grant', meta: { by: me } }),
+  );
   if (next === null) throw new HTTPException(404, { message: 'utilisateur introuvable' });
   emit([login], { type: 'panel:update', payload: {} });
   return c.json({ ok: true, login, coins: next });
+});
+
+// GET /admin/shop/users — annuaire « suivi des coins » : tous les joueurs avec
+// leur solde (tri solde décroissant), filtrable par `?search=` (login / prénom /
+// nom). Sert à la liste cliquable de Shop GOD. Renvoie aussi quelques agrégats
+// légers (nb d'objets possédés) pour un aperçu sans ouvrir la fiche.
+app.get('/admin/shop/users', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const search = (c.req.query('search') ?? '').trim();
+  const where: Prisma.UserWhereInput = search
+    ? {
+        OR: [
+          { login: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+        ],
+      }
+    : {};
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: [{ leagueCoins: 'desc' }, { login: 'asc' }],
+    select: {
+      login: true,
+      firstName: true,
+      lastName: true,
+      imageUrl: true,
+      title: true,
+      leagueCoins: true,
+      _count: { select: { inventory: true, coinTransactions: true } },
+    },
+  });
+  return c.json(
+    users.map((u) => ({
+      login: u.login,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      imageUrl: u.imageUrl,
+      title: u.title,
+      coins: u.leagueCoins,
+      itemsOwned: u._count.inventory,
+      txCount: u._count.coinTransactions,
+    })),
+  );
+});
+
+// GET /admin/shop/users/:login — fiche « suivi des coins » d'un joueur : solde
+// courant, récapitulatif (gagné / dépensé / par type), inventaire (cosmétiques +
+// consommables) et journal paginé de TOUS ses mouvements de coins (gains/pertes,
+// avec le contexte de chacun). Pagination simple via ?limit= & ?offset=.
+app.get('/admin/shop/users/:login', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 50) || 50));
+  const offset = Math.max(0, Number(c.req.query('offset') ?? 0) || 0);
+  const typeFilter = (c.req.query('type') ?? '').trim();
+  const txWhere: Prisma.CoinTransactionWhereInput = {
+    userLogin: login,
+    ...(typeFilter ? { type: typeFilter } : {}),
+  };
+
+  const user = await prisma.user.findUnique({
+    where: { login },
+    select: {
+      login: true,
+      firstName: true,
+      lastName: true,
+      imageUrl: true,
+      title: true,
+      leagueCoins: true,
+      eloMultUntil: true,
+    },
+  });
+  if (!user) throw new HTTPException(404, { message: 'utilisateur introuvable' });
+
+  const [cosmetics, consumables, txPage, totalTx, earned, spent, byType] = await Promise.all([
+    prisma.shopInventory.findMany({
+      where: { userLogin: login },
+      orderBy: { acquiredAt: 'desc' },
+      select: {
+        itemId: true,
+        equipped: true,
+        acquiredAt: true,
+        item: { select: { name: true, category: true, rarity: true, color: true, price: true } },
+      },
+    }),
+    prisma.consumableInventory.findMany({ where: { userLogin: login } }),
+    prisma.coinTransaction.findMany({
+      where: txWhere,
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.coinTransaction.count({ where: txWhere }),
+    prisma.coinTransaction.aggregate({
+      where: { userLogin: login, amount: { gt: 0 } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.coinTransaction.aggregate({
+      where: { userLogin: login, amount: { lt: 0 } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.coinTransaction.groupBy({
+      by: ['type'],
+      where: { userLogin: login },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+  ]);
+
+  return c.json({
+    login: user.login,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    imageUrl: user.imageUrl,
+    title: user.title,
+    coins: user.leagueCoins,
+    eloMultUntil: user.eloMultUntil ? user.eloMultUntil.toISOString() : null,
+    summary: {
+      earned: earned._sum.amount ?? 0,
+      spent: spent._sum.amount ?? 0,
+      earnedCount: earned._count,
+      spentCount: spent._count,
+      byType: byType.map((r) => ({ type: r.type, total: r._sum.amount ?? 0, count: r._count._all })),
+    },
+    inventory: {
+      cosmetics: cosmetics.map((r) => ({
+        itemId: r.itemId,
+        name: r.item.name,
+        category: r.item.category,
+        rarity: r.item.rarity,
+        color: r.item.color,
+        price: r.item.price,
+        equipped: r.equipped,
+        acquiredAt: r.acquiredAt.toISOString(),
+      })),
+      consumables: consumables.map((r) => ({
+        kind: r.kind,
+        quantity: r.quantity,
+        lastUsedAt: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+      })),
+    },
+    transactions: txPage.map((t) => ({
+      id: t.id,
+      amount: t.amount,
+      balanceAfter: t.balanceAfter,
+      type: t.type,
+      refId: t.refId,
+      meta: t.meta,
+      createdAt: t.createdAt.toISOString(),
+    })),
+    total: totalTx,
+    limit,
+    offset,
+    hasMore: offset + txPage.length < totalTx,
+  });
 });
 
 // POST /admin/shop/grant-item — donne un cosmétique (titre/badge/bannière/cosmétique)

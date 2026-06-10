@@ -87,6 +87,9 @@ const ShopPage = lazy(() =>
 const ShopGODPage = lazy(() =>
   import('./pages/ShopGODPage').then((m) => ({ default: m.ShopGODPage })),
 );
+const ShopGODUserPage = lazy(() =>
+  import('./pages/ShopGODUserPage').then((m) => ({ default: m.ShopGODUserPage })),
+);
 const GradesPage = lazy(() =>
   import('./pages/GradesPage').then((m) => ({ default: m.GradesPage })),
 );
@@ -254,6 +257,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
                 <Route path="/h2h" element={<H2HPage />} />
                 <Route path="/shop" element={<ShopPage />} />
                 <Route path="/shop-god" element={<ShopGODPage />} />
+                <Route path="/shop-god/u/:login" element={<ShopGODUserPage />} />
                 <Route path="/GOD" element={<GODPage />} />
                 <Route path="/grades" element={<GradesPage />} />
                 <Route path="/history" element={<HistoriquePage />} />

@@ -1,12 +1,18 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift, Gem } from 'lucide-react';
+import { ChevronLeft, Store, Coins, Plus, Pencil, Trash2, Save, X, Gift, Gem, Search, ChevronRight } from 'lucide-react';
 import {
   api,
   type ShopCategory,
   type ShopItemData,
   type ShopItemInput,
+  type ShopUserRow,
 } from '../lib/api';
+
+/** « Prénom Nom » si dispo, sinon le login. */
+function nameOf(u: { firstName: string | null; lastName: string | null; login: string }): string {
+  return [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || u.login;
+}
 import { RARITY, resolveRarity } from '../lib/rarity';
 // Formulaire de cosmétique + primitives extraits (réutilisés par la récompense de tournoi).
 import {
@@ -487,6 +493,110 @@ function GrantItemSection({ items }: { items: ShopItemData[] }) {
   );
 }
 
+// ── Section 0 : suivi des joueurs (liste cliquable → fiche détaillée) ────────
+
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  if (url) {
+    return <img src={url} alt="" className="w-7 h-7 rounded-full object-cover border border-zinc-700" />;
+  }
+  return (
+    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400 uppercase">
+      {name.slice(0, 2)}
+    </div>
+  );
+}
+
+function PlayersSection() {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<ShopUserRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+
+  // Recherche débounced côté serveur (login / prénom / nom).
+  useEffect(() => {
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      setLoading(true);
+      api.adminShopUsers(search.trim() || undefined)
+        .then((list) => { if (!cancelled) setRows(list); })
+        .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur'); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [search]);
+
+  return (
+    <div className="p-4">
+      <Section title="Suivi des joueurs — solde &amp; historique">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un joueur…"
+              className="bg-zinc-800 border border-zinc-700 rounded pl-8 pr-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500 w-64"
+            />
+          </div>
+          <span className="text-zinc-600 text-xs font-mono">
+            {loading ? '…' : `${rows.length} joueur${rows.length !== 1 ? 's' : ''}`}
+          </span>
+        </div>
+        {error && <div className="mb-3 text-xs text-red-400 font-mono">{error}</div>}
+        {loading && rows.length === 0 ? (
+          <div className="text-zinc-500 text-sm font-mono">Chargement…</div>
+        ) : rows.length === 0 ? (
+          <div className="text-zinc-600 text-sm font-mono">Aucun joueur trouvé.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm font-mono border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-500 text-xs uppercase tracking-wider">
+                  <th className="text-left py-2 px-3">Joueur</th>
+                  <th className="text-right py-2 px-3">Solde</th>
+                  <th className="text-right py-2 px-3">Objets</th>
+                  <th className="text-right py-2 px-3">Mouvements</th>
+                  <th className="py-2 px-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((u) => (
+                  <tr
+                    key={u.login}
+                    onClick={() => navigate(`/shop-god/u/${encodeURIComponent(u.login)}`)}
+                    className="border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors cursor-pointer"
+                  >
+                    <td className="py-2 px-3">
+                      <span className="inline-flex items-center gap-2.5">
+                        <Avatar url={u.imageUrl} name={nameOf(u)} />
+                        <span className="flex flex-col leading-tight">
+                          <span className="text-zinc-100">{nameOf(u)}</span>
+                          <span className="text-[10px] text-zinc-500">@{u.login}</span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums text-amber-400">
+                      <span className="inline-flex items-center gap-1 justify-end">
+                        {u.coins} <CoinIcon />
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.itemsOwned}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.txCount}</td>
+                    <td className="py-2 px-3 text-right">
+                      <ChevronRight className="w-4 h-4 text-zinc-600 inline-block" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 // ── Page principale (self-guard admin) ──────────────────────────────────────
 
 export function ShopGODPage() {
@@ -567,6 +677,7 @@ export function ShopGODPage() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-screen-2xl mx-auto">
+          <PlayersSection />
           <GrantCoinsSection />
           <GrantItemSection items={items} />
           <ItemsSection onItemsChanged={setItems} />

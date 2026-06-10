@@ -21,6 +21,9 @@ export const dict: Record<Lang, Dict> = {
     // Vue figée d'une saison passée
     'lb.snapshot.empty': 'Aucun classement archivé pour cette saison.',
     'lb.snapshot.emptyShort': 'Aucun classement archivé.',
+    // Classement saison en cours : non-classés masqués
+    'lb.unranked.empty': 'Aucune partie jouée pour le moment.',
+    'lb.unranked.note': 'Pour apparaître au classement, il faut avoir joué au moins une partie cette saison (ELO de départ : 1000).',
     'lb.col.eloFinal': 'ELO final',
     'lb.col.wd': 'V-D',
     // Série « none »
@@ -65,6 +68,8 @@ export const dict: Record<Lang, Dict> = {
     'lb.season.currentLong': 'Current season',
     'lb.snapshot.empty': 'No archived ranking for this season.',
     'lb.snapshot.emptyShort': 'No archived ranking.',
+    'lb.unranked.empty': 'No games played yet.',
+    'lb.unranked.note': 'To appear on the leaderboard you must play at least one game this season (starting ELO: 1000).',
     'lb.col.eloFinal': 'Final ELO',
     'lb.col.wd': 'W-L',
     'lb.streak.none': '-',
@@ -102,6 +107,8 @@ export const dict: Record<Lang, Dict> = {
     'lb.season.currentLong': 'Temporada actual',
     'lb.snapshot.empty': 'No hay clasificación archivada para esta temporada.',
     'lb.snapshot.emptyShort': 'No hay clasificación archivada.',
+    'lb.unranked.empty': 'Aún no se ha jugado ninguna partida.',
+    'lb.unranked.note': 'Para aparecer en la clasificación debes jugar al menos una partida esta temporada (ELO inicial: 1000).',
     'lb.col.eloFinal': 'ELO final',
     'lb.col.wd': 'V-D',
     'lb.streak.none': '-',

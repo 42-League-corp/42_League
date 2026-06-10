@@ -260,6 +260,83 @@ export interface AdminUserItems {
   badges: EquippedBadge[];
 }
 
+// ── Suivi des coins (Shop GOD) ──────────────────────────────────────────────
+
+/** Source d'un mouvement de coins (cf. journal CoinTransaction côté backend). */
+export type CoinTxType =
+  | 'match'
+  | 'quest'
+  | 'bet_place'
+  | 'bet_win'
+  | 'bet_refund'
+  | 'bet_reversal'
+  | 'tournament_prize'
+  | 'shop_purchase'
+  | 'shop_consumable'
+  | 'mystery_box'
+  | 'sheldon_reward'
+  | 'admin_grant';
+
+/** Une ligne de l'annuaire « suivi des coins » (liste cliquable de Shop GOD). */
+export interface ShopUserRow {
+  login: string;
+  firstName: string | null;
+  lastName: string | null;
+  imageUrl: string | null;
+  title: string | null;
+  coins: number;
+  itemsOwned: number;
+  txCount: number;
+}
+
+/** Un mouvement de coins (gain/perte) journalisé pour un joueur. */
+export interface CoinTransaction {
+  id: string;
+  /** Delta réel appliqué au solde (signé : + gain, − perte). */
+  amount: number;
+  balanceAfter: number;
+  type: CoinTxType;
+  refId: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** Fiche complète « suivi des coins » d'un joueur (solde + histo + inventaire). */
+export interface ShopUserDetail {
+  login: string;
+  firstName: string | null;
+  lastName: string | null;
+  imageUrl: string | null;
+  title: string | null;
+  coins: number;
+  eloMultUntil: string | null;
+  summary: {
+    earned: number;
+    spent: number;
+    earnedCount: number;
+    spentCount: number;
+    byType: { type: CoinTxType; total: number; count: number }[];
+  };
+  inventory: {
+    cosmetics: {
+      itemId: string;
+      name: string;
+      category: ShopCategory;
+      rarity: ShopRarity | null;
+      color: string | null;
+      price: number;
+      equipped: boolean;
+      acquiredAt: string;
+    }[];
+    consumables: { kind: ConsumableKind; quantity: number; lastUsedAt: string | null }[];
+  };
+  transactions: CoinTransaction[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 /** Rareté d'un objet — pilote la couleur de sa carte (cf. lib/rarity.ts). */
 export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -1829,6 +1906,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ login, amount }),
     }),
+  // ── Suivi des coins (Shop GOD) ────────────────────────────────────────────
+  /** Annuaire des joueurs avec leur solde (tri solde décroissant, recherche optionnelle). */
+  adminShopUsers: (search?: string) =>
+    request<ShopUserRow[]>(
+      `/admin/shop/users${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+    ),
+  /** Fiche détaillée d'un joueur : solde + récap + inventaire + journal paginé. */
+  adminShopUser: (
+    login: string,
+    opts?: { limit?: number; offset?: number; type?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.limit != null) qs.set('limit', String(opts.limit));
+    if (opts?.offset != null) qs.set('offset', String(opts.offset));
+    if (opts?.type) qs.set('type', opts.type);
+    const q = qs.toString();
+    return request<ShopUserDetail>(
+      `/admin/shop/users/${encodeURIComponent(login)}${q ? `?${q}` : ''}`,
+    );
+  },
   /** Donne un cosmétique (item boutique) à un joueur, avec auto-équipement optionnel. */
   adminGrantItem: (login: string, itemId: string, equip?: boolean) =>
     request<{ ok: true; login: string; itemId: string; equipped: boolean }>(
