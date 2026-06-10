@@ -653,12 +653,13 @@ function PlayersSection() {
 
 // ── Page principale (self-guard admin) ──────────────────────────────────────
 
-export function ShopGODPage() {
+// Coquille commune des pages GOD (auth admin + header + zone scrollable). Partagée
+// par la page principale et la sous-page « Suivi des joueurs ».
+function GodChrome({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [myLogin, setMyLogin] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [items, setItems] = useState<ShopItemData[]>([]);
 
   useEffect(() => {
     api.me()
@@ -730,14 +731,52 @@ export function ShopGODPage() {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-screen-2xl mx-auto">
-          <PlayersSection />
-          <GrantCoinsSection />
-          <GrantItemSection items={items} />
-          <ItemsSection onItemsChanged={setItems} />
-        </div>
+        <div className="max-w-screen-2xl mx-auto">{children}</div>
       </div>
     </div>
+  );
+}
+
+export function ShopGODPage() {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<ShopItemData[]>([]);
+  return (
+    <GodChrome>
+      {/* Suivi des joueurs → sous-page dédiée (sortie du flux principal, trop lourde en tête). */}
+      <div className="p-4 pb-0">
+        <button
+          onClick={() => navigate('/shop-god/players')}
+          className="w-full flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900 hover:border-zinc-700 transition-colors px-4 py-3 cursor-pointer text-left"
+        >
+          <span className="flex items-center gap-2 text-zinc-200 text-sm font-bold">
+            <Search className="w-4 h-4 text-amber-400" /> Suivi des joueurs — solde &amp; historique
+          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-500" />
+        </button>
+      </div>
+      <GrantCoinsSection />
+      <GrantItemSection items={items} />
+      <ItemsSection onItemsChanged={setItems} />
+    </GodChrome>
+  );
+}
+
+// Sous-page séparée : le tableau « Suivi des joueurs » (solde + historique + accès au
+// ledger par joueur). Atteinte depuis le bouton dédié de la page principale.
+export function ShopGODPlayersPage() {
+  const navigate = useNavigate();
+  return (
+    <GodChrome>
+      <div className="p-4 pb-0">
+        <button
+          onClick={() => navigate('/shop-god')}
+          className="inline-flex items-center gap-1 text-zinc-500 text-xs hover:text-zinc-300 transition-colors cursor-pointer"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} /> Retour Shop GOD
+        </button>
+      </div>
+      <PlayersSection />
+    </GodChrome>
   );
 }
 

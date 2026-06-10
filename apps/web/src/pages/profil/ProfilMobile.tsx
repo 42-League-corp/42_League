@@ -13,7 +13,6 @@ import { EloChart } from '../../components/EloChart';
 import { SectionHeader } from './shared/SectionHeader';
 import { RankingScopeToggle } from '../leaderboard/RankingScopeToggle';
 import { BetsPanel } from './BetsPanel';
-import { InventoryPanel } from './InventoryPanel';
 import { useProfilLogic } from './shared/useProfilLogic';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
@@ -90,8 +89,7 @@ export function ProfilMobile() {
         {/* Ops card (urgent rouge) */}
         <OpsCard />
 
-        {/* Inventaire : consommables (anti-OPS, multiplicateur d'ELO) */}
-        <InventoryPanel />
+        {/* Inventaire : déplacé dans la Boutique (onglet Inventaire). */}
 
         {/* Following / Followers (style GitHub) */}
         <section>

@@ -21,6 +21,7 @@ import {
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
 import { QuestsPanel } from './profil/QuestsPanel';
 import { BetsPanel } from './profil/BetsPanel';
+import { InventoryPanel } from './profil/InventoryPanel';
 import { Panel } from '../components/Panel';
 import { CoinCount } from '../components/CoinCount';
 import { Skeleton } from '../mobile/primitives/Skeleton';
@@ -369,7 +370,7 @@ export function ShopPage() {
   const { me, refresh } = useLeagueData();
   // Onglets du shop : boutique (cosmétiques) · quêtes hebdo · paris. Les quêtes et
   // paris vivent désormais ici (hub des League Coins), plus sur le profil.
-  const [tab, setTab] = useState<'shop' | 'quests' | 'bets'>('shop');
+  const [tab, setTab] = useState<'shop' | 'inventory' | 'quests' | 'bets'>('shop');
   // Cible des cartes « comment gagner » : matchs → page Défis ; quêtes/paris →
   // onglet correspondant (sans quitter le shop).
   const pickEarn = useCallback(
@@ -543,6 +544,7 @@ export function ShopPage() {
       <div className="flex gap-1 p-1 rounded-xl bg-bg-2/60 border border-border/40">
         {([
           { v: 'shop' as const, label: t('shop.title'), Icon: Gem },
+          { v: 'inventory' as const, label: 'Inventaire', Icon: PackageOpen },
           { v: 'quests' as const, label: t('profil.tab.quests'), Icon: Target },
           { v: 'bets' as const, label: t('profil.tab.bets'), Icon: Dices },
         ]).map(({ v, label, Icon }) => (
@@ -562,6 +564,7 @@ export function ShopPage() {
         ))}
       </div>
 
+      {tab === 'inventory' && <InventoryPanel />}
       {tab === 'quests' && <QuestsPanel />}
       {tab === 'bets' && <BetsPanel />}
 

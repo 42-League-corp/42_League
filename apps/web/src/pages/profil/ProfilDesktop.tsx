@@ -18,7 +18,6 @@ import { FollowLists } from '../../components/FollowLists';
 import { TournamentCup } from '../../components/TournamentCup';
 import { SmashTrophy } from '../../components/SmashTrophy';
 import { ChessTrophy } from '../../components/ChessTrophy';
-import { InventoryPanel } from './InventoryPanel';
 import { FavoriteCharsRow } from '../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../lib/chars';
@@ -329,10 +328,7 @@ export function ProfilDesktop() {
         <FollowLists />
       </div>
 
-      {/* Inventaire : consommables (anti-OPS, multiplicateur d'ELO) */}
-      <div className="mt-4">
-        <InventoryPanel />
-      </div>
+      {/* Inventaire : déplacé dans la Boutique (onglet Inventaire). */}
 
       {/* Mes Équipes 2v2 — retiré du desktop (visible sur mobile uniquement) */}
 
