@@ -263,6 +263,9 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
                 <Route path="/shop-god/players" element={<ShopGODPlayersPage />} />
                 <Route path="/shop-god/u/:login" element={<ShopGODUserPage />} />
                 <Route path="/GOD" element={<GODPage />} />
+                {/* Panneau modérateur : même page que /GOD, restreinte aux onglets
+                    couverts par les permissions du MODERATOR. */}
+                <Route path="/moodo" element={<GODPage moodo />} />
                 <Route path="/grades" element={<GradesPage />} />
                 <Route path="/history" element={<HistoriquePage />} />
                 <Route path="/settings" element={<ReglagesPage />} />

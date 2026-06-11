@@ -14,6 +14,7 @@ const GameTransitionOverlay = lazy(() => import('../components/GameTransitionOve
 const MatchmakingOverlay = lazy(() => import('../components/MatchmakingOverlay').then(m => ({ default: m.MatchmakingOverlay })));
 const DuelStrikeOverlay  = lazy(() => import('../components/DuelStrikeOverlay').then(m => ({ default: m.DuelStrikeOverlay })));
 const ContestRageOverlay = lazy(() => import('../components/ContestRageOverlay').then(m => ({ default: m.ContestRageOverlay })));
+const RankUpOverlay      = lazy(() => import('../components/RankUpOverlay').then(m => ({ default: m.RankUpOverlay })));
 
 interface AppShellProps {
   children: ReactNode;
@@ -57,6 +58,8 @@ export function AppShell({ children }: AppShellProps) {
         <ContestRageOverlay />
         {/* Cinématique « coup de foudre → VERSUS » */}
         <DuelStrikeOverlay />
+        {/* Cinématique « PASSAGE DE RANG » : l'emblème claque + onde de choc + éclairs */}
+        <RankUpOverlay />
       </Suspense>
     </>
   );

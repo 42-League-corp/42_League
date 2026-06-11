@@ -454,7 +454,12 @@ export interface StreakView {
 export interface MeResponse {
   login: string;
   isAdmin?: boolean;
-  role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
+  role?: 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
+  /**
+   * Permissions accordées si role === 'MODERATOR' ({} si aucune), null sinon.
+   * Pilote les sections visibles du panneau /moodo.
+   */
+  moderatorPermissions?: Partial<Record<ModeratorPermissionKey, boolean>> | null;
   /** Solde de League Coins de l'utilisateur (défaut 0). */
   coins?: number;
   /** Réputation litiges : nb de litiges perdus (marque visible sur le profil). */
@@ -526,6 +531,7 @@ export const MODERATOR_PERMISSION_KEYS = [
   'canBan', 'canEditStats', 'canDeleteMatches', 'canEditMatches',
   'canDeletePendingMatches', 'canDeleteRejectedMatches', 'canDeleteChallenges',
   'canDeleteOps', 'canResetOpsCooldown', 'canDeleteTournaments', 'canViewSuspicious', 'canViewAuditLog', 'canViewHistory',
+  'canViewStats',
 ] as const;
 
 export type ModeratorPermissionKey = (typeof MODERATOR_PERMISSION_KEYS)[number];
@@ -544,6 +550,7 @@ export const MODERATOR_PERMISSION_LABELS: Record<ModeratorPermissionKey, string>
   canViewSuspicious: 'Voir alertes',
   canViewAuditLog: 'Voir audit log',
   canViewHistory: 'Voir historique complet',
+  canViewStats: 'Voir stats',
 };
 
 export interface AdminUser {
@@ -1022,6 +1029,9 @@ export interface MyBet {
   opsOwnerLogin: string | null;
   opsTargetLogin: string | null;
   choiceLogin: string;
+  /** Pronostic de score exact (paris match uniquement, null sinon). */
+  predictedScoreA: number | null;
+  predictedScoreB: number | null;
   stake: number;
   status: BetStatus;
   payout: number;
@@ -1083,6 +1093,13 @@ export interface PlaceMatchBetInput {
   matchId: string;
   choiceLogin: string;
   stake: number;
+  /**
+   * Pronostic de SCORE EXACT (les deux ensemble, alignés sur playerA/playerB) :
+   * optionnel pour un parieur extérieur (gain ×4 si pile au lieu de ×2),
+   * OBLIGATOIRE pour un joueur qui parie sur son propre match (gagné ssi pile).
+   */
+  predictedScoreA?: number;
+  predictedScoreB?: number;
 }
 
 /** Stats de contributions git d'un membre (lignes ajoutées / supprimées / net). */

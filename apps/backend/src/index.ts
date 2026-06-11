@@ -190,6 +190,7 @@ const MODERATOR_PERMISSIONS = [
   'canViewSuspicious',       // GET /admin/suspicious
   'canViewAuditLog',         // GET /admin/audit-log
   'canViewHistory',          // GET /admin/all-history
+  'canViewStats',            // GET /admin/stats/overview (onglet STATS du /moodo)
 ] as const;
 
 type ModeratorPermission = (typeof MODERATOR_PERMISSIONS)[number];
@@ -1177,6 +1178,10 @@ app.get('/me', async (c) => {
     // Série d'assiduité ranked : série courante, record, bonus ELO actif, prochain palier.
     streak: streakView(user),
     isAdmin: isAdmin(login),
+    // Permissions de modération (MODERATOR uniquement, {} si aucune accordée) —
+    // pilote les sections visibles du panneau /moodo côté front.
+    moderatorPermissions:
+      role === 'MODERATOR' ? ((user?.moderatorPermissions as ModeratorPermissions | null) ?? {}) : null,
     // Autorisé à accéder au staging (cf. STAGING_ALLOWED) — le front s'en sert
     // pour la barrière staging sans dupliquer la liste blanche.
     stagingAllowed: STAGING_ALLOWED.has(login.toLowerCase()) || isTesterLogin(login.toLowerCase()),
@@ -6301,11 +6306,14 @@ app.post('/tournaments/:id/league/matches/:matchId/edit-score', async (c) => {
     const newWinner =
       scoreA === scoreB ? null : scoreA > scoreB ? m.playerALogin : m.playerBLogin;
     const winnerChanged = newWinner !== m.winnerLogin;
+    // Un score corrigé sans changement de vainqueur impacte quand même les paris
+    // « score exact » (×4) → on re-règle aussi dans ce cas.
+    const scoreChanged = scoreA !== m.scoreA || scoreB !== m.scoreB;
     await tx.tournamentMatch.update({
       where: { id: matchId },
       data: { scoreA, scoreB, winnerLogin: newWinner, recordedByLogin: me, recordedAt: new Date() },
     });
-    if (!winnerChanged) return [] as string[];
+    if (!winnerChanged && !scoreChanged) return [] as string[];
     // Reverse des paris déjà réglés sur ce match (débit du gain, retour à 'open'),
     // puis règlement pour le nouveau vainqueur. `touched` = parieurs dont le solde bouge.
     const touched = new Set<string>();
@@ -8830,7 +8838,7 @@ app.post('/analytics/track', async (c) => {
 //   ?game=ID  restreint pages/events/actifs à une discipline (sinon global)
 app.get('/admin/stats/overview', async (c) => {
   const me = await getCurrentLogin(c);
-  await requireAdminOrModerator(me);
+  await requirePerm(me, 'canViewStats');
   const url = new URL(c.req.url);
   const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days')) || 30));
   const gameParam = url.searchParams.get('game');
@@ -10320,6 +10328,13 @@ const COINS_PER_MATCH_PLAYED = 20;
 const COINS_PER_MATCH_WON = 50;
 /** Cote fixe des paris : un pari gagnant rapporte 2× la mise (gain net = mise). */
 const BET_PAYOUT_MULTIPLIER = 2;
+/**
+ * Cote des paris match avec SCORE EXACT : vainqueur correct ×2, et encore ×2 si
+ * le score exact est pile (×4 au total). C'est aussi la seule cote des joueurs
+ * qui parient sur LEUR PROPRE match (pronostic du score exact obligatoire —
+ * gagné uniquement si le score final est exactement celui annoncé).
+ */
+const BET_EXACT_SCORE_MULTIPLIER = 4;
 
 /**
  * Clé de semaine ISO 8601 (« 2026-W23 ») d'une date, en UTC. Sert de partition
@@ -10587,11 +10602,16 @@ async function settleBetsTx(
 const DRAW_CHOICE = '__draw__';
 
 /**
- * Règle les paris sur l'ISSUE d'un match de tournoi (cote fixe ×2). Contrairement
- * aux paris « vainqueur du tournoi », le NUL est ici un pronostic VALIDE : un pari
- * sur le nul (choiceLogin === DRAW_CHOICE) gagne quand le match est nul
+ * Règle les paris sur l'ISSUE d'un match de tournoi. Contrairement aux paris
+ * « vainqueur du tournoi », le NUL est ici un pronostic VALIDE : un pari sur le
+ * nul (choiceLogin === DRAW_CHOICE) gagne quand le match est nul
  * (winnerLogin === null, ligue uniquement). Un mauvais pronostic est perdu (pas de
  * remboursement — le remboursement reste réservé aux annulations, cf. refundBetsTx).
+ *
+ * Cotes : vainqueur correct ×2 ; si le pari porte AUSSI le score exact et qu'il
+ * est pile (predictedScoreA/B === scoreA/B) → ×4. Cas particulier : un JOUEUR du
+ * match (ou son coéquipier 2v2) a forcément parié le score exact — il ne gagne
+ * QUE si le score est pile (×4), le bon vainqueur seul ne suffit pas.
  */
 async function settleMatchBetsTx(
   tx: Prisma.TransactionClient,
@@ -10599,17 +10619,46 @@ async function settleMatchBetsTx(
   winnerLogin: string | null,
 ): Promise<string[]> {
   const open = await tx.bet.findMany({ where: { targetType: 'match', matchId, status: 'open' } });
+  if (open.length === 0) return [];
+  // Score final + joueurs du match : nécessaires pour juger les paris « score
+  // exact » et appliquer la règle stricte des participants.
+  const m = await tx.tournamentMatch.findUnique({
+    where: { id: matchId },
+    select: { tournamentId: true, playerALogin: true, playerBLogin: true, scoreA: true, scoreB: true },
+  });
+  const partners = m ? await tournamentPartnerMap(tx, m.tournamentId) : new Map<string, string | null>();
+  const players = m
+    ? [...teamMembersOf(m.playerALogin, partners), ...teamMembersOf(m.playerBLogin, partners)]
+    : [];
   const credited: string[] = [];
   const now = new Date();
   for (const b of open) {
-    const won =
+    const winnerOk =
       b.choiceLogin === DRAW_CHOICE ? winnerLogin === null : b.choiceLogin === winnerLogin;
-    const payout = won ? b.stake * BET_PAYOUT_MULTIPLIER : 0;
+    const exact =
+      b.predictedScoreA != null &&
+      b.predictedScoreB != null &&
+      m?.scoreA != null &&
+      m?.scoreB != null &&
+      b.predictedScoreA === m.scoreA &&
+      b.predictedScoreB === m.scoreB;
+    // Un joueur du match ne gagne que sur le score exact ; les autres gagnent dès
+    // le bon vainqueur (×2), avec bonus ×4 si leur score exact est pile.
+    const won = players.includes(b.bettorLogin) ? exact : winnerOk;
+    const payout = !won ? 0 : exact ? b.stake * BET_EXACT_SCORE_MULTIPLIER : b.stake * BET_PAYOUT_MULTIPLIER;
     if (payout > 0) {
       await grantCoinsTx(tx, b.bettorLogin, payout, {
         type: 'bet_win',
         refId: b.id,
-        meta: { targetType: 'match', matchId: b.matchId, choiceLogin: b.choiceLogin, stake: b.stake },
+        meta: {
+          targetType: 'match',
+          matchId: b.matchId,
+          choiceLogin: b.choiceLogin,
+          stake: b.stake,
+          ...(b.predictedScoreA != null
+            ? { predictedScoreA: b.predictedScoreA, predictedScoreB: b.predictedScoreB, exact }
+            : {}),
+        },
       });
       credited.push(b.bettorLogin);
     }
@@ -10917,6 +10966,8 @@ app.get('/bets', async (c) => {
       opsOwnerLogin: b.ops?.ownerLogin ?? null,
       opsTargetLogin: b.ops?.targetLogin ?? null,
       choiceLogin: b.choiceLogin,
+      predictedScoreA: b.predictedScoreA,
+      predictedScoreB: b.predictedScoreB,
       stake: b.stake,
       status: b.status,
       payout: b.payout,
@@ -11092,12 +11143,20 @@ app.post('/bets/ops', async (c) => {
 // Pari sur l'ISSUE d'un MATCH de tournoi : victoire joueur A / NUL / victoire
 // joueur B. `choiceLogin` = login d'un des deux joueurs, ou DRAW_CHOICE pour le nul
 // (ligue uniquement). Marché ouvert tant que le match n'a pas démarré (aucun score
-// saisi) ; réglé au confirm du match (settleMatchBetsTx). Cote fixe ×2.
-const PlaceMatchBetSchema = z.object({
-  matchId: z.string().min(1),
-  choiceLogin: z.string().min(1),
-  stake: z.number().int().positive(),
-});
+// saisi) ; réglé au confirm du match (settleMatchBetsTx). Cote fixe ×2, ou ×4 avec
+// un pronostic de SCORE EXACT (predictedScoreA/B, optionnel — obligatoire pour un
+// joueur du match, qui ne peut parier QUE sur le score exact qu'il pense faire).
+const PlaceMatchBetSchema = z
+  .object({
+    matchId: z.string().min(1),
+    choiceLogin: z.string().min(1),
+    stake: z.number().int().positive(),
+    predictedScoreA: z.number().int().min(0).max(999).optional(),
+    predictedScoreB: z.number().int().min(0).max(999).optional(),
+  })
+  .refine((d) => (d.predictedScoreA == null) === (d.predictedScoreB == null), {
+    message: 'le score exact se pronostique des deux côtés (A et B)',
+  });
 
 app.post('/bets/match', async (c) => {
   const me = await getCurrentLogin(c);
@@ -11105,13 +11164,13 @@ app.post('/bets/match', async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceMatchBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
-  const { matchId, choiceLogin, stake } = parsed.data;
+  const { matchId, choiceLogin, stake, predictedScoreA, predictedScoreB } = parsed.data;
   const result = await prisma.$transaction(async (tx) => {
     const m = await tx.tournamentMatch.findUnique({ where: { id: matchId } });
     if (!m) throw new HTTPException(404, { message: 'match introuvable' });
     const tour = await tx.tournament.findUnique({
       where: { id: m.tournamentId },
-      select: { status: true },
+      select: { status: true, game: true },
     });
     if (!tour || tour.status !== 'in_progress') {
       throw new HTTPException(409, { message: 'les paris sont fermés : tournoi non démarré ou terminé' });
@@ -11137,14 +11196,38 @@ app.post('/bets/match', async (c) => {
     if (!isDraw && choiceLogin !== m.playerALogin && choiceLogin !== m.playerBLogin) {
       throw new HTTPException(400, { message: 'le pronostic doit être un des deux joueurs (ou le nul)' });
     }
-    // Les deux joueurs du match (et leurs coéquipiers en 2v2) ne parient pas dessus.
+    // Un joueur du match (ou son coéquipier 2v2) peut parier sur SON match, mais
+    // uniquement en pronostiquant le SCORE EXACT qu'il pense faire (réglé strict :
+    // gagné ssi le score final est pile, cote ×4 — cf. settleMatchBetsTx).
     const partners = await tournamentPartnerMap(tx, m.tournamentId);
     const players = [
       ...teamMembersOf(m.playerALogin, partners),
       ...teamMembersOf(m.playerBLogin, partners),
     ];
-    if (players.includes(me)) {
-      throw new HTTPException(403, { message: 'tu ne peux pas parier sur ton propre match' });
+    if (players.includes(me) && predictedScoreA == null) {
+      throw new HTTPException(403, {
+        message: 'sur ton propre match, tu paries uniquement sur le score exact (pronostique-le)',
+      });
+    }
+    if (predictedScoreA != null && predictedScoreB != null) {
+      // Le score pronostiqué doit être plausible pour la discipline (score libre,
+      // nul accepté seulement en ligue — mêmes règles que l'édition de score).
+      const predErr = validateTournamentScore(parseGameId(tour.game), predictedScoreA, predictedScoreB, {
+        freeGoals: true,
+        allowDraw: m.stage === 'league',
+      });
+      if (predErr) throw new HTTPException(400, { message: `score pronostiqué invalide : ${predErr}` });
+      // Cohérence pronostic vainqueur ↔ score exact : le vainqueur impliqué par le
+      // score doit être le choix parié (égalité → nul).
+      const implied =
+        predictedScoreA === predictedScoreB
+          ? DRAW_CHOICE
+          : predictedScoreA > predictedScoreB
+            ? m.playerALogin
+            : m.playerBLogin;
+      if (implied !== choiceLogin) {
+        throw new HTTPException(400, { message: 'le score exact pronostiqué contredit ton pronostic de vainqueur' });
+      }
     }
     const dup = await tx.bet.findFirst({ where: { bettorLogin: me, status: 'open', matchId } });
     if (dup) throw new HTTPException(409, { message: 'tu as déjà un pari ouvert sur ce match' });
@@ -11154,7 +11237,14 @@ app.post('/bets/match', async (c) => {
     await grantCoinsTx(tx, me, -stake, {
       type: 'bet_place',
       refId: matchId,
-      meta: { targetType: 'match', tournamentId: m.tournamentId, matchId, choiceLogin, stake },
+      meta: {
+        targetType: 'match',
+        tournamentId: m.tournamentId,
+        matchId,
+        choiceLogin,
+        stake,
+        ...(predictedScoreA != null ? { predictedScoreA, predictedScoreB } : {}),
+      },
     });
     const bet = await tx.bet.create({
       data: {
@@ -11165,6 +11255,8 @@ app.post('/bets/match', async (c) => {
         matchId,
         choiceLogin,
         stake,
+        predictedScoreA: predictedScoreA ?? null,
+        predictedScoreB: predictedScoreB ?? null,
       },
     });
     return { bet, balance: u.leagueCoins - stake };

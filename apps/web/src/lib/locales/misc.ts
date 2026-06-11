@@ -14,6 +14,9 @@ export const dict: Record<Lang, Dict> = {
     'trophy.title': 'Trophées',
     'trophy.sub': 'récompenses légendaires',
 
+    // ─── Passage de rang (cinématique RankUpOverlay) ────────────────────────
+    'rankup.title': 'PASSAGE DE RANG',
+
     // ─── G.O.A.T ───────────────────────────────────────────────────────────
     'goat.sub': 'Greatest Of All Time',
     'common.back': 'Retour',
@@ -244,6 +247,8 @@ export const dict: Record<Lang, Dict> = {
     'trophy.title': 'Hall of Fame',
     'trophy.sub': 'legendary rewards',
 
+    'rankup.title': 'RANK UP',
+
     'goat.sub': 'Greatest Of All Time',
     'common.back': 'Back',
     'goat.weight.elo': 'ELO 50%',
@@ -459,6 +464,8 @@ export const dict: Record<Lang, Dict> = {
   es: {
     'trophy.title': 'Salón de la fama',
     'trophy.sub': 'recompensas legendarias',
+
+    'rankup.title': 'ASCENSO DE RANGO',
 
     'goat.sub': 'Greatest Of All Time',
     'common.back': 'Volver',
