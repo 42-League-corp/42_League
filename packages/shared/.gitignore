@@ -1,0 +1,5 @@
+# Artefacts émis par `tsc -b` (projet composite) — le paquet est consommé en SOURCE
+# (main: ./src/index.ts), ces .js/.d.ts ne doivent jamais être versionnés.
+src/**/*.js
+src/**/*.d.ts
+*.tsbuildinfo

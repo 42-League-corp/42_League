@@ -280,6 +280,7 @@ export type CoinTxType =
   | 'shop_consumable'
   | 'mystery_box'
   | 'sheldon_reward'
+  | 'trophy_income'
   | 'admin_grant';
 
 /** Lot tiré dans une Boîte Mystère (objet gagné) — null si rien de nouveau. */

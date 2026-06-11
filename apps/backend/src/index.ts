@@ -61,6 +61,9 @@ import {
   GRANDMASTER_MIN_ELO,
   ownedTitles,
   computeGoat,
+  trophyCountsByLogin,
+  type GameBoards,
+  type TrophyMatch,
 } from '@42-league/shared';
 import {
   GAME_IDS,
@@ -10012,6 +10015,7 @@ type CoinTxType =
   | 'shop_consumable'
   | 'mystery_box'
   | 'sheldon_reward'
+  | 'trophy_income'
   | 'admin_grant';
 
 interface CoinTxEntry {
@@ -10157,6 +10161,86 @@ function isoWeekKey(d: Date): string {
   firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
   const week = 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// ─── Revenus passifs hebdomadaires (podium des trophées) ─────────────────────
+// Chaque semaine ISO, on classe les joueurs par NOMBRE DE TROPHÉES détenus (agrégé
+// sur toutes les disciplines, mêmes calculs purs que l'onglet « Trophées », saison
+// active — cf. trophyCountsByLogin). Le PODIUM touche une prime fixe et CHACUN reçoit
+// en plus une prime PAR TROPHÉE (cumulable avec la prime de podium). Idempotent par
+// semaine via WeeklyTrophyPayout (jamais payé deux fois la même semaine ISO).
+const TROPHY_PODIUM_WEEKLY = [1200, 700, 350]; // 1er, 2e, 3e
+const TROPHY_PER_TROPHY_WEEKLY = 25; // par trophée détenu (podium compris)
+// Colonne d'Elo par discipline (board de trophées) — évite de tirer tout RatingFields.
+const TROPHY_ELO_FIELD: Record<string, 'elo' | 'eloSmash' | 'eloChess' | 'eloSf' | 'eloFlechettes'> = {
+  babyfoot: 'elo',
+  smash: 'eloSmash',
+  chess: 'eloChess',
+  streetfighter: 'eloSf',
+  flechettes: 'eloFlechettes',
+};
+
+async function runWeeklyTrophyIncome(now: Date = new Date()): Promise<void> {
+  const weekKey = isoWeekKey(now);
+  // Idempotence : semaine déjà payée → on ne fait rien.
+  if (await prisma.weeklyTrophyPayout.findUnique({ where: { weekKey } })) return;
+
+  const season = await prisma.season.findFirst({ where: { isActive: true } });
+  const seasonId = season?.id ?? null;
+
+  // Matchs 1v1 classés de la saison active (mêmes que les boards par discipline).
+  const rawMatches = await prisma.playedMatch.findMany({
+    where: { mode: null, ...(seasonId ? { seasonId } : {}) },
+    select: {
+      playerALogin: true, playerBLogin: true, scoreA: true, scoreB: true,
+      winner: true, playedAt: true, game: true, stocksA: true, stocksB: true,
+    },
+  });
+  const matches = rawMatches as unknown as TrophyMatch[];
+
+  // Boards par discipline : joueurs visibles inscrits, Elo du mode + dodge.
+  const boards: GameBoards = {};
+  for (const game of GAME_IDS) {
+    const users = await prisma.user.findMany({
+      where: { ...VISIBLE_USER_WHERE, games: { has: game } },
+      select: { login: true, imageUrl: true, dodgeCount: true, elo: true, eloSmash: true, eloChess: true, eloSf: true, eloFlechettes: true },
+    });
+    const field = TROPHY_ELO_FIELD[game];
+    boards[game] = users.map((u) => ({ login: u.login, imageUrl: u.imageUrl, elo: field ? u[field] : u.elo, dodgeCount: u.dodgeCount }));
+  }
+
+  const counts = trophyCountsByLogin(boards, matches);
+  // Classement par nb de trophées décroissant puis login (déterministe, comme le
+  // podium affiché). Vide → on marque tout de même la semaine (idempotence).
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const top3 = ranked.slice(0, 3).map(([login]) => login);
+
+  await prisma.$transaction(async (tx) => {
+    let paid = 0;
+    for (let i = 0; i < ranked.length; i++) {
+      const [login, count] = ranked[i]!;
+      const podiumBonus = i < 3 ? TROPHY_PODIUM_WEEKLY[i]! : 0;
+      const amount = podiumBonus + count * TROPHY_PER_TROPHY_WEEKLY;
+      if (amount <= 0) continue;
+      const res = await grantCoinsTx(tx, login, amount, {
+        type: 'trophy_income',
+        meta: { week: weekKey, trophies: count, rank: i < 3 ? i + 1 : null, podiumBonus, perTrophy: count * TROPHY_PER_TROPHY_WEEKLY },
+      });
+      if (res != null) paid++;
+    }
+    await tx.weeklyTrophyPayout.create({
+      data: { weekKey, recipients: paid, top1: top3[0] ?? null, top2: top3[1] ?? null, top3: top3[2] ?? null },
+    });
+  });
+
+  if (top3.length > 0) {
+    void notifyMany(top3, {
+      type: 'coins_granted',
+      title: 'Revenus passifs des trophées',
+      body: `Le podium des trophées de la semaine a été récompensé — tes League Coins ont été crédités.`,
+      link: `/profil`,
+    });
+  }
 }
 
 // ─── Quêtes hebdomadaires (source de vérité serveur) ─────────────────────────
@@ -11448,6 +11532,11 @@ if (process.env.NODE_ENV !== 'test') {
       });
       purgeScheduledDeletions().catch((err) => {
         console.error('failed to purge scheduled account deletions', err);
+      });
+      // Revenus passifs hebdomadaires (podium des trophées) — idempotent par semaine
+      // ISO, donc un check quotidien crédite une seule fois en début de semaine.
+      runWeeklyTrophyIncome().catch((err) => {
+        console.error('failed to run weekly trophy income', err);
       });
     };
     runDailyPurges();

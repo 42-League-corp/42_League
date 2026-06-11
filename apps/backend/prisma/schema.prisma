@@ -958,6 +958,20 @@ model CoinTransaction {
   @@map("coin_transaction")
 }
 
+// Idempotence des revenus passifs hebdomadaires (podium des trophées). Une ligne par
+// semaine ISO payée : empêche de créditer deux fois la même semaine (redémarrages,
+// ticks multiples). `weekKey` au format "2026-W24". `top1/2/3` = podium payé (audit).
+model WeeklyTrophyPayout {
+  weekKey    String   @id @map("week_key")
+  paidAt     DateTime @default(now()) @map("paid_at")
+  recipients Int      @default(0)
+  top1       String?
+  top2       String?
+  top3       String?
+
+  @@map("weekly_trophy_payout")
+}
+
 // ─── Analytics : pages vues & événements d'usage (tableau de bord GOD) ────────
 //
 // Journal léger d'usage *produit* — à ne pas confondre avec AdminAuditLog (actions
