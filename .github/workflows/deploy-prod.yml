@@ -81,6 +81,10 @@ jobs:
           output: trivy-backend.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          # Outillage de BUILD uniquement (esbuild via tsx, vite/rollup/vitest, @crxjs) :
+          # présent dans node_modules mais jamais exposé au runtime → exclu du scan
+          # d'image (cf. SECURITY.md). Réduit le bruit CVE des binaires Go d'esbuild.
+          skip-dirs: '**/node_modules/esbuild,**/node_modules/@esbuild,**/node_modules/vite,**/node_modules/vite-node,**/node_modules/vitest,**/node_modules/@vitest,**/node_modules/rollup,**/node_modules/@rollup,**/node_modules/@crxjs'
           exit-code: '0'
         continue-on-error: true
 
@@ -142,6 +146,10 @@ jobs:
           output: trivy-frontend.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          # Outillage de BUILD uniquement (esbuild via tsx, vite/rollup/vitest, @crxjs) :
+          # présent dans node_modules mais jamais exposé au runtime → exclu du scan
+          # d'image (cf. SECURITY.md). Réduit le bruit CVE des binaires Go d'esbuild.
+          skip-dirs: '**/node_modules/esbuild,**/node_modules/@esbuild,**/node_modules/vite,**/node_modules/vite-node,**/node_modules/vitest,**/node_modules/@vitest,**/node_modules/rollup,**/node_modules/@rollup,**/node_modules/@crxjs'
           exit-code: '0'
         continue-on-error: true
 
