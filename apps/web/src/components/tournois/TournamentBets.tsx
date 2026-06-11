@@ -12,7 +12,45 @@ import {
 import { trackEvent } from '../../lib/analytics';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useT } from '../../lib/i18n';
+import { Avatar } from '../Avatar';
 import { BetForm, CoinAmount, GameTag, betStatusStyle } from '../bets/BetPrimitives';
+
+/** Visage(s) d'une équipe : pp du capitaine (+ coéquipier en 2v2) puis le libellé.
+ *  Rend les affiches lisibles d'un coup d'œil dans l'onglet « Parier ». */
+function TeamFaces({
+  login,
+  partners,
+  avatars,
+  size = 'sm',
+  align = 'left',
+}: {
+  login: string | null;
+  partners: Record<string, string | null>;
+  avatars: Record<string, string | null>;
+  size?: 'xs' | 'sm' | 'md';
+  align?: 'left' | 'right';
+}) {
+  if (!login) return <span className="text-muted-2">?</span>;
+  const partner = partners[login] ?? null;
+  const faces = (
+    <div className="flex -space-x-2 shrink-0">
+      <Avatar login={login} imageUrl={avatars[login] ?? null} size={size} />
+      {partner && <Avatar login={partner} imageUrl={avatars[partner] ?? null} size={size} />}
+    </div>
+  );
+  const label = (
+    <span className="font-extrabold text-text-strong text-sm truncate">
+      @{login}
+      {partner && <span className="text-muted-2"> &amp; @{partner}</span>}
+    </span>
+  );
+  return (
+    <div className={`flex items-center gap-2 min-w-0 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      {faces}
+      {label}
+    </div>
+  );
+}
 
 /** En-tête de section dorée, alignée sur le style de la page tournoi. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -149,6 +187,18 @@ export function TournamentBets({
       return !myLogin || !players.includes(myLogin);
     });
   }, [isInProgress, tournament.matches, teamOf, myLogin]);
+  // « Match à suivre » : l'affiche ANNONCÉE par l'orga (activeMatchId) si elle est
+  // encore pariable, sinon le prochain match ouvert. Mise en avant en grand pour
+  // parier en un clic ; les autres affiches suivent en liste compacte.
+  const featured = useMemo(() => {
+    if (!isInProgress) return null;
+    const announced = openMatches.find((m) => m.id === tournament.activeMatchId);
+    return announced ?? openMatches[0] ?? null;
+  }, [isInProgress, openMatches, tournament.activeMatchId]);
+  const restMatches = useMemo(
+    () => openMatches.filter((m) => m.id !== featured?.id),
+    [openMatches, featured],
+  );
   // Matchs sur lesquels j'ai déjà un pari ouvert (pour masquer le bouton).
   const myOpenMatchIds = useMemo(
     () => new Set(myBets.filter((b) => b.targetType === 'match' && b.status === 'open').map((b) => b.matchId)),
@@ -159,6 +209,78 @@ export function TournamentBets({
     () => new Map((tournament.matches ?? []).map((m) => [m.id, m])),
     [tournament.matches],
   );
+
+  // Affiche pariable (pp visibles). `featured` → version mise en avant (plus grande,
+  // joueurs face à face). Sinon ligne compacte. Réutilise le même formulaire de pari.
+  const renderMatchCard = (m: TournamentMatch, isFeatured: boolean) => {
+    const key = `m:${m.id}`;
+    const isLeague = m.stage === 'league';
+    const alreadyBet = myOpenMatchIds.has(m.id);
+    const choices = [
+      m.playerALogin as string,
+      ...(isLeague ? [DRAW_CHOICE] : []),
+      m.playerBLogin as string,
+    ];
+    return (
+      <div
+        key={m.id}
+        className={`rounded-2xl border p-4 ${
+          isFeatured ? 'border-gold/40 bg-gold/[0.06] shadow-[0_0_0_1px_rgba(255,201,74,0.12)]' : 'border-gold/15 bg-bg-1/70'
+        }`}
+      >
+        {isFeatured ? (
+          <div className="flex items-center justify-between gap-3">
+            <TeamFaces login={m.playerALogin} partners={partners} avatars={avatars} size="md" />
+            <span className="shrink-0 text-[11px] font-black uppercase tracking-[0.18em] text-gold/70">VS</span>
+            <TeamFaces login={m.playerBLogin} partners={partners} avatars={avatars} size="md" align="right" />
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Swords className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
+              <TeamFaces login={m.playerALogin} partners={partners} avatars={avatars} size="xs" />
+              <span className="text-muted-2 text-xs shrink-0">vs</span>
+              <TeamFaces login={m.playerBLogin} partners={partners} avatars={avatars} size="xs" />
+            </div>
+            {!alreadyBet && openForm !== key && (
+              <button
+                type="button"
+                onClick={() => setOpenForm(key)}
+                className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
+              >
+                {t('bets.placeBet')}
+              </button>
+            )}
+          </div>
+        )}
+        {isFeatured && !alreadyBet && openForm !== key && (
+          <button
+            type="button"
+            onClick={() => setOpenForm(key)}
+            className="mt-3 w-full h-9 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
+          >
+            {t('bets.placeBet')}
+          </button>
+        )}
+        {alreadyBet ? (
+          <div className="text-[11px] text-muted-2 mt-2">{t('bets.alreadyBet')}</div>
+        ) : (
+          openForm === key && (
+            <BetForm
+              choices={choices}
+              avatars={avatars}
+              partners={partners}
+              labels={{ [DRAW_CHOICE]: t('bets.draw') }}
+              maxStake={coins}
+              busy={placing}
+              onCancel={() => setOpenForm(null)}
+              onSubmit={(choiceLogin, stake) => placeMatchBet({ matchId: m.id, choiceLogin, stake })}
+            />
+          )
+        )}
+      </div>
+    );
+  };
 
   return (
     <section className="space-y-5">
@@ -230,68 +352,33 @@ export function TournamentBets({
 
       {/* Pari sur l'ISSUE des matchs — tournoi en cours. */}
       {isInProgress && (
-        <section>
-          <SectionTitle>{t('bets.matchOutcome')}</SectionTitle>
+        <section className="space-y-5">
           {iAmEntrant && (
-            <p className="text-[11px] text-muted-2 mb-2">{t('bets.matchOwnHint')}</p>
+            <p className="text-[11px] text-muted-2">{t('bets.matchOwnHint')}</p>
           )}
+
+          {/* MATCH À SUIVRE : l'affiche en cours/à venir, mise en avant pour parier vite. */}
+          {featured && (
+            <section>
+              <SectionTitle>{t('bets.featured')}</SectionTitle>
+              <p className="text-[11px] text-muted-2 mb-2 leading-snug">{t('bets.featuredHint')}</p>
+              {renderMatchCard(featured, true)}
+            </section>
+          )}
+
+          {/* Les AUTRES affiches pariables, en liste compacte avec pp. */}
           {openMatches.length === 0 ? (
-            <div className="text-center text-muted-2 py-4 text-sm">{t('bets.noOpenMatch')}</div>
+            <section>
+              <SectionTitle>{t('bets.matchOutcome')}</SectionTitle>
+              <div className="text-center text-muted-2 py-4 text-sm">{t('bets.noOpenMatch')}</div>
+            </section>
           ) : (
-            <div className="space-y-3">
-              {openMatches.map((m) => {
-                const key = `m:${m.id}`;
-                const isLeague = m.stage === 'league';
-                const alreadyBet = myOpenMatchIds.has(m.id);
-                // Choix : A / (Nul si ligue) / B. Valeur = login (clé du règlement).
-                const choices = [
-                  m.playerALogin as string,
-                  ...(isLeague ? [DRAW_CHOICE] : []),
-                  m.playerBLogin as string,
-                ];
-                return (
-                  <div key={m.id} className="rounded-2xl border border-gold/15 bg-bg-1/70 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Swords className="w-4 h-4 text-gold shrink-0" strokeWidth={2.2} />
-                        <span className="font-extrabold text-text-strong text-sm truncate">
-                          {teamLabel(m.playerALogin, partners)}{' '}
-                          <span className="text-muted-2">vs</span>{' '}
-                          {teamLabel(m.playerBLogin, partners)}
-                        </span>
-                      </div>
-                      {!alreadyBet && openForm !== key && (
-                        <button
-                          type="button"
-                          onClick={() => setOpenForm(key)}
-                          className="shrink-0 px-3 h-8 rounded-lg border border-gold/40 bg-gold/15 text-gold text-xs font-extrabold uppercase tracking-[0.14em] tap-transparent hover:bg-gold/25"
-                        >
-                          {t('bets.placeBet')}
-                        </button>
-                      )}
-                    </div>
-                    {alreadyBet ? (
-                      <div className="text-[11px] text-muted-2 mt-1">{t('bets.alreadyBet')}</div>
-                    ) : (
-                      openForm === key && (
-                        <BetForm
-                          choices={choices}
-                          avatars={avatars}
-                          partners={partners}
-                          labels={{ [DRAW_CHOICE]: t('bets.draw') }}
-                          maxStake={coins}
-                          busy={placing}
-                          onCancel={() => setOpenForm(null)}
-                          onSubmit={(choiceLogin, stake) =>
-                            placeMatchBet({ matchId: m.id, choiceLogin, stake })
-                          }
-                        />
-                      )
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            restMatches.length > 0 && (
+              <section>
+                <SectionTitle>{t('bets.matchOutcome')}</SectionTitle>
+                <div className="space-y-3">{restMatches.map((m) => renderMatchCard(m, false))}</div>
+              </section>
+            )
           )}
         </section>
       )}
