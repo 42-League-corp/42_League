@@ -113,9 +113,9 @@ function injectLink(login: string, elo: number) {
   link.href = playerUrl(login);
   link.target = '_blank';
   link.rel = 'noreferrer noopener';
-  link.title = '42 League — voir le profil complet';
+  link.title = 'One League — voir le profil complet';
   const label = document.createElement('span');
-  label.textContent = '42 League';
+  label.textContent = 'One League';
   const eloChip = document.createElement('span');
   eloChip.className = 'l42-elo';
   eloChip.textContent = `${elo} ELO`;
@@ -161,7 +161,7 @@ function injectSkill(opts: {
   head.className = 'l42-skill-row';
   const label = document.createElement('span');
   label.className = 'l42-skill-label';
-  label.textContent = '⚔ Babyfoot 42 League';
+  label.textContent = '⚔ Babyfoot One League';
   const rank = document.createElement('span');
   rank.className = 'l42-skill-rank';
   rank.textContent = `#${opts.rank}/${opts.total} · ${opts.wins}W ${opts.losses}L`;

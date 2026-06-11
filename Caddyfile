@@ -1,3 +1,11 @@
+# Ancien domaine (rebrand) → 301 vers oneleague.fr, en conservant le chemin.
+# L'URL change réellement dans le navigateur (redirection permanente, pas un proxy).
+# Le front appelle l'API en same-origin (/api) quel que soit le domaine — aucun
+# besoin de proxifier /api ici : tout le trafic utile passe par oneleague.fr.
+www.42league.fr, 42league.fr {
+    redir https://oneleague.fr{uri} permanent
+}
+
 www.oneleague.fr {
     redir https://oneleague.fr{uri} permanent
 }
@@ -42,6 +50,11 @@ oneleague.fr {
 # Même Caddy, second domaine. Caddy provisionne automatiquement le certificat
 # TLS de staging.oneleague.fr dès que le DNS pointe sur le VPS (aucun certbot).
 # Les upstreams `league-stg-*` sont atteints via le réseau partagé `league_edge`.
+# Ancien sous-domaine staging.42league.fr → 301 vers staging.oneleague.fr.
+staging.42league.fr {
+    redir https://staging.oneleague.fr{uri} permanent
+}
+
 staging.oneleague.fr {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

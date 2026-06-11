@@ -4,10 +4,10 @@ const ICON = 'icons/42_league.png';
 
 export default defineManifest({
   manifest_version: 3,
-  name: '42 League',
+  name: 'One League',
   version: '0.0.5',
   description:
-    '42 League — badges ELO sur les profils intra + raccourci vers la web app.',
+    'One League — badges ELO sur les profils intra + raccourci vers la web app.',
   icons: {
     16: ICON,
     32: ICON,
@@ -15,7 +15,7 @@ export default defineManifest({
     128: ICON,
   },
   action: {
-    default_title: '42 League',
+    default_title: 'One League',
     default_popup: 'src/popup/index.html',
     default_icon: {
       16: ICON,

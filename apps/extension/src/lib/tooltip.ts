@@ -186,7 +186,7 @@ function fillNode(node: HTMLElement, s: PlayerStats) {
   name.textContent = s.login;
   const sub = document.createElement('div');
   sub.className = 'l42tt-sub';
-  sub.textContent = s.rank != null ? `42 League · #${s.rank}` : '42 League · non classé';
+  sub.textContent = s.rank != null ? `One League · #${s.rank}` : 'One League · non classé';
   id.append(name, sub);
   if (s.title) {
     const title = document.createElement('div');

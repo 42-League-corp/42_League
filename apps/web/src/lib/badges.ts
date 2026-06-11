@@ -22,7 +22,7 @@ export const BADGE_CATALOG: Record<string, BadgeDef> = {
   },
   founder: {
     label: 'Founder',
-    description: "À l'origine de 42 League — du premier commit au déploiement.",
+    description: "À l'origine de One League — du premier commit au déploiement.",
     color: '#ffc94a',
     icon: Crown,
   },
@@ -34,7 +34,7 @@ export const BADGE_CATALOG: Record<string, BadgeDef> = {
   },
   beta_tester: {
     label: 'Beta Tester',
-    description: 'Présent·e dès la saison bêta de 42 League.',
+    description: 'Présent·e dès la saison bêta de One League.',
     color: '#3fd6c0',
     icon: FlaskConical,
   },
