@@ -457,6 +457,10 @@ export interface MeResponse {
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   /** Solde de League Coins de l'utilisateur (défaut 0). */
   coins?: number;
+  /** Réputation litiges : nb de litiges perdus (marque visible sur le profil). */
+  disputesLost?: number;
+  /** Fin du cooldown de sanction de litige (ISO) — déclaration & paris bloqués tant qu'elle est future. Null si aucune. */
+  penaltyCooldownUntil?: string | null;
   /** Série d'assiduité ranked : série courante, record, bonus ELO, prochain palier. */
   streak?: StreakView;
   /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
@@ -513,6 +517,8 @@ export interface MeResponse {
     onboardedAt?: string | null;
     /** Fin de la fenêtre de boost « EN FEU » (ELO ×2) — null/passé = pas en feu. */
     eloMultUntil?: string | null;
+    /** Réputation litiges : nb de litiges perdus (marque publique sur le profil). */
+    disputesLost?: number;
   } | null;
 }
 
@@ -585,7 +591,18 @@ export interface RejectedMatch {
   contestReason: string;
   contestMessage: string;
   rejectedAt: string;
+  /** Discipline du match contesté. */
+  game?: string;
+  /** Arbitrage : 'open' | 'resolved' | 'dismissed' (historique). */
+  status?: string;
+  /** Verdict : 'declarer_wrong' | 'contester_wrong' | 'dismissed'. */
+  resolution?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 }
+
+/** Verdict d'arbitrage d'un litige. */
+export type DisputeVerdict = 'declarer_wrong' | 'contester_wrong' | 'dismiss';
 
 export interface ModerationStats {
   user: AdminUser;
@@ -1742,6 +1759,15 @@ export const api = {
       body: JSON.stringify({}),
     }),
   adminRejectedMatches: () => request<RejectedMatch[]>('/admin/rejected-matches'),
+  /** File d'arbitrage des litiges (status: 'open' par défaut, 'all' pour l'historique). */
+  adminDisputes: (status: 'open' | 'all' = 'open') =>
+    request<RejectedMatch[]>(`/admin/disputes?status=${status}`),
+  /** Tranche un litige : applique le malus au fautif (sauf 'dismiss'). */
+  adminResolveDispute: (id: string, verdict: DisputeVerdict) =>
+    request<{ id: string; status: 'resolved'; verdict: DisputeVerdict; culprit: string | null; malus: { tier: number; elo: number; coins: number; cooldownUntil: string } | null }>(
+      `/admin/disputes/${encodeURIComponent(id)}/resolve`,
+      { method: 'POST', body: JSON.stringify({ verdict }) },
+    ),
   adminSuspicious: () => request<SuspiciousFlag[]>('/admin/suspicious'),
   adminAuditLog: (filters?: { actor?: string; target?: string; action?: AdminAuditAction; limit?: number }) => {
     const params = new URLSearchParams();

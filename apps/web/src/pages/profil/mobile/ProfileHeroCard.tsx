@@ -90,6 +90,8 @@ export function ProfileHeroCard({
   const equippedTitle = displayTitle(user.login, user.title, null);
   const isTarnished = !equippedTitle;
   const titleLabel = equippedTitle ?? t('profil.title.tarnished');
+  // Marque de réputation : nb de litiges perdus (faux score / contestation abusive).
+  const disputesLost = user.disputesLost ?? (isMe ? me?.disputesLost : 0) ?? 0;
   const effectiveTitleColor = isTarnished ? null : titleColor;
 
   // Badges cross-jeux : toutes les disciplines où ce joueur est INSCRIT
@@ -267,12 +269,31 @@ export function ProfileHeroCard({
               )}
             </div>
             {realName && <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>}
-            {user.campus && (
-              <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
-                <MapPin className="w-3 h-3" strokeWidth={2.5} />
-                <span>{user.campus}</span>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {user.campus && (
+                <div className="inline-flex items-center gap-1 text-[10px] text-muted font-medium uppercase tracking-wider">
+                  <MapPin className="w-3 h-3" strokeWidth={2.5} />
+                  <span>{user.campus}</span>
+                </div>
+              )}
+              {disputesLost > 0 && (
+                <CursorTooltip
+                  className="inline-flex"
+                  content={
+                    <>
+                      <div className="text-xs font-extrabold text-red">Litiges perdus : {disputesLost}</div>
+                      <div className="mt-1 text-[11px] leading-snug text-muted-2">
+                        Score déclaré faux ou contestation jugée abusive. Plus le compteur monte, plus la sanction est lourde.
+                      </div>
+                    </>
+                  }
+                >
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red bg-red/10 border border-red/25 rounded-full px-2 py-0.5">
+                    ⚖ {disputesLost}
+                  </span>
+                </CursorTooltip>
+              )}
+            </div>
           </div>
 
           {myRank > 0 && (

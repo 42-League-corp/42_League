@@ -1317,6 +1317,94 @@ function RejectionTable({ rows }: { rows: RejectedMatch[]; perspective?: 'emitte
   );
 }
 
+// Arbitrage des litiges OUVERTS : l'admin tranche (faux score / contestation
+// abusive / sans suite) → le fautif prend le malus croissant (cf. backend).
+function DisputeArbitration() {
+  const [rows, setRows] = useState<RejectedMatch[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback((silent = false) => {
+    if (!silent) setRows([]);
+    api.adminDisputes('open').then(setRows).catch(() => {});
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  useServerEvents(() => load(true), PANEL_EVENTS);
+
+  const resolve = async (id: string, verdict: 'declarer_wrong' | 'contester_wrong' | 'dismiss') => {
+    setBusy(id);
+    setMsg('');
+    try {
+      const res = await api.adminResolveDispute(id, verdict);
+      setMsg(
+        res.culprit && res.malus
+          ? `Sanction appliquée à @${res.culprit} : -${res.malus.elo} Elo, -${res.malus.coins} coins (litige n°${res.malus.tier}).`
+          : 'Litige classé sans suite.',
+      );
+      load(true);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/[0.04] p-3">
+      <div className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400 mb-2">
+        ⚖️ Litiges à arbitrer · {rows.length}
+      </div>
+      {msg && <div className="text-[11px] font-mono text-amber-300 mb-2">{msg}</div>}
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.id} className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-zinc-300">
+              <span className="text-zinc-500">{fmtDate(r.rejectedAt)}</span>
+              <span className="text-zinc-100 font-bold">@{r.declarerLogin}</span>
+              <span className="text-zinc-500">a déclaré</span>
+              <span className="tabular-nums text-zinc-400">{r.scoreDeclarer}–{r.scoreOpponent}</span>
+              <span className="text-zinc-500">vs</span>
+              <span className="text-zinc-100 font-bold">@{r.opponentLogin}</span>
+              <span className={`px-1 py-0.5 rounded ${r.contestReason === 'never_played' ? 'bg-red-400/15 text-red-400' : 'bg-orange-400/15 text-orange-400'}`}>
+                {r.contestReason === 'never_played' ? 'jamais joué' : 'score incorrect'}
+              </span>
+              {r.game && <span className="text-zinc-600">[{r.game}]</span>}
+            </div>
+            {r.contestMessage && <div className="mt-1 text-zinc-400 italic">« {r.contestMessage} »</div>}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                disabled={busy === r.id}
+                onClick={() => void resolve(r.id, 'declarer_wrong')}
+                className="px-2 py-1 rounded bg-red-500/15 hover:bg-red-500/30 text-red-300 border border-red-500/30 disabled:opacity-40"
+              >
+                Faux score · sanctionner @{r.declarerLogin}
+              </button>
+              <button
+                type="button"
+                disabled={busy === r.id}
+                onClick={() => void resolve(r.id, 'contester_wrong')}
+                className="px-2 py-1 rounded bg-orange-500/15 hover:bg-orange-500/30 text-orange-300 border border-orange-500/30 disabled:opacity-40"
+              >
+                Contestation abusive · sanctionner @{r.opponentLogin}
+              </button>
+              <button
+                type="button"
+                disabled={busy === r.id}
+                onClick={() => void resolve(r.id, 'dismiss')}
+                className="px-2 py-1 rounded bg-zinc-700/40 hover:bg-zinc-600/40 text-zinc-300 border border-zinc-600/40 disabled:opacity-40"
+              >
+                Sans suite
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RejetsTab() {
   const [rows, setRows] = useState<RejectedMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1344,6 +1432,8 @@ function RejetsTab() {
 
   return (
     <div className="p-4">
+      {/* File d'arbitrage des litiges ouverts (tranche → malus au fautif). */}
+      <DisputeArbitration />
       <div className="mb-4 flex items-center gap-3">
         <Input value={filter} onChange={setFilter} placeholder={t('god.rej.filter')} className="w-72" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.rej.count')}</span>

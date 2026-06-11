@@ -380,6 +380,9 @@ const PUBLIC_USER_OMIT = [
   // Semaine d'activation du boost ELO ×2 — interne (la limite hebdo). `eloMultUntil`
   // reste public : les autres voient qu'un joueur est « en feu » sur sa fiche.
   'eloMultWeekKey',
+  // Fin du cooldown de sanction de litige — interne (seul /me l'expose). La MARQUE
+  // `disputesLost`, elle, RESTE publique (transparence sociale).
+  'penaltyCooldownUntil',
 ] as const;
 
 /** Retire les champs sensibles d'un objet User avant sérialisation publique. */
@@ -1167,6 +1170,10 @@ app.get('/me', async (c) => {
     equippedBanner: cosmetics.equippedBanner,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
+    // Réputation litiges : marque (nb de litiges perdus) + fin du cooldown de
+    // sanction (déclaration/paris bloqués tant qu'elle est future).
+    disputesLost: user?.disputesLost ?? 0,
+    penaltyCooldownUntil: user?.penaltyCooldownUntil ? user.penaltyCooldownUntil.toISOString() : null,
     // Série d'assiduité ranked : série courante, record, bonus ELO actif, prochain palier.
     streak: streakView(user),
     isAdmin: isAdmin(login),
@@ -2550,6 +2557,8 @@ app.get('/matches/pending', async (c) => {
 
 app.post('/matches', async (c) => {
   const me = await getCurrentLogin(c);
+  // Sanction de litige en cours → déclaration bloquée (cf. applyDisputeMalusTx).
+  await assertNotPenalized(me, 'déclarer un match');
   const body = await c.req.json().catch(() => null);
   const parsed = DeclareMatchSchema.safeParse(body);
   if (!parsed.success) {
@@ -2606,6 +2615,7 @@ app.post('/matches', async (c) => {
 // (cf. /matches/:id/confirm) puis réglé par settle2v2PendingAsPlayed.
 app.post('/matches/2v2', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'déclarer un match');
   const body = await c.req.json().catch(() => null);
   const parsed = Declare2v2MatchSchema.safeParse(body);
   if (!parsed.success) {
@@ -3172,6 +3182,9 @@ app.post('/matches/:id/reject', async (c) => {
         scoreOpponent: p.scoreOpponent,
         contestReason,
         contestMessage,
+        game: p.game,
+        // Litige ouvert : part en file d'arbitrage (admin/orga tranche → malus).
+        status: 'open',
       },
     });
     await tx.pendingMatch.delete({ where: { id } });
@@ -7875,6 +7888,114 @@ app.delete('/admin/rejected-matches/:id', async (c) => {
   return c.json({ id, deleted: true });
 });
 
+// ── Refonte contestation : arbitrage + réputation + malus ────────────────────
+// Un litige (RejectedMatch status='open') est tranché par un admin/modérateur. La
+// partie jugée fautive (faux score OU contestation abusive) prend un malus CROISSANT
+// selon son nombre de litiges déjà perdus (`disputesLost`) :
+//   1er : -20 Elo · -100 coins · 24 h sans déclarer/parier
+//   2e  : -50 Elo · -250 coins · 48 h
+//   3e+ : -100 Elo · -500 coins · 72 h
+// `disputesLost` est aussi la « marque » de réputation affichée sur le profil.
+const DISPUTE_MALUS_TIERS = [
+  { elo: 20, coins: 100, cooldownH: 24 },
+  { elo: 50, coins: 250, cooldownH: 48 },
+  { elo: 100, coins: 500, cooldownH: 72 },
+] as const;
+
+async function applyDisputeMalusTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  game: string,
+  now: Date = new Date(),
+): Promise<{ tier: number; elo: number; coins: number; cooldownUntil: Date }> {
+  const u = await tx.user.findUnique({ where: { login }, select: { disputesLost: true } });
+  const idx = Math.min(u?.disputesLost ?? 0, DISPUTE_MALUS_TIERS.length - 1);
+  const t = DISPUTE_MALUS_TIERS[idx]!;
+  const g = parseGameId(game);
+  const cooldownUntil = new Date(now.getTime() + t.cooldownH * 60 * 60 * 1000);
+  await tx.user.update({
+    where: { login },
+    data: {
+      ...eloDelta(g, -t.elo),
+      disputesLost: { increment: 1 },
+      penaltyCooldownUntil: cooldownUntil,
+    },
+  });
+  await grantCoinsTx(tx, login, -t.coins, { type: 'dispute_malus', meta: { game: g, elo: -t.elo, tier: idx + 1 } });
+  return { tier: idx + 1, elo: t.elo, coins: t.coins, cooldownUntil };
+}
+
+const ResolveDisputeSchema = z.object({
+  verdict: z.enum(['declarer_wrong', 'contester_wrong', 'dismiss']),
+});
+
+// Refuse l'action (déclaration de match / pari) si le joueur est sous cooldown de
+// sanction de litige (penaltyCooldownUntil future). Décourage de re-déclarer/parier
+// pendant la pénalité. No-op si aucun cooldown actif.
+async function assertNotPenalized(login: string, action: 'déclarer un match' | 'parier', now: Date = new Date()): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { login }, select: { penaltyCooldownUntil: true } });
+  if (u?.penaltyCooldownUntil && u.penaltyCooldownUntil.getTime() > now.getTime()) {
+    const hrs = Math.ceil((u.penaltyCooldownUntil.getTime() - now.getTime()) / (60 * 60 * 1000));
+    throw new HTTPException(403, {
+      message: `Sanction de litige en cours : tu ne peux pas ${action} pendant encore ~${hrs} h.`,
+    });
+  }
+}
+
+// GET /admin/disputes?status=open|all — file d'arbitrage des litiges.
+app.get('/admin/disputes', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requirePerm(me, 'canDeleteRejectedMatches');
+  const status = c.req.query('status') ?? 'open';
+  const list = await prisma.rejectedMatch.findMany({
+    where: status === 'all' ? {} : { status },
+    orderBy: { rejectedAt: 'desc' },
+    take: 200,
+  });
+  return c.json(list);
+});
+
+// POST /admin/disputes/:id/resolve — tranche un litige (et applique le malus au
+// fautif si verdict != 'dismiss').
+app.post('/admin/disputes/:id/resolve', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requirePerm(me, 'canDeleteRejectedMatches');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ResolveDisputeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { verdict } = parsed.data;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const d = await tx.rejectedMatch.findUnique({ where: { id } });
+    if (!d) throw new HTTPException(404, { message: 'litige introuvable' });
+    if (d.status !== 'open') throw new HTTPException(409, { message: 'litige déjà tranché' });
+    const culprit =
+      verdict === 'declarer_wrong' ? d.declarerLogin : verdict === 'contester_wrong' ? d.opponentLogin : null;
+    const malus = culprit ? await applyDisputeMalusTx(tx, culprit, d.game) : null;
+    await tx.rejectedMatch.update({
+      where: { id },
+      data: {
+        status: 'resolved',
+        resolution: verdict === 'dismiss' ? 'dismissed' : verdict,
+        resolvedBy: me,
+        resolvedAt: new Date(),
+      },
+    });
+    return { culprit, malus };
+  });
+
+  if (result.culprit && result.malus) {
+    void notifyMany([result.culprit], {
+      type: 'dispute_malus',
+      title: 'Litige tranché en ta défaveur',
+      body: `Sanction : -${result.malus.elo} Elo, -${result.malus.coins} coins, déclaration & paris bloqués ${DISPUTE_MALUS_TIERS[Math.min(result.malus.tier - 1, 2)]!.cooldownH} h (litige n°${result.malus.tier}).`,
+    });
+    emit([result.culprit], { type: 'panel:update', payload: {} });
+  }
+  return c.json({ id, status: 'resolved', verdict, culprit: result.culprit, malus: result.malus });
+});
+
 app.delete('/admin/pending-matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
   await requirePerm(me, 'canDeletePendingMatches');
@@ -10016,6 +10137,7 @@ type CoinTxType =
   | 'mystery_box'
   | 'sheldon_reward'
   | 'trophy_income'
+  | 'dispute_malus'
   | 'admin_grant';
 
 interface CoinTxEntry {
@@ -10778,6 +10900,7 @@ const PlaceBetSchema = z.object({
 
 app.post('/bets', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -10852,6 +10975,7 @@ const PlaceOpsBetSchema = z.object({
 
 app.post('/bets/ops', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceOpsBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -10924,6 +11048,7 @@ const PlaceMatchBetSchema = z.object({
 
 app.post('/bets/match', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceMatchBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
