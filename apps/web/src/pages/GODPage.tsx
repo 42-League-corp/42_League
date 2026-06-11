@@ -4208,6 +4208,7 @@ const CONSUMABLE_LABEL: Record<ConsumableKind, string> = {
   anti_ops: 'Anti-OPS',
   elo_mult: "Multiplicateur d'ELO",
   force_duel: 'Main du Destin',
+  mini_ops: 'Mini-OPS',
 };
 
 /** Onglet GOD : gestion des consommables, badges libres et titre d'un joueur. */

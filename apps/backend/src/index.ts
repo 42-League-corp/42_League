@@ -9007,13 +9007,30 @@ app.post('/shop/:id/buy', async (c) => {
 
     // Consommable : empilable (quantité), avec cap mensuel d'achats par type.
     if (consumableKind) {
-      const mk = monthKey(new Date());
+      const now = new Date();
+      const mk = monthKey(now);
       const cap = CONSUMABLE_MONTHLY_CAP[consumableKind];
       const monthly = await tx.consumableMonthly.findUnique({
         where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
       });
       if ((monthly?.count ?? 0) >= cap) {
         throw new HTTPException(409, { message: `cap mensuel atteint pour ce consommable (${cap}/mois)` });
+      }
+      // Cooldown d'achat (ex. mini_ops : 1 / 48 h) — borne le rythme d'acquisition.
+      const buyCooldown = CONSUMABLE_BUY_COOLDOWN_MS[consumableKind];
+      const existing = buyCooldown
+        ? await tx.consumableInventory.findUnique({
+            where: { userLogin_kind: { userLogin: login, kind: consumableKind } },
+          })
+        : null;
+      if (buyCooldown && existing?.lastBoughtAt) {
+        const elapsed = now.getTime() - existing.lastBoughtAt.getTime();
+        if (elapsed < buyCooldown) {
+          const hrs = Math.ceil((buyCooldown - elapsed) / (60 * 60 * 1000));
+          throw new HTTPException(429, {
+            message: `achat en cooldown : réessaie dans ~${hrs} h (1 achat toutes les ${Math.round(buyCooldown / (24 * 60 * 60 * 1000))} j).`,
+          });
+        }
       }
       if (user.leagueCoins < item.price) {
         throw new HTTPException(400, { message: 'solde insuffisant' });
@@ -9025,8 +9042,8 @@ app.post('/shop/:id/buy', async (c) => {
       });
       await tx.consumableInventory.upsert({
         where: { userLogin_kind: { userLogin: login, kind: consumableKind } },
-        update: { quantity: { increment: 1 } },
-        create: { userLogin: login, kind: consumableKind, quantity: 1 },
+        update: { quantity: { increment: 1 }, ...(buyCooldown ? { lastBoughtAt: now } : {}) },
+        create: { userLogin: login, kind: consumableKind, quantity: 1, ...(buyCooldown ? { lastBoughtAt: now } : {}) },
       });
       await tx.consumableMonthly.upsert({
         where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
@@ -9256,7 +9273,10 @@ app.post('/me/inventory/:id/equip', async (c) => {
 //                 (au choix) et les force à s'affronter — un défi déjà accepté
 //                 (inéluctable, impossible à refuser) apparaît dans leurs duels.
 //                 Cap 1/mois.
-const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel'] as const;
+//  - 'mini_ops' : version « solo » du force_duel — l'ACHETEUR désigne UNE cible et
+//                 se voit opposé à elle dans un duel inéluctable. Rare (1200 coins),
+//                 limité par un COOLDOWN D'ACHAT (1 / 48 h) plutôt qu'au cap mensuel.
+const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel', 'mini_ops'] as const;
 type ConsumableKind = (typeof CONSUMABLE_KINDS)[number];
 function isConsumableKind(s: string): s is ConsumableKind {
   return (CONSUMABLE_KINDS as readonly string[]).includes(s);
@@ -9271,6 +9291,10 @@ function isEloMultActive(u: { eloMultUntil: Date | null }, now: Date = new Date(
 const ANTI_OPS_MONTHLY_CAP = 2;
 const ELO_MULT_MONTHLY_CAP = 6;
 const FORCE_DUEL_MONTHLY_CAP = 1;
+// mini_ops : la vraie limite est le COOLDOWN D'ACHAT (1 achat / 2 jours), pas le cap
+// mensuel — on garde un cap mensuel non bloquant (≈ 1 tous les 2 jours).
+const MINI_OPS_MONTHLY_CAP = 16;
+const MINI_OPS_DEFAULT_GAME = 'babyfoot';
 // Discipline par défaut du duel forcé si l'instigateur n'en choisit pas (babyfoot,
 // 1v1 phare). L'instigateur peut imposer n'importe quelle discipline à l'usage.
 const FORCE_DUEL_DEFAULT_GAME = 'babyfoot';
@@ -9280,6 +9304,12 @@ const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
   anti_ops: ANTI_OPS_MONTHLY_CAP,
   elo_mult: ELO_MULT_MONTHLY_CAP,
   force_duel: FORCE_DUEL_MONTHLY_CAP,
+  mini_ops: MINI_OPS_MONTHLY_CAP,
+};
+// Cooldown d'ACHAT par type (ms) — borne le rythme d'acquisition indépendamment du
+// cap mensuel. Seul mini_ops en a un (1 achat toutes les 48 h).
+const CONSUMABLE_BUY_COOLDOWN_MS: Partial<Record<ConsumableKind, number>> = {
+  mini_ops: 2 * 24 * 60 * 60 * 1000,
 };
 
 // Objets boutique « consommable » seedés (ids stables, comme la mystery box).
@@ -9315,6 +9345,15 @@ const CONSUMABLE_ITEMS: {
       'Désigne deux joueurs et la discipline de ton choix, et force-les à s’affronter : un défi inéluctable apparaît dans leurs duels, impossible à refuser. 1 par mois.',
     price: 2500,
     rarity: 'epic',
+  },
+  {
+    id: 'consumable-mini-ops',
+    kind: 'mini_ops',
+    name: 'Mini-OPS',
+    description:
+      'Désigne une cible et la discipline de ton choix : un duel inéluctable t’oppose à elle, impossible à refuser. Achat limité à un toutes les 48 h.',
+    price: 1200,
+    rarity: 'rare',
   },
 ];
 
@@ -9481,6 +9520,13 @@ const ForceDuelUseSchema = z.object({
   game: z.string().trim().optional(),
 });
 
+// Corps du POST .../mini_ops/use : la CIBLE de l'acheteur (qui devient son
+// adversaire forcé) et la discipline imposée (optionnelle → babyfoot par défaut).
+const MiniOpsUseSchema = z.object({
+  target: z.string().trim().min(1),
+  game: z.string().trim().optional(),
+});
+
 // GET /me/consumables — stock par type + cap mensuel + état du x2 armé.
 app.get('/me/consumables', async (c) => {
   const login = await getCurrentLogin(c);
@@ -9501,12 +9547,18 @@ app.get('/me/consumables', async (c) => {
     eloMultWeekTaken: !!user?.eloMultWeekKey && user.eloMultWeekKey === isoWeekKey(now),
     items: CONSUMABLE_KINDS.map((kind) => {
       const r = byKind.get(kind);
+      const buyCooldownMs = CONSUMABLE_BUY_COOLDOWN_MS[kind] ?? null;
+      // Date à partir de laquelle un nouvel achat est permis (cooldown d'achat).
+      const buyableAt =
+        buyCooldownMs && r?.lastBoughtAt ? new Date(r.lastBoughtAt.getTime() + buyCooldownMs) : null;
       return {
         kind,
         quantity: r?.quantity ?? 0,
         lastUsedAt: r?.lastUsedAt ? r.lastUsedAt.toISOString() : null,
         monthlyCap: CONSUMABLE_MONTHLY_CAP[kind],
         monthlyUsed: monthByKind.get(kind) ?? 0,
+        buyCooldownMs,
+        buyableAt: buyableAt && buyableAt.getTime() > now.getTime() ? buyableAt.toISOString() : null,
       };
     }),
   });
@@ -9566,6 +9618,55 @@ app.post('/me/consumables/:kind/use', async (c) => {
       type: 'challenge_received',
       title: `La Main du Destin vous oppose`,
       body: `@${login} vous force à un duel : @${player1} vs @${player2} en ${gameLabel}.`,
+      link: `/challenges?game=${encodeURIComponent(game)}`,
+      game,
+      refId: challenge.id,
+    });
+    emit([login], { type: 'panel:update', payload: {} });
+    return c.json({ ok: true, forced: true, challengeId: challenge.id });
+  }
+
+  // ── Mini-OPS : force UN duel entre l'ACHETEUR et la cible désignée, dans la ──
+  // discipline choisie (babyfoot par défaut). Comme la Main du Destin, le défi est
+  // créé déjà accepté → inéluctable (ni refus ni annulation). L'acheteur EST partie
+  // au duel (challenger), contrairement à la Main du Destin.
+  if (kind === 'mini_ops') {
+    const body = await c.req.json().catch(() => null);
+    const parsed = MiniOpsUseSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+    const target = parsed.data.target;
+    if (target === login) throw new HTTPException(400, { message: 'choisis un adversaire autre que toi' });
+    const game = parseGameId(parsed.data.game ?? MINI_OPS_DEFAULT_GAME);
+    const gameLabel = getGameDef(game).label;
+    await assertTargetable(target);
+
+    const challenge = await prisma.$transaction(async (tx) => {
+      const row = await tx.consumableInventory.findUnique({
+        where: { userLogin_kind: { userLogin: login, kind } },
+      });
+      if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucun Mini-OPS en stock' });
+      await tx.consumableInventory.update({
+        where: { userLogin_kind: { userLogin: login, kind } },
+        data: { quantity: { decrement: 1 }, lastUsedAt: now },
+      });
+      return tx.challenge.create({
+        data: {
+          id: randomUUID(),
+          challengerLogin: login,
+          opponentLogin: target,
+          status: 'accepted',
+          game,
+          scheduledAt: now,
+          decidedAt: now,
+        },
+      });
+    });
+
+    emit([login, target], { type: 'challenge:accepted', payload: challenge });
+    void notifyMany([target], {
+      type: 'challenge_received',
+      title: 'Mini-OPS : un duel t’est imposé',
+      body: `@${login} t’impose un duel inéluctable en ${gameLabel}.`,
       link: `/challenges?game=${encodeURIComponent(game)}`,
       game,
       refId: challenge.id,
@@ -9677,7 +9778,7 @@ const ShopItemUpdateSchema = z
     if (d.category === 'consumable') {
       const kind = typeof d.payload.kind === 'string' ? d.payload.kind : '';
       if (!isConsumableKind(kind)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind invalide (anti_ops | elo_mult | force_duel)" });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind invalide (anti_ops | elo_mult | force_duel | mini_ops)" });
       }
     }
   });

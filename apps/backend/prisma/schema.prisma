@@ -816,10 +816,13 @@ model ShopInventory {
 // est empilable : `quantity` exemplaires détenus. `lastUsedAt` sert au cooldown
 // entre deux utilisations (anti-ops : ANTI_OPS_USE_COOLDOWN_MS).
 model ConsumableInventory {
-  userLogin  String    @map("user_login")
-  kind       String // 'anti_ops' | 'elo_mult' | 'force_duel'
-  quantity   Int       @default(0)
-  lastUsedAt DateTime? @map("last_used_at")
+  userLogin   String    @map("user_login")
+  kind        String // 'anti_ops' | 'elo_mult' | 'force_duel' | 'mini_ops'
+  quantity    Int       @default(0)
+  lastUsedAt  DateTime? @map("last_used_at")
+  // Dernier ACHAT de ce consommable — sert au cooldown d'achat (ex. mini_ops : 1
+  // achat / 2 jours). Null tant qu'aucun achat à cooldown n'a eu lieu.
+  lastBoughtAt DateTime? @map("last_bought_at")
 
   user User @relation("userConsumables", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
 

@@ -231,7 +231,7 @@ export interface TeamProfile extends BabyfootTeamEntry {
 export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box' | 'consumable'; // 'badge' conservé pour rétrocompatibilité inventaire
 
 /** Type de consommable (cf. ConsumableInventory backend). */
-export type ConsumableKind = 'anti_ops' | 'elo_mult' | 'force_duel';
+export type ConsumableKind = 'anti_ops' | 'elo_mult' | 'force_duel' | 'mini_ops';
 
 /** État d'un consommable pour le joueur courant (stock + cap mensuel). */
 export interface ConsumableState {
@@ -240,6 +240,10 @@ export interface ConsumableState {
   lastUsedAt: string | null;
   monthlyCap: number;
   monthlyUsed: number;
+  /** Cooldown d'achat en ms (mini_ops) — null si l'objet n'en a pas. */
+  buyCooldownMs?: number | null;
+  /** Date (ISO) à partir de laquelle un nouvel achat est permis — null si achetable. */
+  buyableAt?: string | null;
 }
 
 export interface ConsumablesResponse {
@@ -1888,7 +1892,11 @@ export const api = {
     }),
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
-  useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string; game?: Game }) =>
+  useConsumable: (
+    kind: ConsumableKind,
+    // force_duel : { player1, player2 } · mini_ops : { target } · autres : aucun.
+    body?: { player1: string; player2: string; game?: Game } | { target: string; game?: Game },
+  ) =>
     request<{ ok: true; until?: string; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
       `/me/consumables/${encodeURIComponent(kind)}/use`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },
