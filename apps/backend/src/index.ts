@@ -4914,6 +4914,37 @@ async function assertRegisterablePartner(tx: TxOrPrisma, login: string): Promise
   }
 }
 
+// Ordonnance « méthode du cercle » : produit toutes les paires du round-robin
+// RANGÉES PAR JOURNÉE. À chaque journée, tout le monde joue une fois (un joueur se
+// repose si l'effectif est impair). Conséquence : les affiches sont ENTRELACÉES —
+// on ne voit plus les 5 matchs d'un même joueur à la suite, chacun joue à son tour,
+// et le « prochain match » tombe naturellement sur ceux qui n'ont pas joué depuis
+// le plus longtemps. Le sens domicile/extérieur (A/B) alterne d'une journée à
+// l'autre pour l'équité. Renvoie les paires dans l'ordre de programmation.
+function leagueRoundRobinPairs(logins: string[]): Array<[string, string]> {
+  if (logins.length < 2) return [];
+  const arr = [...logins];
+  const bye = arr.length % 2 === 1;
+  if (bye) arr.push('__BYE__');
+  const n = arr.length;
+  const half = n / 2;
+  const out: Array<[string, string]> = [];
+  for (let r = 0; r < n - 1; r++) {
+    for (let i = 0; i < half; i++) {
+      const a = arr[i]!;
+      const b = arr[n - 1 - i]!;
+      if (a === '__BYE__' || b === '__BYE__') continue;
+      out.push(r % 2 === 0 ? [a, b] : [b, a]);
+    }
+    // Rotation : on fige arr[0], le reste tourne d'un cran (dernier → 2e position).
+    const fixed = arr[0]!;
+    const rest = arr.slice(1);
+    rest.unshift(rest.pop()!);
+    arr.splice(0, arr.length, fixed, ...rest);
+  }
+  return out;
+}
+
 // Crée toutes les affiches ALLER manquantes d'un round-robin de ligue (chaque paire
 // d'équipes s'affronte une fois). Idempotent : ne recrée jamais une paire déjà
 // composée (peu importe le sens A/B ou la manche). En 2v2, `logins` = capitaines
@@ -4950,22 +4981,19 @@ async function ensureLeagueRoundRobin(
     playerALogin: string;
     playerBLogin: string;
   }> = [];
-  for (let i = 0; i < logins.length; i++) {
-    for (let j = i + 1; j < logins.length; j++) {
-      const a = logins[i]!;
-      const b = logins[j]!;
-      if (seen.has(pairKey(a, b))) continue;
-      data.push({
-        id: randomUUID(),
-        tournamentId,
-        stage: 'league',
-        poolIndex: 0,
-        round: 0,
-        slot: slot++,
-        playerALogin: a,
-        playerBLogin: b,
-      });
-    }
+  // Paires rangées par journée (entrelacées) plutôt que joueur par joueur.
+  for (const [a, b] of leagueRoundRobinPairs(logins)) {
+    if (seen.has(pairKey(a, b))) continue;
+    data.push({
+      id: randomUUID(),
+      tournamentId,
+      stage: 'league',
+      poolIndex: 0,
+      round: 0,
+      slot: slot++,
+      playerALogin: a,
+      playerBLogin: b,
+    });
   }
   if (data.length) await tx.tournamentMatch.createMany({ data });
   return data.length;
@@ -8929,6 +8957,22 @@ app.get('/shop', async (c) => {
 // déséquiper avant, ni de lui substituer un autre objet de sa catégorie).
 const SHELDON_REWARD = 300;
 const SHELDON_LOCK_MS = 7 * 24 * 60 * 60 * 1000;
+// Seuil d'Elo pour ouvrir l'accès à la Boîte Mystère : il faut au moins 1010 sur
+// SA MEILLEURE discipline (le pari coûte de l'Elo en cas de perte — on réserve donc
+// la box à ceux qui ont un coussin). Volontairement ABSENT de la description du
+// produit : le refus ci-dessous est le seul endroit où ce seuil est révélé.
+const MYSTERY_BOX_MIN_BEST_ELO = 1010;
+/** Meilleur Elo du joueur toutes disciplines confondues. */
+function bestEloOf(u: {
+  elo: number;
+  eloBabyfoot2v2: number;
+  eloSmash: number;
+  eloChess: number;
+  eloSf: number;
+  eloFlechettes: number;
+}): number {
+  return Math.max(u.elo, u.eloBabyfoot2v2, u.eloSmash, u.eloChess, u.eloSf, u.eloFlechettes);
+}
 function isSheldonApostle(item: { name: string }): boolean {
   return item.name
     .normalize('NFD')
@@ -9037,6 +9081,17 @@ app.post('/shop/:id/buy', async (c) => {
     // sans perte d'ELO. 9 fois sur 10 → on perd 10 ELO et rien d'autre. Si on
     // possède déjà le titre, c'est forcément une perte (impossible de le re-gagner).
     if (isMysteryBox) {
+      // Gate d'Elo : il faut ≥ 1010 sur sa meilleure discipline. Le message est le
+      // SEUL endroit où ce seuil apparaît (absent de la description du produit).
+      const elos = await tx.user.findUnique({
+        where: { login },
+        select: { elo: true, eloBabyfoot2v2: true, eloSmash: true, eloChess: true, eloSf: true, eloFlechettes: true },
+      });
+      if (elos && bestEloOf(elos) < MYSTERY_BOX_MIN_BEST_ELO) {
+        throw new HTTPException(403, {
+          message: `Elo trop bas pour acheter la Boîte Mystère : il faut au moins ${MYSTERY_BOX_MIN_BEST_ELO} d'Elo sur ta meilleure discipline.`,
+        });
+      }
       const ownsTitle = await tx.shopInventory.findUnique({
         where: { userLogin_itemId: { userLogin: login, itemId: 'title-mysterious' } },
       });
