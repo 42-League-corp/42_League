@@ -53,6 +53,7 @@ jobs:
           output: trivy-backend.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          skip-dirs: '**/node_modules/esbuild,**/node_modules/@esbuild,**/node_modules/vite,**/node_modules/vite-node,**/node_modules/vitest,**/node_modules/@vitest,**/node_modules/rollup,**/node_modules/@rollup,**/node_modules/@crxjs'
           exit-code: '0'
         continue-on-error: true
 
@@ -110,6 +111,7 @@ jobs:
           output: trivy-frontend.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          skip-dirs: '**/node_modules/esbuild,**/node_modules/@esbuild,**/node_modules/vite,**/node_modules/vite-node,**/node_modules/vitest,**/node_modules/@vitest,**/node_modules/rollup,**/node_modules/@rollup,**/node_modules/@crxjs'
           exit-code: '0'
         continue-on-error: true
 
