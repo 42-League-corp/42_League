@@ -5212,7 +5212,8 @@ app.get('/tournaments', async (c) => {
     where: { game },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     include: {
-      entries: { select: { login: true, partnerLogin: true } },
+      // teamName : permet d'afficher le DUO vainqueur (nom d'équipe) sur la carte 2v2.
+      entries: { select: { login: true, partnerLogin: true, teamName: true } },
       winner: { select: { login: true, imageUrl: true } },
     },
   });

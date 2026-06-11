@@ -14,6 +14,7 @@ import CoinFlip from '../components/tournois/CoinFlip';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import { VersusOverlay, type VersusFighter } from '../components/tournois/VersusOverlay';
 import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
+import { winnerTeam } from '../lib/tournamentTeam';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
 import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
@@ -861,17 +862,27 @@ export function TournoiDetailPage() {
           </div>
 
           <aside className="order-1 xl:order-2 flex flex-col gap-3 xl:sticky xl:top-2">
-            {tournament.winner && tournament.status === 'finished' && (
-              <div className="border border-gold/40 bg-gold/5 rounded-xl p-5 text-center">
-                <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
-                  {t('tournois.detail.winner')}
+            {tournament.winner && tournament.status === 'finished' && (() => {
+              const wt = winnerTeam(tournament);
+              if (!wt) return null;
+              return (
+                <div className="border border-gold/40 bg-gold/5 rounded-xl p-5 text-center">
+                  <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
+                    {t('tournois.detail.winner')}{wt.is2v2 ? ' · Duo' : ''}
+                  </div>
+                  <div className="inline-flex flex-col items-center gap-2 text-base">
+                    <div className="flex -space-x-3">
+                      {wt.members.map((m) => (
+                        <PlayerLink key={m.login} login={m.login}>
+                          <Avatar login={m.login} imageUrl={m.imageUrl} size="lg" />
+                        </PlayerLink>
+                      ))}
+                    </div>
+                    <span className="font-extrabold text-text-strong">{wt.label}</span>
+                  </div>
                 </div>
-                <PlayerLink login={tournament.winner.login} className="inline-flex flex-col gap-2 text-base">
-                  <Avatar login={tournament.winner.login} imageUrl={tournament.winner.imageUrl ?? null} size="lg" />
-                  <span className="font-extrabold text-text-strong">{tournament.winner.login}</span>
-                </PlayerLink>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Onglets (tournoi en cours) : suivre le bracket/la ligue, ou parier
                 sur l'issue des matchs à venir. Visible par tout le monde. */}
