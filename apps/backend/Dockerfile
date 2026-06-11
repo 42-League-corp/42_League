@@ -26,6 +26,10 @@ LABEL commit="${GIT_COMMIT}" build_date="${BUILD_DATE}" service="backend"
 # Durcissement : on met à jour les paquets Alpine (CVE OS : openssl, libxml2, …)
 # puis on installe ce qu'il faut à l'exécution (OpenSSL requis par Prisma).
 RUN apk upgrade --no-cache && apk add --no-cache openssl libc6-compat
+# Met à jour le npm bundlé dans l'image (npx est utilisé au runtime) : corrige les
+# CVE de SES dépendances embarquées (tar, minimatch, glob, cross-spawn, brace-expansion,
+# ip-address, diff) signalées par Trivy sous /usr/local/lib/node_modules/npm.
+RUN npm install -g npm@latest && npm cache clean --force
 
 WORKDIR /app
 
