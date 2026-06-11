@@ -1,7 +1,7 @@
 {
   "name": "One League",
   "short_name": "One League",
-  "description": "Babyfoot ranked pour les étudiants 42 — ELO, défis, tournois.",
+  "description": "Créez des tournois et classements Elo sur votre campus 42. Babyfoot, jeux vidéo, jeux de société...",
   "id": "/",
   "start_url": "/",
   "scope": "/",

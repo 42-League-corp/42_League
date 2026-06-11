@@ -11,12 +11,32 @@
          (overscroll, safe-area, bande de la barre d'URL mobile) sont peintes en
          sombre dès le 1er paint au lieu de blanc en mode clair OS. -->
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="One League — Babyfoot ranked pour les étudiants 42" />
+    <meta name="description" content="Créez des tournois et classements Elo sur votre campus 42. Babyfoot, jeux vidéo, jeux de société... Dynamisez votre communauté 42 en quelques clics !" />
+    <meta name="keywords" content="42 school, campus 42, tournois, leaderboard, elo, babyfoot, classement, jeux, étudiants, gamification" />
+    <link rel="canonical" href="https://oneleague.fr/" />
+
+    <!-- Open Graph (partage réseaux sociaux + aperçu Google) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://oneleague.fr/" />
+    <meta property="og:site_name" content="One League" />
+    <meta property="og:title" content="One League | Gamifiez votre Campus : Leaderboard, Elo et Tournois" />
+    <meta property="og:description" content="Créez des tournois et classements Elo sur votre campus 42. Babyfoot, jeux vidéo, jeux de société... Dynamisez votre communauté 42 en quelques clics !" />
+    <meta property="og:image" content="https://oneleague.fr/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="One League — logo" />
+    <meta property="og:locale" content="fr_FR" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="One League | Gamifiez votre Campus : Leaderboard, Elo et Tournois" />
+    <meta name="twitter:description" content="Créez des tournois et classements Elo sur votre campus 42. Babyfoot, jeux vidéo, jeux de société... Dynamisez votre communauté 42 en quelques clics !" />
+    <meta name="twitter:image" content="https://oneleague.fr/icon-512.png" />
 
     <!-- PWA: iOS standalone -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="One League" />
+    <meta name="apple-mobile-web-app-title" content="42 League" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no" />
 
@@ -27,15 +47,17 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Préchargement de l'icône du SplashScreen (élément LCP) : la requête part
-         dès le parsing HTML au lieu d'attendre le bootstrap JS. -->
+    <!-- Préchargement du logo desktop (élément LCP) : la requête part dès le
+         parsing HTML sans attendre le bootstrap JS ni le CSS. -->
+    <link rel="preload" as="image" href="/logo-wordmark.webp" type="image/webp" />
+    <!-- Préchargement de l'icône du SplashScreen (LCP mobile) -->
     <link rel="preload" as="image" href="/apple-touch-icon.png" />
 
     <!-- Préchargement des logos d'univers (évite le flash gris↔couleur du GameModeSwitch) -->
-    <link rel="preload" as="image" href="/smash-color.png" />
-    <link rel="preload" as="image" href="/smash-grey.png" />
-    <link rel="preload" as="image" href="/sf-color.png" />
-    <link rel="preload" as="image" href="/sf-grey.png" />
+    <link rel="preload" as="image" href="/smash-color.webp" type="image/webp" />
+    <link rel="preload" as="image" href="/smash-grey.webp" type="image/webp" />
+    <link rel="preload" as="image" href="/sf-color.webp" type="image/webp" />
+    <link rel="preload" as="image" href="/sf-grey.webp" type="image/webp" />
 
     <!-- Fonts : preconnect + chargement non bloquant (évite le render-blocking).
          La feuille est chargée en media="print" puis basculée en "all" au load ;
@@ -60,7 +82,24 @@
       />
     </noscript>
 
-    <title>One League</title>
+    <title>One League | Gamifiez votre Campus : Leaderboard, Elo et Tournois</title>
+
+    <!-- Structured data JSON-LD (Google rich results) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "One League",
+      "alternateName": "42 League",
+      "url": "https://oneleague.fr",
+      "description": "Créez des tournois et classements Elo sur votre campus 42. Babyfoot, jeux vidéo, jeux de société... Dynamisez votre communauté 42 en quelques clics !",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "fr",
+      "audience": { "@type": "EducationalAudience", "educationalRole": "student" },
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+    }
+    </script>
   </head>
   <body class="bg-bg-0 text-text antialiased font-sans">
     <div id="root"></div>
