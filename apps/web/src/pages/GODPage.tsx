@@ -46,10 +46,15 @@ import { useGameMode } from '../hooks/useGameMode';
 import { useLeagueData } from '../hooks/useLeagueData';
 import { GAMES, GAME_META } from '../lib/gameMeta';
 import { fireContestRage } from '../lib/contestRage';
+import { triggerDuelStrike } from '../lib/duelStrike';
 import { VersusOverlay as GlobalVersusOverlay } from '../components/VersusOverlay';
 import { VersusOverlay as TournVersusOverlay } from '../components/tournois/VersusOverlay';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
+import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
+import { PlayerReactionOverlay } from '../components/PlayerReactionOverlay';
+import { MysteryRevealModal } from '../components/shop/MysteryRevealModal';
+import type { MysteryReward } from '../lib/api';
 
 type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements' | 'items';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
@@ -3933,8 +3938,12 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
   }
   const accent = GAME_META[game].color;
 
-  type Anim = null | 'versus' | 'tversus' | 'ceremony';
+  type Anim = null | 'versus' | 'tversus' | 'ceremony' | 'victory';
   const [anim, setAnim] = useState<Anim>(null);
+  // Réaction (meme) : la série croît à chaque clic → signature inédite, donc rejoue.
+  const [reactionStreak, setReactionStreak] = useState(0);
+  // Boîte mystère : 'win' = titre arc-en-ciel, 'loss' = malus −10 ELO.
+  const [mystery, setMystery] = useState<'win' | 'loss' | null>(null);
   const [coinOpen, setCoinOpen] = useState(false);
   const [coin, setCoin] = useState<{ flipping: boolean; side: 'heads' | 'tails' | null }>({ flipping: false, side: null });
 
@@ -3959,8 +3968,18 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
     { key: 'coin', label: 'Pile ou face', desc: 'Pièce lancée en l\'air + révélation de la PP du gagnant.', onClick: playCoin },
     { key: 'ceremony', label: 'Cérémonie de lancement', desc: 'Cérémonie de tournoi (titre, tirage, parade).', onClick: () => setAnim('ceremony') },
     { key: 'rage', label: 'Contestation (rage)', desc: 'Flash rouge + onde de choc + emojis de rage.', onClick: () => fireContestRage('sender') },
+    { key: 'duel', label: 'Éclair de duel', desc: 'Foudre diagonale + VS au lancement/à l\'acceptation d\'un duel.', onClick: () => triggerDuelStrike({ meLogin, opponentLogin: opp.login, game, kind: 'challenge' }) },
+    { key: 'victory', label: 'Champion (victoire)', desc: 'Confettis + portrait du vainqueur (duo affiché en 2v2).', onClick: () => setAnim('victory') },
+    { key: 'reaction', label: 'Réaction (meme)', desc: 'Pop-up moqueur/élogieux selon la série (ici série chaude).', onClick: () => setReactionStreak((s) => (s >= 6 ? s + 1 : 6)) },
+    { key: 'mystery-win', label: 'Boîte mystère (gain)', desc: 'Révélation animée du titre arc-en-ciel « Mysterious ».', onClick: () => setMystery('win') },
+    { key: 'mystery-loss', label: 'Boîte mystère (perte)', desc: 'La boîte n\'offre rien : malus de −10 ELO (9 chances sur 10).', onClick: () => setMystery('loss') },
     { key: 'transition', label: 'Transition de mode ⚠️', desc: 'Joue la cinématique en passant au mode suivant (change ton mode).', onClick: cycleGame },
   ];
+
+  // Lot d'exemple pour la boîte mystère gagnante : le titre arc-en-ciel « Mysterious ».
+  const MYSTERY_SAMPLE: MysteryReward = {
+    id: 'title-mysterious', name: 'Mysterious', category: 'title', color: 'rainbow', rarity: 'legendary',
+  };
 
   return (
     <div className="p-4 space-y-4">
@@ -4002,6 +4021,24 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
           accent={accent}
           onDone={() => setAnim(null)}
           t={t}
+        />
+      )}
+      <VictoryOverlay
+        open={anim === 'victory'}
+        champion={meP}
+        partner={opp}
+        tournamentName="Tournoi de démonstration"
+        accent={accent}
+        onDone={() => setAnim(null)}
+        t={t}
+      />
+      {reactionStreak > 0 && (
+        <PlayerReactionOverlay signals={{ currentStreak: reactionStreak, winRate: 88, total: 30 }} />
+      )}
+      {mystery && (
+        <MysteryRevealModal
+          reward={mystery === 'win' ? MYSTERY_SAMPLE : null}
+          onClose={() => setMystery(null)}
         />
       )}
     </div>

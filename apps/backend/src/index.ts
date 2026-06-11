@@ -2237,9 +2237,10 @@ app.post('/seasons/:id/activate', async (c) => {
 //  - SUPERADMIN only ;
 //  - connexion à la prod en LECTURE SEULE via PROD_READONLY_URL (rôle Postgres
 //    SELECT-only) → aucune écriture vers la prod n'est mécaniquement possible.
-// Ne copie QUE l'ELO et les compteurs (matchesPlayed*, dodgeCount,
-// tournamentsWon*) par discipline. Jamais les rôles, permissions, leagueCoins,
-// flags staging, ni l'historique des matchs/saisons.
+// Copie l'ELO, les compteurs (matchesPlayed*, dodgeCount, tournamentsWon*) par
+// discipline ET le solde League Coins, puis bascule la saison active de staging sur
+// celle de la prod. Jamais les rôles, permissions, flags staging, ni l'historique
+// des matchs.
 // Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
 // Comptes présents en prod mais absents de staging → créés avec une identité
 // minimale (rôle USER) pour que le classement staging reflète la prod.
@@ -2268,6 +2269,9 @@ const PROD_ELO_SELECT = {
   eloSf: true,
   matchesPlayedSf: true,
   tournamentsWonSf: true,
+  // Solde League Coins : synchronisé aussi (cf. /admin/seasons/sync-elo-from-prod)
+  // pour tester l'économie sur des données réalistes.
+  leagueCoins: true,
 } satisfies Prisma.UserSelect;
 
 app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
@@ -2291,6 +2295,7 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
   let created = 0;
   let prodCount = 0;
   const skipped: string[] = [];
+  let seasonSwitched: string | null = null;
   try {
     const prodUsers = await prod.user.findMany({
       where: VISIBLE_USER_WHERE,
@@ -2301,7 +2306,7 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     // peuplée, c'est que PROD_READONLY_URL pointe vers la mauvaise base/schéma.
     console.log(`[sync-elo-from-prod] ${prodCount} utilisateurs lus depuis la prod`);
     for (const u of prodUsers) {
-      // Uniquement l'ELO + les compteurs — jamais rôle/permissions/coins.
+      // ELO + compteurs + solde League Coins — jamais rôle/permissions.
       const stats = {
         elo: u.elo,
         matchesPlayed: u.matchesPlayed,
@@ -2316,6 +2321,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         eloSf: u.eloSf,
         matchesPlayedSf: u.matchesPlayedSf,
         tournamentsWonSf: u.tournamentsWonSf,
+        // League Coins : recopiés depuis la prod (la prod est la source de vérité).
+        leagueCoins: u.leagueCoins,
         // Fléchettes : absentes de la prod (schéma en retard) → non copiées, le
         // staging garde son défaut (Elo 1000) pour cette discipline.
       };
@@ -2325,7 +2332,7 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
           select: { login: true },
         });
         if (existing) {
-          // MAJ : on ne touche QUE les stats. Identité/rôle/coins préservés.
+          // MAJ : stats + coins recopiés. Identité/rôle préservés.
           await prisma.user.update({ where: { login: u.login }, data: stats });
           updated++;
         } else {
@@ -2353,6 +2360,31 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         skipped.push(u.login);
       }
     }
+
+    // ── Bascule de saison : staging passe sur la MÊME saison active que la prod ──
+    // (ex. la prod est sur « Saison 1 » mais staging encore sur la Beta). On bascule
+    // par NOM : on réutilise une saison staging du même nom si elle existe, sinon on
+    // la crée. Les coins ne sont jamais reset (cohérent avec le rollover de saison).
+    const prodSeason = await prod.season.findFirst({
+      where: { isActive: true },
+      select: { name: true },
+    });
+    if (prodSeason) {
+      const stagingActive = await prisma.season.findFirst({ where: { isActive: true } });
+      if (!stagingActive || stagingActive.name !== prodSeason.name) {
+        await prisma.$transaction(async (tx) => {
+          await tx.season.updateMany({ where: { isActive: true }, data: { isActive: false } });
+          const existing = await tx.season.findFirst({ where: { name: prodSeason.name } });
+          if (existing) {
+            await tx.season.update({ where: { id: existing.id }, data: { isActive: true, endedAt: null } });
+          } else {
+            await tx.season.create({ data: { id: randomUUID(), name: prodSeason.name, isActive: true } });
+          }
+        });
+        seasonSwitched = prodSeason.name;
+        console.log(`[sync-elo-from-prod] saison staging basculée sur « ${prodSeason.name} »`);
+      }
+    }
   } finally {
     await prod.$disconnect();
   }
@@ -2362,11 +2394,11 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     actorRole: await getUserRole(me),
     action: 'SYNC_ELO_FROM_PROD',
     target: 'prod',
-    payload: { prodCount, updated, created, skipped: skipped.length },
+    payload: { prodCount, updated, created, skipped: skipped.length, seasonSwitched },
   });
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
-  return c.json({ prodCount, updated, created, skipped });
+  return c.json({ prodCount, updated, created, skipped, seasonSwitched });
 });
 
 // Supprime une saison : retire le classement figé, les badges champion liés, et
