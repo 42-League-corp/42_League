@@ -231,7 +231,7 @@ export interface TeamProfile extends BabyfootTeamEntry {
 export type ShopCategory = 'title' | 'banner' | 'badge' | 'mystery_box' | 'consumable'; // 'badge' conservé pour rétrocompatibilité inventaire
 
 /** Type de consommable (cf. ConsumableInventory backend). */
-export type ConsumableKind = 'anti_ops' | 'elo_mult' | 'force_duel';
+export type ConsumableKind = 'anti_ops' | 'elo_mult' | 'force_duel' | 'mini_ops';
 
 /** État d'un consommable pour le joueur courant (stock + cap mensuel). */
 export interface ConsumableState {
@@ -240,6 +240,10 @@ export interface ConsumableState {
   lastUsedAt: string | null;
   monthlyCap: number;
   monthlyUsed: number;
+  /** Cooldown d'achat en ms (mini_ops) — null si l'objet n'en a pas. */
+  buyCooldownMs?: number | null;
+  /** Date (ISO) à partir de laquelle un nouvel achat est permis — null si achetable. */
+  buyableAt?: string | null;
 }
 
 export interface ConsumablesResponse {
@@ -276,6 +280,7 @@ export type CoinTxType =
   | 'shop_consumable'
   | 'mystery_box'
   | 'sheldon_reward'
+  | 'trophy_income'
   | 'admin_grant';
 
 /** Lot tiré dans une Boîte Mystère (objet gagné) — null si rien de nouveau. */
@@ -452,6 +457,10 @@ export interface MeResponse {
   role?: 'USER' | 'ADMIN' | 'SUPERADMIN';
   /** Solde de League Coins de l'utilisateur (défaut 0). */
   coins?: number;
+  /** Réputation litiges : nb de litiges perdus (marque visible sur le profil). */
+  disputesLost?: number;
+  /** Fin du cooldown de sanction de litige (ISO) — déclaration & paris bloqués tant qu'elle est future. Null si aucune. */
+  penaltyCooldownUntil?: string | null;
   /** Série d'assiduité ranked : série courante, record, bonus ELO, prochain palier. */
   streak?: StreakView;
   /** True si l'utilisateur n'a pas (encore) consenti à la version courante de la politique. */
@@ -508,6 +517,8 @@ export interface MeResponse {
     onboardedAt?: string | null;
     /** Fin de la fenêtre de boost « EN FEU » (ELO ×2) — null/passé = pas en feu. */
     eloMultUntil?: string | null;
+    /** Réputation litiges : nb de litiges perdus (marque publique sur le profil). */
+    disputesLost?: number;
   } | null;
 }
 
@@ -580,7 +591,18 @@ export interface RejectedMatch {
   contestReason: string;
   contestMessage: string;
   rejectedAt: string;
+  /** Discipline du match contesté. */
+  game?: string;
+  /** Arbitrage : 'open' | 'resolved' | 'dismissed' (historique). */
+  status?: string;
+  /** Verdict : 'declarer_wrong' | 'contester_wrong' | 'dismissed'. */
+  resolution?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 }
+
+/** Verdict d'arbitrage d'un litige. */
+export type DisputeVerdict = 'declarer_wrong' | 'contester_wrong' | 'dismiss';
 
 export interface ModerationStats {
   user: AdminUser;
@@ -1214,13 +1236,19 @@ export const api = {
     request<Season>(`/seasons/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   deleteSeason: (id: string) =>
     request<{ deleted: true }>(`/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  // Synchro ELO/stats prod → staging (staging only, superadmin). Renvoie les
-  // compteurs de comptes mis à jour / créés / sautés.
+  // Synchro ELO/stats prod → staging (staging only, superadmin). Copie aussi les
+  // tournois en cours/passés (inscrits + matchs). Renvoie les compteurs de comptes
+  // mis à jour / créés / sautés + tournois synchronisés.
   syncEloFromProd: () =>
-    request<{ prodCount: number; updated: number; created: number; skipped: string[] }>(
-      '/admin/seasons/sync-elo-from-prod',
-      { method: 'POST' },
-    ),
+    request<{
+      prodCount: number;
+      updated: number;
+      created: number;
+      skipped: string[];
+      tournamentsSynced: number;
+      tournamentsSkipped: string[];
+      seasonSwitched: string | null;
+    }>('/admin/seasons/sync-elo-from-prod', { method: 'POST' }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: { opponentLogin: string } & MatchResultInput) =>
@@ -1737,6 +1765,15 @@ export const api = {
       body: JSON.stringify({}),
     }),
   adminRejectedMatches: () => request<RejectedMatch[]>('/admin/rejected-matches'),
+  /** File d'arbitrage des litiges (status: 'open' par défaut, 'all' pour l'historique). */
+  adminDisputes: (status: 'open' | 'all' = 'open') =>
+    request<RejectedMatch[]>(`/admin/disputes?status=${status}`),
+  /** Tranche un litige : applique le malus au fautif (sauf 'dismiss'). */
+  adminResolveDispute: (id: string, verdict: DisputeVerdict) =>
+    request<{ id: string; status: 'resolved'; verdict: DisputeVerdict; culprit: string | null; malus: { tier: number; elo: number; coins: number; cooldownUntil: string } | null }>(
+      `/admin/disputes/${encodeURIComponent(id)}/resolve`,
+      { method: 'POST', body: JSON.stringify({ verdict }) },
+    ),
   adminSuspicious: () => request<SuspiciousFlag[]>('/admin/suspicious'),
   adminAuditLog: (filters?: { actor?: string; target?: string; action?: AdminAuditAction; limit?: number }) => {
     const params = new URLSearchParams();
@@ -1888,7 +1925,11 @@ export const api = {
     }),
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
-  useConsumable: (kind: ConsumableKind, body?: { player1: string; player2: string; game?: Game }) =>
+  useConsumable: (
+    kind: ConsumableKind,
+    // force_duel : { player1, player2 } · mini_ops : { target } · autres : aucun.
+    body?: { player1: string; player2: string; game?: Game } | { target: string; game?: Game },
+  ) =>
     request<{ ok: true; until?: string; cancelled?: boolean; forced?: boolean; challengeId?: string }>(
       `/me/consumables/${encodeURIComponent(kind)}/use`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },

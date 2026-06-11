@@ -14,7 +14,7 @@ import CoinFlip from '../components/tournois/CoinFlip';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import { VersusOverlay, type VersusFighter } from '../components/tournois/VersusOverlay';
 import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
-import { winnerTeam } from '../lib/tournamentTeam';
+import { winnerTeam, teamForCaptain } from '../lib/tournamentTeam';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
 import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
@@ -24,7 +24,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
 import { computeStandings, type Standing } from '../lib/tournamentStandings';
-import { tournamentEloReward, tournamentEloMax } from '@42-league/shared';
+import { TOURNAMENT_ELO_PLACEMENTS, tournamentPlacements, tournamentEloForPlacement } from '@42-league/shared';
 
 // Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
 const GAME_ACCENT: Record<Game, string> = {
@@ -492,7 +492,7 @@ export function TournoiDetailPage() {
             <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
               {tournament.prizeKind === 'coins' ? (
                 <>
-                  <img src="/42coin.png" alt="" className="w-4 h-4" />
+                  <img src="/42coin.webp" alt="" className="w-4 h-4" />
                   {t('tournois.detail.prize.coins').replace('{n}', String(tournament.prizeCoins ?? 0))}
                 </>
               ) : tournament.prizeItem ? (
@@ -519,7 +519,7 @@ export function TournoiDetailPage() {
               {t('tournois.detail.cashPrize')}
             </div>
             <div className="text-sm font-bold text-text-strong flex items-center gap-1.5 flex-wrap">
-              <img src="/42coin.png" alt="" className="w-4 h-4" />
+              <img src="/42coin.webp" alt="" className="w-4 h-4" />
               {tournament.cashPrizeBase.toLocaleString()}
               <span className="text-[11px] text-muted-2 font-medium">{t('tournois.detail.cashPrize.note')}</span>
             </div>
@@ -865,6 +865,23 @@ export function TournoiDetailPage() {
             {tournament.winner && tournament.status === 'finished' && (() => {
               const wt = winnerTeam(tournament);
               if (!wt) return null;
+              // Podium complet dérivé du bracket (3e = battu par le champion en demi).
+              // Affiché aussi pour les tournois PASSÉS — même barème : +100/+75/+50/+25.
+              const bracket = (tournament.matches ?? []).filter(
+                (m) => (m.stage ?? 'bracket') === 'bracket',
+              );
+              const placements = tournamentPlacements(
+                bracket.map((m) => ({
+                  round: m.round,
+                  playerALogin: m.playerALogin ?? null,
+                  playerBLogin: m.playerBLogin ?? null,
+                  winnerLogin: m.winnerLogin ?? null,
+                })),
+              );
+              const PLACE_LABEL = ['🥇 1er', '🥈 2e', '🥉 3e', '4e'];
+              const runners = placements
+                .map((login, i) => ({ login, rank: i + 1 }))
+                .filter((p): p is { login: string; rank: number } => !!p.login && p.rank > 1);
               return (
                 <div className="border border-gold/40 bg-gold/5 rounded-xl p-5 text-center">
                   <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
@@ -879,7 +896,28 @@ export function TournoiDetailPage() {
                       ))}
                     </div>
                     <span className="font-extrabold text-text-strong">{wt.label}</span>
+                    <span className="text-[11px] font-bold text-gold">+{TOURNAMENT_ELO_PLACEMENTS[0]} Elo</span>
                   </div>
+                  {runners.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gold/15 space-y-1.5 text-left">
+                      {runners.map(({ login, rank }) => {
+                        const team = teamForCaptain(tournament, login);
+                        const elo = tournamentEloForPlacement(rank);
+                        return (
+                          <div key={login} className="flex items-center gap-2 text-xs">
+                            <span className="w-12 shrink-0 text-muted-2 font-bold">{PLACE_LABEL[rank - 1]}</span>
+                            <span className="flex -space-x-1.5 shrink-0">
+                              {team.members.map((m) => (
+                                <Avatar key={m.login} login={m.login} imageUrl={m.imageUrl} size="xs" />
+                              ))}
+                            </span>
+                            <span className="flex-1 min-w-0 truncate text-text-strong font-semibold">{team.label}</span>
+                            {elo > 0 && <span className="shrink-0 text-teal font-bold">+{elo}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1078,6 +1116,24 @@ function PoolsAndBracket({
   };
   const showAnnounce = canManage && !isChess && hasBracket && !!announceTarget;
 
+  // Maps pp + binôme (depuis les inscrits) pour les bandeaux/affiches.
+  const { entryAvatars, entryPartners } = useMemo(() => {
+    const av: Record<string, string | null> = {};
+    const pa: Record<string, string | null> = {};
+    for (const e of tournament.entries ?? []) {
+      av[e.login] = e.user?.imageUrl ?? null;
+      pa[e.login] = e.partnerLogin ?? null;
+      if (e.partnerLogin) av[e.partnerLogin] = e.partner?.imageUrl ?? null;
+    }
+    return { entryAvatars: av, entryPartners: pa };
+  }, [tournament.entries]);
+  // Affiche mise en avant : le match ANNONCÉ en cours (activeMatchId, non confirmé)
+  // sinon le prochain match prêt. Visible de TOUS (parieurs compris).
+  const activeMatch = bracketMatchesFlat.find(
+    (m) => m.id === tournament.activeMatchId && !m.confirmedAt,
+  );
+  const bannerMatch = activeMatch ?? announceTarget;
+
   // Officiant : échange de deux joueurs du bracket par drag-and-drop. Le backend
   // valide (matchs non confirmés), reset l'état des matchs touchés et rembourse les
   // paris ouverts ; on recharge ensuite l'arbre.
@@ -1162,6 +1218,17 @@ function PoolsAndBracket({
             )}
           </div>
 
+          {/* Bandeau « Prochain match / en cours » — visible de tous (parieurs + orga). */}
+          {!isChess && bannerMatch && (
+            <NextMatchBanner
+              match={bannerMatch}
+              partners={entryPartners}
+              avatars={entryAvatars}
+              live={!!activeMatch}
+              label={activeMatch ? t('tournois.bracket.nowPlaying') : t('tournois.bracket.upNext')}
+            />
+          )}
+
           {/* Officiant : indice drag-and-drop pour échanger deux joueurs. */}
           {canOfficiate && (
             <p className="text-[11px] text-muted-2 mb-2 flex items-center gap-1.5">
@@ -1215,6 +1282,64 @@ function PoolsAndBracket({
 // Libellé d'une équipe de ligue : « capitaine » (1v1) ou « capitaine + coéquipier » (2v2).
 function leagueTeamLabel(team: LeagueTeam): string {
   return team.members.length > 1 ? `${team.captain} + ${team.members[1]}` : team.captain;
+}
+
+// Un côté d'affiche : pp (capitaine + binôme en 2v2) + libellé, lisible d'un coup.
+function MatchSide({
+  login,
+  partners,
+  avatars,
+  right = false,
+}: {
+  login: string | null;
+  partners: Record<string, string | null>;
+  avatars: Record<string, string | null>;
+  right?: boolean;
+}) {
+  if (!login) return <span className="text-muted-2">?</span>;
+  const partner = partners[login] ?? null;
+  return (
+    <div className={`flex items-center gap-2 min-w-0 ${right ? 'flex-row-reverse text-right' : ''}`}>
+      <div className="flex -space-x-2 shrink-0">
+        <Avatar login={login} imageUrl={avatars[login] ?? null} size="sm" />
+        {partner && <Avatar login={partner} imageUrl={avatars[partner] ?? null} size="sm" />}
+      </div>
+      <span className="font-extrabold text-text-strong text-sm truncate">
+        @{login}
+        {partner && <span className="text-muted-2"> &amp; @{partner}</span>}
+      </span>
+    </div>
+  );
+}
+
+// Bandeau « Prochain match » / « Match en cours » : met en avant l'affiche désignée,
+// avec photos de profil, pour que parieurs ET organisateur la suivent sans effort.
+function NextMatchBanner({
+  match,
+  partners,
+  avatars,
+  label,
+  live,
+}: {
+  match: TournamentMatch;
+  partners: Record<string, string | null>;
+  avatars: Record<string, string | null>;
+  label: string;
+  live: boolean;
+}) {
+  return (
+    <div className={`mb-3 rounded-2xl border px-4 py-3 ${live ? 'border-teal/45 bg-teal/[0.06]' : 'border-gold/40 bg-gold/[0.06]'}`}>
+      <div className={`text-[10px] uppercase tracking-[0.16em] font-extrabold mb-2 flex items-center gap-2 ${live ? 'text-teal' : 'text-gold'}`}>
+        <span className={`inline-block w-1 h-2.5 rounded-sm bg-gradient-to-b ${live ? 'from-teal to-teal' : 'from-gold to-gold-dim'}`} />
+        {label}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <MatchSide login={match.playerALogin} partners={partners} avatars={avatars} />
+        <span className={`shrink-0 text-[11px] font-black uppercase tracking-[0.18em] ${live ? 'text-teal/70' : 'text-gold/70'}`}>VS</span>
+        <MatchSide login={match.playerBLogin} partners={partners} avatars={avatars} right />
+      </div>
+    </div>
+  );
 }
 
 // Classe de couleur d'une cellule de matrice selon l'issue (vue de l'équipe-ligne).
@@ -1378,9 +1503,19 @@ function LeagueSection({
   const pairKey = (m: TournamentMatch) =>
     [m.playerALogin ?? '', m.playerBLogin ?? ''].sort().join(' ');
   // Partition : affiches jouables (2 équipes), séparées « à jouer » / « jouées ».
+  // `matches` arrive déjà triées (méthode du cercle) → pending[0] = le PROCHAIN match.
   const playable = matches.filter((m) => m.playerALogin && m.playerBLogin);
   const pending = playable.filter((m) => !m.confirmedAt);
   const played = playable.filter((m) => m.confirmedAt);
+  const nextMatch = pending[0] ?? null;
+  // Maps pp + binôme depuis les inscrits, pour le bandeau « Prochain match ».
+  const leagueAvatars: Record<string, string | null> = {};
+  const leaguePartners: Record<string, string | null> = {};
+  for (const e of tournament.entries ?? []) {
+    leagueAvatars[e.login] = e.user?.imageUrl ?? null;
+    leaguePartners[e.login] = e.partnerLogin ?? null;
+    if (e.partnerLogin) leagueAvatars[e.partnerLogin] = e.partner?.imageUrl ?? null;
+  }
   // Paires ayant déjà un retour composé (pour masquer le bouton « demander un retour »).
   const retourPairs = new Set(
     matches.filter((m) => (m.poolIndex ?? 0) === 1).map((m) => pairKey(m)),
@@ -1404,18 +1539,10 @@ function LeagueSection({
   const canFinalize = rankedCount >= 2 && effectiveQualify <= rankedCount;
 
   // ── Gains projetés (temps réel) ──
-  // Bonus Elo minimal sécurisé en se qualifiant (palier qualification d'un format
-  // ligue), et bonus du champion (plafond selon le type : 100 officiel / 50 amical).
-  // Recalculé à chaque score.
-  const eloMax = tournamentEloMax(tournament.kind);
-  const projectedRounds = Math.max(1, Math.round(Math.log2(effectiveQualify)));
-  const securedQualElo = tournamentEloReward({
-    format: 'league',
-    qualified: true,
-    bracketRoundsWon: 0,
-    totalBracketRounds: projectedRounds,
-    max: eloMax,
-  });
+  // Barème par PLACEMENT final (identique amical/officiel) : 1er +100, 2e +75,
+  // 3e +50, 4e +25. Le rang du classement de ligue donne la PROJECTION — le
+  // placement réel se joue en phase finale. Recalculé à chaque score.
+  const eloMax = TOURNAMENT_ELO_PLACEMENTS[0];
   // Libellé du prix unique au champion (officiels) : coins ou cosmétique.
   const championPrize =
     tournament.kind === 'official' && tournament.prizeKind && tournament.prizeKind !== 'none'
@@ -1606,9 +1733,14 @@ function LeagueSection({
                           🏆 +{eloMax}
                           {championPrize ? ` · ${championPrize}` : ''}
                         </span>
-                      ) : (
+                      ) : i < TOURNAMENT_ELO_PLACEMENTS.length ? (
+                        // Podium projeté (2e/3e/4e) : +75/+50/+25 si le rang tient en phase finale.
                         <span className="text-teal text-[11px] font-semibold">
-                          {t('tournois.league.gainQualified').replace('{n}', String(securedQualElo))}
+                          {t('tournois.league.gainQualified').replace('{n}', String(TOURNAMENT_ELO_PLACEMENTS[i]))}
+                        </span>
+                      ) : (
+                        <span className="text-teal/70 text-[11px] font-semibold">
+                          {t('tournois.league.qualifiedOnly')}
                         </span>
                       )}
                     </td>
@@ -1686,6 +1818,18 @@ function LeagueSection({
             {t('tournois.league.generateMissing')}
           </button>
         </div>
+      )}
+
+      {/* Bandeau « Prochain match » : la 1re affiche à jouer (ordre équitable de la
+          méthode du cercle) mise en avant avec pp — repère parieurs & organisateur. */}
+      {editable && nextMatch && (
+        <NextMatchBanner
+          match={nextMatch}
+          partners={leaguePartners}
+          avatars={leagueAvatars}
+          live={false}
+          label={t('tournois.bracket.upNext')}
+        />
       )}
 
       {/* ── À jouer ── Affiches prêtes (round-robin auto + retours demandés) : pile-ou-face

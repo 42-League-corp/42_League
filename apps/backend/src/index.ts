@@ -17,8 +17,8 @@ import {
   AnnouncementCreateSchema,
   betPayout,
   cashPrizeForRounds,
-  tournamentEloReward,
-  tournamentEloMax,
+  tournamentPlacements,
+  tournamentEloForPlacement,
   DEFAULT_BET_FINAL_MULT,
   BET_FINAL_MULT_MIN,
   BET_FINAL_MULT_MAX,
@@ -61,6 +61,9 @@ import {
   GRANDMASTER_MIN_ELO,
   ownedTitles,
   computeGoat,
+  trophyCountsByLogin,
+  type GameBoards,
+  type TrophyMatch,
 } from '@42-league/shared';
 import {
   GAME_IDS,
@@ -377,6 +380,9 @@ const PUBLIC_USER_OMIT = [
   // Semaine d'activation du boost ELO ×2 — interne (la limite hebdo). `eloMultUntil`
   // reste public : les autres voient qu'un joueur est « en feu » sur sa fiche.
   'eloMultWeekKey',
+  // Fin du cooldown de sanction de litige — interne (seul /me l'expose). La MARQUE
+  // `disputesLost`, elle, RESTE publique (transparence sociale).
+  'penaltyCooldownUntil',
 ] as const;
 
 /** Retire les champs sensibles d'un objet User avant sérialisation publique. */
@@ -1164,6 +1170,10 @@ app.get('/me', async (c) => {
     equippedBanner: cosmetics.equippedBanner,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
+    // Réputation litiges : marque (nb de litiges perdus) + fin du cooldown de
+    // sanction (déclaration/paris bloqués tant qu'elle est future).
+    disputesLost: user?.disputesLost ?? 0,
+    penaltyCooldownUntil: user?.penaltyCooldownUntil ? user.penaltyCooldownUntil.toISOString() : null,
     // Série d'assiduité ranked : série courante, record, bonus ELO actif, prochain palier.
     streak: streakView(user),
     isAdmin: isAdmin(login),
@@ -1194,15 +1204,6 @@ app.put('/me/title', async (c) => {
   await getOrCreateUser(login);
   const user = await prisma.user.findUnique({ where: { login } });
   if (!user) throw new HTTPException(404, { message: 'user not found' });
-
-  // Bloque le changement de titre si l'Apôtre de Sheldon est équipé (verrou permanent).
-  const equippedTitles = await prisma.shopInventory.findMany({
-    where: { userLogin: login, equipped: true, item: { category: 'title' } },
-    include: { item: true },
-  });
-  if (equippedTitles.some((r) => isSheldonApostle(r.item))) {
-    throw new HTTPException(409, { message: "impossible de changer de titre tant que l'Apôtre de Sheldon est équipé" });
-  }
 
   // Retrait du titre.
   if (!raw) {
@@ -2246,9 +2247,10 @@ app.post('/seasons/:id/activate', async (c) => {
 //  - SUPERADMIN only ;
 //  - connexion à la prod en LECTURE SEULE via PROD_READONLY_URL (rôle Postgres
 //    SELECT-only) → aucune écriture vers la prod n'est mécaniquement possible.
-// Ne copie QUE l'ELO et les compteurs (matchesPlayed*, dodgeCount,
-// tournamentsWon*) par discipline. Jamais les rôles, permissions, leagueCoins,
-// flags staging, ni l'historique des matchs/saisons.
+// Copie l'ELO, les compteurs (matchesPlayed*, dodgeCount, tournamentsWon*) par
+// discipline, le solde League Coins ET les tournois en cours/passés (inscrits +
+// matchs), puis bascule la saison active de staging sur celle de la prod. Jamais
+// les rôles, permissions, flags staging, ni l'historique des matchs 1v1.
 // Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
 // Comptes présents en prod mais absents de staging → créés avec une identité
 // minimale (rôle USER) pour que le classement staging reflète la prod.
@@ -2277,6 +2279,9 @@ const PROD_ELO_SELECT = {
   eloSf: true,
   matchesPlayedSf: true,
   tournamentsWonSf: true,
+  // Solde League Coins : synchronisé aussi (cf. /admin/seasons/sync-elo-from-prod)
+  // pour tester l'économie sur des données réalistes.
+  leagueCoins: true,
 } satisfies Prisma.UserSelect;
 
 app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
@@ -2300,6 +2305,9 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
   let created = 0;
   let prodCount = 0;
   const skipped: string[] = [];
+  let tournamentsSynced = 0;
+  const tournamentsSkipped: string[] = [];
+  let seasonSwitched: string | null = null;
   try {
     const prodUsers = await prod.user.findMany({
       where: VISIBLE_USER_WHERE,
@@ -2310,7 +2318,7 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     // peuplée, c'est que PROD_READONLY_URL pointe vers la mauvaise base/schéma.
     console.log(`[sync-elo-from-prod] ${prodCount} utilisateurs lus depuis la prod`);
     for (const u of prodUsers) {
-      // Uniquement l'ELO + les compteurs — jamais rôle/permissions/coins.
+      // ELO + compteurs + solde League Coins — jamais rôle/permissions.
       const stats = {
         elo: u.elo,
         matchesPlayed: u.matchesPlayed,
@@ -2325,6 +2333,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         eloSf: u.eloSf,
         matchesPlayedSf: u.matchesPlayedSf,
         tournamentsWonSf: u.tournamentsWonSf,
+        // League Coins : recopiés depuis la prod (la prod est la source de vérité).
+        leagueCoins: u.leagueCoins,
         // Fléchettes : absentes de la prod (schéma en retard) → non copiées, le
         // staging garde son défaut (Elo 1000) pour cette discipline.
       };
@@ -2334,7 +2344,7 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
           select: { login: true },
         });
         if (existing) {
-          // MAJ : on ne touche QUE les stats. Identité/rôle/coins préservés.
+          // MAJ : stats + coins recopiés. Identité/rôle préservés.
           await prisma.user.update({ where: { login: u.login }, data: stats });
           updated++;
         } else {
@@ -2362,6 +2372,102 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
         skipped.push(u.login);
       }
     }
+
+    // ── Tournois : recopie les tournois EN COURS et PASSÉS de la prod ──────────
+    // (avec inscrits + matchs) pour tester sur l'historique réel. Idempotent :
+    // chaque tournoi prod remplace sa copie staging (delete + recreate — les
+    // entries/matchs/invites/paris staging liés sautent en cascade, acceptable en
+    // env de test). Les tournois créés UNIQUEMENT en staging sont laissés intacts.
+    const prodTournaments = await prod.tournament.findMany({
+      where: { status: { in: ['in_progress', 'finished'] } },
+      select: {
+        id: true, name: true, kind: true, isPrivate: true, imageUrl: true,
+        capacity: true, mode: true, format: true, game: true, status: true,
+        createdByLogin: true, coOrganizers: true, winnerLogin: true,
+        createdAt: true, startedAt: true, finishedAt: true, activeMatchId: true,
+        prizeKind: true, prizeCoins: true, prizeItemId: true,
+        betFinalMult: true, cashPrizeBase: true, leagueQualifyCount: true,
+        entries: {
+          select: { login: true, partnerLogin: true, teamName: true, joinedAt: true },
+        },
+        matches: {
+          select: {
+            id: true, stage: true, poolIndex: true, round: true, slot: true,
+            playerALogin: true, playerBLogin: true, scoreA: true, scoreB: true,
+            winnerLogin: true, recordedByLogin: true, recordedAt: true,
+            confirmedAt: true, betsLockedAt: true, tossWinnerLogin: true,
+            tossSide: true, advantagePick: true, tossAt: true,
+          },
+        },
+      },
+    });
+    console.log(`[sync-elo-from-prod] ${prodTournaments.length} tournois (en cours/terminés) lus depuis la prod`);
+    for (const t of prodTournaments) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // FK users : backfille en minimal les logins référencés mais absents de
+          // staging (ex. compte anonymisé en prod, hors du sync utilisateurs).
+          const referenced = new Set<string>([t.createdByLogin]);
+          if (t.winnerLogin) referenced.add(t.winnerLogin);
+          for (const e of t.entries) referenced.add(e.login);
+          for (const m of t.matches) {
+            if (m.playerALogin) referenced.add(m.playerALogin);
+            if (m.playerBLogin) referenced.add(m.playerBLogin);
+          }
+          for (const login of referenced) {
+            await tx.user.upsert({ where: { login }, update: {}, create: { login, role: 'USER' } });
+          }
+          // Récompense cosmétique : ne garde la référence que si l'objet existe en staging.
+          const prizeItemId =
+            t.prizeItemId &&
+            (await tx.shopItem.findUnique({ where: { id: t.prizeItemId }, select: { id: true } }))
+              ? t.prizeItemId
+              : null;
+          await tx.tournament.deleteMany({ where: { id: t.id } });
+          const { entries, matches, ...fields } = t;
+          await tx.tournament.create({ data: { ...fields, prizeItemId } });
+          if (entries.length > 0) {
+            await tx.tournamentEntry.createMany({
+              data: entries.map((e) => ({ ...e, tournamentId: t.id })),
+            });
+          }
+          if (matches.length > 0) {
+            await tx.tournamentMatch.createMany({
+              data: matches.map((m) => ({ ...m, tournamentId: t.id })),
+            });
+          }
+        });
+        tournamentsSynced++;
+      } catch (e) {
+        console.warn(`[sync-elo-from-prod] skip tournoi ${t.id} (${t.name}):`, e instanceof Error ? e.message : e);
+        tournamentsSkipped.push(t.name);
+      }
+    }
+
+    // ── Bascule de saison : staging passe sur la MÊME saison active que la prod ──
+    // (ex. la prod est sur « Saison 1 » mais staging encore sur la Beta). On bascule
+    // par NOM : on réutilise une saison staging du même nom si elle existe, sinon on
+    // la crée. Les coins ne sont jamais reset (cohérent avec le rollover de saison).
+    const prodSeason = await prod.season.findFirst({
+      where: { isActive: true },
+      select: { name: true },
+    });
+    if (prodSeason) {
+      const stagingActive = await prisma.season.findFirst({ where: { isActive: true } });
+      if (!stagingActive || stagingActive.name !== prodSeason.name) {
+        await prisma.$transaction(async (tx) => {
+          await tx.season.updateMany({ where: { isActive: true }, data: { isActive: false } });
+          const existing = await tx.season.findFirst({ where: { name: prodSeason.name } });
+          if (existing) {
+            await tx.season.update({ where: { id: existing.id }, data: { isActive: true, endedAt: null } });
+          } else {
+            await tx.season.create({ data: { id: randomUUID(), name: prodSeason.name, isActive: true } });
+          }
+        });
+        seasonSwitched = prodSeason.name;
+        console.log(`[sync-elo-from-prod] saison staging basculée sur « ${prodSeason.name} »`);
+      }
+    }
   } finally {
     await prod.$disconnect();
   }
@@ -2371,11 +2477,14 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     actorRole: await getUserRole(me),
     action: 'SYNC_ELO_FROM_PROD',
     target: 'prod',
-    payload: { prodCount, updated, created, skipped: skipped.length },
+    payload: {
+      prodCount, updated, created, skipped: skipped.length,
+      tournamentsSynced, tournamentsSkipped: tournamentsSkipped.length, seasonSwitched,
+    },
   });
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
-  return c.json({ prodCount, updated, created, skipped });
+  return c.json({ prodCount, updated, created, skipped, tournamentsSynced, tournamentsSkipped, seasonSwitched });
 });
 
 // Supprime une saison : retire le classement figé, les badges champion liés, et
@@ -2524,6 +2633,8 @@ app.get('/matches/pending', async (c) => {
 
 app.post('/matches', async (c) => {
   const me = await getCurrentLogin(c);
+  // Sanction de litige en cours → déclaration bloquée (cf. applyDisputeMalusTx).
+  await assertNotPenalized(me, 'déclarer un match');
   const body = await c.req.json().catch(() => null);
   const parsed = DeclareMatchSchema.safeParse(body);
   if (!parsed.success) {
@@ -2580,6 +2691,7 @@ app.post('/matches', async (c) => {
 // (cf. /matches/:id/confirm) puis réglé par settle2v2PendingAsPlayed.
 app.post('/matches/2v2', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'déclarer un match');
   const body = await c.req.json().catch(() => null);
   const parsed = Declare2v2MatchSchema.safeParse(body);
   if (!parsed.success) {
@@ -3146,6 +3258,9 @@ app.post('/matches/:id/reject', async (c) => {
         scoreOpponent: p.scoreOpponent,
         contestReason,
         contestMessage,
+        game: p.game,
+        // Litige ouvert : part en file d'arbitrage (admin/orga tranche → malus).
+        status: 'open',
       },
     });
     await tx.pendingMatch.delete({ where: { id } });
@@ -4891,6 +5006,37 @@ async function assertRegisterablePartner(tx: TxOrPrisma, login: string): Promise
   }
 }
 
+// Ordonnance « méthode du cercle » : produit toutes les paires du round-robin
+// RANGÉES PAR JOURNÉE. À chaque journée, tout le monde joue une fois (un joueur se
+// repose si l'effectif est impair). Conséquence : les affiches sont ENTRELACÉES —
+// on ne voit plus les 5 matchs d'un même joueur à la suite, chacun joue à son tour,
+// et le « prochain match » tombe naturellement sur ceux qui n'ont pas joué depuis
+// le plus longtemps. Le sens domicile/extérieur (A/B) alterne d'une journée à
+// l'autre pour l'équité. Renvoie les paires dans l'ordre de programmation.
+function leagueRoundRobinPairs(logins: string[]): Array<[string, string]> {
+  if (logins.length < 2) return [];
+  const arr = [...logins];
+  const bye = arr.length % 2 === 1;
+  if (bye) arr.push('__BYE__');
+  const n = arr.length;
+  const half = n / 2;
+  const out: Array<[string, string]> = [];
+  for (let r = 0; r < n - 1; r++) {
+    for (let i = 0; i < half; i++) {
+      const a = arr[i]!;
+      const b = arr[n - 1 - i]!;
+      if (a === '__BYE__' || b === '__BYE__') continue;
+      out.push(r % 2 === 0 ? [a, b] : [b, a]);
+    }
+    // Rotation : on fige arr[0], le reste tourne d'un cran (dernier → 2e position).
+    const fixed = arr[0]!;
+    const rest = arr.slice(1);
+    rest.unshift(rest.pop()!);
+    arr.splice(0, arr.length, fixed, ...rest);
+  }
+  return out;
+}
+
 // Crée toutes les affiches ALLER manquantes d'un round-robin de ligue (chaque paire
 // d'équipes s'affronte une fois). Idempotent : ne recrée jamais une paire déjà
 // composée (peu importe le sens A/B ou la manche). En 2v2, `logins` = capitaines
@@ -4927,22 +5073,19 @@ async function ensureLeagueRoundRobin(
     playerALogin: string;
     playerBLogin: string;
   }> = [];
-  for (let i = 0; i < logins.length; i++) {
-    for (let j = i + 1; j < logins.length; j++) {
-      const a = logins[i]!;
-      const b = logins[j]!;
-      if (seen.has(pairKey(a, b))) continue;
-      data.push({
-        id: randomUUID(),
-        tournamentId,
-        stage: 'league',
-        poolIndex: 0,
-        round: 0,
-        slot: slot++,
-        playerALogin: a,
-        playerBLogin: b,
-      });
-    }
+  // Paires rangées par journée (entrelacées) plutôt que joueur par joueur.
+  for (const [a, b] of leagueRoundRobinPairs(logins)) {
+    if (seen.has(pairKey(a, b))) continue;
+    data.push({
+      id: randomUUID(),
+      tournamentId,
+      stage: 'league',
+      poolIndex: 0,
+      round: 0,
+      slot: slot++,
+      playerALogin: a,
+      playerBLogin: b,
+    });
   }
   if (data.length) await tx.tournamentMatch.createMany({ data });
   return data.length;
@@ -4973,49 +5116,33 @@ async function launchTournamentMatches(
 // finale → tournoi terminé + titre + récompense + paris du tournoi.
 // Renvoie le même objet de résultat que la route confirm (emits/notifs APRÈS commit).
 /**
- * Crédite le bonus d'Elo de fin de tournoi à TOUS les participants, selon le
- * palier atteint (champion `maxReward`, sorti en qualif 0, paliers interpolés — cf.
- * `tournamentEloReward`). `maxReward` dépend du type : 100 pour un officiel, 50 pour
- * un amical (cf. `tournamentEloMax`). Appelé une seule fois, au settlement de la finale.
- *
- * Le palier d'un joueur se déduit du bracket : nombre de matchs de bracket gagnés
- * (byes inclus) et présence dans le bracket (= a franchi poules/ligue). En 2v2 le
- * bonus du capitaine est versé aux deux coéquipiers.
+ * Crédite le bonus d'Elo de fin de tournoi PAR PLACEMENT : 1er +100, 2e +75,
+ * 3e +50, 4e +25 (cf. TOURNAMENT_ELO_PLACEMENTS — identique amical/officiel).
+ * Les placements se déduisent du bracket (3e = demi-finaliste battu par le
+ * champion, convention sans petite finale, cf. tournamentPlacements). En 2v2,
+ * CHAQUE membre de l'équipe touche le montant plein. Appelé une seule fois, au
+ * settlement de la finale.
  */
 async function awardTournamentElo(
   tx: Prisma.TransactionClient,
   id: string,
-  format: string,
   game: GameId,
-  totalBracketRounds: number,
-  maxReward: number,
 ): Promise<void> {
-  const entries = await tx.tournamentEntry.findMany({
-    where: { tournamentId: id },
-    select: { login: true, partnerLogin: true },
-  });
   const bracket = await tx.tournamentMatch.findMany({
     where: { tournamentId: id, stage: 'bracket' },
-    select: { playerALogin: true, playerBLogin: true, winnerLogin: true },
+    select: { round: true, playerALogin: true, playerBLogin: true, winnerLogin: true },
   });
-  // Tours de bracket gagnés par login + présence dans le bracket (= qualifié).
-  const roundsWon = new Map<string, number>();
-  const inBracket = new Set<string>();
-  for (const bm of bracket) {
-    if (bm.playerALogin) inBracket.add(bm.playerALogin);
-    if (bm.playerBLogin) inBracket.add(bm.playerBLogin);
-    if (bm.winnerLogin) roundsWon.set(bm.winnerLogin, (roundsWon.get(bm.winnerLogin) ?? 0) + 1);
-  }
-  for (const e of entries) {
-    const reward = tournamentEloReward({
-      format,
-      qualified: inBracket.has(e.login),
-      bracketRoundsWon: roundsWon.get(e.login) ?? 0,
-      totalBracketRounds,
-      max: maxReward,
-    });
+  const placements = tournamentPlacements(bracket);
+  for (let i = 0; i < placements.length; i++) {
+    const captain = placements[i];
+    if (!captain) continue;
+    const reward = tournamentEloForPlacement(i + 1);
     if (reward <= 0) continue;
-    const members = e.partnerLogin ? [e.login, e.partnerLogin] : [e.login];
+    const entry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login: captain } },
+      select: { partnerLogin: true },
+    });
+    const members = entry?.partnerLogin ? [captain, entry.partnerLogin] : [captain];
     for (const login of members) {
       await tx.user.update({ where: { login }, data: eloDelta(game, reward) });
     }
@@ -5155,16 +5282,9 @@ async function settleConfirmedTournamentMatch(
       },
       select: { game: true, format: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
     });
-    // Bonus d'Elo de fin de tournoi à tous les participants (champion 100 officiel /
-    // 50 amical, sortis en qualif 0, paliers interpolés). Indépendant des coins/cosmétiques.
-    await awardTournamentElo(
-      tx,
-      id,
-      tour.format,
-      parseGameId(tour.game),
-      totalBracketRounds,
-      tournamentEloMax(tour.kind),
-    );
+    // Bonus d'Elo de fin de tournoi PAR PLACEMENT (1er +100, 2e +75, 3e +50,
+    // 4e +25 — chaque membre en 2v2). Indépendant des coins/cosmétiques.
+    await awardTournamentElo(tx, id, parseGameId(tour.game));
     // Membres de l'équipe gagnante : capitaine seul (1v1) ou + coéquipier (2v2).
     const winEntry = await tx.tournamentEntry.findUnique({
       where: { tournamentId_login: { tournamentId: id, login: winnerLogin } },
@@ -7821,6 +7941,114 @@ app.delete('/admin/rejected-matches/:id', async (c) => {
   return c.json({ id, deleted: true });
 });
 
+// ── Refonte contestation : arbitrage + réputation + malus ────────────────────
+// Un litige (RejectedMatch status='open') est tranché par un admin/modérateur. La
+// partie jugée fautive (faux score OU contestation abusive) prend un malus CROISSANT
+// selon son nombre de litiges déjà perdus (`disputesLost`) :
+//   1er : -20 Elo · -100 coins · 24 h sans déclarer/parier
+//   2e  : -50 Elo · -250 coins · 48 h
+//   3e+ : -100 Elo · -500 coins · 72 h
+// `disputesLost` est aussi la « marque » de réputation affichée sur le profil.
+const DISPUTE_MALUS_TIERS = [
+  { elo: 20, coins: 100, cooldownH: 24 },
+  { elo: 50, coins: 250, cooldownH: 48 },
+  { elo: 100, coins: 500, cooldownH: 72 },
+] as const;
+
+async function applyDisputeMalusTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  game: string,
+  now: Date = new Date(),
+): Promise<{ tier: number; elo: number; coins: number; cooldownUntil: Date }> {
+  const u = await tx.user.findUnique({ where: { login }, select: { disputesLost: true } });
+  const idx = Math.min(u?.disputesLost ?? 0, DISPUTE_MALUS_TIERS.length - 1);
+  const t = DISPUTE_MALUS_TIERS[idx]!;
+  const g = parseGameId(game);
+  const cooldownUntil = new Date(now.getTime() + t.cooldownH * 60 * 60 * 1000);
+  await tx.user.update({
+    where: { login },
+    data: {
+      ...eloDelta(g, -t.elo),
+      disputesLost: { increment: 1 },
+      penaltyCooldownUntil: cooldownUntil,
+    },
+  });
+  await grantCoinsTx(tx, login, -t.coins, { type: 'dispute_malus', meta: { game: g, elo: -t.elo, tier: idx + 1 } });
+  return { tier: idx + 1, elo: t.elo, coins: t.coins, cooldownUntil };
+}
+
+const ResolveDisputeSchema = z.object({
+  verdict: z.enum(['declarer_wrong', 'contester_wrong', 'dismiss']),
+});
+
+// Refuse l'action (déclaration de match / pari) si le joueur est sous cooldown de
+// sanction de litige (penaltyCooldownUntil future). Décourage de re-déclarer/parier
+// pendant la pénalité. No-op si aucun cooldown actif.
+async function assertNotPenalized(login: string, action: 'déclarer un match' | 'parier', now: Date = new Date()): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { login }, select: { penaltyCooldownUntil: true } });
+  if (u?.penaltyCooldownUntil && u.penaltyCooldownUntil.getTime() > now.getTime()) {
+    const hrs = Math.ceil((u.penaltyCooldownUntil.getTime() - now.getTime()) / (60 * 60 * 1000));
+    throw new HTTPException(403, {
+      message: `Sanction de litige en cours : tu ne peux pas ${action} pendant encore ~${hrs} h.`,
+    });
+  }
+}
+
+// GET /admin/disputes?status=open|all — file d'arbitrage des litiges.
+app.get('/admin/disputes', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requirePerm(me, 'canDeleteRejectedMatches');
+  const status = c.req.query('status') ?? 'open';
+  const list = await prisma.rejectedMatch.findMany({
+    where: status === 'all' ? {} : { status },
+    orderBy: { rejectedAt: 'desc' },
+    take: 200,
+  });
+  return c.json(list);
+});
+
+// POST /admin/disputes/:id/resolve — tranche un litige (et applique le malus au
+// fautif si verdict != 'dismiss').
+app.post('/admin/disputes/:id/resolve', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requirePerm(me, 'canDeleteRejectedMatches');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = ResolveDisputeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { verdict } = parsed.data;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const d = await tx.rejectedMatch.findUnique({ where: { id } });
+    if (!d) throw new HTTPException(404, { message: 'litige introuvable' });
+    if (d.status !== 'open') throw new HTTPException(409, { message: 'litige déjà tranché' });
+    const culprit =
+      verdict === 'declarer_wrong' ? d.declarerLogin : verdict === 'contester_wrong' ? d.opponentLogin : null;
+    const malus = culprit ? await applyDisputeMalusTx(tx, culprit, d.game) : null;
+    await tx.rejectedMatch.update({
+      where: { id },
+      data: {
+        status: 'resolved',
+        resolution: verdict === 'dismiss' ? 'dismissed' : verdict,
+        resolvedBy: me,
+        resolvedAt: new Date(),
+      },
+    });
+    return { culprit, malus };
+  });
+
+  if (result.culprit && result.malus) {
+    void notifyMany([result.culprit], {
+      type: 'dispute_malus',
+      title: 'Litige tranché en ta défaveur',
+      body: `Sanction : -${result.malus.elo} Elo, -${result.malus.coins} coins, déclaration & paris bloqués ${DISPUTE_MALUS_TIERS[Math.min(result.malus.tier - 1, 2)]!.cooldownH} h (litige n°${result.malus.tier}).`,
+    });
+    emit([result.culprit], { type: 'panel:update', payload: {} });
+  }
+  return c.json({ id, status: 'resolved', verdict, culprit: result.culprit, malus: result.malus });
+});
+
 app.delete('/admin/pending-matches/:id', async (c) => {
   const me = await getCurrentLogin(c);
   await requirePerm(me, 'canDeletePendingMatches');
@@ -8902,9 +9130,26 @@ app.get('/shop', async (c) => {
 // transaction pour éviter les doubles achats / soldes négatifs.
 // ── « Apôtre de Sheldon » : objet spécial reconnu par son nom (insensible à la
 // casse et aux accents). À l'achat il DONNE 300 coins au lieu de coûter, ne peut
-// être acheté qu'une fois, et s'auto-équipe définitivement (impossible à déséquiper,
-// ni de lui substituer un autre objet de sa catégorie, ni de changer de titre).
+// être acheté qu'une fois, et s'auto-équipe verrouillé 1 semaine (impossible à
+// déséquiper avant, ni de lui substituer un autre objet de sa catégorie).
 const SHELDON_REWARD = 300;
+const SHELDON_LOCK_MS = 7 * 24 * 60 * 60 * 1000;
+// Seuil d'Elo pour ouvrir l'accès à la Boîte Mystère : il faut au moins 1010 sur
+// SA MEILLEURE discipline (le pari coûte de l'Elo en cas de perte — on réserve donc
+// la box à ceux qui ont un coussin). Volontairement ABSENT de la description du
+// produit : le refus ci-dessous est le seul endroit où ce seuil est révélé.
+const MYSTERY_BOX_MIN_BEST_ELO = 1010;
+/** Meilleur Elo du joueur toutes disciplines confondues. */
+function bestEloOf(u: {
+  elo: number;
+  eloBabyfoot2v2: number;
+  eloSmash: number;
+  eloChess: number;
+  eloSf: number;
+  eloFlechettes: number;
+}): number {
+  return Math.max(u.elo, u.eloBabyfoot2v2, u.eloSmash, u.eloChess, u.eloSf, u.eloFlechettes);
+}
 function isSheldonApostle(item: { name: string }): boolean {
   return item.name
     .normalize('NFD')
@@ -8939,13 +9184,30 @@ app.post('/shop/:id/buy', async (c) => {
 
     // Consommable : empilable (quantité), avec cap mensuel d'achats par type.
     if (consumableKind) {
-      const mk = monthKey(new Date());
+      const now = new Date();
+      const mk = monthKey(now);
       const cap = CONSUMABLE_MONTHLY_CAP[consumableKind];
       const monthly = await tx.consumableMonthly.findUnique({
         where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
       });
       if ((monthly?.count ?? 0) >= cap) {
         throw new HTTPException(409, { message: `cap mensuel atteint pour ce consommable (${cap}/mois)` });
+      }
+      // Cooldown d'achat (ex. mini_ops : 1 / 48 h) — borne le rythme d'acquisition.
+      const buyCooldown = CONSUMABLE_BUY_COOLDOWN_MS[consumableKind];
+      const existing = buyCooldown
+        ? await tx.consumableInventory.findUnique({
+            where: { userLogin_kind: { userLogin: login, kind: consumableKind } },
+          })
+        : null;
+      if (buyCooldown && existing?.lastBoughtAt) {
+        const elapsed = now.getTime() - existing.lastBoughtAt.getTime();
+        if (elapsed < buyCooldown) {
+          const hrs = Math.ceil((buyCooldown - elapsed) / (60 * 60 * 1000));
+          throw new HTTPException(429, {
+            message: `achat en cooldown : réessaie dans ~${hrs} h (1 achat toutes les ${Math.round(buyCooldown / (24 * 60 * 60 * 1000))} j).`,
+          });
+        }
       }
       if (user.leagueCoins < item.price) {
         throw new HTTPException(400, { message: 'solde insuffisant' });
@@ -8957,8 +9219,8 @@ app.post('/shop/:id/buy', async (c) => {
       });
       await tx.consumableInventory.upsert({
         where: { userLogin_kind: { userLogin: login, kind: consumableKind } },
-        update: { quantity: { increment: 1 } },
-        create: { userLogin: login, kind: consumableKind, quantity: 1 },
+        update: { quantity: { increment: 1 }, ...(buyCooldown ? { lastBoughtAt: now } : {}) },
+        create: { userLogin: login, kind: consumableKind, quantity: 1, ...(buyCooldown ? { lastBoughtAt: now } : {}) },
       });
       await tx.consumableMonthly.upsert({
         where: { userLogin_kind_monthKey: { userLogin: login, kind: consumableKind, monthKey: mk } },
@@ -9013,6 +9275,17 @@ app.post('/shop/:id/buy', async (c) => {
     // sans perte d'ELO. 9 fois sur 10 → on perd 10 ELO et rien d'autre. Si on
     // possède déjà le titre, c'est forcément une perte (impossible de le re-gagner).
     if (isMysteryBox) {
+      // Gate d'Elo : il faut ≥ 1010 sur sa meilleure discipline. Le message est le
+      // SEUL endroit où ce seuil apparaît (absent de la description du produit).
+      const elos = await tx.user.findUnique({
+        where: { login },
+        select: { elo: true, eloBabyfoot2v2: true, eloSmash: true, eloChess: true, eloSf: true, eloFlechettes: true },
+      });
+      if (elos && bestEloOf(elos) < MYSTERY_BOX_MIN_BEST_ELO) {
+        throw new HTTPException(403, {
+          message: `Elo trop bas pour acheter la Boîte Mystère : il faut au moins ${MYSTERY_BOX_MIN_BEST_ELO} d'Elo sur ta meilleure discipline.`,
+        });
+      }
       const ownsTitle = await tx.shopInventory.findUnique({
         where: { userLogin_itemId: { userLogin: login, itemId: 'title-mysterious' } },
       });
@@ -9098,20 +9371,25 @@ app.post('/me/inventory/:id/equip', async (c) => {
   });
   if (!row) throw new HTTPException(404, { message: 'objet non possédé' });
 
-  // Verrou « Apôtre de Sheldon » : permanent, impossible à déséquiper ou à
-  // remplacer par un autre objet de la même catégorie.
+  // Verrou « Apôtre de Sheldon » : tant qu'il est équipé depuis moins d'une
+  // semaine, on ne peut NI le déséquiper, NI équiper un autre objet de SA
+  // catégorie (qui le déséquiperait par la règle « un seul équipé par catégorie »).
+  const nowEquip = new Date();
   const equippedRows = await prisma.shopInventory.findMany({
     where: { userLogin: login, equipped: true },
     include: { item: true },
   });
-  const lockedSheldon = equippedRows.find((r) => isSheldonApostle(r.item));
+  const lockedSheldon = equippedRows.find(
+    (r) => isSheldonApostle(r.item) && r.acquiredAt.getTime() + SHELDON_LOCK_MS > nowEquip.getTime(),
+  );
   if (lockedSheldon) {
+    const until = new Date(lockedSheldon.acquiredAt.getTime() + SHELDON_LOCK_MS).toISOString();
     if (lockedSheldon.itemId === itemId && !equipped) {
-      throw new HTTPException(409, { message: "l'Apôtre de Sheldon ne peut pas être déséquipé" });
+      throw new HTTPException(409, { message: `l'Apôtre de Sheldon reste équipé jusqu'au ${until}` });
     }
     if (lockedSheldon.itemId !== itemId && equipped && row.item.category === lockedSheldon.item.category) {
       throw new HTTPException(409, {
-        message: `impossible de changer de ${row.item.category} tant que l'Apôtre de Sheldon est équipé`,
+        message: `impossible de changer de ${row.item.category} tant que l'Apôtre de Sheldon est équipé (jusqu'au ${until})`,
       });
     }
   }
@@ -9172,7 +9450,10 @@ app.post('/me/inventory/:id/equip', async (c) => {
 //                 (au choix) et les force à s'affronter — un défi déjà accepté
 //                 (inéluctable, impossible à refuser) apparaît dans leurs duels.
 //                 Cap 1/mois.
-const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel'] as const;
+//  - 'mini_ops' : version « solo » du force_duel — l'ACHETEUR désigne UNE cible et
+//                 se voit opposé à elle dans un duel inéluctable. Rare (1200 coins),
+//                 limité par un COOLDOWN D'ACHAT (1 / 48 h) plutôt qu'au cap mensuel.
+const CONSUMABLE_KINDS = ['anti_ops', 'elo_mult', 'force_duel', 'mini_ops'] as const;
 type ConsumableKind = (typeof CONSUMABLE_KINDS)[number];
 function isConsumableKind(s: string): s is ConsumableKind {
   return (CONSUMABLE_KINDS as readonly string[]).includes(s);
@@ -9187,6 +9468,10 @@ function isEloMultActive(u: { eloMultUntil: Date | null }, now: Date = new Date(
 const ANTI_OPS_MONTHLY_CAP = 2;
 const ELO_MULT_MONTHLY_CAP = 6;
 const FORCE_DUEL_MONTHLY_CAP = 1;
+// mini_ops : la vraie limite est le COOLDOWN D'ACHAT (1 achat / 2 jours), pas le cap
+// mensuel — on garde un cap mensuel non bloquant (≈ 1 tous les 2 jours).
+const MINI_OPS_MONTHLY_CAP = 16;
+const MINI_OPS_DEFAULT_GAME = 'babyfoot';
 // Discipline par défaut du duel forcé si l'instigateur n'en choisit pas (babyfoot,
 // 1v1 phare). L'instigateur peut imposer n'importe quelle discipline à l'usage.
 const FORCE_DUEL_DEFAULT_GAME = 'babyfoot';
@@ -9196,6 +9481,12 @@ const CONSUMABLE_MONTHLY_CAP: Record<ConsumableKind, number> = {
   anti_ops: ANTI_OPS_MONTHLY_CAP,
   elo_mult: ELO_MULT_MONTHLY_CAP,
   force_duel: FORCE_DUEL_MONTHLY_CAP,
+  mini_ops: MINI_OPS_MONTHLY_CAP,
+};
+// Cooldown d'ACHAT par type (ms) — borne le rythme d'acquisition indépendamment du
+// cap mensuel. Seul mini_ops en a un (1 achat toutes les 48 h).
+const CONSUMABLE_BUY_COOLDOWN_MS: Partial<Record<ConsumableKind, number>> = {
+  mini_ops: 2 * 24 * 60 * 60 * 1000,
 };
 
 // Objets boutique « consommable » seedés (ids stables, comme la mystery box).
@@ -9231,6 +9522,15 @@ const CONSUMABLE_ITEMS: {
       'Désigne deux joueurs et la discipline de ton choix, et force-les à s’affronter : un défi inéluctable apparaît dans leurs duels, impossible à refuser. 1 par mois.',
     price: 2500,
     rarity: 'epic',
+  },
+  {
+    id: 'consumable-mini-ops',
+    kind: 'mini_ops',
+    name: 'Mini-OPS',
+    description:
+      'Désigne une cible et la discipline de ton choix : un duel inéluctable t’oppose à elle, impossible à refuser. Achat limité à un toutes les 48 h.',
+    price: 1200,
+    rarity: 'rare',
   },
 ];
 
@@ -9397,6 +9697,13 @@ const ForceDuelUseSchema = z.object({
   game: z.string().trim().optional(),
 });
 
+// Corps du POST .../mini_ops/use : la CIBLE de l'acheteur (qui devient son
+// adversaire forcé) et la discipline imposée (optionnelle → babyfoot par défaut).
+const MiniOpsUseSchema = z.object({
+  target: z.string().trim().min(1),
+  game: z.string().trim().optional(),
+});
+
 // GET /me/consumables — stock par type + cap mensuel + état du x2 armé.
 app.get('/me/consumables', async (c) => {
   const login = await getCurrentLogin(c);
@@ -9417,12 +9724,18 @@ app.get('/me/consumables', async (c) => {
     eloMultWeekTaken: !!user?.eloMultWeekKey && user.eloMultWeekKey === isoWeekKey(now),
     items: CONSUMABLE_KINDS.map((kind) => {
       const r = byKind.get(kind);
+      const buyCooldownMs = CONSUMABLE_BUY_COOLDOWN_MS[kind] ?? null;
+      // Date à partir de laquelle un nouvel achat est permis (cooldown d'achat).
+      const buyableAt =
+        buyCooldownMs && r?.lastBoughtAt ? new Date(r.lastBoughtAt.getTime() + buyCooldownMs) : null;
       return {
         kind,
         quantity: r?.quantity ?? 0,
         lastUsedAt: r?.lastUsedAt ? r.lastUsedAt.toISOString() : null,
         monthlyCap: CONSUMABLE_MONTHLY_CAP[kind],
         monthlyUsed: monthByKind.get(kind) ?? 0,
+        buyCooldownMs,
+        buyableAt: buyableAt && buyableAt.getTime() > now.getTime() ? buyableAt.toISOString() : null,
       };
     }),
   });
@@ -9482,6 +9795,55 @@ app.post('/me/consumables/:kind/use', async (c) => {
       type: 'challenge_received',
       title: `La Main du Destin vous oppose`,
       body: `@${login} vous force à un duel : @${player1} vs @${player2} en ${gameLabel}.`,
+      link: `/challenges?game=${encodeURIComponent(game)}`,
+      game,
+      refId: challenge.id,
+    });
+    emit([login], { type: 'panel:update', payload: {} });
+    return c.json({ ok: true, forced: true, challengeId: challenge.id });
+  }
+
+  // ── Mini-OPS : force UN duel entre l'ACHETEUR et la cible désignée, dans la ──
+  // discipline choisie (babyfoot par défaut). Comme la Main du Destin, le défi est
+  // créé déjà accepté → inéluctable (ni refus ni annulation). L'acheteur EST partie
+  // au duel (challenger), contrairement à la Main du Destin.
+  if (kind === 'mini_ops') {
+    const body = await c.req.json().catch(() => null);
+    const parsed = MiniOpsUseSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+    const target = parsed.data.target;
+    if (target === login) throw new HTTPException(400, { message: 'choisis un adversaire autre que toi' });
+    const game = parseGameId(parsed.data.game ?? MINI_OPS_DEFAULT_GAME);
+    const gameLabel = getGameDef(game).label;
+    await assertTargetable(target);
+
+    const challenge = await prisma.$transaction(async (tx) => {
+      const row = await tx.consumableInventory.findUnique({
+        where: { userLogin_kind: { userLogin: login, kind } },
+      });
+      if (!row || row.quantity < 1) throw new HTTPException(400, { message: 'aucun Mini-OPS en stock' });
+      await tx.consumableInventory.update({
+        where: { userLogin_kind: { userLogin: login, kind } },
+        data: { quantity: { decrement: 1 }, lastUsedAt: now },
+      });
+      return tx.challenge.create({
+        data: {
+          id: randomUUID(),
+          challengerLogin: login,
+          opponentLogin: target,
+          status: 'accepted',
+          game,
+          scheduledAt: now,
+          decidedAt: now,
+        },
+      });
+    });
+
+    emit([login, target], { type: 'challenge:accepted', payload: challenge });
+    void notifyMany([target], {
+      type: 'challenge_received',
+      title: 'Mini-OPS : un duel t’est imposé',
+      body: `@${login} t’impose un duel inéluctable en ${gameLabel}.`,
       link: `/challenges?game=${encodeURIComponent(game)}`,
       game,
       refId: challenge.id,
@@ -9593,7 +9955,7 @@ const ShopItemUpdateSchema = z
     if (d.category === 'consumable') {
       const kind = typeof d.payload.kind === 'string' ? d.payload.kind : '';
       if (!isConsumableKind(kind)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind invalide (anti_ops | elo_mult | force_duel)" });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "consommable : payload.kind invalide (anti_ops | elo_mult | force_duel | mini_ops)" });
       }
     }
   });
@@ -9827,6 +10189,8 @@ type CoinTxType =
   | 'shop_consumable'
   | 'mystery_box'
   | 'sheldon_reward'
+  | 'trophy_income'
+  | 'dispute_malus'
   | 'admin_grant';
 
 interface CoinTxEntry {
@@ -9972,6 +10336,86 @@ function isoWeekKey(d: Date): string {
   firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
   const week = 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// ─── Revenus passifs hebdomadaires (podium des trophées) ─────────────────────
+// Chaque semaine ISO, on classe les joueurs par NOMBRE DE TROPHÉES détenus (agrégé
+// sur toutes les disciplines, mêmes calculs purs que l'onglet « Trophées », saison
+// active — cf. trophyCountsByLogin). Le PODIUM touche une prime fixe et CHACUN reçoit
+// en plus une prime PAR TROPHÉE (cumulable avec la prime de podium). Idempotent par
+// semaine via WeeklyTrophyPayout (jamais payé deux fois la même semaine ISO).
+const TROPHY_PODIUM_WEEKLY = [1200, 700, 350]; // 1er, 2e, 3e
+const TROPHY_PER_TROPHY_WEEKLY = 25; // par trophée détenu (podium compris)
+// Colonne d'Elo par discipline (board de trophées) — évite de tirer tout RatingFields.
+const TROPHY_ELO_FIELD: Record<string, 'elo' | 'eloSmash' | 'eloChess' | 'eloSf' | 'eloFlechettes'> = {
+  babyfoot: 'elo',
+  smash: 'eloSmash',
+  chess: 'eloChess',
+  streetfighter: 'eloSf',
+  flechettes: 'eloFlechettes',
+};
+
+async function runWeeklyTrophyIncome(now: Date = new Date()): Promise<void> {
+  const weekKey = isoWeekKey(now);
+  // Idempotence : semaine déjà payée → on ne fait rien.
+  if (await prisma.weeklyTrophyPayout.findUnique({ where: { weekKey } })) return;
+
+  const season = await prisma.season.findFirst({ where: { isActive: true } });
+  const seasonId = season?.id ?? null;
+
+  // Matchs 1v1 classés de la saison active (mêmes que les boards par discipline).
+  const rawMatches = await prisma.playedMatch.findMany({
+    where: { mode: null, ...(seasonId ? { seasonId } : {}) },
+    select: {
+      playerALogin: true, playerBLogin: true, scoreA: true, scoreB: true,
+      winner: true, playedAt: true, game: true, stocksA: true, stocksB: true,
+    },
+  });
+  const matches = rawMatches as unknown as TrophyMatch[];
+
+  // Boards par discipline : joueurs visibles inscrits, Elo du mode + dodge.
+  const boards: GameBoards = {};
+  for (const game of GAME_IDS) {
+    const users = await prisma.user.findMany({
+      where: { ...VISIBLE_USER_WHERE, games: { has: game } },
+      select: { login: true, imageUrl: true, dodgeCount: true, elo: true, eloSmash: true, eloChess: true, eloSf: true, eloFlechettes: true },
+    });
+    const field = TROPHY_ELO_FIELD[game];
+    boards[game] = users.map((u) => ({ login: u.login, imageUrl: u.imageUrl, elo: field ? u[field] : u.elo, dodgeCount: u.dodgeCount }));
+  }
+
+  const counts = trophyCountsByLogin(boards, matches);
+  // Classement par nb de trophées décroissant puis login (déterministe, comme le
+  // podium affiché). Vide → on marque tout de même la semaine (idempotence).
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const top3 = ranked.slice(0, 3).map(([login]) => login);
+
+  await prisma.$transaction(async (tx) => {
+    let paid = 0;
+    for (let i = 0; i < ranked.length; i++) {
+      const [login, count] = ranked[i]!;
+      const podiumBonus = i < 3 ? TROPHY_PODIUM_WEEKLY[i]! : 0;
+      const amount = podiumBonus + count * TROPHY_PER_TROPHY_WEEKLY;
+      if (amount <= 0) continue;
+      const res = await grantCoinsTx(tx, login, amount, {
+        type: 'trophy_income',
+        meta: { week: weekKey, trophies: count, rank: i < 3 ? i + 1 : null, podiumBonus, perTrophy: count * TROPHY_PER_TROPHY_WEEKLY },
+      });
+      if (res != null) paid++;
+    }
+    await tx.weeklyTrophyPayout.create({
+      data: { weekKey, recipients: paid, top1: top3[0] ?? null, top2: top3[1] ?? null, top3: top3[2] ?? null },
+    });
+  });
+
+  if (top3.length > 0) {
+    void notifyMany(top3, {
+      type: 'coins_granted',
+      title: 'Revenus passifs des trophées',
+      body: `Le podium des trophées de la semaine a été récompensé — tes League Coins ont été crédités.`,
+      link: `/profil`,
+    });
+  }
 }
 
 // ─── Quêtes hebdomadaires (source de vérité serveur) ─────────────────────────
@@ -10509,6 +10953,7 @@ const PlaceBetSchema = z.object({
 
 app.post('/bets', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -10583,6 +11028,7 @@ const PlaceOpsBetSchema = z.object({
 
 app.post('/bets/ops', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceOpsBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -10655,6 +11101,7 @@ const PlaceMatchBetSchema = z.object({
 
 app.post('/bets/match', async (c) => {
   const me = await getCurrentLogin(c);
+  await assertNotPenalized(me, 'parier');
   const body = await c.req.json().catch(() => null);
   const parsed = PlaceMatchBetSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
@@ -11263,6 +11710,11 @@ if (process.env.NODE_ENV !== 'test') {
       });
       purgeScheduledDeletions().catch((err) => {
         console.error('failed to purge scheduled account deletions', err);
+      });
+      // Revenus passifs hebdomadaires (podium des trophées) — idempotent par semaine
+      // ISO, donc un check quotidien crédite une seule fois en début de semaine.
+      runWeeklyTrophyIncome().catch((err) => {
+        console.error('failed to run weekly trophy income', err);
       });
     };
     runDailyPurges();

@@ -4,6 +4,7 @@ import { X, type LucideIcon } from 'lucide-react';
 import { badgeDef } from '../lib/badges';
 import { badgeIcon } from '../lib/badgeIcons';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { CursorTooltip } from './CursorTooltip';
 import type { EquippedBadge } from '../lib/api';
 
 /** Def de rendu d'un badge (catalogue OU badge acheté en boutique). */
@@ -12,11 +13,35 @@ export interface BadgeRenderDef {
   color: string;
   icon: LucideIcon;
   description?: string;
+  /** Comment l'obtenir (infobulle de profil). */
+  obtain?: string;
+  /** Badge unique (un seul porteur) plutôt qu'obtenable. */
+  unique?: boolean;
 }
 
 /** Convertit un badge acheté (icône = nom string) en def de rendu. */
 function defFromEquipped(b: EquippedBadge): BadgeRenderDef {
-  return { label: b.label, color: b.color ?? '#a89880', icon: badgeIcon(b.icon) };
+  return {
+    label: b.label,
+    color: b.color ?? '#a89880',
+    icon: badgeIcon(b.icon),
+    obtain: 'Badge cosmétique disponible en boutique.',
+  };
+}
+
+/** Contenu de l'infobulle d'un badge : libellé, statut (unique/obtenable) et moyen. */
+function badgeTooltipContent(b: BadgeRenderDef) {
+  return (
+    <>
+      <div className="text-xs font-extrabold" style={{ color: b.color }}>
+        {b.label}
+      </div>
+      <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-gold/80">
+        {b.unique ? 'Badge unique' : 'Badge obtenable'}
+      </div>
+      {b.obtain && <div className="mt-1 text-[11px] leading-snug text-muted-2">{b.obtain}</div>}
+    </>
+  );
 }
 
 /**
@@ -30,6 +55,7 @@ export function BadgeChip({
   def,
   size = 'sm',
   iconOnly = false,
+  richTooltip = false,
   onClick,
 }: {
   code?: string;
@@ -38,6 +64,8 @@ export function BadgeChip({
   /** Pastille ronde icône-seule (label dans la modale) — gain de place à côté
    *  d'un nom, évite que le label pousse / tronque le texte voisin. */
   iconOnly?: boolean;
+  /** Infobulle riche qui SUIT LE CURSEUR (unique/obtenable + comment) — profils. */
+  richTooltip?: boolean;
   onClick?: () => void;
 }) {
   const b = def ?? badgeDef(code ?? '');
@@ -53,7 +81,11 @@ export function BadgeChip({
     animate: { backgroundPosition: ['0% 0%', '220% 0%'] },
     transition: { duration: 3.2, repeat: Infinity, ease: 'linear' as const },
   };
+  // Sans infobulle riche, on garde l'attribut natif `title` ; avec, on le retire
+  // pour ne pas doubler l'infobulle du navigateur sous celle qui suit le curseur.
+  const nativeTitle = richTooltip ? undefined : b.label;
 
+  let chip: React.ReactNode;
   if (iconOnly) {
     const boxCls = size === 'xs' ? 'w-5 h-5' : size === 'md' ? 'w-7 h-7' : 'w-6 h-6';
     const iconCls = size === 'xs' ? 'w-3 h-3' : size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5';
@@ -61,40 +93,43 @@ export function BadgeChip({
     const inner = <Icon className={iconCls} strokeWidth={2.6} />;
     // Sans onClick : pastille NON interactive (span) — autorise l'imbrication dans
     // un lien/bouton (lignes de classement, hover-card) sans HTML invalide.
-    return onClick ? (
-      <motion.button type="button" onClick={onClick} title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+    chip = onClick ? (
+      <motion.button type="button" onClick={onClick} title={nativeTitle} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
         {inner}
       </motion.button>
     ) : (
-      <motion.span role="img" title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+      <motion.span role="img" title={nativeTitle} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+        {inner}
+      </motion.span>
+    );
+  } else {
+    const sizeCls =
+      size === 'xs'
+        ? 'text-[8px] px-1.5 py-0.5 gap-0.5'
+        : size === 'md'
+          ? 'text-xs px-3 py-1.5 gap-1.5'
+          : 'text-[10px] px-2 py-0.5 gap-1';
+    const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-4 h-4' : 'w-3 h-3';
+    const cls = `inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`;
+    const inner = (
+      <>
+        <Icon className={iconCls} strokeWidth={2.6} />
+        {b.label}
+      </>
+    );
+    chip = onClick ? (
+      <motion.button type="button" onClick={onClick} title={nativeTitle} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
+        {inner}
+      </motion.button>
+    ) : (
+      <motion.span role="img" title={nativeTitle} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
         {inner}
       </motion.span>
     );
   }
 
-  const sizeCls =
-    size === 'xs'
-      ? 'text-[8px] px-1.5 py-0.5 gap-0.5'
-      : size === 'md'
-        ? 'text-xs px-3 py-1.5 gap-1.5'
-        : 'text-[10px] px-2 py-0.5 gap-1';
-  const iconCls = size === 'xs' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-4 h-4' : 'w-3 h-3';
-  const cls = `inline-flex items-center rounded-full font-extrabold uppercase tracking-[0.1em] border leading-none ${sizeCls}`;
-  const inner = (
-    <>
-      <Icon className={iconCls} strokeWidth={2.6} />
-      {b.label}
-    </>
-  );
-  return onClick ? (
-    <motion.button type="button" onClick={onClick} title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
-      {inner}
-    </motion.button>
-  ) : (
-    <motion.span role="img" title={b.label} aria-label={b.label} className={cls} style={commonStyle} {...sheen}>
-      {inner}
-    </motion.span>
-  );
+  if (!richTooltip) return <>{chip}</>;
+  return <CursorTooltip content={badgeTooltipContent(b)}>{chip}</CursorTooltip>;
 }
 
 /** Pastille « +N » repliant les badges en trop — ouvre la modale au clic. */
@@ -143,6 +178,7 @@ export function BadgesRow({
   size = 'sm',
   max = 3,
   iconOnly = false,
+  richTooltip = false,
 }: {
   codes: string[];
   /** Badge(s) acheté(s) & équipé(s) (boutique), rendus avec leur def inline. */
@@ -153,6 +189,8 @@ export function BadgesRow({
   /** Pastilles rondes icône-seule (label dans la modale) — pour les espaces serrés
    *  comme la rangée à côté du nom sur les cartes héro mobiles. */
   iconOnly?: boolean;
+  /** Infobulle riche qui suit le curseur sur chaque pastille (profils). */
+  richTooltip?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const extras = extra ?? [];
@@ -163,10 +201,10 @@ export function BadgesRow({
   // Liste unifiée (catalogue + boutique), dans l'ordre d'affichage.
   const chips = [
     ...safeCodes.map((code) => (
-      <BadgeChip key={code} code={code} size={size} iconOnly={iconOnly} onClick={() => setOpen(true)} />
+      <BadgeChip key={code} code={code} size={size} iconOnly={iconOnly} richTooltip={richTooltip} onClick={() => setOpen(true)} />
     )),
     ...extras.map((b) => (
-      <BadgeChip key={`shop-${b.code}`} def={defFromEquipped(b)} size={size} iconOnly={iconOnly} onClick={() => setOpen(true)} />
+      <BadgeChip key={`shop-${b.code}`} def={defFromEquipped(b)} size={size} iconOnly={iconOnly} richTooltip={richTooltip} onClick={() => setOpen(true)} />
     )),
   ];
   const visible = chips.slice(0, max);

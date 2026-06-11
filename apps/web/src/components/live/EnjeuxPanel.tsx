@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { tournamentEloMax, tournamentEloReward } from '@42-league/shared';
+import { TOURNAMENT_ELO_PLACEMENTS, tournamentEloForPlacement } from '@42-league/shared';
 import { Avatar } from '../Avatar';
 import { PanelTitle } from './LivePanel';
 import type { LiveTournament, TournamentMatch } from '../../lib/api';
@@ -93,21 +93,14 @@ function LeagueView({
   const is2v2 = tournament.mode === '2v2';
   const rows = standings.slice(0, 12);
 
-  // Enjeux (miroir de la page de contrôle).
-  const eloMax = tournamentEloMax(tournament.kind);
+  // Enjeux (miroir de la page de contrôle) : barème par PLACEMENT final
+  // (1er +100, 2e +75, 3e +50, 4e +25 — identique amical/officiel).
+  const eloMax = TOURNAMENT_ELO_PLACEMENTS[0];
   const effectiveQualify = Math.min(
     64,
     Math.max(2, tournament.leagueQualifyCount ?? largestPow2AtMost(standings.length || 2)),
   );
   const highlightQualify = Math.min(effectiveQualify, standings.length);
-  const projectedRounds = Math.max(1, Math.round(Math.log2(effectiveQualify)));
-  const securedQualElo = tournamentEloReward({
-    format: 'league',
-    qualified: true,
-    bracketRoundsWon: 0,
-    totalBracketRounds: projectedRounds,
-    max: eloMax,
-  });
   const championPrize =
     tournament.kind === 'official' && tournament.prizeKind && tournament.prizeKind !== 'none'
       ? tournament.prizeKind === 'coins'
@@ -157,7 +150,10 @@ function LeagueView({
                 i === 0
                   ? { tone: 'champion', main: `🏆 +${eloMax}`, title: championPrize ?? undefined }
                   : qualified
-                    ? { tone: 'qualified', main: `+${securedQualElo}` }
+                    ? tournamentEloForPlacement(i + 1) > 0
+                      // Podium projeté (2e/3e/4e) : +75/+50/+25 si le rang tient en finale.
+                      ? { tone: 'qualified', main: `+${tournamentEloForPlacement(i + 1)}` }
+                      : { tone: 'qualified', main: 'Qualifié' }
                     : gap > 0
                       ? { tone: 'gap', main: `−${gap}`, sub: 'qualif' }
                       : { tone: 'gap', main: '=' }

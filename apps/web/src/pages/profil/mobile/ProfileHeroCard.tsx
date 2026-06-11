@@ -9,6 +9,8 @@ import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../../lib/chars';
 import { RankBadge } from '../../../components/RankBadge';
 import { Tooltip } from '../../../components/Tooltip';
+import { CursorTooltip } from '../../../components/CursorTooltip';
+import { titleTooltipContent } from '../../../components/TitleTooltip';
 import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
@@ -88,6 +90,8 @@ export function ProfileHeroCard({
   const equippedTitle = displayTitle(user.login, user.title, null);
   const isTarnished = !equippedTitle;
   const titleLabel = equippedTitle ?? t('profil.title.tarnished');
+  // Marque de réputation : nb de litiges perdus (faux score / contestation abusive).
+  const disputesLost = user.disputesLost ?? (isMe ? me?.disputesLost : 0) ?? 0;
   const effectiveTitleColor = isTarnished ? null : titleColor;
 
   // Badges cross-jeux : toutes les disciplines où ce joueur est INSCRIT
@@ -201,8 +205,13 @@ export function ProfileHeroCard({
             « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (sur SON
             profil) est une flèche qui suit immédiatement la fin du titre. */}
         <div className="relative flex items-center justify-center gap-1.5 mb-4">
+          <CursorTooltip
+            className="inline-flex max-w-[80%] min-w-0"
+            disabled={isTarnished}
+            content={titleTooltipContent(equippedTitle)}
+          >
           <span
-            className={`inline-flex items-center gap-1.5 max-w-[80%] min-w-0 ${
+            className={`inline-flex items-center gap-1.5 min-w-0 ${
               !isTarnished && effectiveTitleColor === 'rainbow' ? 'title-rainbow' : ''
             }`}
             style={isTarnished || effectiveTitleColor === 'rainbow' ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
@@ -213,6 +222,7 @@ export function ProfileHeroCard({
             </span>
             <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
           </span>
+          </CursorTooltip>
           {isMe && <TitlePicker className="shrink-0" />}
           {isMe && <BannerPicker className="absolute left-0" />}
         </div>
@@ -253,17 +263,37 @@ export function ProfileHeroCard({
                     size="md"
                     iconOnly={isMobile}
                     max={isMobile ? 3 : 4}
+                    richTooltip
                   />
                 </div>
               )}
             </div>
             {realName && <div className="text-[10px] text-muted-2 font-mono truncate">@{user.login}</div>}
-            {user.campus && (
-              <div className="inline-flex items-center gap-1 text-[10px] text-muted mt-1 font-medium uppercase tracking-wider">
-                <MapPin className="w-3 h-3" strokeWidth={2.5} />
-                <span>{user.campus}</span>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {user.campus && (
+                <div className="inline-flex items-center gap-1 text-[10px] text-muted font-medium uppercase tracking-wider">
+                  <MapPin className="w-3 h-3" strokeWidth={2.5} />
+                  <span>{user.campus}</span>
+                </div>
+              )}
+              {disputesLost > 0 && (
+                <CursorTooltip
+                  className="inline-flex"
+                  content={
+                    <>
+                      <div className="text-xs font-extrabold text-red">Litiges perdus : {disputesLost}</div>
+                      <div className="mt-1 text-[11px] leading-snug text-muted-2">
+                        Score déclaré faux ou contestation jugée abusive. Plus le compteur monte, plus la sanction est lourde.
+                      </div>
+                    </>
+                  }
+                >
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red bg-red/10 border border-red/25 rounded-full px-2 py-0.5">
+                    ⚖ {disputesLost}
+                  </span>
+                </CursorTooltip>
+              )}
+            </div>
           </div>
 
           {myRank > 0 && (
@@ -345,7 +375,7 @@ export function ProfileHeroCard({
           const coinValue = isMe ? (me?.coins ?? 0) : (coinsProp ?? 0);
           return (
             <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-violet-500/10 border border-violet-400/25">
-              <img src="/42coin.png" alt="" className="w-5 h-5 shrink-0" />
+              <img src="/42coin.webp" alt="" className="w-5 h-5 shrink-0" />
               <span className="text-[11px] uppercase tracking-[0.16em] font-extrabold text-violet-200/90">
                 League Coins
               </span>

@@ -125,7 +125,7 @@ function SfField() {
         <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
           fill="#ff7a18" opacity="0.12" />
       ))}
-      <image href="/sf-color.png" x="248" y="16" width="140" height="88" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+      <image href="/sf-color.webp" x="248" y="16" width="140" height="88" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
     </svg>
   );
 }
@@ -144,7 +144,7 @@ function SmashField() {
         <path key={x} d={`M${x} ${14 + i * 6} l6 14 -10 -3 5 12 -12 -8`}
           fill="#ff3d50" opacity="0.12" />
       ))}
-      <image href="/smash-color.png" x="288" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+      <image href="/smash-color.webp" x="288" y="10" width="100" height="100" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
     </svg>
   );
 }

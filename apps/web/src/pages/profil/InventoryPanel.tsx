@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
-import { ShieldBan, Swords, Flame, Loader2, Check, X, type LucideProps } from 'lucide-react';
+import { ShieldBan, Swords, Flame, Loader2, Check, X, Crosshair, type LucideProps } from 'lucide-react';
 import { api, type ConsumablesResponse, type ConsumableKind, type ConsumableState } from '../../lib/api';
 import { useFlash } from '../../hooks/useFlash';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -33,6 +33,12 @@ const META: Record<ConsumableKind, { label: string; desc: string; Icon: Componen
     Icon: Swords,
     color: '#b07bff',
   },
+  mini_ops: {
+    label: 'Mini-OPS',
+    desc: 'Désigne une cible : un duel inéluctable t’oppose à elle, impossible à refuser.',
+    Icon: Crosshair,
+    color: '#ff5d73',
+  },
 };
 
 const COOLDOWN_MS: Partial<Record<ConsumableKind, number>> = {
@@ -60,6 +66,8 @@ export function InventoryPanel() {
   // Sélecteur « Main du Destin » : null = fermé, sinon les deux logins + la
   // discipline imposée en cours de saisie.
   const [duelPicker, setDuelPicker] = useState<{ p1: string; p2: string; game: Game } | null>(null);
+  // Sélecteur « Mini-OPS » : null = fermé, sinon la cible + la discipline imposée.
+  const [miniPicker, setMiniPicker] = useState<{ target: string; game: Game } | null>(null);
   // Fenêtre de boost « EN FEU » en cours (décompte vivant) pour le multiplicateur d'ELO.
   const boost = useEloBoostRemaining(data?.eloMultUntil ?? null);
 
@@ -119,6 +127,27 @@ export function InventoryPanel() {
     }
   }, [duelPicker, show, load, refresh]);
 
+  const launchMini = useCallback(async () => {
+    if (!miniPicker) return;
+    const { target, game } = miniPicker;
+    if (!target) {
+      show('Choisis une cible.', 'error');
+      return;
+    }
+    setBusy('mini_ops');
+    try {
+      await api.useConsumable('mini_ops', { target, game });
+      show(`Mini-OPS scellé : tu affrontes @${target} en ${GAME_META[game].label}.`);
+      setMiniPicker(null);
+      await load();
+      void refresh();
+    } catch (err) {
+      show(err instanceof Error ? err.message : 'Action impossible', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }, [miniPicker, show, load, refresh]);
+
   if (!data) return null;
 
   return (
@@ -171,7 +200,11 @@ export function InventoryPanel() {
                 type="button"
                 disabled={disabled}
                 onClick={() =>
-                  c.kind === 'force_duel' ? setDuelPicker({ p1: '', p2: '', game: getGame() }) : void use(c.kind)
+                  c.kind === 'force_duel'
+                    ? setDuelPicker({ p1: '', p2: '', game: getGame() })
+                    : c.kind === 'mini_ops'
+                      ? setMiniPicker({ target: '', game: getGame() })
+                      : void use(c.kind)
                 }
                 className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-extrabold uppercase tracking-wide transition-all disabled:opacity-40 ${
                   disabled ? 'bg-bg-1 border border-border/60 text-muted' : 'text-bg-0'
@@ -283,6 +316,98 @@ export function InventoryPanel() {
                 <Swords className="w-4 h-4" strokeWidth={2.4} />
               )}
               Sceller le duel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {miniPicker && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => busy !== 'mini_ops' && setMiniPicker(null)}
+        >
+          <div
+            className="w-full max-w-sm card-hud rounded-2xl p-5"
+            style={{ borderColor: `${META.mini_ops.color}55` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Crosshair className="w-5 h-5" style={{ color: META.mini_ops.color }} strokeWidth={2.2} />
+              <h3 className="font-gaming text-base font-extrabold text-text-strong flex-1">Mini-OPS</h3>
+              <button
+                type="button"
+                onClick={() => setMiniPicker(null)}
+                disabled={busy === 'mini_ops'}
+                className="text-muted hover:text-text-strong disabled:opacity-40"
+              >
+                <X className="w-5 h-5" strokeWidth={2.4} />
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-2 leading-snug mb-4">
+              Désigne ta cible et la discipline : un duel inéluctable t’opposera à elle. Elle ne pourra pas le refuser.
+            </p>
+            <div className="mb-3">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wide">Discipline</span>
+              <div className="mt-1 grid grid-cols-5 gap-1.5">
+                {GAMES.map((g) => {
+                  const gm = GAME_META[g];
+                  const on = miniPicker.game === g;
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setMiniPicker((d) => (d ? { ...d, game: g } : d))}
+                      title={gm.label}
+                      aria-pressed={on}
+                      className="flex flex-col items-center gap-1 rounded-lg border px-1 py-2 transition-all"
+                      style={{
+                        borderColor: on ? gm.color : 'rgba(255,255,255,0.10)',
+                        background: on ? gm.bgColor : 'transparent',
+                        boxShadow: on ? `0 0 0 1px ${gm.color}55` : undefined,
+                      }}
+                    >
+                      <span style={{ color: gm.color }}>{gm.icon(on, 22)}</span>
+                      <span
+                        className="text-[9px] font-bold leading-none truncate w-full text-center"
+                        style={{ color: on ? gm.color : '#7d6e54' }}
+                      >
+                        {gm.shortLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <label className="block">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wide">Cible</span>
+              <select
+                value={miniPicker.target}
+                onChange={(e) => setMiniPicker((d) => (d ? { ...d, target: e.target.value } : d))}
+                className="mt-1 w-full rounded-lg bg-bg-1 border border-border/70 px-3 py-2 text-sm text-text-strong focus:outline-none focus:border-[--c]"
+                style={{ ['--c' as string]: META.mini_ops.color }}
+              >
+                <option value="">— choisir —</option>
+                {others.map((u) => (
+                  <option key={u.login} value={u.login}>
+                    {u.login}
+                    {u.firstName ? ` (${u.firstName})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void launchMini()}
+              disabled={busy === 'mini_ops' || !miniPicker.target}
+              className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-extrabold uppercase tracking-wide text-bg-0 transition-all disabled:opacity-40"
+              style={{ background: META.mini_ops.color }}
+            >
+              {busy === 'mini_ops' ? (
+                <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.5} />
+              ) : (
+                <Crosshair className="w-4 h-4" strokeWidth={2.4} />
+              )}
+              Lancer le Mini-OPS
             </button>
           </div>
         </div>

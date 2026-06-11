@@ -1,5 +1,6 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { tournamentPlacements, tournamentEloForPlacement } from '@42-league/shared';
 import { Avatar } from '../Avatar';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { computeStandings } from '../../lib/tournamentStandings';
@@ -39,6 +40,8 @@ interface Summary {
   leagueDiff: number | null; // goal average du vainqueur en phase de ligue (si format ligue)
   final: TournamentMatch | null;
   semis: TournamentMatch[];
+  /** Podium complet [{rang, équipe, gain Elo}] — affiché aussi sur les tournois passés. */
+  podium: { rank: number; team: TeamView; elo: number }[];
 }
 
 function summarize(t: Tournament, imgByLogin: Map<string, string | null>): Summary | null {
@@ -69,6 +72,23 @@ function summarize(t: Tournament, imgByLogin: Map<string, string | null>): Summa
     if (row) leagueDiff = row.diff;
   }
 
+  // Podium dérivé du bracket (3e = demi-finaliste battu par le champion) + barème
+  // d'Elo par placement (+100/+75/+50/+25).
+  const podium = tournamentPlacements(
+    bracket.map((m) => ({
+      round: m.round,
+      playerALogin: m.playerALogin ?? null,
+      playerBLogin: m.playerBLogin ?? null,
+      winnerLogin: m.winnerLogin ?? null,
+    })),
+  )
+    .map((login, i) =>
+      login
+        ? { rank: i + 1, team: teamForLogin(login, entries, imgByLogin, is2v2), elo: tournamentEloForPlacement(i + 1) }
+        : null,
+    )
+    .filter((x): x is { rank: number; team: TeamView; elo: number } => x !== null);
+
   return {
     is2v2,
     winner: winLogin ? teamForLogin(winLogin, entries, imgByLogin, is2v2) : null,
@@ -77,6 +97,7 @@ function summarize(t: Tournament, imgByLogin: Map<string, string | null>): Summa
     leagueDiff,
     final,
     semis,
+    podium,
   };
 }
 
@@ -195,9 +216,25 @@ export function PastTournamentHover({ t, children }: { t: Tournament; children: 
                 <span className="block text-xs font-bold text-gold truncate">{s.winner.label}</span>
                 <span className="block text-[9px] text-muted-2 uppercase tracking-wider">
                   Vainqueur{s.is2v2 ? ' (duo)' : ''} · {s.winnerWins} victoire{s.winnerWins > 1 ? 's' : ''}
+                  <span className="text-gold font-bold"> · +{tournamentEloForPlacement(1)} Elo</span>
                 </span>
               </span>
             </div>
+
+            {/* Podium complet : placements + gains d'Elo (+100/+75/+50/+25). */}
+            {s.podium.length > 1 && (
+              <div className="mb-2.5 space-y-1">
+                {s.podium.filter((p) => p.rank > 1).map((p) => (
+                  <div key={p.rank} className="flex items-center gap-1.5 text-[10px]">
+                    <span className="w-8 shrink-0 text-muted-2 font-bold">
+                      {p.rank === 2 ? '🥈 2e' : p.rank === 3 ? '🥉 3e' : '4e'}
+                    </span>
+                    <TeamTag team={p.team} />
+                    {p.elo > 0 && <span className="ml-auto shrink-0 text-teal font-bold">+{p.elo}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Stats du tournoi */}
             <div className="flex items-center gap-2 mb-2.5">

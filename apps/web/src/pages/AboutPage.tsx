@@ -2297,7 +2297,7 @@ function TeamCarousel({
 
       {/* Carrousel « coverflow » : carte centrale nette, voisines en retrait et floutées. */}
       <div
-        className="relative h-[480px] sm:h-[560px] select-none touch-pan-y overflow-hidden"
+        className="relative h-[clamp(540px,76vh,780px)] select-none touch-pan-y overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onWheel={onWheel}
@@ -2404,7 +2404,7 @@ function MemberCard({
   const hasStats = member.gitStats && stat && stat.added + stat.deleted > 0;
   return (
     <div
-      className={`relative w-[280px] sm:w-[330px] h-[440px] sm:h-[520px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
+      className={`relative w-[300px] sm:w-[370px] h-[480px] sm:h-[620px] rounded-2xl overflow-hidden border-2 bg-bg-2 transition-shadow duration-300 ${
         accent.border
       } ${active ? 'shadow-[0_24px_60px_-18px_rgba(0,0,0,0.75)]' : 'shadow-lg'}`}
     >

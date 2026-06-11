@@ -110,3 +110,65 @@ export function tournamentEloReward(params: {
   // Élimination directe : pas de palier de qualification distinct.
   return Math.round((max * k) / R);
 }
+
+// ─── Gains d'Elo par PLACEMENT final ──────────────────────────────────────────
+// Nouveau barème (remplace l'interpolation par tour pour le versement) : seuls les
+// QUATRE premiers du tournoi touchent un bonus d'Elo, fixe et identique pour tous
+// les types de tournois (amical comme officiel). En 2v2, CHAQUE membre de l'équipe
+// touche le montant plein.
+//   1er → 100 · 2e → 75 · 3e → 50 · 4e → 25 · au-delà → 0
+
+/** Barème d'Elo par placement (index 0 = 1er). */
+export const TOURNAMENT_ELO_PLACEMENTS = [100, 75, 50, 25] as const;
+
+/** Bonus d'Elo d'un placement (1-indexé) : 1 → 100, 2 → 75, 3 → 50, 4 → 25, sinon 0. */
+export function tournamentEloForPlacement(rank: number): number {
+  return TOURNAMENT_ELO_PLACEMENTS[rank - 1] ?? 0;
+}
+
+/** Sous-ensemble d'un match de bracket nécessaire au calcul des placements. */
+export interface PlacementMatch {
+  round: number;
+  playerALogin: string | null;
+  playerBLogin: string | null;
+  winnerLogin: string | null;
+}
+
+/**
+ * Placements finaux [1er, 2e, 3e, 4e] (logins capitaines, null si indéterminé)
+ * dérivés des matchs de BRACKET d'un tournoi terminé :
+ *   - 1er = vainqueur de la finale ; 2e = son adversaire ;
+ *   - 3e = le demi-finaliste battu par le CHAMPION (il a buté sur le futur
+ *     vainqueur — convention sans petite finale) ; 4e = l'autre demi-finaliste.
+ * Bracket à 2 joueurs (1 round) → pas de 3e/4e. Byes → cases null tolérées.
+ */
+export function tournamentPlacements(
+  bracket: PlacementMatch[],
+): [string | null, string | null, string | null, string | null] {
+  if (bracket.length === 0) return [null, null, null, null];
+  const maxRound = Math.max(...bracket.map((m) => m.round));
+  const final = bracket.find((m) => m.round === maxRound && m.winnerLogin) ?? null;
+  const first = final?.winnerLogin ?? null;
+  const second =
+    final && first ? (final.playerALogin === first ? final.playerBLogin : final.playerALogin) : null;
+
+  // Demi-finales : perdant = l'autre joueur du match (absent sur un bye).
+  const semis = bracket.filter((m) => m.round === maxRound - 1 && m.winnerLogin);
+  const losers = semis
+    .map((m) => ({
+      winner: m.winnerLogin!,
+      loser: m.playerALogin === m.winnerLogin ? m.playerBLogin : m.playerALogin,
+    }))
+    .filter((x) => !!x.loser);
+  let third: string | null = null;
+  let fourth: string | null = null;
+  if (losers.length === 1) {
+    third = losers[0]!.loser;
+  } else if (losers.length >= 2) {
+    const vsChampion = losers.find((x) => x.winner === first);
+    const other = losers.find((x) => x !== vsChampion) ?? null;
+    third = vsChampion?.loser ?? losers[0]!.loser;
+    fourth = (vsChampion ? other?.loser : losers[1]!.loser) ?? null;
+  }
+  return [first, second, third, fourth];
+}

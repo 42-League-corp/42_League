@@ -30,7 +30,7 @@ export function LiveHeader({ tournament, phase }: { tournament: LiveTournament; 
       {/* Marque */}
       <div className="flex items-center gap-[1vw] min-w-0">
         <img
-          src="/logo-wordmark.png"
+          src="/logo-wordmark.webp"
           alt="42 League"
           className="h-[5vh] w-auto object-contain drop-shadow-[0_0_18px_rgba(255,201,74,0.35)]"
         />

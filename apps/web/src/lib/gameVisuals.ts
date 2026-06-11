@@ -27,6 +27,6 @@ export const GAME_EMOJI: Record<Game, string> = {
 
 /** Logos PNG (uniquement smash & streetfighter en possèdent). */
 export const GAME_LOGO_SRC: Partial<Record<Game, string>> = {
-  smash: '/smash-color.png',
-  streetfighter: '/sf-color.png',
+  smash: '/smash-color.webp',
+  streetfighter: '/sf-color.webp',
 };

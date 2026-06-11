@@ -35,6 +35,13 @@ model User {
   matchesPlayed2v2    Int       @default(0) @map("matches_played_2v2")
   dodgeCount          Int       @default(0) @map("dodge_count")
   tournamentsWon      Int       @default(0) @map("tournaments_won")
+  // ── Réputation litiges ──────────────────────────────────────────────────────
+  // Nombre de litiges PERDUS (faux score déclaré OU contestation jugée abusive) —
+  // c'est la « marque » visible sur le profil ET le palier d'escalade du malus.
+  disputesLost        Int       @default(0) @map("disputes_lost")
+  // Fin du cooldown de sanction : tant qu'elle est future, le joueur ne peut ni
+  // déclarer de match ni parier (malus de litige). Null = aucune sanction en cours.
+  penaltyCooldownUntil DateTime? @map("penalty_cooldown_until")
   // Classement Smash Bros (jeu parallèle) — rating/compteurs distincts du babyfoot.
   eloSmash            Int       @default(1000) @map("elo_smash")
   matchesPlayedSmash  Int       @default(0) @map("matches_played_smash")
@@ -274,6 +281,9 @@ model BugReport {
   @@map("bug_reports")
 }
 
+// Un score contesté. Sert AUSSI de file d'arbitrage : un litige naît « open », un
+// admin (ou organisateur) tranche → `status` passe à 'resolved' avec un `resolution`
+// désignant la partie fautive, qui prend alors le malus (cf. applyDisputeMalusTx).
 model RejectedMatch {
   id             String   @id @default(uuid())
   declarerLogin  String   @map("declarer_login")
@@ -282,13 +292,23 @@ model RejectedMatch {
   scoreOpponent  Int      @map("score_opponent")
   contestReason  String   @map("contest_reason")
   contestMessage String   @map("contest_message")
+  // Discipline du match contesté (pour appliquer le malus d'Elo sur le bon Elo).
+  game           String   @default("babyfoot")
   rejectedAt     DateTime @default(now()) @map("rejected_at")
+  // Arbitrage : 'open' tant que non tranché, 'resolved' une fois jugé.
+  status         String   @default("open")
+  // Verdict : 'declarer_wrong' (faux score) | 'contester_wrong' (contestation
+  // abusive) | 'dismissed' (sans suite, aucun malus). Null tant que non tranché.
+  resolution     String?  @map("resolution")
+  resolvedBy     String?  @map("resolved_by")
+  resolvedAt     DateTime? @map("resolved_at")
 
   declarer User @relation("rejectedDeclarer", fields: [declarerLogin], references: [login])
   opponent User @relation("rejectedOpponent", fields: [opponentLogin], references: [login])
 
   @@index([declarerLogin])
   @@index([opponentLogin])
+  @@index([status])
   @@map("rejected_matches")
 }
 
@@ -816,10 +836,13 @@ model ShopInventory {
 // est empilable : `quantity` exemplaires détenus. `lastUsedAt` sert au cooldown
 // entre deux utilisations (anti-ops : ANTI_OPS_USE_COOLDOWN_MS).
 model ConsumableInventory {
-  userLogin  String    @map("user_login")
-  kind       String // 'anti_ops' | 'elo_mult' | 'force_duel'
-  quantity   Int       @default(0)
-  lastUsedAt DateTime? @map("last_used_at")
+  userLogin   String    @map("user_login")
+  kind        String // 'anti_ops' | 'elo_mult' | 'force_duel' | 'mini_ops'
+  quantity    Int       @default(0)
+  lastUsedAt  DateTime? @map("last_used_at")
+  // Dernier ACHAT de ce consommable — sert au cooldown d'achat (ex. mini_ops : 1
+  // achat / 2 jours). Null tant qu'aucun achat à cooldown n'a eu lieu.
+  lastBoughtAt DateTime? @map("last_bought_at")
 
   user User @relation("userConsumables", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
 
@@ -953,6 +976,20 @@ model CoinTransaction {
   @@index([userLogin, createdAt])
   @@index([type])
   @@map("coin_transaction")
+}
+
+// Idempotence des revenus passifs hebdomadaires (podium des trophées). Une ligne par
+// semaine ISO payée : empêche de créditer deux fois la même semaine (redémarrages,
+// ticks multiples). `weekKey` au format "2026-W24". `top1/2/3` = podium payé (audit).
+model WeeklyTrophyPayout {
+  weekKey    String   @id @map("week_key")
+  paidAt     DateTime @default(now()) @map("paid_at")
+  recipients Int      @default(0)
+  top1       String?
+  top2       String?
+  top3       String?
+
+  @@map("weekly_trophy_payout")
 }
 
 // ─── Analytics : pages vues & événements d'usage (tableau de bord GOD) ────────

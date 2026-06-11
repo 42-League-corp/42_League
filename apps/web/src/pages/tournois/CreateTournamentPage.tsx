@@ -501,7 +501,7 @@ export function CreateTournamentPage() {
               </label>
               <p className="text-[10px] text-muted-2 mb-2">{t('tournois.field.cashPrize.hint')}</p>
               <div className="relative">
-                <img src="/42coin.png" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" />
+                <img src="/42coin.webp" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" />
                 <input
                   type="number"
                   min={0}

@@ -121,7 +121,7 @@ export function FeaturedMatch({
           )}
           {isBabyfoot && (
             <img
-              src="/baby anim-Photoroom.png"
+              src="/baby-anim.webp"
               alt=""
               className="h-[12vh] w-auto object-contain mt-[0.4vh] drop-shadow-[0_8px_30px_rgba(0,0,0,0.6)]"
             />
