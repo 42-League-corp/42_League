@@ -925,6 +925,11 @@ model Bet {
   opsId        String?   @map("ops_id") // Ops.id quand targetType='ops' (le duel appartient à cet ops)
   challengeId  String?   @map("challenge_id") // Challenge.id du duel d'ops parié (targetType='ops')
   choiceLogin  String    @map("choice_login") // vainqueur pronostiqué
+  // Pronostic de SCORE EXACT (paris match uniquement) : optionnel pour un parieur
+  // extérieur (bonus ×4 si pile), OBLIGATOIRE pour un joueur qui parie sur son
+  // propre match (gagné ssi score pile). Aligné sur playerA/playerB du match.
+  predictedScoreA Int? @map("predicted_score_a")
+  predictedScoreB Int? @map("predicted_score_b")
   stake        Int // mise débitée à la prise
   status       String    @default("open") // 'open' | 'won' | 'lost' | 'refunded'
   payout       Int       @default(0) // coins crédités au règlement (0 si perdu)

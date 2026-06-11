@@ -59,6 +59,7 @@ classement si dispo, sinon factices), `participants`, `pairings`, `accent`, `gam
 | Réaction (meme) | `components/PlayerReactionOverlay.tsx` | série de victoires/défaites | ✅ `reaction` |
 | Boîte mystère (gain/perte) | `components/shop/MysteryRevealModal.tsx` | achat d'une boîte mystère (1/10 gagne le titre, 9/10 −10 ELO) | ✅ `mystery-win` / `mystery-loss` |
 | Transition de mode | cinématique au changement d'univers | changement de mode de jeu | ✅ `transition` |
+| Passage de rang | `components/RankUpOverlay.tsx` (`triggerRankUp`, store `lib/rankUp.ts`) | l'ELO franchit un palier supérieur (détection dans `LeagueDataProvider` au refresh de `me`) — l'emblème du grade claque au centre : onde de choc + éclairs | ✅ `rankup` |
 | Révélation OPS | `components/OpsRevealOverlay.tsx` | **état serveur** : on devient la cible OPS | ⚠️ non (voir ci-dessous) |
 
 ### Animations NON démontrables via un simple bouton

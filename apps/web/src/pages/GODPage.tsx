@@ -47,6 +47,8 @@ import { useLeagueData } from '../hooks/useLeagueData';
 import { GAMES, GAME_META } from '../lib/gameMeta';
 import { fireContestRage } from '../lib/contestRage';
 import { triggerDuelStrike } from '../lib/duelStrike';
+import { triggerRankUp } from '../lib/rankUp';
+import { RANK_TIERS, GRANDMASTER } from '@42-league/shared';
 import { VersusOverlay as GlobalVersusOverlay } from '../components/VersusOverlay';
 import { VersusOverlay as TournVersusOverlay } from '../components/tournois/VersusOverlay';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
@@ -4033,6 +4035,15 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
 
   type Anim = null | 'versus' | 'tversus' | 'ceremony' | 'victory';
   const [anim, setAnim] = useState<Anim>(null);
+  // Passage de rang : chaque clic monte d'un palier (Étain → … → Diamant → GM),
+  // pour passer en revue tous les emblèmes. Overlay global monté dans l'AppShell.
+  const rankUpIdx = useRef(0);
+  const playRankUp = () => {
+    const ladder = [...RANK_TIERS, GRANDMASTER];
+    const i = rankUpIdx.current % (ladder.length - 1);
+    rankUpIdx.current += 1;
+    triggerRankUp({ tier: ladder[i + 1]!, fromTier: ladder[i]!, game });
+  };
   // Réaction (meme) : la série croît à chaque clic → signature inédite, donc rejoue.
   const [reactionStreak, setReactionStreak] = useState(0);
   // Boîte mystère : 'win' = titre arc-en-ciel, 'loss' = malus −10 ELO.
@@ -4067,6 +4078,7 @@ function AnimationsTab({ myLogin }: { myLogin: string }) {
     { key: 'mystery-win', label: 'Boîte mystère (gain)', desc: 'Révélation animée du titre arc-en-ciel « Mysterious ».', onClick: () => setMystery('win') },
     { key: 'mystery-loss', label: 'Boîte mystère (perte)', desc: 'La boîte n\'offre rien : malus de −10 ELO (9 chances sur 10).', onClick: () => setMystery('loss') },
     { key: 'transition', label: 'Transition de mode ⚠️', desc: 'Joue la cinématique en passant au mode suivant (change ton mode).', onClick: cycleGame },
+    { key: 'rankup', label: 'Passage de rang', desc: 'L\'emblème du grade claque au centre : onde de choc + éclairs (palier suivant à chaque clic).', onClick: playRankUp },
   ];
 
   // Lot d'exemple pour la boîte mystère gagnante : le titre arc-en-ciel « Mysterious ».
@@ -4488,20 +4500,47 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'animations' },
 ];
 
-export function GODPage() {
+// ── Panneau /moodo (modérateurs) ──────────────────────────────────────────────
+// Un MODERATOR voit le même panneau que /GOD mais restreint aux onglets couverts
+// par ses permissions (accordées par un admin via l'onglet MODÉRATION). Onglet
+// visible si AU MOINS UNE des permissions listées est accordée ; les onglets
+// absents de cette table (saisons, annonces, inventaires…) restent admin-only.
+// La vraie barrière reste côté serveur (requirePerm sur chaque endpoint).
+const MODO_TAB_PERMS: Partial<Record<Tab, ModeratorPermissionKey[]>> = {
+  stats: ['canViewStats'],
+  users: ['canBan', 'canEditStats'],
+  moderation: ['canBan'],
+  rejets: ['canDeleteRejectedMatches'],
+  alertes: ['canViewSuspicious'],
+  audit: ['canViewAuditLog'],
+  history: ['canViewHistory'],
+  tournaments: ['canDeleteTournaments'],
+};
+
+export function GODPage({ moodo = false }: { moodo?: boolean }) {
   const navigate = useNavigate();
   const t = useT();
   const [myLogin, setMyLogin] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Role | null>(null);
+  const [myPerms, setMyPerms] = useState<Partial<Record<ModeratorPermissionKey, boolean>>>({});
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('users');
+  const [activeTab, setActiveTab] = useState<Tab>(moodo ? 'stats' : 'users');
   // Sens de la dernière transition d'onglet (1 = suivant, -1 = précédent),
   // pour orienter la petite animation de glissement sur mobile.
   const [navDir, setNavDir] = useState(0);
   const isMobile = useIsMobile();
 
   // Onglets réellement visibles selon le rôle — base de la nav par swipe.
-  const visibleTabs = TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN');
+  // /moodo : un MODERATOR ne voit que les onglets couverts par ses permissions ;
+  // un admin qui visite /moodo voit tous les onglets « modo » (aperçu).
+  const visibleTabs = moodo
+    ? TABS.filter((tab) => {
+        const perms = MODO_TAB_PERMS[tab.id];
+        if (!perms) return false;
+        if (myRole === 'ADMIN' || myRole === 'SUPERADMIN') return true;
+        return perms.some((p) => myPerms[p]);
+      })
+    : TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN');
 
   const goToTab = useCallback(
     (dir: 1 | -1) => {
@@ -4532,16 +4571,31 @@ export function GODPage() {
     api.me()
       .then((data) => {
         const role = data.role;
-        if (role === 'ADMIN' || role === 'SUPERADMIN') {
+        // /GOD : admins uniquement. /moodo : modérateurs (+ admins en aperçu).
+        const allowed =
+          role === 'ADMIN' || role === 'SUPERADMIN' || (moodo && role === 'MODERATOR');
+        if (allowed) {
           setMyLogin(data.login);
           setMyRole(role);
+          setMyPerms(data.moderatorPermissions ?? {});
         } else {
           setMyRole(null);
         }
       })
       .catch(() => setMyRole(null))
       .finally(() => setAuthLoading(false));
-  }, []);
+  }, [moodo]);
+
+  // /moodo : l'onglet courant peut ne pas être autorisé pour ce modo (permissions
+  // chargées après coup) → on se rabat sur le premier onglet visible.
+  useEffect(() => {
+    if (!moodo || authLoading || !myRole) return;
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id ?? 'stats');
+    }
+    // visibleTabs est dérivé de myPerms/myRole — les deps suffisent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moodo, authLoading, myRole, myPerms, activeTab]);
 
   if (authLoading) {
     return (
@@ -4551,11 +4605,14 @@ export function GODPage() {
     );
   }
 
-  if (!myRole || !myLogin) {
+  // /moodo : un modo sans AUCUNE permission accordée n'a rien à voir → 403 aussi.
+  if (!myRole || !myLogin || (moodo && visibleTabs.length === 0)) {
     return (
       <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 overflow-hidden">
         <span className="text-red-400 font-mono text-2xl font-bold">{t('god.denied.code')}</span>
-        <span className="text-zinc-400 font-mono text-sm">{t('god.denied.msg')}</span>
+        <span className="text-zinc-400 font-mono text-sm">
+          {moodo ? t('god.denied.msgModo') : t('god.denied.msg')}
+        </span>
         <button onClick={() => navigate('/challenges')} className="text-zinc-500 font-mono text-xs hover:text-zinc-300 transition-colors cursor-pointer">
           {t('god.back')}
         </button>
@@ -4576,7 +4633,9 @@ export function GODPage() {
             >
               <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
-            <span className="text-zinc-300 font-bold tracking-widest text-sm">{t('god.panel')}</span>
+            <span className="text-zinc-300 font-bold tracking-widest text-sm">
+              {moodo ? t('moodo.panel') : t('god.panel')}
+            </span>
             <span className="text-zinc-700">|</span>
             <span className="text-zinc-400 text-xs">{myLogin}</span>
             <RoleBadge role={myRole} />

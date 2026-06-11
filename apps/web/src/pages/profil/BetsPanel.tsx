@@ -226,6 +226,7 @@ export function BetsPanel() {
                       <div className="text-sm font-bold text-text-strong truncate">{title}</div>
                       <div className="text-[11px] text-muted-2 truncate">
                         {kindLabel} · {b.stake} {t('bets.on')} @{b.choiceLogin}
+                        {b.predictedScoreA != null && ` (${b.predictedScoreA}-${b.predictedScoreB})`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

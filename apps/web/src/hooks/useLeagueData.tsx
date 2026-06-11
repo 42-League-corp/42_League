@@ -26,7 +26,9 @@ import {
 import { useAuth } from './useAuth';
 import { getApiBase } from '../lib/config';
 import { getToken } from '../lib/storage';
-import { getGame, subscribeGame } from '../lib/gameMode';
+import { getGame, subscribeGame, type Game } from '../lib/gameMode';
+import { rankTier } from '@42-league/shared';
+import { triggerRankUp } from '../lib/rankUp';
 
 export interface LeagueData {
   me: MeResponse | null;
@@ -437,6 +439,42 @@ export function LeagueDataProvider({ children }: { children: ReactNode }) {
       es?.close();
     };
   }, [authenticated]);
+
+  // ─── Détection « PASSAGE DE RANG » ───────────────────────────────────────
+  // À chaque mise à jour de `me` (confirmation de match, refresh SSE…), on
+  // compare l'ELO de chaque discipline avec sa valeur précédente : si un palier
+  // supérieur est franchi (Étain → Bronze → … → Diamant), on déclenche la
+  // cinématique plein écran (RankUpOverlay monté dans l'AppShell). Le premier
+  // chargement n'anime jamais (pas de référence de comparaison).
+  const prevElosRef = useRef<Partial<Record<Game, number>> | null>(null);
+  useEffect(() => {
+    const u = data.me?.user;
+    if (!u) {
+      prevElosRef.current = null;
+      return;
+    }
+    const elos: Partial<Record<Game, number>> = {
+      babyfoot: u.elo,
+      smash: u.eloSmash,
+      chess: u.eloChess,
+      streetfighter: u.eloSf,
+      flechettes: u.eloFlechettes,
+    };
+    const prev = prevElosRef.current;
+    prevElosRef.current = elos;
+    if (!prev) return;
+    for (const g of Object.keys(elos) as Game[]) {
+      const before = prev[g];
+      const after = elos[g];
+      if (before == null || after == null || after <= before) continue;
+      const from = rankTier(before);
+      const to = rankTier(after);
+      if (to.min > from.min) {
+        triggerRankUp({ tier: to, fromTier: from, game: g });
+        break; // une seule cinématique à la fois
+      }
+    }
+  }, [data.me]);
 
   const patchMyTitle = useCallback((title: string | null) => {
     setData((prev) =>

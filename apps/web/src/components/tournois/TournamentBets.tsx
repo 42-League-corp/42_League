@@ -174,19 +174,17 @@ export function TournamentBets({
     (login: string | null) => (login ? [login, partners[login] ?? null].filter(Boolean) : []),
     [partners],
   );
-  // Matchs PARIABLES : les deux joueurs connus, pas encore saisis/confirmés/verrouillés,
-  // et je n'en suis pas un des joueurs (ni coéquipier).
+  // Matchs PARIABLES : les deux joueurs connus, pas encore saisis/confirmés/verrouillés.
+  // MES matchs restent pariables — mais uniquement sur le SCORE EXACT (cf. renderMatchCard).
   const openMatches = useMemo(() => {
     if (!isInProgress) return [] as TournamentMatch[];
     return (tournament.matches ?? []).filter((m) => {
       if (!m.playerALogin || !m.playerBLogin) return false;
       // Pile-ou-face lancé → marché fermé (le match va commencer).
       if (m.tossAt) return false;
-      if (m.confirmedAt || m.recordedAt || m.betsLockedAt) return false;
-      const players = [...teamOf(m.playerALogin), ...teamOf(m.playerBLogin)];
-      return !myLogin || !players.includes(myLogin);
+      return !(m.confirmedAt || m.recordedAt || m.betsLockedAt);
     });
-  }, [isInProgress, tournament.matches, teamOf, myLogin]);
+  }, [isInProgress, tournament.matches]);
   // « Match à suivre » : l'affiche ANNONCÉE par l'orga (activeMatchId) si elle est
   // encore pariable, sinon le prochain match ouvert. Mise en avant en grand pour
   // parier en un clic ; les autres affiches suivent en liste compacte.
@@ -216,6 +214,10 @@ export function TournamentBets({
     const key = `m:${m.id}`;
     const isLeague = m.stage === 'league';
     const alreadyBet = myOpenMatchIds.has(m.id);
+    // Je joue ce match (capitaine ou coéquipier) → pari possible UNIQUEMENT sur le
+    // score exact que je pense faire (gagné ssi pile, gain ×4 — règle serveur).
+    const iPlay =
+      !!myLogin && [...teamOf(m.playerALogin), ...teamOf(m.playerBLogin)].includes(myLogin);
     const choices = [
       m.playerALogin as string,
       ...(isLeague ? [DRAW_CHOICE] : []),
@@ -273,8 +275,21 @@ export function TournamentBets({
               labels={{ [DRAW_CHOICE]: t('bets.draw') }}
               maxStake={coins}
               busy={placing}
+              scorePrediction={{
+                required: iPlay,
+                teamA: m.playerALogin as string,
+                teamB: m.playerBLogin as string,
+                allowDraw: isLeague,
+              }}
               onCancel={() => setOpenForm(null)}
-              onSubmit={(choiceLogin, stake) => placeMatchBet({ matchId: m.id, choiceLogin, stake })}
+              onSubmit={(choiceLogin, stake, scores) =>
+                placeMatchBet({
+                  matchId: m.id,
+                  choiceLogin,
+                  stake,
+                  ...(scores ? { predictedScoreA: scores.a, predictedScoreB: scores.b } : {}),
+                })
+              }
             />
           )
         )}
@@ -398,7 +413,9 @@ export function TournamentBets({
                   ? `${teamLabel(m.playerALogin, partners)} vs ${teamLabel(m.playerBLogin, partners)}`
                   : t('bets.matchOutcome')
                 : t('bets.tournamentWinner');
-              const pick = bet.choiceLogin === DRAW_CHOICE ? t('bets.draw') : `@${bet.choiceLogin}`;
+              const pick =
+                (bet.choiceLogin === DRAW_CHOICE ? t('bets.draw') : `@${bet.choiceLogin}`) +
+                (bet.predictedScoreA != null ? ` (${bet.predictedScoreA}-${bet.predictedScoreB})` : '');
               return (
                 <div
                   key={bet.id}
