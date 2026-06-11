@@ -9,6 +9,8 @@ import { FavoriteCharsEditor } from '../../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../../lib/chars';
 import { RankBadge } from '../../../components/RankBadge';
 import { Tooltip } from '../../../components/Tooltip';
+import { CursorTooltip } from '../../../components/CursorTooltip';
+import { titleTooltipContent } from '../../../components/TitleTooltip';
 import { BadgesRow } from '../../../components/Badges';
 import { AnimatedCounter } from '../../../mobile/primitives/AnimatedCounter';
 import { useLeagueData } from '../../../hooks/useLeagueData';
@@ -201,8 +203,13 @@ export function ProfileHeroCard({
             « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (sur SON
             profil) est une flèche qui suit immédiatement la fin du titre. */}
         <div className="relative flex items-center justify-center gap-1.5 mb-4">
+          <CursorTooltip
+            className="inline-flex max-w-[80%] min-w-0"
+            disabled={isTarnished}
+            content={titleTooltipContent(equippedTitle)}
+          >
           <span
-            className={`inline-flex items-center gap-1.5 max-w-[80%] min-w-0 ${
+            className={`inline-flex items-center gap-1.5 min-w-0 ${
               !isTarnished && effectiveTitleColor === 'rainbow' ? 'title-rainbow' : ''
             }`}
             style={isTarnished || effectiveTitleColor === 'rainbow' ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
@@ -213,6 +220,7 @@ export function ProfileHeroCard({
             </span>
             <span className={`text-base leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
           </span>
+          </CursorTooltip>
           {isMe && <TitlePicker className="shrink-0" />}
           {isMe && <BannerPicker className="absolute left-0" />}
         </div>
@@ -253,6 +261,7 @@ export function ProfileHeroCard({
                     size="md"
                     iconOnly={isMobile}
                     max={isMobile ? 3 : 4}
+                    richTooltip
                   />
                 </div>
               )}
