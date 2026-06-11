@@ -3043,7 +3043,10 @@ function SeasonsTab() {
           .replace('{prodCount}', String(r.prodCount))
           .replace('{updated}', String(r.updated))
           .replace('{created}', String(r.created))
-          .replace('{skipped}', String(r.skipped.length)),
+          .replace('{skipped}', String(r.skipped.length)) +
+          ` · ${r.tournamentsSynced} tournoi${r.tournamentsSynced > 1 ? 's' : ''} synchronisé${r.tournamentsSynced > 1 ? 's' : ''}${
+            r.tournamentsSkipped.length > 0 ? ` (${r.tournamentsSkipped.length} sauté${r.tournamentsSkipped.length > 1 ? 's' : ''})` : ''
+          }${r.seasonSwitched ? ` · saison basculée sur « ${r.seasonSwitched} »` : ''}`,
       );
       await load();
     } catch (e) {

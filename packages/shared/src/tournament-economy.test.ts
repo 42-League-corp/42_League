@@ -146,3 +146,56 @@ describe('tournamentEloReward', () => {
     });
   });
 });
+
+// ─── Placement-based Elo ──────────────────────────────────────────────────────
+import { tournamentEloForPlacement, tournamentPlacements } from './tournament-economy.js';
+
+describe('tournamentEloForPlacement', () => {
+  it('barème 100/75/50/25 puis 0', () => {
+    expect(tournamentEloForPlacement(1)).toBe(100);
+    expect(tournamentEloForPlacement(2)).toBe(75);
+    expect(tournamentEloForPlacement(3)).toBe(50);
+    expect(tournamentEloForPlacement(4)).toBe(25);
+    expect(tournamentEloForPlacement(5)).toBe(0);
+    expect(tournamentEloForPlacement(0)).toBe(0);
+  });
+});
+
+describe('tournamentPlacements', () => {
+  const m = (round: number, a: string | null, b: string | null, w: string | null) => ({
+    round,
+    playerALogin: a,
+    playerBLogin: b,
+    winnerLogin: w,
+  });
+
+  it('bracket de 4 : 3e = demi-finaliste battu par le champion', () => {
+    // Demi 1 : alice bat bob · Demi 2 : carol bat dave · Finale : alice bat carol.
+    const placements = tournamentPlacements([
+      m(1, 'alice', 'bob', 'alice'),
+      m(1, 'carol', 'dave', 'carol'),
+      m(2, 'alice', 'carol', 'alice'),
+    ]);
+    expect(placements).toEqual(['alice', 'carol', 'bob', 'dave']);
+  });
+
+  it('bracket de 2 (finale sèche) : pas de 3e/4e', () => {
+    expect(tournamentPlacements([m(1, 'alice', 'bob', 'bob')])).toEqual(['bob', 'alice', null, null]);
+  });
+
+  it('bye en demi : le perdant manquant est ignoré', () => {
+    const placements = tournamentPlacements([
+      m(1, 'alice', null, 'alice'), // bye
+      m(1, 'carol', 'dave', 'dave'),
+      m(2, 'alice', 'dave', 'dave'),
+    ]);
+    expect(placements[0]).toBe('dave');
+    expect(placements[1]).toBe('alice');
+    expect(placements[2]).toBe('carol'); // seul vrai perdant de demi
+    expect(placements[3]).toBeNull();
+  });
+
+  it('bracket vide → tout null', () => {
+    expect(tournamentPlacements([])).toEqual([null, null, null, null]);
+  });
+});

@@ -631,6 +631,23 @@ function MostTitled({
         Les plus titrés
       </div>
 
+      {/* Revenus passifs hebdomadaires : le podium des trophées rapporte des League
+          Coins CHAQUE SEMAINE, et chaque trophée détenu une prime cumulable. */}
+      <div className="mb-3 rounded-xl border border-gold/25 bg-gold/[0.05] px-4 py-3">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-gold font-extrabold mb-1.5 flex items-center gap-1.5">
+          <span>🪙</span>
+          <span>Revenus passifs hebdomadaires</span>
+        </div>
+        <p className="text-[11px] text-muted-2 leading-snug">
+          Chaque semaine, le podium des plus titrés est payé en League Coins :{' '}
+          <span className="text-gold font-bold">🥇 1 200</span> ·{' '}
+          <span className="text-gold/90 font-bold">🥈 700</span> ·{' '}
+          <span className="text-gold/80 font-bold">🥉 350</span>. Et chaque trophée détenu
+          rapporte <span className="text-gold font-bold">25 coins</span> par semaine — cumulable
+          avec la prime de podium. Garde tes trophées pour encaisser !
+        </p>
+      </div>
+
       {/* Fond très subtil sans border (évite card-hud dans card-hud).
           overflow-hidden + sans padding : le podium est plein cadre, le halo et
           le balayage de brillance vont jusqu'aux bords (pas de cadre mort autour). */}

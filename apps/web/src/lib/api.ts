@@ -1236,13 +1236,19 @@ export const api = {
     request<Season>(`/seasons/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   deleteSeason: (id: string) =>
     request<{ deleted: true }>(`/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  // Synchro ELO/stats prod → staging (staging only, superadmin). Renvoie les
-  // compteurs de comptes mis à jour / créés / sautés.
+  // Synchro ELO/stats prod → staging (staging only, superadmin). Copie aussi les
+  // tournois en cours/passés (inscrits + matchs). Renvoie les compteurs de comptes
+  // mis à jour / créés / sautés + tournois synchronisés.
   syncEloFromProd: () =>
-    request<{ prodCount: number; updated: number; created: number; skipped: string[] }>(
-      '/admin/seasons/sync-elo-from-prod',
-      { method: 'POST' },
-    ),
+    request<{
+      prodCount: number;
+      updated: number;
+      created: number;
+      skipped: string[];
+      tournamentsSynced: number;
+      tournamentsSkipped: string[];
+      seasonSwitched: string | null;
+    }>('/admin/seasons/sync-elo-from-prod', { method: 'POST' }),
   pendingMatches: () => request<PendingMatch[]>('/matches/pending'),
   playedMatches: () => request<PlayedMatch[]>('/matches'),
   declareMatch: (input: { opponentLogin: string } & MatchResultInput) =>

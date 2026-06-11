@@ -14,7 +14,7 @@ import CoinFlip from '../components/tournois/CoinFlip';
 import { CoinFlipOverlay } from '../components/tournois/CoinFlipOverlay';
 import { VersusOverlay, type VersusFighter } from '../components/tournois/VersusOverlay';
 import { VictoryOverlay } from '../components/tournois/VictoryOverlay';
-import { winnerTeam } from '../lib/tournamentTeam';
+import { winnerTeam, teamForCaptain } from '../lib/tournamentTeam';
 import TournamentLaunchCeremony from '../components/tournois/TournamentLaunchCeremony';
 import { TournamentBets } from '../components/tournois/TournamentBets';
 import { RankingScopeToggle } from './leaderboard/RankingScopeToggle';
@@ -24,7 +24,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { useServerEvents } from '../hooks/useServerEvents';
 import { useT } from '../lib/i18n';
 import { computeStandings, type Standing } from '../lib/tournamentStandings';
-import { tournamentEloReward, tournamentEloMax } from '@42-league/shared';
+import { TOURNAMENT_ELO_PLACEMENTS, tournamentPlacements, tournamentEloForPlacement } from '@42-league/shared';
 
 // Accent par jeu pour la cérémonie / le bracket (mêmes teintes que le reste de l'app).
 const GAME_ACCENT: Record<Game, string> = {
@@ -865,6 +865,23 @@ export function TournoiDetailPage() {
             {tournament.winner && tournament.status === 'finished' && (() => {
               const wt = winnerTeam(tournament);
               if (!wt) return null;
+              // Podium complet dérivé du bracket (3e = battu par le champion en demi).
+              // Affiché aussi pour les tournois PASSÉS — même barème : +100/+75/+50/+25.
+              const bracket = (tournament.matches ?? []).filter(
+                (m) => (m.stage ?? 'bracket') === 'bracket',
+              );
+              const placements = tournamentPlacements(
+                bracket.map((m) => ({
+                  round: m.round,
+                  playerALogin: m.playerALogin ?? null,
+                  playerBLogin: m.playerBLogin ?? null,
+                  winnerLogin: m.winnerLogin ?? null,
+                })),
+              );
+              const PLACE_LABEL = ['🥇 1er', '🥈 2e', '🥉 3e', '4e'];
+              const runners = placements
+                .map((login, i) => ({ login, rank: i + 1 }))
+                .filter((p): p is { login: string; rank: number } => !!p.login && p.rank > 1);
               return (
                 <div className="border border-gold/40 bg-gold/5 rounded-xl p-5 text-center">
                   <div className="text-gold text-xs uppercase tracking-[0.18em] font-extrabold mb-3">
@@ -879,7 +896,28 @@ export function TournoiDetailPage() {
                       ))}
                     </div>
                     <span className="font-extrabold text-text-strong">{wt.label}</span>
+                    <span className="text-[11px] font-bold text-gold">+{TOURNAMENT_ELO_PLACEMENTS[0]} Elo</span>
                   </div>
+                  {runners.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gold/15 space-y-1.5 text-left">
+                      {runners.map(({ login, rank }) => {
+                        const team = teamForCaptain(tournament, login);
+                        const elo = tournamentEloForPlacement(rank);
+                        return (
+                          <div key={login} className="flex items-center gap-2 text-xs">
+                            <span className="w-12 shrink-0 text-muted-2 font-bold">{PLACE_LABEL[rank - 1]}</span>
+                            <span className="flex -space-x-1.5 shrink-0">
+                              {team.members.map((m) => (
+                                <Avatar key={m.login} login={m.login} imageUrl={m.imageUrl} size="xs" />
+                              ))}
+                            </span>
+                            <span className="flex-1 min-w-0 truncate text-text-strong font-semibold">{team.label}</span>
+                            {elo > 0 && <span className="shrink-0 text-teal font-bold">+{elo}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1501,18 +1539,10 @@ function LeagueSection({
   const canFinalize = rankedCount >= 2 && effectiveQualify <= rankedCount;
 
   // ── Gains projetés (temps réel) ──
-  // Bonus Elo minimal sécurisé en se qualifiant (palier qualification d'un format
-  // ligue), et bonus du champion (plafond selon le type : 100 officiel / 50 amical).
-  // Recalculé à chaque score.
-  const eloMax = tournamentEloMax(tournament.kind);
-  const projectedRounds = Math.max(1, Math.round(Math.log2(effectiveQualify)));
-  const securedQualElo = tournamentEloReward({
-    format: 'league',
-    qualified: true,
-    bracketRoundsWon: 0,
-    totalBracketRounds: projectedRounds,
-    max: eloMax,
-  });
+  // Barème par PLACEMENT final (identique amical/officiel) : 1er +100, 2e +75,
+  // 3e +50, 4e +25. Le rang du classement de ligue donne la PROJECTION — le
+  // placement réel se joue en phase finale. Recalculé à chaque score.
+  const eloMax = TOURNAMENT_ELO_PLACEMENTS[0];
   // Libellé du prix unique au champion (officiels) : coins ou cosmétique.
   const championPrize =
     tournament.kind === 'official' && tournament.prizeKind && tournament.prizeKind !== 'none'
@@ -1703,9 +1733,14 @@ function LeagueSection({
                           🏆 +{eloMax}
                           {championPrize ? ` · ${championPrize}` : ''}
                         </span>
-                      ) : (
+                      ) : i < TOURNAMENT_ELO_PLACEMENTS.length ? (
+                        // Podium projeté (2e/3e/4e) : +75/+50/+25 si le rang tient en phase finale.
                         <span className="text-teal text-[11px] font-semibold">
-                          {t('tournois.league.gainQualified').replace('{n}', String(securedQualElo))}
+                          {t('tournois.league.gainQualified').replace('{n}', String(TOURNAMENT_ELO_PLACEMENTS[i]))}
+                        </span>
+                      ) : (
+                        <span className="text-teal/70 text-[11px] font-semibold">
+                          {t('tournois.league.qualifiedOnly')}
                         </span>
                       )}
                     </td>

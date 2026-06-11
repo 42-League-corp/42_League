@@ -17,8 +17,8 @@ import {
   AnnouncementCreateSchema,
   betPayout,
   cashPrizeForRounds,
-  tournamentEloReward,
-  tournamentEloMax,
+  tournamentPlacements,
+  tournamentEloForPlacement,
   DEFAULT_BET_FINAL_MULT,
   BET_FINAL_MULT_MIN,
   BET_FINAL_MULT_MAX,
@@ -2248,9 +2248,9 @@ app.post('/seasons/:id/activate', async (c) => {
 //  - connexion à la prod en LECTURE SEULE via PROD_READONLY_URL (rôle Postgres
 //    SELECT-only) → aucune écriture vers la prod n'est mécaniquement possible.
 // Copie l'ELO, les compteurs (matchesPlayed*, dodgeCount, tournamentsWon*) par
-// discipline ET le solde League Coins, puis bascule la saison active de staging sur
-// celle de la prod. Jamais les rôles, permissions, flags staging, ni l'historique
-// des matchs.
+// discipline, le solde League Coins ET les tournois en cours/passés (inscrits +
+// matchs), puis bascule la saison active de staging sur celle de la prod. Jamais
+// les rôles, permissions, flags staging, ni l'historique des matchs 1v1.
 // Comptes présents UNIQUEMENT en staging (test1…, tester, jagharra) → intacts.
 // Comptes présents en prod mais absents de staging → créés avec une identité
 // minimale (rôle USER) pour que le classement staging reflète la prod.
@@ -2305,6 +2305,8 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
   let created = 0;
   let prodCount = 0;
   const skipped: string[] = [];
+  let tournamentsSynced = 0;
+  const tournamentsSkipped: string[] = [];
   let seasonSwitched: string | null = null;
   try {
     const prodUsers = await prod.user.findMany({
@@ -2371,6 +2373,77 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
       }
     }
 
+    // ── Tournois : recopie les tournois EN COURS et PASSÉS de la prod ──────────
+    // (avec inscrits + matchs) pour tester sur l'historique réel. Idempotent :
+    // chaque tournoi prod remplace sa copie staging (delete + recreate — les
+    // entries/matchs/invites/paris staging liés sautent en cascade, acceptable en
+    // env de test). Les tournois créés UNIQUEMENT en staging sont laissés intacts.
+    const prodTournaments = await prod.tournament.findMany({
+      where: { status: { in: ['in_progress', 'finished'] } },
+      select: {
+        id: true, name: true, kind: true, isPrivate: true, imageUrl: true,
+        capacity: true, mode: true, format: true, game: true, status: true,
+        createdByLogin: true, coOrganizers: true, winnerLogin: true,
+        createdAt: true, startedAt: true, finishedAt: true, activeMatchId: true,
+        prizeKind: true, prizeCoins: true, prizeItemId: true,
+        betFinalMult: true, cashPrizeBase: true, leagueQualifyCount: true,
+        entries: {
+          select: { login: true, partnerLogin: true, teamName: true, joinedAt: true },
+        },
+        matches: {
+          select: {
+            id: true, stage: true, poolIndex: true, round: true, slot: true,
+            playerALogin: true, playerBLogin: true, scoreA: true, scoreB: true,
+            winnerLogin: true, recordedByLogin: true, recordedAt: true,
+            confirmedAt: true, betsLockedAt: true, tossWinnerLogin: true,
+            tossSide: true, advantagePick: true, tossAt: true,
+          },
+        },
+      },
+    });
+    console.log(`[sync-elo-from-prod] ${prodTournaments.length} tournois (en cours/terminés) lus depuis la prod`);
+    for (const t of prodTournaments) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // FK users : backfille en minimal les logins référencés mais absents de
+          // staging (ex. compte anonymisé en prod, hors du sync utilisateurs).
+          const referenced = new Set<string>([t.createdByLogin]);
+          if (t.winnerLogin) referenced.add(t.winnerLogin);
+          for (const e of t.entries) referenced.add(e.login);
+          for (const m of t.matches) {
+            if (m.playerALogin) referenced.add(m.playerALogin);
+            if (m.playerBLogin) referenced.add(m.playerBLogin);
+          }
+          for (const login of referenced) {
+            await tx.user.upsert({ where: { login }, update: {}, create: { login, role: 'USER' } });
+          }
+          // Récompense cosmétique : ne garde la référence que si l'objet existe en staging.
+          const prizeItemId =
+            t.prizeItemId &&
+            (await tx.shopItem.findUnique({ where: { id: t.prizeItemId }, select: { id: true } }))
+              ? t.prizeItemId
+              : null;
+          await tx.tournament.deleteMany({ where: { id: t.id } });
+          const { entries, matches, ...fields } = t;
+          await tx.tournament.create({ data: { ...fields, prizeItemId } });
+          if (entries.length > 0) {
+            await tx.tournamentEntry.createMany({
+              data: entries.map((e) => ({ ...e, tournamentId: t.id })),
+            });
+          }
+          if (matches.length > 0) {
+            await tx.tournamentMatch.createMany({
+              data: matches.map((m) => ({ ...m, tournamentId: t.id })),
+            });
+          }
+        });
+        tournamentsSynced++;
+      } catch (e) {
+        console.warn(`[sync-elo-from-prod] skip tournoi ${t.id} (${t.name}):`, e instanceof Error ? e.message : e);
+        tournamentsSkipped.push(t.name);
+      }
+    }
+
     // ── Bascule de saison : staging passe sur la MÊME saison active que la prod ──
     // (ex. la prod est sur « Saison 1 » mais staging encore sur la Beta). On bascule
     // par NOM : on réutilise une saison staging du même nom si elle existe, sinon on
@@ -2404,11 +2477,14 @@ app.post('/admin/seasons/sync-elo-from-prod', async (c) => {
     actorRole: await getUserRole(me),
     action: 'SYNC_ELO_FROM_PROD',
     target: 'prod',
-    payload: { prodCount, updated, created, skipped: skipped.length, seasonSwitched },
+    payload: {
+      prodCount, updated, created, skipped: skipped.length,
+      tournamentsSynced, tournamentsSkipped: tournamentsSkipped.length, seasonSwitched,
+    },
   });
   broadcast({ type: 'data:update', payload: {} });
   broadcast({ type: 'leaderboard:update', payload: {} });
-  return c.json({ prodCount, updated, created, skipped, seasonSwitched });
+  return c.json({ prodCount, updated, created, skipped, tournamentsSynced, tournamentsSkipped, seasonSwitched });
 });
 
 // Supprime une saison : retire le classement figé, les badges champion liés, et
@@ -5040,49 +5116,33 @@ async function launchTournamentMatches(
 // finale → tournoi terminé + titre + récompense + paris du tournoi.
 // Renvoie le même objet de résultat que la route confirm (emits/notifs APRÈS commit).
 /**
- * Crédite le bonus d'Elo de fin de tournoi à TOUS les participants, selon le
- * palier atteint (champion `maxReward`, sorti en qualif 0, paliers interpolés — cf.
- * `tournamentEloReward`). `maxReward` dépend du type : 100 pour un officiel, 50 pour
- * un amical (cf. `tournamentEloMax`). Appelé une seule fois, au settlement de la finale.
- *
- * Le palier d'un joueur se déduit du bracket : nombre de matchs de bracket gagnés
- * (byes inclus) et présence dans le bracket (= a franchi poules/ligue). En 2v2 le
- * bonus du capitaine est versé aux deux coéquipiers.
+ * Crédite le bonus d'Elo de fin de tournoi PAR PLACEMENT : 1er +100, 2e +75,
+ * 3e +50, 4e +25 (cf. TOURNAMENT_ELO_PLACEMENTS — identique amical/officiel).
+ * Les placements se déduisent du bracket (3e = demi-finaliste battu par le
+ * champion, convention sans petite finale, cf. tournamentPlacements). En 2v2,
+ * CHAQUE membre de l'équipe touche le montant plein. Appelé une seule fois, au
+ * settlement de la finale.
  */
 async function awardTournamentElo(
   tx: Prisma.TransactionClient,
   id: string,
-  format: string,
   game: GameId,
-  totalBracketRounds: number,
-  maxReward: number,
 ): Promise<void> {
-  const entries = await tx.tournamentEntry.findMany({
-    where: { tournamentId: id },
-    select: { login: true, partnerLogin: true },
-  });
   const bracket = await tx.tournamentMatch.findMany({
     where: { tournamentId: id, stage: 'bracket' },
-    select: { playerALogin: true, playerBLogin: true, winnerLogin: true },
+    select: { round: true, playerALogin: true, playerBLogin: true, winnerLogin: true },
   });
-  // Tours de bracket gagnés par login + présence dans le bracket (= qualifié).
-  const roundsWon = new Map<string, number>();
-  const inBracket = new Set<string>();
-  for (const bm of bracket) {
-    if (bm.playerALogin) inBracket.add(bm.playerALogin);
-    if (bm.playerBLogin) inBracket.add(bm.playerBLogin);
-    if (bm.winnerLogin) roundsWon.set(bm.winnerLogin, (roundsWon.get(bm.winnerLogin) ?? 0) + 1);
-  }
-  for (const e of entries) {
-    const reward = tournamentEloReward({
-      format,
-      qualified: inBracket.has(e.login),
-      bracketRoundsWon: roundsWon.get(e.login) ?? 0,
-      totalBracketRounds,
-      max: maxReward,
-    });
+  const placements = tournamentPlacements(bracket);
+  for (let i = 0; i < placements.length; i++) {
+    const captain = placements[i];
+    if (!captain) continue;
+    const reward = tournamentEloForPlacement(i + 1);
     if (reward <= 0) continue;
-    const members = e.partnerLogin ? [e.login, e.partnerLogin] : [e.login];
+    const entry = await tx.tournamentEntry.findUnique({
+      where: { tournamentId_login: { tournamentId: id, login: captain } },
+      select: { partnerLogin: true },
+    });
+    const members = entry?.partnerLogin ? [captain, entry.partnerLogin] : [captain];
     for (const login of members) {
       await tx.user.update({ where: { login }, data: eloDelta(game, reward) });
     }
@@ -5222,16 +5282,9 @@ async function settleConfirmedTournamentMatch(
       },
       select: { game: true, format: true, kind: true, prizeKind: true, prizeCoins: true, prizeItemId: true },
     });
-    // Bonus d'Elo de fin de tournoi à tous les participants (champion 100 officiel /
-    // 50 amical, sortis en qualif 0, paliers interpolés). Indépendant des coins/cosmétiques.
-    await awardTournamentElo(
-      tx,
-      id,
-      tour.format,
-      parseGameId(tour.game),
-      totalBracketRounds,
-      tournamentEloMax(tour.kind),
-    );
+    // Bonus d'Elo de fin de tournoi PAR PLACEMENT (1er +100, 2e +75, 3e +50,
+    // 4e +25 — chaque membre en 2v2). Indépendant des coins/cosmétiques.
+    await awardTournamentElo(tx, id, parseGameId(tour.game));
     // Membres de l'équipe gagnante : capitaine seul (1v1) ou + coéquipier (2v2).
     const winEntry = await tx.tournamentEntry.findUnique({
       where: { tournamentId_login: { tournamentId: id, login: winnerLogin } },
