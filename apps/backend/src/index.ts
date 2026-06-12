@@ -1134,7 +1134,12 @@ async function equippedCosmetics(login: string): Promise<EquippedCosmetics> {
         color: it.color ?? null,
       };
     } else if (it.category === 'banner') {
-      out.equippedBanner = typeof payload.image === 'string' ? payload.image : null;
+      // Bannière personnalisable : image uploadée par le joueur prioritaire sur l'image de l'item.
+      const up = r.userPayload && typeof r.userPayload === 'object' && !Array.isArray(r.userPayload)
+        ? (r.userPayload as Record<string, unknown>)
+        : null;
+      const userImg = up && typeof up.image === 'string' ? up.image : null;
+      out.equippedBanner = userImg ?? (typeof payload.image === 'string' ? payload.image : null);
     }
   }
   return out;
@@ -9365,8 +9370,47 @@ app.get('/me/inventory', async (c) => {
       item: serializeShopItem(r.item),
       equipped: r.equipped,
       acquiredAt: r.acquiredAt.toISOString(),
+      userPayload: r.userPayload ?? null,
     })),
   );
+});
+
+// POST /me/inventory/:id/banner-image — upload une image personnalisée pour une bannière
+// dont le payload contient `allowUpload: true`. Stockée dans ShopInventory.userPayload.
+const CustomBannerImageSchema = z.object({
+  image: z
+    .string()
+    .min(1)
+    .refine((s) => s.startsWith('data:image/'), 'Image invalide (data-URL requise)')
+    .refine((s) => s.length <= MAX_BANNER_DATAURL_LEN, 'Image trop lourde (max ~700 Ko)'),
+});
+app.post('/me/inventory/:id/banner-image', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const itemId = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = CustomBannerImageSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.issues[0]?.message ?? 'Image invalide' });
+
+  const entry = await prisma.shopInventory.findUnique({
+    where: { userLogin_itemId: { userLogin: login, itemId } },
+    include: { item: true },
+  });
+  if (!entry) throw new HTTPException(404, { message: 'Item non trouvé dans ton inventaire' });
+  if (entry.item.category !== 'banner')
+    throw new HTTPException(400, { message: "Cet item n'est pas une bannière" });
+  const itemPayload =
+    entry.item.payload && typeof entry.item.payload === 'object' && !Array.isArray(entry.item.payload)
+      ? (entry.item.payload as Record<string, unknown>)
+      : {};
+  if (!itemPayload.allowUpload)
+    throw new HTTPException(400, { message: "Cette bannière ne supporte pas l'upload personnalisé" });
+
+  await prisma.shopInventory.update({
+    where: { userLogin_itemId: { userLogin: login, itemId } },
+    data: { userPayload: { image: parsed.data.image } },
+  });
+  return c.json({ ok: true });
 });
 
 // POST /me/inventory/:id/equip — (dé)équipe un objet possédé. Au plus un objet
