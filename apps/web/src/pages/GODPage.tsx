@@ -58,7 +58,7 @@ import { PlayerReactionOverlay } from '../components/PlayerReactionOverlay';
 import { MysteryRevealModal } from '../components/shop/MysteryRevealModal';
 import type { MysteryReward } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements' | 'items';
+type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements' | 'items' | 'sf-sessions';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
@@ -1058,6 +1058,20 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
                             isStagingAllowed
                               ? <Btn onClick={() => toggleStaging(u.login, true)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">{t('god.users.removeStaging')}</Btn>
                               : <Btn onClick={() => toggleStaging(u.login, false)} disabled={pending === u.login} variant="ghost" className="border border-teal-600/50 text-teal-500">{t('god.users.staging')}</Btn>
+                          )}
+                          {/* SF Admin toggle — ADMIN/SUPERADMIN */}
+                          {(myRole === 'ADMIN' || myRole === 'SUPERADMIN') && (
+                            <Btn
+                              onClick={async () => {
+                                const currentSfAdmin = !!(u as AdminUser & { sfAdmin?: boolean }).sfAdmin;
+                                await (api as unknown as { adminSetSfAdmin: (l: string, v: boolean) => Promise<unknown> }).adminSetSfAdmin(u.login, !currentSfAdmin);
+                                void load();
+                              }}
+                              disabled={pending === u.login}
+                              variant={(u as AdminUser & { sfAdmin?: boolean }).sfAdmin ? 'warn' : 'ghost'}
+                            >
+                              SF Admin {(u as AdminUser & { sfAdmin?: boolean }).sfAdmin ? '✓' : '○'}
+                            </Btn>
                           )}
                           {u.bannedAt
                             ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">{t('god.users.unban')}</Btn>
@@ -4482,7 +4496,299 @@ function ItemsAdminTab() {
   );
 }
 
-const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
+// ── SF Sessions Tab ────────────────────────────────────────────────────────
+
+interface LocalSfSession {
+  id: string;
+  startTime: string;
+  endTime: string | null;
+  organizerLogin: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  organizer: { login: string; firstName: string | null; lastName: string | null; imageUrl: string | null };
+}
+
+function SfSessionsTab({ myLogin }: { myLogin: string }) {
+  const [sessions, setSessions] = useState<LocalSfSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({
+    startNow: true,
+    startTime: '',
+    durationHours: '3',
+    useEndTime: false,
+    endTime: '',
+    description: '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  void myLogin;
+
+  const load = useCallback(async () => {
+    try {
+      const list = await (api as unknown as { adminListSfSessions: () => Promise<LocalSfSession[]> }).adminListSfSessions();
+      setSessions(list);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const now = new Date();
+  const activeSession = sessions.find(
+    (s) =>
+      s.isActive &&
+      new Date(s.startTime) <= now &&
+      (!s.endTime || new Date(s.endTime) > now)
+  );
+
+  const openSession = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const startTime = form.startNow
+        ? new Date().toISOString()
+        : form.startTime
+        ? new Date(form.startTime).toISOString()
+        : new Date().toISOString();
+      const data: Record<string, unknown> = {
+        startTime,
+        description: form.description || undefined,
+      };
+      if (form.useEndTime && form.endTime) {
+        data.endTime = new Date(form.endTime).toISOString();
+      } else if (!form.useEndTime && form.durationHours) {
+        data.durationHours = parseFloat(form.durationHours);
+      }
+      await (api as unknown as { adminCreateSfSession: (d: Record<string, unknown>) => Promise<LocalSfSession> }).adminCreateSfSession(data);
+      setMsg('Session ouverte !');
+      setCreating(false);
+      void load();
+    } catch {
+      setMsg("Erreur lors de l'ouverture");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeSession = async (id: string) => {
+    setBusy(true);
+    try {
+      await (api as unknown as { adminUpdateSfSession: (id: string, d: { isActive: boolean }) => Promise<LocalSfSession> }).adminUpdateSfSession(id, { isActive: false });
+      void load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelSession = async (id: string) => {
+    if (!confirm('Annuler cette session ?')) return;
+    setBusy(true);
+    try {
+      await (api as unknown as { adminDeleteSfSession: (id: string) => Promise<{ ok: boolean }> }).adminDeleteSfSession(id);
+      void load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fmtDt = (iso: string) =>
+    new Date(iso).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+  return (
+    <div className="space-y-6 p-4">
+      <Section title="État actuel">
+        {activeSession ? (
+          <div className="flex items-center justify-between bg-zinc-800/60 border border-zinc-700 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <div>
+                <span className="text-green-400 font-mono text-xs font-bold uppercase tracking-wide">
+                  Session en cours
+                </span>
+                <p className="text-zinc-400 text-xs mt-0.5">
+                  Depuis {fmtDt(activeSession.startTime)}
+                  {activeSession.endTime
+                    ? ` · Fin prévue ${fmtDt(activeSession.endTime)}`
+                    : ' · Pas de fin planifiée'}
+                </p>
+              </div>
+            </div>
+            <Btn onClick={() => closeSession(activeSession.id)} variant="danger" disabled={busy}>
+              Clôturer
+            </Btn>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-zinc-800/60 border border-zinc-800 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-zinc-600" />
+              <span className="text-zinc-500 font-mono text-xs">Aucune session active</span>
+            </div>
+            <Btn
+              onClick={() => setCreating(!creating)}
+              variant="success"
+              disabled={busy}
+            >
+              {creating ? 'Annuler' : '+ Ouvrir une session'}
+            </Btn>
+          </div>
+        )}
+      </Section>
+
+      {creating && !activeSession && (
+        <Section title="Nouvelle session">
+          <div className="bg-zinc-800/40 border border-zinc-700 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.startNow}
+                  onChange={(e) => setForm((f) => ({ ...f, startNow: e.target.checked }))}
+                  className="rounded"
+                />
+                <span className="text-zinc-300 text-xs font-mono">Démarrer maintenant</span>
+              </label>
+              {!form.startNow && (
+                <Input
+                  type="datetime-local"
+                  value={form.startTime}
+                  onChange={(v) => setForm((f) => ({ ...f, startTime: v }))}
+                  className="text-xs"
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.useEndTime}
+                  onChange={(e) => setForm((f) => ({ ...f, useEndTime: e.target.checked }))}
+                  className="rounded"
+                />
+                <span className="text-zinc-300 text-xs font-mono">Heure de fin fixe</span>
+              </label>
+              {form.useEndTime ? (
+                <Input
+                  type="datetime-local"
+                  value={form.endTime}
+                  onChange={(v) => setForm((f) => ({ ...f, endTime: v }))}
+                  className="text-xs"
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-500 text-xs">Durée :</span>
+                  <Input
+                    type="number"
+                    value={form.durationHours}
+                    onChange={(v) => setForm((f) => ({ ...f, durationHours: v }))}
+                    placeholder="3"
+                    className="w-16 text-xs"
+                  />
+                  <span className="text-zinc-500 text-xs">heures</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <Input
+                value={form.description}
+                onChange={(v) => setForm((f) => ({ ...f, description: v }))}
+                placeholder="Description (optionnelle)"
+                className="w-full text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Btn onClick={openSession} variant="success" disabled={busy}>
+                {busy ? '…' : 'Ouvrir la session'}
+              </Btn>
+              {msg && <span className="text-xs font-mono text-zinc-400">{msg}</span>}
+            </div>
+          </div>
+        </Section>
+      )}
+
+      <Section title={`Historique (${sessions.length})`}>
+        {loading ? (
+          <span className="text-zinc-600 text-xs font-mono">Chargement…</span>
+        ) : sessions.length === 0 ? (
+          <span className="text-zinc-600 text-xs font-mono">Aucune session</span>
+        ) : (
+          <div className="space-y-1.5">
+            {sessions.map((s) => {
+              const sessionNow = new Date();
+              const isOn =
+                s.isActive &&
+                new Date(s.startTime) <= sessionNow &&
+                (!s.endTime || new Date(s.endTime) > sessionNow);
+              const isPending = s.isActive && new Date(s.startTime) > sessionNow;
+              const orgName =
+                [s.organizer.firstName, s.organizer.lastName]
+                  .filter(Boolean)
+                  .join(' ') || s.organizerLogin;
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between bg-zinc-800/40 border border-zinc-800 rounded px-3 py-2 gap-4"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        isOn
+                          ? 'bg-green-400'
+                          : isPending
+                          ? 'bg-yellow-400'
+                          : 'bg-zinc-600'
+                      }`}
+                    />
+                    <span className="text-zinc-300 text-xs font-mono truncate">
+                      {fmtDt(s.startTime)}
+                    </span>
+                    {s.endTime && (
+                      <span className="text-zinc-600 text-xs">→ {fmtDt(s.endTime)}</span>
+                    )}
+                    <span className="text-zinc-500 text-xs">par {orgName}</span>
+                    {s.description && (
+                      <span className="text-zinc-600 text-xs truncate italic">
+                        &ldquo;{s.description}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {isOn && (
+                      <Btn onClick={() => closeSession(s.id)} variant="danger" disabled={busy}>
+                        Clôturer
+                      </Btn>
+                    )}
+                    {isPending && (
+                      <Btn onClick={() => cancelSession(s.id)} variant="warn" disabled={busy}>
+                        Annuler
+                      </Btn>
+                    )}
+                    {!isOn && !isPending && (
+                      <span className="text-zinc-700 text-[10px] font-mono">terminée</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+const TABS: { id: Tab; superAdminOnly?: boolean; sfAdminOnly?: boolean }[] = [
   { id: 'stats' },
   { id: 'users' },
   { id: 'moderation' },
@@ -4496,6 +4802,7 @@ const TABS: { id: Tab; superAdminOnly?: boolean }[] = [
   { id: 'tournaments' },
   { id: 'announcements' },
   { id: 'items' },
+  { id: 'sf-sessions', sfAdminOnly: true },
   { id: 'seasons', superAdminOnly: true },
   { id: 'animations' },
 ];
@@ -4523,6 +4830,7 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
   const [myLogin, setMyLogin] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [myPerms, setMyPerms] = useState<Partial<Record<ModeratorPermissionKey, boolean>>>({});
+  const [isSfAdmin, setIsSfAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>(moodo ? 'stats' : 'users');
   // Sens de la dernière transition d'onglet (1 = suivant, -1 = précédent),
@@ -4540,7 +4848,11 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
         if (myRole === 'ADMIN' || myRole === 'SUPERADMIN') return true;
         return perms.some((p) => myPerms[p]);
       })
-    : TABS.filter((tab) => !tab.superAdminOnly || myRole === 'SUPERADMIN');
+    : TABS.filter((tab) => {
+        if (tab.superAdminOnly && myRole !== 'SUPERADMIN') return false;
+        if (isSfAdmin && myRole === 'MODERATOR') return !!tab.sfAdminOnly;
+        return true;
+      });
 
   const goToTab = useCallback(
     (dir: 1 | -1) => {
@@ -4571,10 +4883,18 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
     api.me()
       .then((data) => {
         const role = data.role;
-        // /GOD : admins uniquement. /moodo : modérateurs (+ admins en aperçu).
-        const allowed =
-          role === 'ADMIN' || role === 'SUPERADMIN' || (moodo && role === 'MODERATOR');
-        if (allowed) {
+        const hasSfAdmin = (data as { sfAdmin?: boolean }).sfAdmin === true;
+        if (role === 'ADMIN' || role === 'SUPERADMIN') {
+          setMyLogin(data.login);
+          setMyRole(role);
+          setMyPerms(data.moderatorPermissions ?? {});
+          setIsSfAdmin(hasSfAdmin);
+        } else if (hasSfAdmin && !moodo) {
+          setMyLogin(data.login);
+          setMyRole('MODERATOR' as Role);
+          setIsSfAdmin(true);
+          setActiveTab('sf-sessions');
+        } else if (moodo && role === 'MODERATOR') {
           setMyLogin(data.login);
           setMyRole(role);
           setMyPerms(data.moderatorPermissions ?? {});
@@ -4724,6 +5044,7 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
           {activeTab === 'animations' && <AnimationsTab myLogin={myLogin} />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
           {activeTab === 'items' && <ItemsAdminTab />}
+          {activeTab === 'sf-sessions' && myLogin && <SfSessionsTab myLogin={myLogin} />}
         </motion.div>
       </div>
     </div>
