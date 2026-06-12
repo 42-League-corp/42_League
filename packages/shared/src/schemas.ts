@@ -168,11 +168,15 @@ export const ShopItemCreateSchema = z
   })
   .superRefine((d, ctx) => {
     if (d.category === 'banner') {
-      const img = d.payload && typeof d.payload.image === 'string' ? d.payload.image : '';
-      if (!img.startsWith('data:image/')) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
-      } else if (img.length > MAX_BANNER_DATAURL_LEN) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+      // allowUpload = true → bannière personnalisable par le joueur, image non requise à la création.
+      const allowUpload = d.payload?.allowUpload === true;
+      if (!allowUpload) {
+        const img = d.payload && typeof d.payload.image === 'string' ? d.payload.image : '';
+        if (!img.startsWith('data:image/')) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière : image (data-URL) requise' });
+        } else if (img.length > MAX_BANNER_DATAURL_LEN) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'bannière trop lourde (max ~700 Ko)' });
+        }
       }
     }
     if (d.category === 'consumable') {
@@ -571,3 +575,20 @@ export const ContestDartsSchema = z.object({
 });
 
 export type ContestDartsInput = z.infer<typeof ContestDartsSchema>;
+
+// ─── SF Session (club sessions) ──────────────────────────────────────────────
+
+export const CreateSfSessionSchema = z.object({
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime().optional(),
+  durationHours: z.number().positive().max(24).optional(),
+  description: z.string().max(300).optional(),
+});
+export type CreateSfSession = z.infer<typeof CreateSfSessionSchema>;
+
+export const UpdateSfSessionSchema = z.object({
+  endTime: z.string().datetime().optional().nullable(),
+  isActive: z.boolean().optional(),
+  description: z.string().max(300).optional(),
+});
+export type UpdateSfSession = z.infer<typeof UpdateSfSessionSchema>;
