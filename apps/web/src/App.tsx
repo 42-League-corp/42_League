@@ -107,6 +107,9 @@ const AboutPage = lazy(() =>
 const LiveTournamentPage = lazy(() =>
   import('./pages/LiveTournamentPage').then((m) => ({ default: m.LiveTournamentPage })),
 );
+const SfSessionPage = lazy(() =>
+  import('./pages/SfSessionPage').then((m) => ({ default: m.SfSessionPage })),
+);
 
 export function App() {
   const { authenticated } = useAuth();
@@ -155,6 +158,15 @@ export function App() {
             />
           )}
           <Route path="/login" element={authenticated ? <Navigate to="/challenges" replace /> : <LoginPage />} />
+          {/* Page session SF — plein écran, publique (pas d'auth requise). */}
+          <Route
+            path="/sf-session"
+            element={
+              <Suspense fallback={<PageSkeleton />}>
+                <SfSessionPage />
+              </Suspense>
+            }
+          />
           {/* Écran TV live — plein écran, hors AppShell. Authentifié (la TV est connectée). */}
           <Route
             path="/live-tournament/:id?"
