@@ -16,6 +16,7 @@ import {
   Eye,
   ShieldBan,
   Zap,
+  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
@@ -37,6 +38,7 @@ import {
   type ShopCategory,
   type ShopItemData,
 } from '../lib/api';
+import { CustomBannerUploaderModal } from '../components/shop/CustomBannerUploader';
 import { trackEvent } from '../lib/analytics';
 import { RARITY, RARITY_ORDER, resolveRarity, type Rarity } from '../lib/rarity';
 
@@ -245,6 +247,11 @@ function ShopItemVisual({ item, rarityHex }: { item: ShopItemData; rarityHex: st
       {item.category === 'banner' &&
         (image ? (
           <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : p.allowUpload === true ? (
+          <div className="relative flex flex-col items-center gap-1.5 px-3 text-center">
+            <Upload className="w-6 h-6 text-gold/60" strokeWidth={1.8} />
+            <span className="text-[10px] text-gold/60 font-bold uppercase tracking-wide">Image personnalisée</span>
+          </div>
         ) : (
           <ImageIcon className="relative w-7 h-7 text-muted-2" strokeWidth={1.8} />
         ))}
@@ -388,6 +395,8 @@ export function ShopPage() {
   const [items, setItems] = useState<ShopItemData[]>(shopCache?.items ?? []);
   const [owned, setOwned] = useState<Set<string>>(new Set(shopCache?.owned ?? []));
   const [equipped, setEquipped] = useState<Set<string>>(new Set(shopCache?.equipped ?? []));
+  // Entrées d'inventaire complètes — nécessaires pour lire userPayload des bannières custom.
+  const [inventoryEntries, setInventoryEntries] = useState<InventoryEntry[]>([]);
   // Skeleton uniquement au tout premier chargement (cache vide). Si on a déjà un
   // snapshot, on affiche le catalogue connu immédiatement, sans clignotement.
   const [loading, setLoading] = useState(!shopCache);
@@ -397,6 +406,8 @@ export function ShopPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   // Objet en cours de prévisualisation sur la carte de profil (modal).
   const [preview, setPreview] = useState<ShopItemData | null>(null);
+  // Bannière custom en cours d'upload (itemId → ouvre le modal d'upload).
+  const [uploadingBannerId, setUploadingBannerId] = useState<string | null>(null);
   // Révélation de Boîte Mystère : { reward } pendant l'animation, null = fermé.
   const [reveal, setReveal] = useState<{ reward: MysteryReward | null } | null>(null);
   // État mensuel des consommables (kind → achats restants ce mois). Décrémente à
@@ -441,6 +452,7 @@ export function ShopPage() {
       setItems(snap.items);
       setOwned(new Set(snap.owned));
       setEquipped(new Set(snap.equipped));
+      setInventoryEntries(inventory);
       setMonthly(snap.monthly);
     } catch (err) {
       show(err instanceof Error ? err.message : t('shop.error'), 'error');
@@ -652,6 +664,9 @@ export function ShopPage() {
             const canAfford = coins >= item.price;
             const isEquipped = equipped.has(item.id);
             const showEquip = isOwned && EQUIPPABLE.includes(item.category);
+            const isCustomBanner = isOwned && item.category === 'banner' && payloadOf(item).allowUpload === true;
+            const invEntry = isCustomBanner ? inventoryEntries.find((e) => e.itemId === item.id) : undefined;
+            const userBannerImg = typeof invEntry?.userPayload?.image === 'string' ? invEntry.userPayload.image : null;
             const itemBusy = busy === item.id;
             // Consommable : achats restants ce mois (cap mensuel).
             const consKind =
@@ -731,6 +746,18 @@ export function ShopPage() {
                       </span>
                       <span className="text-muted-2">par mois</span>
                     </div>
+                  )}
+
+                  {/* Bannière custom possédée : invite à uploader son image */}
+                  {isCustomBanner && (
+                    <button
+                      type="button"
+                      onClick={() => setUploadingBannerId(item.id)}
+                      className="relative w-full rounded-lg border border-dashed border-gold/30 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-gold/70 hover:border-gold/60 hover:text-gold transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      {userBannerImg ? 'Changer mon image' : 'Uploader mon image'}
+                    </button>
                   )}
 
                   <div className="relative mt-auto flex items-center justify-between gap-2 pt-1">
@@ -817,6 +844,27 @@ export function ShopPage() {
       )}
         </>
       )}
+
+      {/* Upload image personnalisée d'une bannière custom */}
+      {uploadingBannerId && (() => {
+        const entry = inventoryEntries.find((e) => e.itemId === uploadingBannerId);
+        const item = items.find((it) => it.id === uploadingBannerId);
+        return entry && item ? (
+          <CustomBannerUploaderModal
+            itemId={uploadingBannerId}
+            itemName={item.name}
+            currentImage={typeof entry.userPayload?.image === 'string' ? entry.userPayload.image : null}
+            onClose={() => setUploadingBannerId(null)}
+            onSaved={(dataUrl) => {
+              setInventoryEntries((prev) =>
+                prev.map((e) => e.itemId === uploadingBannerId ? { ...e, userPayload: { image: dataUrl } } : e),
+              );
+              setUploadingBannerId(null);
+              void refresh();
+            }}
+          />
+        ) : null;
+      })()}
 
       {/* Aperçu du cosmétique appliqué sur la carte de profil */}
       {preview && me && (
