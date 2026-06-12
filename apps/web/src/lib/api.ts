@@ -395,6 +395,7 @@ export interface InventoryEntry {
   item: ShopItemData;
   equipped: boolean;
   acquiredAt: string;
+  userPayload?: Record<string, unknown> | null;
 }
 
 export interface ShopResponse {
@@ -472,6 +473,7 @@ export interface MeResponse {
   consentRequired?: boolean;
   /** True si le login est autorisé sur l'env staging (cf. STAGING_ALLOWED backend). */
   stagingAllowed?: boolean;
+  sfAdmin?: boolean;
   /** Version de la politique de confidentialité en vigueur côté serveur. */
   termsVersion?: string;
   /** Codes de badges (cf. catalogue front lib/badges.ts). */
@@ -955,6 +957,30 @@ export interface AllHistoryEvent {
   scheduledAt?: string;
   decidedAt?: string | null;
   expiresAt?: string;
+}
+
+// ── SF Club Sessions ──────────────────────────────────────────────────────
+
+export interface SfSession {
+  id: string;
+  startTime: string;
+  endTime: string | null;
+  organizerLogin: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  organizer: {
+    login: string;
+    firstName: string | null;
+    lastName: string | null;
+    imageUrl: string | null;
+  };
+}
+
+export interface SfSessionCurrent {
+  session: SfSession | null;
+  status: 'active' | 'upcoming' | 'none';
 }
 
 export class AuthError extends Error {}
@@ -1940,6 +1966,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ equipped }),
     }),
+  uploadCustomBannerImage: (id: string, image: string) =>
+    request<{ ok: true }>(`/me/inventory/${encodeURIComponent(id)}/banner-image`, {
+      method: 'POST',
+      body: JSON.stringify({ image }),
+    }),
   // ── Consommables ───────────────────────────────────────────────────────────
   consumables: () => request<ConsumablesResponse>('/me/consumables'),
   useConsumable: (
@@ -2068,6 +2099,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // ── SF Club Sessions ──────────────────────────────────────────────────────
+
+  getSfSessionCurrent: (): Promise<SfSessionCurrent> =>
+    request<SfSessionCurrent>('/sf-session/current', {}, { auth: false }),
+
+  adminListSfSessions: (): Promise<SfSession[]> =>
+    request<SfSession[]>('/admin/sf-sessions'),
+
+  adminCreateSfSession: (data: {
+    startTime: string;
+    endTime?: string;
+    durationHours?: number;
+    description?: string;
+  }): Promise<SfSession> =>
+    request<SfSession>('/admin/sf-sessions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateSfSession: (
+    id: string,
+    data: { endTime?: string | null; isActive?: boolean; description?: string },
+  ): Promise<SfSession> =>
+    request<SfSession>(`/admin/sf-sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminDeleteSfSession: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/admin/sf-sessions/${id}`, { method: 'DELETE' }),
+
+  adminSetSfAdmin: (login: string, sfAdmin: boolean): Promise<{ ok: boolean; sfAdmin: boolean }> =>
+    request<{ ok: boolean; sfAdmin: boolean }>(
+      `/admin/users/${login}/sf-admin`,
+      { method: 'POST', body: JSON.stringify({ sfAdmin }) },
+    ),
 
   // ── Analytics : ingestion d'usage (best-effort) + vue d'ensemble GOD ────────
   /** Envoie un lot d'événements d'usage. Best-effort : on ignore les erreurs. */
