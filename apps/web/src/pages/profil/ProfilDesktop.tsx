@@ -7,8 +7,6 @@ import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
 import { RankBadge } from '../../components/RankBadge';
 import { BadgesRow } from '../../components/Badges';
-import { CursorTooltip } from '../../components/CursorTooltip';
-import { titleTooltipContent } from '../../components/TitleTooltip';
 import { Palmares } from '../../components/Palmares';
 import { EloChart } from '../../components/EloChart';
 import { PlayerLink } from '../../components/PlayerLink';
@@ -189,16 +187,9 @@ export function ProfilDesktop() {
             « sans éclat. » quand aucun titre n'est équipé. Le sélecteur (cette vue
             est toujours soi) est une simple flèche à droite. */}
         <div className="relative z-10 pt-3.5 pb-1 flex items-center justify-center px-5">
-          <CursorTooltip
-            className="inline-flex max-w-[80%] min-w-0"
-            disabled={isTarnished}
-            content={titleTooltipContent(equippedTitle)}
-          >
           <span
-            className={`inline-flex items-center gap-1.5 min-w-0 ${
-              !isTarnished && effectiveTitleColor === 'rainbow' ? 'title-rainbow' : ''
-            }`}
-            style={isTarnished || effectiveTitleColor === 'rainbow' ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
+            className="inline-flex items-center gap-1.5 max-w-[80%]"
+            style={isTarnished ? undefined : { color: effectiveTitleColor ?? '#ffc94a' }}
           >
             <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❝</span>
             <span className={`italic text-lg font-bold tracking-wide truncate ${isTarnished ? 'text-muted-2' : ''}`}>
@@ -206,7 +197,6 @@ export function ProfilDesktop() {
             </span>
             <span className={`text-lg leading-none opacity-70 ${isTarnished ? 'text-muted-2' : ''}`}>❞</span>
           </span>
-          </CursorTooltip>
           <BannerPicker className="absolute left-5" />
           <TitlePicker className="absolute right-5" />
         </div>
@@ -238,7 +228,6 @@ export function ProfilDesktop() {
                     codes={me.badges ?? []}
                     extra={[...(equippedBadge ? [equippedBadge] : []), ...(me.customBadges ?? [])]}
                     size="md"
-                    richTooltip
                   />
                 </div>
               )}
