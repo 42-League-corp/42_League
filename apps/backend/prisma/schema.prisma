@@ -99,6 +99,7 @@ model User {
   stagingAllowed      Boolean   @default(false) @map("staging_allowed")
   // Permissions granulaires d'un MODERATOR (null = aucune permission). Voir ModeratorPermission.
   moderatorPermissions Json?    @map("moderator_permissions")
+  sfAdmin             Boolean   @default(false) @map("sf_admin")
   createdAt           DateTime  @default(now()) @map("created_at")
 
   declaredPending           PendingMatch[]          @relation("declarer")
@@ -149,6 +150,7 @@ model User {
   analyticsEvents           AnalyticsEvent[]        @relation("userAnalytics")
   // Annonces générales déjà vues (popup « une seule fois » par utilisateur).
   announcementsSeen         AnnouncementSeen[]      @relation("announcementsSeen")
+  sfSessionsOrganized       SfSession[]
 
   @@map("users")
 }
@@ -766,6 +768,10 @@ enum AdminAction {
   GRANT_BADGE
   REMOVE_BADGE
   RESET_OPS_COOLDOWN
+  SET_SF_ADMIN
+  OPEN_SF_SESSION
+  CLOSE_SF_SESSION
+  CANCEL_SF_SESSION
 }
 
 model AdminAuditLog {
@@ -819,12 +825,14 @@ model ShopItem {
 // Inventaire : objets possédés par un joueur. `equipped` = objet actuellement
 // porté (au plus un équipé par catégorie, cf. logique d'équipement dans index.ts).
 model ShopInventory {
-  userLogin  String   @map("user_login")
-  itemId     String   @map("item_id")
-  equipped   Boolean  @default(false)
-  acquiredAt DateTime @default(now()) @map("acquired_at")
-  user       User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
-  item       ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userLogin   String   @map("user_login")
+  itemId      String   @map("item_id")
+  equipped    Boolean  @default(false)
+  acquiredAt  DateTime @default(now()) @map("acquired_at")
+  // Image uploadée par le joueur pour les bannières personnalisables (allowUpload).
+  userPayload Json?    @map("user_payload")
+  user        User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
+  item        ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@id([userLogin, itemId])
   @@index([userLogin])
@@ -1018,4 +1026,21 @@ model AnalyticsEvent {
   @@index([type, name])
   @@index([login, createdAt])
   @@map("analytics_events")
+}
+
+model SfSession {
+  id             String    @id @default(cuid())
+  startTime      DateTime  @map("start_time")
+  endTime        DateTime? @map("end_time")
+  organizerLogin String    @map("organizer_login")
+  description    String?
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organizer User @relation(fields: [organizerLogin], references: [login], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([startTime])
+  @@index([organizerLogin])
+  @@map("sf_sessions")
 }
