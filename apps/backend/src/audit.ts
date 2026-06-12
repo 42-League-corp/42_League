@@ -33,6 +33,10 @@ const ACTION_EMOJI: Record<AdminAction, string> = {
   GRANT_BADGE: '🎖️',
   REMOVE_BADGE: '🚫',
   RESET_OPS_COOLDOWN: '⏱️',
+  SET_SF_ADMIN: '🎮',
+  OPEN_SF_SESSION: '▶️',
+  CLOSE_SF_SESSION: '⏹️',
+  CANCEL_SF_SESSION: '🗑️',
 };
 
 function extractIp(c: Context): string | null {

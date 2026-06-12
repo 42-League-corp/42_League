@@ -45,6 +45,8 @@ import {
   DeclareDartsSchema,
   ConfirmDartsSchema,
   ContestDartsSchema,
+  CreateSfSessionSchema,
+  UpdateSfSessionSchema,
   calculateBabyfootElo,
   calculateFfaElo,
   calculateDartsElo,
@@ -260,6 +262,13 @@ async function requireAdminOrModerator(login: string): Promise<void> {
   if (role !== 'ADMIN' && role !== 'SUPERADMIN' && role !== 'MODERATOR') {
     throw new HTTPException(403, { message: 'admins only' });
   }
+}
+
+async function requireSfAdminOrAdmin(login: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { login }, select: { sfAdmin: true, role: true } });
+  if (!user) throw new HTTPException(403, { message: 'forbidden' });
+  if (user.sfAdmin || user.role === 'ADMIN' || user.role === 'SUPERADMIN') return;
+  throw new HTTPException(403, { message: 'sf admin or admin required' });
 }
 
 /**
@@ -1190,6 +1199,7 @@ app.get('/me', async (c) => {
     palmares,
     // Pilote la consent-gate côté frontend (cf. AuthenticatedShell).
     consentRequired: consentRequired(user),
+    sfAdmin: user?.sfAdmin ?? false,
     termsVersion: CURRENT_TERMS_VERSION,
     // Annonces générales à montrer en popup (cf. AnnouncementPopup côté front).
     unseenAnnouncements,
@@ -11711,6 +11721,142 @@ async function purgeScheduledDeletions(): Promise<void> {
     );
   }
 }
+
+// ── Street Fighter Club Sessions (public) ─────────────────────────────────
+app.get('/sf-session/current', async (c) => {
+  const now = new Date();
+  const active = await prisma.sfSession.findFirst({
+    where: {
+      isActive: true,
+      startTime: { lte: now },
+      OR: [{ endTime: null }, { endTime: { gt: now } }],
+    },
+    orderBy: { startTime: 'desc' },
+    include: { organizer: { select: { login: true, firstName: true, lastName: true, imageUrl: true } } },
+  });
+  if (active) return c.json({ session: active, status: 'active' });
+
+  const next = await prisma.sfSession.findFirst({
+    where: { isActive: true, startTime: { gt: now } },
+    orderBy: { startTime: 'asc' },
+    include: { organizer: { select: { login: true, firstName: true, lastName: true, imageUrl: true } } },
+  });
+  if (next) return c.json({ session: next, status: 'upcoming' });
+
+  return c.json({ session: null, status: 'none' });
+});
+
+// ── Admin : Sessions Street Fighter ────────────────────────────────────────
+
+app.get('/admin/sf-sessions', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSfAdminOrAdmin(me);
+  const sessions = await prisma.sfSession.findMany({
+    orderBy: { startTime: 'desc' },
+    take: 50,
+    include: { organizer: { select: { login: true, firstName: true, lastName: true, imageUrl: true } } },
+  });
+  return c.json(sessions);
+});
+
+app.post('/admin/sf-sessions', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSfAdminOrAdmin(me);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = CreateSfSessionSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const { startTime, endTime, durationHours, description } = parsed.data;
+  let resolvedEndTime: Date | undefined;
+  if (endTime) {
+    resolvedEndTime = new Date(endTime);
+  } else if (durationHours) {
+    resolvedEndTime = new Date(new Date(startTime).getTime() + durationHours * 60 * 60 * 1000);
+  }
+  const session = await prisma.sfSession.create({
+    data: {
+      startTime: new Date(startTime),
+      endTime: resolvedEndTime ?? null,
+      organizerLogin: me,
+      description: description ?? null,
+    },
+    include: { organizer: { select: { login: true, firstName: true, lastName: true, imageUrl: true } } },
+  });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'OPEN_SF_SESSION',
+    payload: { sessionId: session.id, startTime },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json(session, 201);
+});
+
+app.patch('/admin/sf-sessions/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSfAdminOrAdmin(me);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = UpdateSfSessionSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const session = await prisma.sfSession.findUnique({ where: { id } });
+  if (!session) throw new HTTPException(404, { message: 'session not found' });
+  const data: Record<string, unknown> = {};
+  if (parsed.data.endTime !== undefined) data.endTime = parsed.data.endTime ? new Date(parsed.data.endTime) : null;
+  if (parsed.data.isActive !== undefined) data.isActive = parsed.data.isActive;
+  if (parsed.data.description !== undefined) data.description = parsed.data.description;
+  const updated = await prisma.sfSession.update({
+    where: { id },
+    data,
+    include: { organizer: { select: { login: true, firstName: true, lastName: true, imageUrl: true } } },
+  });
+  if (parsed.data.isActive === false) {
+    await logAdminAction(c, {
+      actor: me,
+      actorRole: await getUserRole(me),
+      action: 'CLOSE_SF_SESSION',
+      payload: { sessionId: id },
+    });
+  }
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json(updated);
+});
+
+app.delete('/admin/sf-sessions/:id', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireSfAdminOrAdmin(me);
+  const id = c.req.param('id');
+  const session = await prisma.sfSession.findUnique({ where: { id } });
+  if (!session) throw new HTTPException(404, { message: 'session not found' });
+  await prisma.sfSession.delete({ where: { id } });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'CANCEL_SF_SESSION',
+    payload: { sessionId: id },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json({ ok: true });
+});
+
+app.post('/admin/users/:login/sf-admin', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const login = c.req.param('login');
+  const body = await c.req.json().catch(() => ({}));
+  const sfAdmin = typeof body.sfAdmin === 'boolean' ? body.sfAdmin : false;
+  const user = await prisma.user.findUnique({ where: { login } });
+  if (!user) throw new HTTPException(404, { message: 'user not found' });
+  await prisma.user.update({ where: { login }, data: { sfAdmin } });
+  await logAdminAction(c, {
+    actor: me,
+    actorRole: await getUserRole(me),
+    action: 'SET_SF_ADMIN',
+    target: login,
+    payload: { sfAdmin },
+  });
+  broadcast({ type: 'data:update', payload: {} });
+  return c.json({ ok: true, sfAdmin });
+});
 
 const port = Number(process.env.PORT ?? 3000);
 
