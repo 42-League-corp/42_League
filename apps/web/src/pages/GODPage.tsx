@@ -1035,6 +1035,7 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [pending, setPending] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState<AdminUser | null>(null);
   const [showReset, setShowReset] = useState(false);
+  const [selectedLogin, setSelectedLogin] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
@@ -1079,14 +1080,6 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     },
     (a, b) => a.login.localeCompare(b.login),
   );
-
-  async function withPending(login: string, fn: () => Promise<unknown>) {
-    setPending(login);
-    setError('');
-    try { await fn(); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('god.error')); }
-    finally { setPending(null); }
-  }
 
   async function createUser() {
     const login = newLogin.trim();
@@ -1133,22 +1126,6 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
           .map((u) => u.login)
       : [];
 
-  async function deleteFakeUser(login: string) {
-    if (!(await confirmOrSudo(t('god.users.confirmDeleteFake').replace('{login}', login))))
-      return;
-    await withPending(login, () => api.adminDeleteUser(login));
-  }
-
-  async function banUser(login: string) {
-    if (!(await confirmOrSudo(t('god.users.confirmBan').replace('{login}', login), t('god.users.confirmBanLabel')))) return;
-    await withPending(login, () => api.adminBanUser(login));
-  }
-
-  async function resetOpsCooldown(login: string) {
-    if (!(await confirmOrSudo(t('god.users.confirmResetCooldown').replace('{login}', login), t('god.users.confirmResetCooldownLabel')))) return;
-    await withPending(login, () => api.adminResetOpsCooldown(login));
-  }
-
   async function bulkDelete() {
     const ids = [...selected].filter((l) => deletableLogins.includes(l));
     if (ids.length === 0) return;
@@ -1156,16 +1133,6 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
     setError('');
     for (const l of ids) await api.adminDeleteUser(l).catch((e) => setError(String(e)));
     clear();
-    load();
-  }
-
-  async function toggleStaging(login: string, currentStaging: boolean) {
-    const grant = !currentStaging;
-    const msg = grant
-      ? t('god.users.staging.grant').replace('{login}', login)
-      : t('god.users.staging.revoke').replace('{login}', login);
-    if (!(await requestConfirm(msg, { danger: !grant, confirmLabel: grant ? t('god.users.staging.grantLabel') : t('god.users.staging.revokeLabel') }))) return;
-    await withPending(login, () => api.setStagingAccess(login, grant));
     load();
   }
 
@@ -1277,105 +1244,71 @@ function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
             </thead>
             <tbody>
               {sorted.map((u) => {
-                const isSelf = u.login === myLogin;
-                const isHardcoded = HARDCODED_SUPERADMINS.has(u.login.toLowerCase());
-                // Hardcodés + soi-même : on ne touche pas au rôle ni au ban.
-                const isLocked = isSelf || isHardcoded;
                 const isDeletable = deletableLogins.includes(u.login);
                 const isStagingAllowed = !!u.stagingAllowed;
+                const isExpanded = selectedLogin === u.login;
                 return (
-                  <tr key={u.login} className={`border-b border-zinc-800/40 hover:bg-zinc-900/60 transition-colors ${selected.has(u.login) ? 'bg-red-500/5' : ''}`}>
-                    <td className="py-2 px-3">
-                      {isDeletable && <Check checked={selected.has(u.login)} onChange={() => toggle(u.login)} />}
-                    </td>
-                    <td className="py-2 px-3 text-zinc-100">{u.login}</td>
-                    <td className="py-2 px-3">
-                      <div className="flex items-center gap-1">
-                        <RoleBadge role={u.role} />
-                        {isStagingAllowed && !isHardcoded && (
-                          <span className="px-1 py-0.5 text-[10px] bg-teal-400/10 text-teal-400 rounded font-mono" title="Accès staging accordé">β</span>
+                  <Fragment key={u.login}>
+                    <tr
+                      onClick={() => setSelectedLogin(isExpanded ? null : u.login)}
+                      className={`border-b border-zinc-800/40 cursor-pointer transition-colors ${
+                        isExpanded ? 'bg-zinc-800/60' : 'hover:bg-zinc-900/60'
+                      } ${selected.has(u.login) ? 'bg-red-500/5' : ''}`}
+                    >
+                      <td className="py-2 px-3">
+                        {isDeletable && (
+                          <Check
+                            checked={selected.has(u.login)}
+                            onChange={() => toggle(u.login)}
+                          />
                         )}
-                      </div>
-                    </td>
-                    <td className="py-2 px-3"><GameModeBadges user={u} /></td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{USER_GAME_STATS[statGame].elo(u)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].matches(u)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.dodgeCount}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].trophies(u)}</td>
-                    <td className="py-2 px-3"><StatusBadge banned={!!u.bannedAt} /></td>
-                    <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
-                    <td className="py-2 px-3">
-                      {isLocked ? (
-                        // Rôle/ban verrouillés pour les superadmins hardcodés et soi-même,
-                        // MAIS le reset de cooldown d'ops (inoffensif) reste accessible —
-                        // sinon un superadmin ne peut jamais reset son propre cooldown.
-                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
-                          <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
-                          {/* Un SUPERADMIN peut éditer l'ELO/les stats d'un autre superadmin (et les siennes) — le rôle et le ban restent verrouillés. */}
-                          {myRole === 'SUPERADMIN' && (
-                            <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
+                      </td>
+                      <td className="py-2 px-3 text-zinc-100 font-mono">{u.login}</td>
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-1">
+                          <RoleBadge role={u.role} />
+                          {isStagingAllowed && !HARDCODED_SUPERADMINS.has(u.login.toLowerCase()) && (
+                            <span className="px-1 py-0.5 text-[10px] bg-teal-400/10 text-teal-400 rounded font-mono" title="Accès staging">β</span>
                           )}
-                          <Btn onClick={() => resetOpsCooldown(u.login)} disabled={pending === u.login} variant="ghost" className="border border-red-500/40 text-red-400">{t('god.users.resetCooldown')}</Btn>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
-                          {/* Promotion / rétrogradation de rôle (SUPERADMIN uniquement) */}
-                          {myRole === 'SUPERADMIN' && u.role !== 'SUPERADMIN' && (
-                            <>
-                              {u.role === 'USER' && (
-                                <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'MODERATOR'))} disabled={pending === u.login} variant="ghost" className="border border-violet-500/40 text-violet-400">→ MODO</Btn>
-                              )}
-                              {u.role === 'MODERATOR' && (
-                                <>
-                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
-                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'ADMIN'))} disabled={pending === u.login} variant="default">→ ADMIN</Btn>
-                                </>
-                              )}
-                              {u.role === 'ADMIN' && (
-                                <>
-                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'MODERATOR'))} disabled={pending === u.login} variant="ghost" className="border border-violet-500/40 text-violet-400">→ MODO</Btn>
-                                  <Btn onClick={() => withPending(u.login, () => api.setUserRole(u.login, 'USER'))} disabled={pending === u.login} variant="ghost">→ USER</Btn>
-                                </>
-                              )}
-                            </>
-                          )}
-                          {/* Permissions moderateur — bouton visible pour ADMIN/SUPERADMIN si le user est MODO */}
-                          {(myRole === 'ADMIN' || myRole === 'SUPERADMIN') && u.role === 'MODERATOR' && (
-                            <ModeratorPermissionsButton user={u} onSaved={load} />
-                          )}
-                          {/* Accès staging (flag indépendant du rôle) — SUPERADMIN seulement */}
-                          {myRole === 'SUPERADMIN' && (
-                            isStagingAllowed
-                              ? <Btn onClick={() => toggleStaging(u.login, true)} disabled={pending === u.login} variant="warn" className="border border-yellow-500/40">{t('god.users.removeStaging')}</Btn>
-                              : <Btn onClick={() => toggleStaging(u.login, false)} disabled={pending === u.login} variant="ghost" className="border border-teal-600/50 text-teal-500">{t('god.users.staging')}</Btn>
-                          )}
-                          {/* SF Admin toggle — ADMIN/SUPERADMIN */}
-                          {(myRole === 'ADMIN' || myRole === 'SUPERADMIN') && (
-                            <Btn
-                              onClick={async () => {
-                                const currentSfAdmin = !!(u as AdminUser & { sfAdmin?: boolean }).sfAdmin;
-                                await (api as unknown as { adminSetSfAdmin: (l: string, v: boolean) => Promise<unknown> }).adminSetSfAdmin(u.login, !currentSfAdmin);
-                                void load();
-                              }}
-                              disabled={pending === u.login}
-                              variant={(u as AdminUser & { sfAdmin?: boolean }).sfAdmin ? 'warn' : 'ghost'}
-                            >
-                              SF Admin {(u as AdminUser & { sfAdmin?: boolean }).sfAdmin ? '✓' : '○'}
-                            </Btn>
-                          )}
-                          {u.bannedAt
-                            ? <Btn onClick={() => withPending(u.login, () => api.adminUnbanUser(u.login))} disabled={pending === u.login} variant="success">{t('god.users.unban')}</Btn>
-                            : <Btn onClick={() => banUser(u.login)} disabled={pending === u.login} variant="danger">{t('god.users.ban')}</Btn>
-                          }
-                          <Btn onClick={() => setEditingStats(u)} variant="ghost">{t('god.users.statsBtn')}</Btn>
-                          <Btn onClick={() => resetOpsCooldown(u.login)} disabled={pending === u.login} variant="ghost" className="border border-red-500/40 text-red-400">{t('god.users.resetCooldown')}</Btn>
-                          {myRole === 'SUPERADMIN' && (IS_STAGING || u.ftId === null) && (
-                            <Btn onClick={() => deleteFakeUser(u.login)} disabled={pending === u.login} variant="danger" className="border border-red-500/40">{t('god.users.deleteBtn')}</Btn>
+                          {(u as AdminUser & { sfAdmin?: boolean }).sfAdmin && (
+                            <span className="px-1 py-0.5 text-[10px] bg-orange-400/10 text-orange-400 rounded font-mono" title="SF Admin">SF</span>
                           )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="py-2 px-3"><GameModeBadges user={u} /></td>
+                      <td className="py-2 px-3 text-right tabular-nums text-zinc-100">{USER_GAME_STATS[statGame].elo(u)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].matches(u)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{u.dodgeCount}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-zinc-400">{USER_GAME_STATS[statGame].trophies(u)}</td>
+                      <td className="py-2 px-3"><StatusBadge banned={!!u.bannedAt} /></td>
+                      <td className="py-2 px-3 text-zinc-500 text-xs">{u.campus ?? '—'}</td>
+                      <td className="py-2 px-3 text-right">
+                        <span className={`text-zinc-500 transition-transform inline-block ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-zinc-900/80 border-b border-zinc-700">
+                        <td colSpan={11} className="p-0">
+                          <UserDetailPanel
+                            user={u}
+                            myRole={myRole}
+                            myLogin={myLogin}
+                            pending={pending}
+                            onAction={async (fn) => {
+                              setPending(u.login);
+                              setError('');
+                              try { await fn(); load(); }
+                              catch (e) { setError(e instanceof Error ? e.message : t('god.error')); }
+                              finally { setPending(null); }
+                            }}
+                            onClose={() => setSelectedLogin(null)}
+                            onEditStats={() => setEditingStats(u)}
+                            onReload={load}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
