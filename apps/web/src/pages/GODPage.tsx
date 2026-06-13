@@ -199,6 +199,35 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function SubTabBar<T extends string>({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: T; label: string }[];
+  active: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0 border-b border-zinc-800 mb-4">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onChange(t.id)}
+          className={`px-4 py-2 text-xs font-mono tracking-widest transition-colors cursor-pointer border-b-2 -mb-[1px] whitespace-nowrap ${
+            active === t.id
+              ? 'text-zinc-100 border-zinc-400'
+              : 'text-zinc-500 border-transparent hover:text-zinc-300'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: '2-digit',
