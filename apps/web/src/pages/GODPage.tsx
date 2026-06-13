@@ -700,6 +700,16 @@ function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSave
     setPerms((p) => ({ ...p, [k]: !p[k] }));
   }
 
+  function toggleGame(gameId: string) {
+    setPerms((p) => {
+      const current = p.managedGames ?? [];
+      const next = current.includes(gameId)
+        ? current.filter((g) => g !== gameId)
+        : [...current, gameId];
+      return { ...p, managedGames: next };
+    });
+  }
+
   async function save() {
     setSaving(true);
     setErr('');
