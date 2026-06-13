@@ -58,7 +58,7 @@ import { PlayerReactionOverlay } from '../components/PlayerReactionOverlay';
 import { MysteryRevealModal } from '../components/shop/MysteryRevealModal';
 import type { MysteryReward } from '../lib/api';
 
-type Tab = 'users' | 'moderation' | 'rejets' | 'matches' | 'pending' | 'ideas' | 'bugs' | 'alertes' | 'audit' | 'history' | 'seasons' | 'tournaments' | 'stats' | 'animations' | 'announcements' | 'items' | 'sf-sessions';
+type Tab = 'stats' | 'players' | 'activity' | 'safety' | 'history' | 'tournaments' | 'feedback' | 'content' | 'system' | 'sf-club';
 type Role = 'MODERATOR' | 'ADMIN' | 'SUPERADMIN';
 
 // Temps réel : événements SSE qui doivent rafraîchir le panel.
