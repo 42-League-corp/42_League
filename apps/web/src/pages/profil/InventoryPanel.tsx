@@ -546,5 +546,6 @@ export function InventoryPanel() {
         </div>
       )}
     </section>
+    </>
   );
 }
