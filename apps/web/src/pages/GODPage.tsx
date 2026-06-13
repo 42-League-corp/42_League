@@ -1699,6 +1699,7 @@ function MatchesTab() {
   const [matches, setMatches] = useState<PlayedMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [gameFilter, setGameFilter] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editPlayerA, setEditPlayerA] = useState('');
   const [editPlayerB, setEditPlayerB] = useState('');
@@ -1724,7 +1725,10 @@ function MatchesTab() {
 
   const { sort, toggleSort } = useTableSort<MatchesSortKey>({ key: 'date', dir: 'desc' });
   const filtered = sortRows(
-    matches.filter((m) => m.playerALogin.includes(filter) || m.playerBLogin.includes(filter)),
+    matches.filter((m) =>
+      (!gameFilter || (m.game ?? 'babyfoot') === gameFilter) &&
+      (m.playerALogin.includes(filter) || m.playerBLogin.includes(filter))
+    ),
     sort,
     (m, k) => {
       switch (k) {
@@ -1816,9 +1820,33 @@ function MatchesTab() {
   return (
     <div className="p-4">
       {confirmNode}
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
         <Input value={filter} onChange={setFilter} placeholder={t('god.matches.filter')} className="w-64" />
         <span className="text-zinc-500 text-xs font-mono">{filtered.length} {t('god.matches.shown')} / {matches.length} {t('god.matches.total')}</span>
+      </div>
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        {[
+          { id: '', label: 'Tous' },
+          { id: 'babyfoot', label: 'Baby', color: '#ffc94a' },
+          { id: 'smash', label: 'Smash', color: '#ff3d50' },
+          { id: 'chess', label: 'Échecs', color: '#56c46e' },
+          { id: 'streetfighter', label: 'SF', color: '#ff7a18' },
+          { id: 'flechettes', label: 'Fléch.', color: '#14b8a6' },
+        ].map(({ id, label, color }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setGameFilter(id)}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer border"
+            style={{
+              background: gameFilter === id ? `${color ?? 'rgba(255,255,255,0.5)'}22` : 'rgba(255,255,255,0.03)',
+              borderColor: gameFilter === id ? (color ?? 'rgba(255,255,255,0.4)') : 'rgba(255,255,255,0.07)',
+              color: gameFilter === id ? (color ?? 'rgba(255,255,255,0.9)') : 'rgba(255,255,255,0.35)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <SudoBar
         sudo={sudo}
