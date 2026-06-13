@@ -725,21 +725,52 @@ function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSave
   }
 
   const activeCount = MODERATOR_PERMISSION_KEYS.filter((k) => !!perms[k]).length;
+  const managedGames = (user.moderatorPermissions as PermsWithGames)?.managedGames ?? [];
 
   return (
     <>
       <Btn
-        onClick={() => { setPerms((user.moderatorPermissions as Partial<Record<ModeratorPermissionKey, boolean>>) ?? {}); setOpen(true); }}
+        onClick={() => { setPerms((user.moderatorPermissions as PermsWithGames) ?? {}); setOpen(true); }}
         variant="ghost"
         className="border border-violet-500/30 text-violet-400"
       >
         🔑 {activeCount}/{MODERATOR_PERMISSION_KEYS.length}
+        {managedGames.length > 0 && (
+          <span className="ml-1.5 text-[10px] opacity-70">
+            {managedGames.map((g) => GAME_ABBREV[g] ?? g).join('+')}
+          </span>
+        )}
       </Btn>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-80 shadow-2xl">
             <div className="text-sm font-mono text-zinc-100 font-bold mb-1">Permissions de @{user.login}</div>
             <div className="text-xs text-zinc-500 font-mono mb-3">MODO — cocher = accès accordé</div>
+            {/* Jeux gérés */}
+            <div className="mb-4">
+              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Jeux gérés</div>
+              <div className="flex flex-wrap gap-2">
+                {MANAGED_GAME_OPTIONS.map(({ id, label, color }) => {
+                  const active = (perms.managedGames ?? []).includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => toggleGame(id)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border"
+                      style={{
+                        background: active ? `${color}22` : 'rgba(255,255,255,0.03)',
+                        borderColor: active ? color : 'rgba(255,255,255,0.1)',
+                        color: active ? color : 'rgba(255,255,255,0.35)',
+                        boxShadow: active ? `0 0 12px -4px ${color}` : 'none',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="space-y-1.5 mb-4">
               {MODERATOR_PERMISSION_KEYS.map((k) => (
                 <label key={k} className="flex items-center gap-2 cursor-pointer group">
