@@ -5048,23 +5048,141 @@ function SfSessionsTab({ myLogin }: { myLogin: string }) {
   );
 }
 
-const TABS: { id: Tab; superAdminOnly?: boolean; sfAdminOnly?: boolean }[] = [
+// ── Onglets fusionnés ─────────────────────────────────────────────────────────
+
+function FeedbackTab() {
+  const [sub, setSub] = useState<'ideas' | 'bugs'>('ideas');
+  return (
+    <div>
+      <SubTabBar
+        tabs={[
+          { id: 'ideas', label: '💡 IDÉES' },
+          { id: 'bugs', label: '🐛 BUGS' },
+        ]}
+        active={sub}
+        onChange={setSub}
+      />
+      {sub === 'ideas' && <IdeasTab />}
+      {sub === 'bugs' && <BugsTab />}
+    </div>
+  );
+}
+
+function ContentTab() {
+  const [sub, setSub] = useState<'announcements' | 'items'>('announcements');
+  return (
+    <div>
+      <SubTabBar
+        tabs={[
+          { id: 'announcements', label: '📣 ANNONCES' },
+          { id: 'items', label: '🎨 INVENTAIRES' },
+        ]}
+        active={sub}
+        onChange={setSub}
+      />
+      {sub === 'announcements' && <AnnouncementsTab />}
+      {sub === 'items' && <ItemsAdminTab />}
+    </div>
+  );
+}
+
+function ActivityTab({ myRole }: { myRole: Role }) {
+  const [sub, setSub] = useState<'matches' | 'pending'>('matches');
+  return (
+    <div>
+      <SubTabBar
+        tabs={[
+          { id: 'matches', label: '⚔️ JOUÉS' },
+          ...(myRole === 'SUPERADMIN' ? [{ id: 'pending' as const, label: '⏳ EN ATTENTE' }] : []),
+        ]}
+        active={sub}
+        onChange={setSub}
+      />
+      {sub === 'matches' && <MatchesTab />}
+      {sub === 'pending' && myRole === 'SUPERADMIN' && <PendingTab />}
+    </div>
+  );
+}
+
+function SafetyTab() {
+  const [sub, setSub] = useState<'rejets' | 'alertes'>('alertes');
+  return (
+    <div>
+      <SubTabBar
+        tabs={[
+          { id: 'alertes', label: '⚠️ ALERTES' },
+          { id: 'rejets', label: '❌ REJETS' },
+        ]}
+        active={sub}
+        onChange={setSub}
+      />
+      {sub === 'alertes' && <AlertesTab />}
+      {sub === 'rejets' && <RejetsTab />}
+    </div>
+  );
+}
+
+function SystemTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
+  type SystemSub = 'audit' | 'seasons' | 'animations';
+  const subTabs: { id: SystemSub; label: string }[] = [
+    { id: 'audit', label: '📋 AUDIT' },
+    ...(myRole === 'SUPERADMIN' ? [{ id: 'seasons' as SystemSub, label: '🏆 SAISONS' }] : []),
+    ...(myRole === 'ADMIN' || myRole === 'SUPERADMIN' ? [{ id: 'animations' as SystemSub, label: '🎬 ANIMATIONS' }] : []),
+  ];
+  const [sub, setSub] = useState<SystemSub>('audit');
+
+  return (
+    <div>
+      <SubTabBar tabs={subTabs} active={sub} onChange={setSub} />
+      {sub === 'audit' && <AuditTab />}
+      {sub === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
+      {sub === 'animations' && (myRole === 'ADMIN' || myRole === 'SUPERADMIN') && <AnimationsTab myLogin={myLogin} />}
+    </div>
+  );
+}
+
+function PlayersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
+  const [sub, setSub] = useState<'users' | 'moderation'>('users');
+  return (
+    <div>
+      <SubTabBar
+        tabs={[
+          { id: 'users', label: '👥 LISTE' },
+          { id: 'moderation', label: '🔍 INSPECTION' },
+        ]}
+        active={sub}
+        onChange={setSub}
+      />
+      {sub === 'users' && <UsersTab myRole={myRole} myLogin={myLogin} />}
+      {sub === 'moderation' && <ModerationTab />}
+    </div>
+  );
+}
+
+const TAB_ICONS: Partial<Record<Tab, string>> = {
+  stats: '📊',
+  players: '👥',
+  activity: '⚔️',
+  safety: '🛡',
+  history: '📜',
+  tournaments: '🎯',
+  feedback: '💬',
+  content: '📣',
+  system: '⚙️',
+  'sf-club': '🥊',
+};
+
+const TABS: { id: Tab; superAdminOnly?: boolean; sfAdminOnly?: boolean; adminOnly?: boolean }[] = [
   { id: 'stats' },
-  { id: 'users' },
-  { id: 'moderation' },
-  { id: 'rejets' },
-  { id: 'pending', superAdminOnly: true },
-  { id: 'ideas' },
-  { id: 'bugs' },
-  { id: 'alertes' },
-  { id: 'audit' },
+  { id: 'players' },
+  { id: 'activity' },
+  { id: 'safety' },
   { id: 'history' },
   { id: 'tournaments' },
-  { id: 'announcements' },
-  { id: 'items' },
-  { id: 'sf-sessions', sfAdminOnly: true },
-  { id: 'seasons', superAdminOnly: true },
-  { id: 'animations' },
+  { id: 'feedback', adminOnly: true },
+  { id: 'content', adminOnly: true },
+  { id: 'system' },
+  { id: 'sf-club', sfAdminOnly: true },
 ];
 
 // ── Panneau /moodo (modérateurs) ──────────────────────────────────────────────
