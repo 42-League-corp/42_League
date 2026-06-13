@@ -17,8 +17,11 @@ import {
   ShieldBan,
   Zap,
   Upload,
+  Crown,
+  Layers,
   type LucideIcon,
 } from 'lucide-react';
+import { TiltCard } from '../components/TiltCard';
 import { ProfilePreviewModal } from '../components/shop/ProfilePreviewModal';
 import { MysteryRevealModal } from '../components/shop/MysteryRevealModal';
 import { QuestsPanel } from './profil/QuestsPanel';
@@ -61,6 +64,16 @@ const HIDDEN_CATS: ShopCategory[] = ['badge'];
  *  catalogue réel est vide ou peu fourni. */
 const MIN_TILES = 6;
 const PLACEHOLDER_CATS: ShopCategory[] = ['banner', 'title', 'badge'];
+
+/** Icône et libellé de chaque catégorie pour les séparateurs de section. */
+const CAT_META: Record<ShopCategory, { Icon: LucideIcon; label: string }> = {
+  title:       { Icon: Crown,       label: 'Titres' },
+  banner:      { Icon: ImageIcon,   label: 'Bannières' },
+  consumable:  { Icon: Zap,         label: 'Consommables' },
+  mystery_box: { Icon: PackageOpen, label: 'Boîtes Mystère' },
+  badge:       { Icon: Gem,         label: 'Badges' },
+  cosmetic:    { Icon: Layers,      label: 'Cosmétiques' },
+};
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Système de rareté — désormais un champ EXPLICITE de l'objet (choisi dans
