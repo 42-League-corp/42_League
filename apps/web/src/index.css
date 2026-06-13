@@ -651,6 +651,71 @@
     }
   }
 
+  /* ─── « Apôtre de Sheldon » — effet cosmétique vendu (cf. components/SheldonApostle.tsx) ── */
+
+  /* Spore qui monte lentement, légèrement vacillante. */
+  .sheldon-spore {
+    animation-name: sheldon-spore-rise;
+    animation-timing-function: ease-out;
+    animation-iteration-count: infinite;
+    opacity: 0;
+  }
+  @keyframes sheldon-spore-rise {
+    0% {
+      transform: translate3d(0, 0, 0) scale(0.5);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.85;
+    }
+    75% {
+      opacity: 0.6;
+    }
+    100% {
+      transform: translate3d(var(--spore-drift, 0px), -100px, 0) scale(1.1);
+      opacity: 0;
+    }
+  }
+
+  /* Nappe toxique : pulsation lente d'opacité + légère montée. */
+  .sheldon-ooze {
+    animation: sheldon-ooze 3.2s ease-in-out infinite;
+    transform-origin: bottom center;
+  }
+  @keyframes sheldon-ooze {
+    0%,
+    100% {
+      transform: scaleY(1);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scaleY(1.08);
+      opacity: 1;
+    }
+  }
+
+  /* Petit tremblement de l'icône du badge. */
+  .sheldon-spore-bob {
+    animation: sheldon-spore-bob 2.2s ease-in-out infinite;
+  }
+  @keyframes sheldon-spore-bob {
+    0%,
+    100% {
+      transform: rotate(-8deg) scale(1);
+    }
+    50% {
+      transform: rotate(8deg) scale(1.15);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sheldon-spore,
+    .sheldon-ooze,
+    .sheldon-spore-bob {
+      animation: none;
+    }
+  }
+
   /* Coin "cogwheel" — pour décor en haut à droite. */
   .corner-gear {
     background:
