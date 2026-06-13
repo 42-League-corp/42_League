@@ -824,6 +824,208 @@ const USER_GAME_STATS: Record<Game, {
   flechettes: { elo: (u) => u.eloFlechettes ?? 1000, matches: (u) => u.matchesPlayedFlechettes ?? 0, trophies: (u) => u.tournamentsWonFlechettes ?? 0 },
 };
 
+function UserDetailPanel({
+  user,
+  myRole,
+  myLogin,
+  pending,
+  onAction,
+  onClose,
+  onEditStats,
+  onReload,
+}: {
+  user: AdminUser;
+  myRole: Role;
+  myLogin: string;
+  pending: string | null;
+  onAction: (fn: () => Promise<unknown>) => Promise<void>;
+  onClose: () => void;
+  onEditStats: () => void;
+  onReload: () => void;
+}) {
+  const isSelf = user.login === myLogin;
+  const isHardcoded = HARDCODED_SUPERADMINS.has(user.login.toLowerCase());
+  const isLocked = isSelf || isHardcoded;
+  const isBusy = pending === user.login;
+  const isStagingAllowed = !!user.stagingAllowed;
+  const sfAdmin = !!(user as AdminUser & { sfAdmin?: boolean }).sfAdmin;
+  const t = useT();
+  const { requestConfirm, confirmNode } = useConfirmDialog();
+
+  return (
+    <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-800/50">
+      {confirmNode}
+
+      {/* Col 1: Rôle */}
+      <div className="space-y-3">
+        <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Rôle</div>
+        {isLocked ? (
+          <div className="flex items-center gap-2">
+            <RoleBadge role={user.role} />
+            <span className="text-zinc-600 text-xs font-mono">{t('god.users.permanent')}</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {(['USER', 'MODERATOR', 'ADMIN'] as const).map((role) => {
+              const isActive = user.role === role;
+              if (myRole !== 'SUPERADMIN' && role === 'ADMIN') return null;
+              if (myRole !== 'SUPERADMIN' && user.role === 'SUPERADMIN') return null;
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  disabled={isActive || isBusy}
+                  onClick={() => onAction(() => api.setUserRole(user.login, role))}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all cursor-pointer border disabled:cursor-default ${
+                    isActive
+                      ? role === 'ADMIN'
+                        ? 'bg-blue-400/15 border-blue-400/40 text-blue-400'
+                        : role === 'MODERATOR'
+                        ? 'bg-violet-400/15 border-violet-400/40 text-violet-400'
+                        : 'bg-zinc-700/60 border-zinc-600 text-zinc-300'
+                      : 'bg-transparent border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {role}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Flags */}
+        {!isLocked && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {/* SF Admin */}
+            {(myRole === 'ADMIN' || myRole === 'SUPERADMIN') && (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() =>
+                  onAction(() =>
+                    (api as unknown as { adminSetSfAdmin: (l: string, v: boolean) => Promise<unknown> }).adminSetSfAdmin(
+                      user.login,
+                      !sfAdmin
+                    )
+                  )
+                }
+                className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all cursor-pointer border ${
+                  sfAdmin
+                    ? 'bg-orange-400/15 border-orange-400/40 text-orange-400'
+                    : 'bg-transparent border-zinc-700 text-zinc-500 hover:border-orange-400/40 hover:text-orange-400'
+                }`}
+              >
+                SF Admin {sfAdmin ? '✓' : '○'}
+              </button>
+            )}
+            {/* Staging (SUPERADMIN) */}
+            {myRole === 'SUPERADMIN' && (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={async () => {
+                  const grant = !isStagingAllowed;
+                  const msg = grant
+                    ? t('god.users.staging.grant').replace('{login}', user.login)
+                    : t('god.users.staging.revoke').replace('{login}', user.login);
+                  const ok = await requestConfirm(msg, {
+                    danger: !grant,
+                    confirmLabel: grant ? t('god.users.staging.grantLabel') : t('god.users.staging.revokeLabel'),
+                  });
+                  if (ok) onAction(() => api.setStagingAccess(user.login, grant));
+                }}
+                className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all cursor-pointer border ${
+                  isStagingAllowed
+                    ? 'bg-teal-400/15 border-teal-400/40 text-teal-400'
+                    : 'bg-transparent border-zinc-700 text-zinc-500 hover:border-teal-400/40 hover:text-teal-400'
+                }`}
+              >
+                β Staging {isStagingAllowed ? '✓' : '○'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Col 2: Permissions (only for MODERATOR) */}
+      <div className="space-y-3">
+        {user.role === 'MODERATOR' && (myRole === 'ADMIN' || myRole === 'SUPERADMIN') ? (
+          <>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Permissions</div>
+            <ModeratorPermissionsButton user={user} onSaved={onReload} />
+            <div className="text-[10px] text-zinc-600 font-mono">
+              {MODERATOR_PERMISSION_KEYS.filter((k) =>
+                !!(user.moderatorPermissions as Partial<Record<ModeratorPermissionKey, boolean>> | null)?.[k]
+              ).length}/{MODERATOR_PERMISSION_KEYS.length} permissions actives
+            </div>
+          </>
+        ) : (
+          <div className="text-[10px] font-mono text-zinc-700 uppercase tracking-widest">
+            {user.role === 'MODERATOR' ? 'Permissions' : 'Permissions (n/a — non MODO)'}
+          </div>
+        )}
+      </div>
+
+      {/* Col 3: Actions */}
+      <div className="space-y-3">
+        <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Actions</div>
+        <div className="flex flex-wrap gap-1.5">
+          <Btn onClick={onEditStats} variant="ghost">{t('god.users.statsBtn')}</Btn>
+          <Btn
+            onClick={() => onAction(() => api.adminResetOpsCooldown(user.login))}
+            disabled={isBusy}
+            variant="ghost"
+            className="border border-red-500/30 text-red-400"
+          >
+            {t('god.users.resetCooldown')}
+          </Btn>
+          {!isLocked && (
+            user.bannedAt ? (
+              <Btn
+                onClick={() => onAction(() => api.adminUnbanUser(user.login))}
+                disabled={isBusy}
+                variant="success"
+              >
+                {t('god.users.unban')}
+              </Btn>
+            ) : (
+              <Btn
+                onClick={async () => {
+                  const ok = await requestConfirm(
+                    t('god.users.confirmBan').replace('{login}', user.login),
+                    { danger: true, confirmLabel: t('god.users.confirmBanLabel') }
+                  );
+                  if (ok) onAction(() => api.adminBanUser(user.login));
+                }}
+                disabled={isBusy}
+                variant="danger"
+              >
+                {t('god.users.ban')}
+              </Btn>
+            )
+          )}
+          {myRole === 'SUPERADMIN' && (IS_STAGING || user.ftId === null) && !isLocked && (
+            <Btn
+              onClick={async () => {
+                const ok = await requestConfirm(
+                  t('god.users.confirmDeleteFake').replace('{login}', user.login),
+                  { danger: true, confirmLabel: t('god.delete') }
+                );
+                if (ok) { onAction(() => api.adminDeleteUser(user.login)); onClose(); }
+              }}
+              disabled={isBusy}
+              variant="danger"
+              className="border border-red-500/40"
+            >
+              {t('god.users.deleteBtn')}
+            </Btn>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UsersTab({ myRole, myLogin }: { myRole: Role; myLogin: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
