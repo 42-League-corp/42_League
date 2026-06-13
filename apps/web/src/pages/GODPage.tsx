@@ -669,10 +669,28 @@ function ResetDatabaseModal({ onClose, onDone }: { onClose: () => void; onDone: 
 
 // ── Éditeur de permissions modérateur ─────────────────────────────────────
 
+type PermsWithGames = Partial<Record<ModeratorPermissionKey, boolean>> & { managedGames?: string[] };
+
+const MANAGED_GAME_OPTIONS = [
+  { id: 'babyfoot', label: 'Baby', color: '#ffc94a' },
+  { id: 'smash', label: 'Smash', color: '#ff3d50' },
+  { id: 'chess', label: 'Échecs', color: '#56c46e' },
+  { id: 'streetfighter', label: 'SF', color: '#ff7a18' },
+  { id: 'flechettes', label: 'Fléch.', color: '#14b8a6' },
+] as const;
+
+const GAME_ABBREV: Record<string, string> = {
+  babyfoot: 'B',
+  smash: 'S',
+  chess: 'É',
+  streetfighter: 'SF',
+  flechettes: 'F',
+};
+
 function ModeratorPermissionsButton({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const [perms, setPerms] = useState<Partial<Record<ModeratorPermissionKey, boolean>>>(
-    (user.moderatorPermissions as Partial<Record<ModeratorPermissionKey, boolean>>) ?? {},
+  const [perms, setPerms] = useState<PermsWithGames>(
+    (user.moderatorPermissions as PermsWithGames) ?? {},
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
