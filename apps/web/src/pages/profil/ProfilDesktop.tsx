@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
 import { EloBoostAura, EloBoostBadge, useEloBoostRemaining } from '../../components/EloBoost';
+import { SheldonApostleAura, SheldonApostleBadge, isSheldonTitle } from '../../components/SheldonApostle';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
@@ -100,6 +101,7 @@ export function ProfilDesktop() {
   // ELO boost window — alimente l'aura incandescente sur la carte profil.
   const boostUntil = u.eloMultUntil ?? null;
   const { active: boosted } = useEloBoostRemaining(boostUntil);
+  const isSheldon = isSheldonTitle(u.title);
   // Cosmétiques équipés (boutique) — profil perso.
   const titleColor = me.titleColor ?? null;
   // Titre équipé : null si aucun → « sans éclat. » GRISÉ (état NONE), pas en or.
@@ -126,18 +128,26 @@ export function ProfilDesktop() {
       <Panel title={t('panel.profil.title')} sub={t('panel.profil.sub')} accent="user">
       {/* Hero : avatar · identité · bloc ELO — fond doré + halo holographique animé. */}
       <div
-        className={`relative overflow-hidden rounded-2xl mb-6 border ${boosted ? 'border-orange-500/70' : 'border-gold/35'}`}
+        className={`relative overflow-hidden rounded-2xl mb-6 border ${
+          isSheldon ? 'border-green-500/70' : boosted ? 'border-orange-500/70' : 'border-gold/35'
+        }`}
         style={{
-          background: boosted
+          background: isSheldon
+            ? 'linear-gradient(180deg, #0e1e0e 0%, #071007 55%, #0a140a 100%)'
+            : boosted
             ? 'linear-gradient(180deg, #2d1a0e 0%, #1a0e07 55%, #22100a 100%)'
             : 'linear-gradient(180deg, #2a241c 0%, #15120e 55%, #1d1914 100%)',
-          boxShadow: boosted
+          boxShadow: isSheldon
+            ? 'inset 0 1px 0 rgba(57,255,20,0.18), inset 0 -1px 0 rgba(0,0,0,0.6), 0 12px 40px -8px rgba(57,255,20,0.35)'
+            : boosted
             ? 'inset 0 1px 0 rgba(255,140,60,0.25), inset 0 -1px 0 rgba(0,0,0,0.6), 0 12px 40px -8px rgba(255,80,20,0.45)'
             : 'inset 0 1px 0 rgba(255,215,120,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 32px -12px rgba(255,201,74,0.25)',
         }}
       >
         {/* Aura incandescente — visible uniquement quand le boost ELO ×2 est actif. */}
-        <EloBoostAura active={boosted} />
+        <EloBoostAura active={boosted && !isSheldon} />
+        {/* Aura toxique — visible quand le joueur est Apôtre de Sheldon. */}
+        <SheldonApostleAura active={isSheldon} />
         {/* Bannière équipée (boutique) = fond de la carte + voile sombre. */}
         {equippedBanner && (
           <>
@@ -268,7 +278,8 @@ export function ProfilDesktop() {
             >
               {stats.elo}
             </div>
-            {boosted && <EloBoostBadge until={boostUntil} className="mt-1.5" />}
+            {boosted && !isSheldon && <EloBoostBadge until={boostUntil} className="mt-1.5" />}
+            {isSheldon && <SheldonApostleBadge className="mt-1.5" />}
           </div>
         </div>
       </div>
