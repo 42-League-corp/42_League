@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { EloBoostAura, EloBoostBadge, useEloBoostRemaining } from '../../../components/EloBoost';
+import { SheldonApostleAura, SheldonApostleBadge, isSheldonTitle } from '../../../components/SheldonApostle';
 import { Avatar } from '../../../components/Avatar';
 import { CoinCount } from '../../../components/CoinCount';
 import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
@@ -119,6 +120,7 @@ export function ProfileHeroCard({
   // ELO boost — aura incandescente quand la fenêtre 6h est active.
   const boostUntil = user.eloMultUntil ?? null;
   const { active: boosted } = useEloBoostRemaining(boostUntil);
+  const isSheldon = isSheldonTitle(user.title);
 
   return (
     <>
@@ -131,17 +133,25 @@ export function ProfileHeroCard({
       // de plus → décalage de hit-testing des taps sous Firefox Android.
       className="relative overflow-hidden rounded-3xl no-select"
       style={{
-        background: boosted
+        background: isSheldon
+          ? 'linear-gradient(180deg, #0e1e0e 0%, #071007 18%, #050d05 50%, #071007 82%, #0e1e0e 100%)'
+          : boosted
           ? 'linear-gradient(180deg, #2d1a0e 0%, #1f0f07 18%, #180a05 50%, #1f0f07 82%, #2d1a0e 100%)'
           : 'linear-gradient(180deg, #2a241c 0%, #1d1914 18%, #15120e 50%, #1d1914 82%, #2a241c 100%)',
-        border: boosted ? '1px solid rgba(255, 120, 30, 0.65)' : '1px solid rgba(255, 201, 74, 0.4)',
-        boxShadow: boosted
+        border: isSheldon
+          ? '1px solid rgba(57, 255, 20, 0.6)'
+          : boosted ? '1px solid rgba(255, 120, 30, 0.65)' : '1px solid rgba(255, 201, 74, 0.4)',
+        boxShadow: isSheldon
+          ? 'inset 0 1px 0 rgba(57,255,20,0.18), inset 0 -1px 0 rgba(0,0,0,0.6), 0 12px 48px -6px rgba(57,255,20,0.38)'
+          : boosted
           ? 'inset 0 1px 0 rgba(255,140,60,0.28), inset 0 -1px 0 rgba(0,0,0,0.6), 0 12px 48px -6px rgba(255,70,10,0.50)'
           : 'inset 0 1px 0 rgba(255, 215, 120, 0.18), inset 0 -1px 0 rgba(0,0,0,0.5), 0 12px 36px -8px rgba(255, 201, 74, 0.22)',
       }}
     >
       {/* Aura incandescente ELO ×2 */}
-      <EloBoostAura active={boosted} />
+      <EloBoostAura active={boosted && !isSheldon} />
+      {/* Aura toxique Apôtre de Sheldon */}
+      <SheldonApostleAura active={isSheldon} />
       {/* Bannière équipée (boutique) = fond de la carte, par-dessus le dégradé.
           Voile sombre pour garder la lisibilité du contenu. */}
       {equippedBanner && (
@@ -296,11 +306,16 @@ export function ProfileHeroCard({
             </div>
             <div
               className="font-display text-[clamp(2.75rem,13vw,3.5rem)] font-black leading-none tabular-nums tracking-tighter text-gold-emboss"
-              style={boosted ? { textShadow: '0 1px 0 rgba(0,0,0,0.7), 0 0 28px rgba(255,100,10,0.75)' } : undefined}
+              style={
+                isSheldon
+                  ? { textShadow: '0 1px 0 rgba(0,0,0,0.7), 0 0 28px rgba(57,255,20,0.65)', color: '#8bc34a' }
+                  : boosted ? { textShadow: '0 1px 0 rgba(0,0,0,0.7), 0 0 28px rgba(255,100,10,0.75)' } : undefined
+              }
             >
               <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
-            {boosted && <EloBoostBadge until={boostUntil} className="mt-1" />}
+            {boosted && !isSheldon && <EloBoostBadge until={boostUntil} className="mt-1" />}
+            {isSheldon && <SheldonApostleBadge className="mt-1" />}
           </div>
 
           {/* Delta 7j */}
