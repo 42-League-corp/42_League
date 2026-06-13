@@ -5208,7 +5208,7 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
   const [myPerms, setMyPerms] = useState<Partial<Record<ModeratorPermissionKey, boolean>>>({});
   const [isSfAdmin, setIsSfAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>(moodo ? 'stats' : 'users');
+  const [activeTab, setActiveTab] = useState<Tab>(moodo ? 'stats' : 'players');
   // Sens de la dernière transition d'onglet (1 = suivant, -1 = précédent),
   // pour orienter la petite animation de glissement sur mobile.
   const [navDir, setNavDir] = useState(0);
@@ -5226,6 +5226,7 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
       })
     : TABS.filter((tab) => {
         if (tab.superAdminOnly && myRole !== 'SUPERADMIN') return false;
+        if (tab.adminOnly && myRole !== 'ADMIN' && myRole !== 'SUPERADMIN') return false;
         if (isSfAdmin && myRole === 'MODERATOR') return !!tab.sfAdminOnly;
         return true;
       });
@@ -5269,7 +5270,7 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
           setMyLogin(data.login);
           setMyRole('MODERATOR' as Role);
           setIsSfAdmin(true);
-          setActiveTab('sf-sessions');
+          setActiveTab('sf-club');
         } else if (moodo && role === 'MODERATOR') {
           setMyLogin(data.login);
           setMyRole(role);
