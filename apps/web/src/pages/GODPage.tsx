@@ -3806,7 +3806,7 @@ function TournamentsTab() {
   const [rows, setRows] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
-  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess'>('all');
+  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes'>('all');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   // Gestion « en attente » : un seul tournoi déplié à la fois.
@@ -3825,6 +3825,8 @@ function TournamentsTab() {
       api.tournaments('babyfoot'),
       api.tournaments('smash'),
       api.tournaments('chess'),
+      api.tournaments('streetfighter'),
+      api.tournaments('flechettes'),
     ])
       .then((lists) => setRows(lists.flat()))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -3973,7 +3975,7 @@ function TournamentsTab() {
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Input value={filter} onChange={setFilter} placeholder={tr('god.tourn.filter')} className="w-72" />
         <div className="flex gap-1">
-          {(['all', 'babyfoot', 'smash', 'chess'] as const).map((g) => (
+          {(['all', 'babyfoot', 'smash', 'chess', 'streetfighter', 'flechettes'] as const).map((g) => (
             <button
               key={g}
               type="button"
