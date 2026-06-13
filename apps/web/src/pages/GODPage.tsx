@@ -5193,13 +5193,11 @@ const TABS: { id: Tab; superAdminOnly?: boolean; sfAdminOnly?: boolean; adminOnl
 // La vraie barrière reste côté serveur (requirePerm sur chaque endpoint).
 const MODO_TAB_PERMS: Partial<Record<Tab, ModeratorPermissionKey[]>> = {
   stats: ['canViewStats'],
-  users: ['canBan', 'canEditStats'],
-  moderation: ['canBan'],
-  rejets: ['canDeleteRejectedMatches'],
-  alertes: ['canViewSuspicious'],
-  audit: ['canViewAuditLog'],
+  players: ['canBan', 'canEditStats'],
+  safety: ['canDeleteRejectedMatches', 'canViewSuspicious'],
   history: ['canViewHistory'],
   tournaments: ['canDeleteTournaments'],
+  system: ['canViewAuditLog'],
 };
 
 export function GODPage({ moodo = false }: { moodo?: boolean }) {
