@@ -2696,7 +2696,7 @@ function AllHistoryTab() {
   const [error, setError] = useState('');
   const [loginFilter, setLoginFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<AllHistoryEventType | 'all'>('all');
-  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess'>('all');
+  const [gameFilter, setGameFilter] = useState<'all' | 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes'>('all');
   const [sudo, setSudo] = useState(false);
   const { requestConfirm, confirmNode } = useConfirmDialog();
   const { selected, toggle, toggleAll, clear } = useSelection();
@@ -2788,8 +2788,15 @@ function AllHistoryTab() {
             <option key={ty} value={ty}>{EVENT_TYPE_ICON[ty]} {t(`god.event.${ty}`)}</option>
           ))}
         </select>
-        <div className="flex gap-1">
-          {(['all', 'babyfoot', 'smash', 'chess'] as const).map((g) => (
+        <div className="flex gap-1 flex-wrap">
+          {([
+            { id: 'all', label: null },
+            { id: 'babyfoot', label: null },
+            { id: 'smash', label: null },
+            { id: 'chess', label: null },
+            { id: 'streetfighter', label: 'SF' },
+            { id: 'flechettes', label: 'Fléch.' },
+          ] as { id: 'all' | 'babyfoot' | 'smash' | 'chess' | 'streetfighter' | 'flechettes'; label: string | null }[]).map(({ id: g, label }) => (
             <button
               key={g}
               type="button"
@@ -2800,7 +2807,7 @@ function AllHistoryTab() {
                   : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              {g === 'all' ? t('god.hist.allGames') : t(`god.tourn.game.${g}`)}
+              {g === 'all' ? t('god.hist.allGames') : (label ?? t(`god.tourn.game.${g}`))}
             </button>
           ))}
         </div>
