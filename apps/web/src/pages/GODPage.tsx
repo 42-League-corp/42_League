@@ -5384,13 +5384,15 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
                 setNavDir(to === from ? 0 : to > from ? 1 : -1);
                 setActiveTab(tab.id);
               }}
-              className={`px-4 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 whitespace-nowrap shrink-0 ${
+              className={`flex items-center gap-1.5 px-3 py-3 text-xs tracking-widest transition-colors cursor-pointer border-b-2 whitespace-nowrap shrink-0 ${
                 activeTab === tab.id
                   ? 'text-zinc-100 border-zinc-400'
                   : 'text-zinc-500 border-transparent hover:text-zinc-300 hover:border-zinc-700'
               }`}
             >
-              {t(`god.tab.${tab.id}`)}
+              {TAB_ICONS[tab.id] && <span className="text-sm leading-none">{TAB_ICONS[tab.id]}</span>}
+              <span className="hidden sm:inline">{t(`god.tab.${tab.id}`)}</span>
+              <span className="sm:hidden text-[10px] font-bold">{t(`god.tab.${tab.id}`).slice(0, 4)}</span>
             </button>
           ))}
         </div>
@@ -5406,22 +5408,15 @@ export function GODPage({ moodo = false }: { moodo?: boolean }) {
           className="max-w-screen-2xl mx-auto"
         >
           {activeTab === 'stats' && <StatsTab />}
-          {activeTab === 'users' && <UsersTab myRole={myRole} myLogin={myLogin} />}
-          {activeTab === 'moderation' && <ModerationTab />}
-          {activeTab === 'rejets' && <RejetsTab />}
-          {activeTab === 'matches' && <MatchesTab />}
-          {activeTab === 'pending' && myRole === 'SUPERADMIN' && <PendingTab />}
-          {activeTab === 'ideas' && <IdeasTab />}
-          {activeTab === 'bugs' && <BugsTab />}
-          {activeTab === 'alertes' && <AlertesTab />}
-          {activeTab === 'audit' && <AuditTab />}
+          {activeTab === 'players' && <PlayersTab myRole={myRole} myLogin={myLogin} />}
+          {activeTab === 'activity' && <ActivityTab myRole={myRole} />}
+          {activeTab === 'safety' && <SafetyTab />}
           {activeTab === 'history' && <AllHistoryTab />}
           {activeTab === 'tournaments' && <TournamentsTab />}
-          {activeTab === 'seasons' && myRole === 'SUPERADMIN' && <SeasonsTab />}
-          {activeTab === 'animations' && <AnimationsTab myLogin={myLogin} />}
-          {activeTab === 'announcements' && <AnnouncementsTab />}
-          {activeTab === 'items' && <ItemsAdminTab />}
-          {activeTab === 'sf-sessions' && myLogin && <SfSessionsTab myLogin={myLogin} />}
+          {activeTab === 'feedback' && <FeedbackTab />}
+          {activeTab === 'content' && <ContentTab />}
+          {activeTab === 'system' && <SystemTab myRole={myRole} myLogin={myLogin} />}
+          {activeTab === 'sf-club' && myLogin && <SfSessionsTab myLogin={myLogin} />}
         </motion.div>
       </div>
     </div>
