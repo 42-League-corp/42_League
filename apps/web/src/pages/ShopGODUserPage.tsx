@@ -36,6 +36,7 @@ const TYPE_LABEL: Record<CoinTxType, string> = {
   shop_consumable: 'Achat consommable',
   mystery_box: 'Mystery box',
   sheldon_reward: 'Cadeau Sheldon',
+  trophy_income: 'Revenu de trophée',
   admin_grant: 'Don admin',
 };
 
@@ -62,6 +63,8 @@ function TypeIcon({ type }: { type: CoinTxType }) {
       return <Package className={cls} />;
     case 'sheldon_reward':
       return <Gift className={cls} />;
+    case 'trophy_income':
+      return <Trophy className={cls} />;
     case 'admin_grant':
       return <Shield className={cls} />;
   }
@@ -116,6 +119,8 @@ function describe(t: CoinTransaction): string {
       return `Mystery box : ${s('name') ?? 'boîte mystère'}`;
     case 'sheldon_reward':
       return `Cadeau « ${s('name') ?? 'Apôtre de Sheldon'} »`;
+    case 'trophy_income':
+      return `Revenu de trophée${s('name') ? ` (${s('name')})` : ''}`;
     case 'admin_grant':
       return s('by') ? `Ajustement manuel par @${s('by')}` : 'Ajustement manuel';
   }

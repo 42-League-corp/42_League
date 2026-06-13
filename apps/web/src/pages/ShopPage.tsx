@@ -16,7 +16,6 @@ import {
   Zap,
   Upload,
   Crown,
-  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import { TiltCard } from '../components/TiltCard';
@@ -61,7 +60,6 @@ const CAT_META: Record<ShopCategory, { Icon: LucideIcon; label: string }> = {
   consumable:  { Icon: Zap,         label: 'Consommables' },
   mystery_box: { Icon: PackageOpen, label: 'Boîtes Mystère' },
   badge:       { Icon: Gem,         label: 'Badges' },
-  cosmetic:    { Icon: Layers,      label: 'Cosmétiques' },
 };
 
 /* ─────────────────────────────────────────────────────────────────────────
