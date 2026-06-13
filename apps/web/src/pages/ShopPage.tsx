@@ -414,9 +414,6 @@ export function ShopPage() {
   // snapshot, on affiche le catalogue connu immédiatement, sans clignotement.
   const [loading, setLoading] = useState(!shopCache);
   const [busy, setBusy] = useState<string | null>(null);
-  const [activeCat, setActiveCat] = useState<ShopCategory | 'all'>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('rarity');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
   // Objet en cours de prévisualisation sur la carte de profil (modal).
   const [preview, setPreview] = useState<ShopItemData | null>(null);
   // Bannière custom en cours d'upload (itemId → ouvre le modal d'upload).
@@ -428,20 +425,6 @@ export function ShopPage() {
   const [monthly, setMonthly] = useState<Record<string, { used: number; cap: number }>>(
     shopCache?.monthly ?? {},
   );
-
-  /** Clic sur un critère de tri : si déjà actif, on inverse le sens ; sinon on
-   *  bascule sur ce critère avec un sens par défaut (rareté/prix décroissants,
-   *  nom croissant — l'ordre le plus naturel pour chacun). */
-  const onSort = useCallback((key: SortKey) => {
-    setSortKey((prev) => {
-      if (prev === key) {
-        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-        return prev;
-      }
-      setSortDir(key === 'name' ? 'asc' : 'desc');
-      return key;
-    });
-  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -527,27 +510,25 @@ export function ShopPage() {
     [equipped, show, t, refresh],
   );
 
-  const catLabel = (c: ShopCategory) => t(`shop.cat.${c}`);
   const rarityLabel = (r: Rarity) => t(`shop.rarity.${r}`);
 
   const visibleItems = items.filter((it) => !HIDDEN_CATS.includes(it.category));
 
-  /** Catégories réellement présentes dans le catalogue, dans un ordre stable,
-   *  pour ne proposer comme filtre que des onglets non vides. */
+  /** Catégories réellement présentes dans le catalogue, dans l'ordre stable. */
   const presentCats = CATEGORY_ORDER.filter((c) => visibleItems.some((it) => it.category === c));
-  const filteredItems =
-    activeCat === 'all' ? visibleItems : visibleItems.filter((it) => it.category === activeCat);
 
-  /** Tri appliqué au catalogue filtré. La comparaison se fait toujours en ordre
-   *  croissant « naturel », puis on inverse selon `sortDir`. */
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    let cmp: number;
-    if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
-    else if (sortKey === 'price') cmp = a.price - b.price;
-    else cmp = RARITY_ORDER.indexOf(resolveRarity(a)) - RARITY_ORDER.indexOf(resolveRarity(b));
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-  const sortLabel = (k: SortKey) => t(`shop.sort.${k}`);
+  /** Items par catégorie, triés rareté décroissante puis nom. */
+  const itemsByCategory = Object.fromEntries(
+    presentCats.map((cat) => [
+      cat,
+      visibleItems
+        .filter((it) => it.category === cat)
+        .sort((a, b) => {
+          const rd = RARITY_ORDER.indexOf(resolveRarity(b)) - RARITY_ORDER.indexOf(resolveRarity(a));
+          return rd !== 0 ? rd : a.name.localeCompare(b.name);
+        }),
+    ]),
+  ) as Record<ShopCategory, ShopItemData[]>;
 
   return (
     <div className="space-y-5">
