@@ -301,6 +301,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Matchmaking (match aléatoire)
     'defis.random': 'Match aléatoire',
+    'defis.random.sub': 'Adversaire aléatoire instantané',
     'defis.queue.searching': "Recherche d'un adversaire…",
     'defis.queue.inQueue': 'Tu es dans la file',
     'defis.queue.cancel': 'Annuler',
@@ -588,6 +589,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Matchmaking (random match)
     'defis.random': 'Random match',
+    'defis.random.sub': 'Instant random opponent',
     'defis.queue.searching': 'Looking for an opponent…',
     'defis.queue.inQueue': "You're in the queue",
     'defis.queue.cancel': 'Cancel',
@@ -875,6 +877,7 @@ export const dict: Record<Lang, Dict> = {
 
     // Matchmaking (partida aleatoria)
     'defis.random': 'Partida aleatoria',
+    'defis.random.sub': 'Rival aleatorio al instante',
     'defis.queue.searching': 'Buscando un rival…',
     'defis.queue.inQueue': 'Estás en la cola',
     'defis.queue.cancel': 'Cancelar',
