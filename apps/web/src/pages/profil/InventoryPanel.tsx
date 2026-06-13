@@ -185,7 +185,6 @@ function BannersSection() {
         />
       )}
     </section>
-    </>
   );
 }
 
