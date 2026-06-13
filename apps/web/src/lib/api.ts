@@ -1001,7 +1001,10 @@ async function request<T>(
   }
   const res = await fetch(`${getApiBase()}${path}`, { ...init, headers });
   if (res.status === 401) {
-    clearToken();
+    // On ne purge la session QUE si la requête était authentifiée. Un 401 sur un
+    // endpoint public (auth:false) — p.ex. /sf-session/current bloqué par la
+    // staging-gate — ne doit JAMAIS déconnecter un utilisateur déjà valide.
+    if (options.auth !== false) clearToken();
     throw new AuthError('session expired');
   }
   if (!res.ok) {
