@@ -6,8 +6,6 @@ import { useT } from '../lib/i18n';
 import { GAME_META } from '../lib/gameMeta';
 import type { Game } from '../lib/gameMode';
 
-type TFn = (key: string) => string;
-
 /**
  * Grand bouton « Match aléatoire ». Garde son design (dégradé, brillance, relief)
  * mais emprunte la palette du mode courant (cf. GAME_META[game].button) : gold
@@ -56,16 +54,15 @@ function SearchBox({
   current = false,
   onPick,
   onCancel,
-  t,
   className = '',
 }: {
   game: Game;
   current?: boolean;
   onPick?: (g: Game) => void;
   onCancel: () => void;
-  t: TFn;
   className?: string;
 }) {
+  const t = useT();
   const gm = GAME_META[game];
   return (
     <div
@@ -131,7 +128,7 @@ function SearchBox({
  *  - une case de recherche par autre mode en file d'attente (clic → bascule).
  * Chaque case indique le mode concerné ; le bouton reprend la palette du mode.
  * L'overlay VERSUS (MatchmakingOverlay) s'affiche sur n'importe quelle page dès
- * qu'un mode trouve un adversaire, avec le logo du mode concerné.
+ *  qu'un mode trouve un adversaire, avec le logo du mode concerné.
  */
 export function MatchmakingButton({ className = '' }: { className?: string }) {
   const t = useT();
@@ -151,7 +148,7 @@ export function MatchmakingButton({ className = '' }: { className?: string }) {
           className="min-w-0 flex-1"
         />
       ) : (
-        <SearchBox game={game} current onCancel={() => void cancel(game)} t={t} className="min-w-0 flex-1" />
+        <SearchBox game={game} current onCancel={() => void cancel(game)} className="min-w-0 flex-1" />
       )}
 
       {/* Cases des autres modes en recherche, équitablement réparties. */}
@@ -161,7 +158,6 @@ export function MatchmakingButton({ className = '' }: { className?: string }) {
           game={g}
           onPick={setGame}
           onCancel={() => void cancel(g)}
-          t={t}
           className="min-w-0 flex-1"
         />
       ))}
