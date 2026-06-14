@@ -110,7 +110,7 @@ function GameBackdropImpl() {
         className="absolute inset-0 h-full w-full select-none object-cover"
         draggable={false}
         loading="eager"
-        fetchPriority="low"
+        {...({ fetchpriority: 'low' } as Record<string, string>)}
         decoding="async"
         style={imgStyle(active === 'A')}
       />
