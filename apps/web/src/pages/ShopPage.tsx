@@ -62,6 +62,10 @@ const CAT_META: Record<ShopCategory, { Icon: LucideIcon; label: string }> = {
   badge:       { Icon: Gem,         label: 'Badges' },
 };
 
+function isSheldonItem(item: ShopItemData): boolean {
+  return item.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes('sheldon');
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Système de rareté — désormais un champ EXPLICITE de l'objet (choisi dans
  * Shop GOD), avec repli sur une déduction par le prix pour les objets antérieurs.
@@ -501,21 +505,28 @@ export function ShopPage() {
 
   const visibleItems = items.filter((it) => !HIDDEN_CATS.includes(it.category));
 
-  /** Catégories réellement présentes dans le catalogue, dans l'ordre stable. */
-  const presentCats = CATEGORY_ORDER.filter((c) => visibleItems.some((it) => it.category === c));
+  const sortByRarity = (a: ShopItemData, b: ShopItemData) => {
+    const rd = RARITY_ORDER.indexOf(resolveRarity(b)) - RARITY_ORDER.indexOf(resolveRarity(a));
+    return rd !== 0 ? rd : a.name.localeCompare(b.name);
+  };
 
-  /** Items par catégorie, triés rareté décroissante puis nom. */
+  /** mystery_box et Sheldon vont dans "Autre" — exclus des sections normales. */
+  const presentCats = CATEGORY_ORDER.filter(
+    (c) => c !== 'mystery_box' && visibleItems.some((it) => it.category === c && !isSheldonItem(it)),
+  );
+
   const itemsByCategory = Object.fromEntries(
     presentCats.map((cat) => [
       cat,
-      visibleItems
-        .filter((it) => it.category === cat)
-        .sort((a, b) => {
-          const rd = RARITY_ORDER.indexOf(resolveRarity(b)) - RARITY_ORDER.indexOf(resolveRarity(a));
-          return rd !== 0 ? rd : a.name.localeCompare(b.name);
-        }),
+      visibleItems.filter((it) => it.category === cat && !isSheldonItem(it)).sort(sortByRarity),
     ]),
   ) as Record<ShopCategory, ShopItemData[]>;
+
+  /** Section "Autre" : mystery_box + items Apôtre de Sheldon. */
+  const autreItems = [
+    ...visibleItems.filter((it) => it.category === 'mystery_box'),
+    ...visibleItems.filter((it) => it.category === 'title' && isSheldonItem(it)),
+  ].sort(sortByRarity);
 
   return (
     <div className="space-y-5">
@@ -785,7 +796,108 @@ export function ShopPage() {
             );
           })}
 
-          {presentCats.length === 0 && (
+          {/* ── Section "Autre" : mystery_box + Apôtre de Sheldon ── */}
+          {autreItems.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-4 px-0.5">
+                <span className="inline-block w-1 h-3.5 bg-gradient-to-b from-gold to-gold-dim rounded-sm flex-shrink-0" />
+                <Sparkles className="w-3.5 h-3.5 text-gold/80 flex-shrink-0" strokeWidth={2.4} />
+                <span className="font-gaming text-[11px] uppercase tracking-[0.2em] font-extrabold text-gold/90">
+                  Autre
+                </span>
+                <span className="font-mono text-[10px] text-muted tabular-nums">· {autreItems.length}</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-gold/30 via-gold/15 to-transparent ml-1" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {autreItems.map((item, idx) => {
+                  const isOwned = owned.has(item.id);
+                  const canAfford = coins >= item.price;
+                  const isEquipped = equipped.has(item.id);
+                  const showEquip = isOwned && EQUIPPABLE.includes(item.category);
+                  const itemBusy = busy === item.id;
+                  const rarity = resolveRarity(item);
+                  const rk = RARITY[rarity];
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.22, delay: idx * 0.04 }}
+                    >
+                      <TiltCard
+                        glowHex={rk.hex}
+                        className="card-hud h-full overflow-hidden rounded-xl flex flex-col"
+                        style={{ boxShadow: `0 0 0 1px ${rk.hex}22, 0 6px 24px -8px ${rk.hex}30` }}
+                      >
+                        <div className="absolute top-0 inset-x-0 h-[1.5px] pointer-events-none"
+                          style={{ background: `linear-gradient(90deg, transparent, ${rk.hex}cc, transparent)` }} />
+                        <div className="absolute inset-0 pointer-events-none"
+                          style={{ background: `radial-gradient(ellipse 80% 50% at 50% 0%, ${rk.hex}18 0%, transparent 70%)` }} />
+                        <div className="relative flex flex-col gap-3 p-4 h-full">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-gaming text-sm font-extrabold text-text-strong leading-tight truncate">{item.name}</div>
+                              <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-[0.14em]" style={{ color: rk.hex }}>
+                                <Gem className="w-2.5 h-2.5" strokeWidth={2.5} />{rarityLabel(rarity)}
+                              </span>
+                            </div>
+                            {isOwned && (
+                              <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide bg-gold/10 border border-gold/30 text-gold">
+                                <Check className="w-2.5 h-2.5" strokeWidth={3} />Possédé
+                              </span>
+                            )}
+                          </div>
+                          <ShopItemVisual item={item} rarityHex={rk.hex} />
+                          {item.description && (
+                            <p className="text-[11px] text-muted-2 leading-relaxed line-clamp-2 -mt-0.5">{item.description}</p>
+                          )}
+                          <div className="mt-auto pt-2 flex items-center justify-between gap-2 border-t border-white/5">
+                            {item.price === 0 ? (
+                              <span className="inline-flex items-center gap-1 font-gaming text-sm font-extrabold text-emerald-400">
+                                <img src="/42coin.webp" alt="" className="w-4 h-4" />+300
+                              </span>
+                            ) : (
+                              <CoinAmount value={item.price} className="font-gaming text-base font-extrabold text-text-strong" />
+                            )}
+                            <div className="flex items-center gap-1.5">
+                              {EQUIPPABLE.includes(item.category) && (
+                                <button type="button" onClick={() => setPreview(item)} title={t('shop.preview.title')}
+                                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-wide border border-border/50 bg-bg-1/80 text-muted-2 hover:text-gold hover:border-gold/40 transition-colors">
+                                  <Eye className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                  <span className="hidden sm:inline">{t('shop.preview')}</span>
+                                </button>
+                              )}
+                              {isOwned ? (
+                                showEquip ? (
+                                  <button type="button" disabled={itemBusy} onClick={() => void toggleEquip(item)}
+                                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-wide transition-all disabled:opacity-60 ${isEquipped ? 'bg-gold/15 border border-gold/40 text-gold' : 'bg-bg-1/80 border border-border/50 text-muted-2 hover:text-text hover:border-gold/30'}`}>
+                                    {isEquipped && <Check className="w-3 h-3" strokeWidth={3} />}
+                                    {isEquipped ? t('shop.equipped') : t('shop.equip')}
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-wide bg-gold/10 border border-gold/25 text-gold/80">
+                                    <Check className="w-3 h-3" strokeWidth={3} />{t('shop.owned')}
+                                  </span>
+                                )
+                              ) : (
+                                <button type="button" disabled={!canAfford || itemBusy} onClick={() => void buy(item)}
+                                  className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-wide transition-all disabled:opacity-60 ${canAfford ? 'bg-gradient-to-r from-gold to-gold-dim text-bg-0 hover:shadow-gold-glow hover:brightness-110 active:scale-95' : 'bg-bg-1/80 border border-border/50 text-muted cursor-not-allowed'}`}>
+                                  {!canAfford && <Lock className="w-3 h-3" strokeWidth={2.5} />}
+                                  {itemBusy ? t('shop.buying') : canAfford ? t('shop.buy') : t('shop.insufficient')}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </TiltCard>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {presentCats.length === 0 && autreItems.length === 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {Array.from({ length: 3 }).map((_, i) => {
                 const cat = PLACEHOLDER_CATS[i % PLACEHOLDER_CATS.length]!;
