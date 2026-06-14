@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Crown, Flame, MapPin, TrendingDown, TrendingUp } from 'lucide-react';
 import { EloBoostAura, EloBoostBadge, useEloBoostRemaining } from '../../../components/EloBoost';
-import { SheldonApostleAura, SheldonApostleBadge, isSheldonTitle } from '../../../components/SheldonApostle';
+import { SheldonApostleAura, isSheldonTitle } from '../../../components/SheldonApostle';
 import { Avatar } from '../../../components/Avatar';
 import { CoinCount } from '../../../components/CoinCount';
 import { FavoriteCharsRow } from '../../../components/FavoriteCharsRow';
@@ -315,7 +315,6 @@ export function ProfileHeroCard({
               <AnimatedCounter value={stats.elo} duration={1.4} />
             </div>
             {boosted && !isSheldon && <EloBoostBadge until={boostUntil} className="mt-1" />}
-            {isSheldon && <SheldonApostleBadge className="mt-1" />}
           </div>
 
           {/* Delta 7j */}

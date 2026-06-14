@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Crown } from 'lucide-react';
 import { EloBoostAura, EloBoostBadge, useEloBoostRemaining } from '../../components/EloBoost';
-import { SheldonApostleAura, SheldonApostleBadge, isSheldonTitle } from '../../components/SheldonApostle';
+import { SheldonApostleAura, isSheldonTitle } from '../../components/SheldonApostle';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
 import { StatCard } from '../../components/StatCard';
@@ -279,7 +279,6 @@ export function ProfilDesktop() {
               {stats.elo}
             </div>
             {boosted && !isSheldon && <EloBoostBadge until={boostUntil} className="mt-1.5" />}
-            {isSheldon && <SheldonApostleBadge className="mt-1.5" />}
           </div>
         </div>
       </div>

@@ -1,7 +1,5 @@
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-
 /* ─────────────────────────────────────────────────────────────────────────
  * « Apôtre de Sheldon » — effet cosmétique du titre boutique homonyme.
  *
@@ -135,48 +133,3 @@ export function SheldonApostleAura({
   );
 }
 
-/**
- * Badge « VENDU » affiché sur la carte du porteur du titre.
- */
-export function SheldonApostleBadge({ className = '' }: { className?: string }) {
-  const reduced = useReducedMotion();
-
-  return (
-    <motion.span
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={
-        reduced
-          ? { scale: 1, opacity: 1 }
-          : {
-              scale: 1,
-              opacity: 1,
-              boxShadow: [
-                `0 0 8px -2px ${SHELDON_COLORS.slime}88`,
-                `0 0 16px 1px ${SHELDON_COLORS.bile}`,
-                `0 0 8px -2px ${SHELDON_COLORS.slime}88`,
-              ],
-            }
-      }
-      transition={
-        reduced
-          ? { duration: 0.2 }
-          : { boxShadow: { duration: 2.2, ease: 'easeInOut', repeat: Infinity }, default: { duration: 0.3 } }
-      }
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] font-extrabold uppercase tracking-[0.12em] ${className}`}
-      style={{
-        color: SHELDON_COLORS.spore,
-        borderColor: `${SHELDON_COLORS.slime}99`,
-        background: `linear-gradient(110deg, ${SHELDON_COLORS.murk}ee 0%, ${SHELDON_COLORS.bile}40 50%, ${SHELDON_COLORS.murk}ee 100%)`,
-      }}
-    >
-      <Sparkles
-        className={`h-3 w-3 ${reduced ? '' : 'sheldon-spore-bob'}`}
-        strokeWidth={2.5}
-        style={{ color: SHELDON_COLORS.slime }}
-      />
-      <span style={{ color: SHELDON_COLORS.slime }}>VENDU</span>
-      <span className="opacity-40">·</span>
-      <span>🦔</span>
-    </motion.span>
-  );
-}
