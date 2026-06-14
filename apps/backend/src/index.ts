@@ -9157,11 +9157,11 @@ app.get('/shop', async (c) => {
 // déséquiper avant, ni de lui substituer un autre objet de sa catégorie).
 const SHELDON_REWARD = 300;
 const SHELDON_LOCK_MS = 7 * 24 * 60 * 60 * 1000;
-// Seuil d'Elo pour ouvrir l'accès à la Boîte Mystère : il faut au moins 1010 sur
+// Seuil d'Elo pour ouvrir l'accès à la Boîte Mystère : il faut au moins 300 sur
 // SA MEILLEURE discipline (le pari coûte de l'Elo en cas de perte — on réserve donc
 // la box à ceux qui ont un coussin). Volontairement ABSENT de la description du
 // produit : le refus ci-dessous est le seul endroit où ce seuil est révélé.
-const MYSTERY_BOX_MIN_BEST_ELO = 1010;
+const MYSTERY_BOX_MIN_BEST_ELO = 300;
 /** Meilleur Elo du joueur toutes disciplines confondues. */
 function bestEloOf(u: {
   elo: number;
