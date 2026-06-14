@@ -23,16 +23,19 @@ import type { Game } from '../lib/gameMode';
 
 interface UniverseArt {
   bg: string;
+  /** Version pré-floutée downscalée (~512px) servie en palier lite : l'upscale
+      du navigateur fait le flou → aucun `filter: blur()` à calculer (cf. usePerfTier). */
+  blur: string;
   prop: string;
   symbol: string;
 }
 
 const ART: Record<Game, UniverseArt> = {
-  babyfoot:      { bg: '/universe/babyfoot.webp',      prop: '/universe/babyfoot-prop.png',      symbol: '/universe/babyfoot-symbol.png' },
-  smash:         { bg: '/universe/smash.webp',         prop: '/universe/smash-prop.png',         symbol: '/universe/smash-symbol.png' },
-  chess:         { bg: '/universe/chess.webp',         prop: '/universe/chess-prop.png',         symbol: '/universe/chess-symbol.png' },
-  streetfighter: { bg: '/universe/streetfighter.webp', prop: '/universe/streetfighter-prop.png', symbol: '/universe/streetfighter-symbol.png' },
-  flechettes:    { bg: '/universe/flechettes.webp',    prop: '/universe/flechettes-prop.png',    symbol: '/universe/flechettes-symbol.png' },
+  babyfoot:      { bg: '/universe/babyfoot.webp',      blur: '/universe/babyfoot-blur.webp',      prop: '/universe/babyfoot-prop.png',      symbol: '/universe/babyfoot-symbol.png' },
+  smash:         { bg: '/universe/smash.webp',         blur: '/universe/smash-blur.webp',         prop: '/universe/smash-prop.png',         symbol: '/universe/smash-symbol.png' },
+  chess:         { bg: '/universe/chess.webp',         blur: '/universe/chess-blur.webp',         prop: '/universe/chess-prop.png',         symbol: '/universe/chess-symbol.png' },
+  streetfighter: { bg: '/universe/streetfighter.webp', blur: '/universe/streetfighter-blur.webp', prop: '/universe/streetfighter-prop.png', symbol: '/universe/streetfighter-symbol.png' },
+  flechettes:    { bg: '/universe/flechettes.webp',    blur: '/universe/flechettes-blur.webp',    prop: '/universe/flechettes-prop.png',    symbol: '/universe/flechettes-symbol.png' },
 };
 
 // Paramètres visuels par phase de transition.
@@ -55,18 +58,22 @@ function GameBackdropImpl() {
   // Fallback sur idle si phase inconnue.
   const ps = (PHASE_STYLES as Record<string, PhaseStyle>)[phase] ?? PHASE_STYLES.idle;
 
-  // Palier lite : on retire le `blur()` (flou plein écran sur image 4K = l'opération
-  // la plus lourde du décor en compositing logiciel/VM). On conserve brightness +
-  // scrim + vignette → la photo reste assombrie et le texte lisible, sans le flou.
+  // Palier lite : on sert l'image PRÉ-FLOUTÉE downscalée et on retire le `blur()`
+  // (flou plein écran live = l'opération la plus lourde du décor en compositing
+  // logiciel/VM). Le flou vient de l'upscale du navigateur → quasi gratuit, et la
+  // lisibilité du texte est préservée (≈ rendu idle d'origine). brightness + scrim
+  // + vignette restent appliqués à l'identique.
   const filter = lite ? ps.filter.replace(/blur\([^)]*\)\s*/, '') : ps.filter;
+  const srcFor = (g: Game) => (lite ? ART[g].blur : ART[g].bg);
 
-  // Précharge les 5 photos une fois → cross-fade instantané ensuite.
+  // Précharge les 5 photos une fois → cross-fade instantané ensuite. En lite on
+  // précharge les versions pré-floutées (légères) plutôt que les pleines résolutions.
   useEffect(() => {
-    Object.values(ART).forEach(({ bg }) => {
+    Object.values(ART).forEach((art) => {
       const im = new Image();
-      im.src = bg;
+      im.src = lite ? art.blur : art.bg;
     });
-  }, []);
+  }, [lite]);
 
   // 2 slots pour le cross-fade. On ne bascule QU'À la phase reveal (la photo ne
   // change pas pendant que les blocs partent).
@@ -98,7 +105,7 @@ function GameBackdropImpl() {
     <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {/* Slot A */}
       <img
-        src={ART[slotA].bg}
+        src={srcFor(slotA)}
         alt=""
         className="absolute inset-0 h-full w-full select-none object-cover"
         draggable={false}
@@ -110,7 +117,7 @@ function GameBackdropImpl() {
       {/* Slot B */}
       {slotB && (
         <img
-          src={ART[slotB].bg}
+          src={srcFor(slotB)}
           alt=""
           className="absolute inset-0 h-full w-full select-none object-cover"
           draggable={false}
