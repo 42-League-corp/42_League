@@ -76,6 +76,7 @@ import {
   getGameAdvantage,
   getGameDef,
   parseGameId,
+  playedFilter,
   projectStats,
   ratingUpdate,
   readElo,
@@ -1670,9 +1671,10 @@ app.get('/leaderboard', async (c) => {
   // Classement par jeu : trie sur l'Elo de la discipline et expose ses compteurs
   // sous les mêmes clés (elo / matchesPlayed / tournamentsWon) pour un front unifié.
   const game = parseGame(c.req.query('game'));
-  // N'apparaissent au classement d'un mode que les joueurs qui y adhèrent (games).
+  // N'apparaissent au classement d'un mode que les joueurs qui y adhèrent (games)
+  // et qui ont disputé au moins un match (évite le vide entre 1001 et 999 ELO).
   const users = await prisma.user.findMany({
-    where: { ...VISIBLE_USER_WHERE, games: { has: game } },
+    where: { ...VISIBLE_USER_WHERE, games: { has: game }, ...playedFilter(game) },
     orderBy: eloOrderBy(game),
     take: MAX_PUBLIC_LIST,
   });
