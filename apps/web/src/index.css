@@ -716,6 +716,35 @@
     }
   }
 
+  /* ─── Anneau cosmétique d'avatar (cf. components/Avatar.tsx + lib/profileFx) ──
+     Contour animé posé autour d'une photo de profil quand son joueur porte un
+     effet (boost ELO « EN FEU », Apôtre de Sheldon…). La couleur arrive en
+     inline-style via `--fx`, donc UNE seule classe couvre tous les effets.
+     100 % CSS (pas de JS/frame) : on n'anime que l'opacité d'un calque déjà
+     peint → composité par le GPU, négligeable même à plusieurs avatars. */
+  .profile-fx-ring {
+    border: 1.5px solid var(--fx);
+    box-shadow:
+      0 0 6px 0 var(--fx),
+      0 0 14px 1px color-mix(in srgb, var(--fx) 45%, transparent);
+    animation: profile-fx-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes profile-fx-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .profile-fx-ring {
+      animation: none;
+      opacity: 0.85;
+    }
+  }
+
   /* Coin "cogwheel" — pour décor en haut à droite. */
   .corner-gear {
     background:

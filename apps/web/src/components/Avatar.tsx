@@ -1,5 +1,6 @@
 import { useState, useEffect, type CSSProperties } from 'react';
 import { useAvatarRingColor } from '../hooks/useAvatarRing';
+import { useProfileFxByLogin } from '../hooks/useProfileFx';
 
 interface AvatarProps {
   login: string;
@@ -20,6 +21,14 @@ interface AvatarProps {
    * "flippe" comme une photo. Sans effet quand une photo est affichée.
    */
   coin?: boolean;
+  /**
+   * Anneau cosmétique (boost ELO « EN FEU », Apôtre de Sheldon…) autour de la
+   * photo. Activé par défaut → l'effet d'un joueur boosté apparaît sur TOUS ses
+   * avatars du site, sans prop à passer. Le mettre à `false` là où la carte
+   * porte déjà l'aura complète (évite le double effet) ou sur les pastilles
+   * purement décoratives.
+   */
+  fx?: boolean;
 }
 
 const SIZE = {
@@ -57,7 +66,7 @@ function ringStyle(color: string, glow: number): CSSProperties {
 /**
  * Avatar rond — design friendly et coloré, cerclé d'un rebord de grade façon gemme.
  */
-export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false, noRing = false }: AvatarProps) {
+export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale = false, coin = false, noRing = false, fx = true }: AvatarProps) {
   // Nombre d'échecs de chargement de la photo. 0 = 1ʳᵉ tentative, 1 = réessai
   // anti-cache, 2 = on abandonne et on affiche l'initiale. Le réessai garantit
   // qu'une réponse cassée servie par un cache (SW opaque empoisonné, hoquet CDN)
@@ -86,6 +95,12 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
   const ring = !noRing && !grayscale ? ringColor : null;
   const ringW = RING_W[size];
 
+  // Anneau cosmétique (boost ELO, Apôtre de Sheldon…) — résolu via le lookup
+  // central par login : aucun prop à passer, l'effet suit le joueur partout.
+  // Coupé en grayscale (saisons figées) et opt-out via `fx={false}`.
+  const cosmetic = useProfileFxByLogin(login);
+  const showFx = fx && !grayscale && cosmetic.active && cosmetic.color;
+
   return (
     <div
       className={`relative flex-shrink-0 rounded-full flex items-center justify-center font-display font-bold uppercase ${SIZE[size]} ${grayscale ? 'grayscale opacity-80' : ''} ${className}`}
@@ -95,6 +110,15 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
           aria-hidden
           className="absolute rounded-full pointer-events-none"
           style={{ inset: -ringW, ...ringStyle(ring, RING_GLOW[size]) }}
+        />
+      )}
+      {/* Anneau cosmétique posé JUSTE au-delà de l'anneau de grade : un halo
+          coloré pulsant qui signale l'effet du joueur (cf. .profile-fx-ring). */}
+      {showFx && (
+        <div
+          aria-hidden
+          className="absolute rounded-full pointer-events-none profile-fx-ring"
+          style={{ inset: -(ringW + 2), ['--fx' as string]: cosmetic.color }}
         />
       )}
       <div

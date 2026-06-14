@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { LeagueDataProvider, useLeagueData } from './hooks/useLeagueData';
 import { AvatarRingProvider } from './hooks/useAvatarRing';
+import { ProfileFxProvider } from './hooks/useProfileFx';
 import { MatchmakingProvider } from './hooks/useMatchmaking';
 import { LoginPage } from './pages/LoginPage';
 import { AuthReturnPage } from './pages/AuthReturnPage';
@@ -242,6 +243,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
 
   return (
     <AvatarRingProvider>
+    <ProfileFxProvider>
     <MatchmakingProvider>
       <AnalyticsTracker />
       <AppShell>
@@ -289,6 +291,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
         <Toast />
       </AppShell>
     </MatchmakingProvider>
+    </ProfileFxProvider>
     </AvatarRingProvider>
   );
 }
