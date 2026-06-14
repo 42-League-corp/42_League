@@ -1231,6 +1231,25 @@ app.put('/me/title', async (c) => {
     return c.json({ login: updated.login, title: updated.title });
   }
 
+  // Bloque le changement si l'Apôtre de Sheldon est encore dans sa semaine d'exposition.
+  const nowTitle = new Date();
+  const equippedItems = await prisma.shopInventory.findMany({
+    where: { userLogin: login, equipped: true },
+    include: { item: true },
+  });
+  const activeSheldon = equippedItems.find(
+    (r) =>
+      isSheldonApostle(r.item) &&
+      r.equippedAt != null &&
+      r.equippedAt.getTime() + SHELDON_LOCK_MS > nowTitle.getTime(),
+  );
+  if (activeSheldon) {
+    const until = new Date(activeSheldon.equippedAt!.getTime() + SHELDON_LOCK_MS).toISOString();
+    throw new HTTPException(409, {
+      message: `impossible de changer de titre tant que l'Apôtre de Sheldon est équipé (jusqu'au ${until})`,
+    });
+  }
+
   const role = await getUserRole(login);
   const owned = await ownedTitlesFor(login, role, user);
   const allowed = new Set(owned.map((o) => o.label));
@@ -9359,11 +9378,41 @@ app.post('/shop/:id/buy', async (c) => {
 app.get('/me/inventory', async (c) => {
   const login = await getCurrentLogin(c);
   await getOrCreateUser(login);
-  const rows = await prisma.shopInventory.findMany({
+  let rows = await prisma.shopInventory.findMany({
     where: { userLogin: login },
     include: { item: true },
     orderBy: { acquiredAt: 'asc' },
   });
+
+  // Auto-expiry : si l'Apôtre de Sheldon a dépassé sa semaine d'exposition, on le déséquipe.
+  const nowInv = new Date();
+  const expiredSheldon = rows.filter(
+    (r) =>
+      r.equipped &&
+      isSheldonApostle(r.item) &&
+      r.equippedAt != null &&
+      r.equippedAt.getTime() + SHELDON_LOCK_MS <= nowInv.getTime(),
+  );
+  if (expiredSheldon.length > 0) {
+    await Promise.all(
+      expiredSheldon.map((r) =>
+        prisma.shopInventory.update({
+          where: { userLogin_itemId: { userLogin: login, itemId: r.itemId } },
+          data: { equipped: false, equippedAt: null },
+        }),
+      ),
+    );
+    const u = await prisma.user.findUnique({ where: { login }, select: { title: true } });
+    if (u?.title && isSheldonApostle({ name: u.title })) {
+      await prisma.user.update({ where: { login }, data: { title: null } });
+    }
+    rows = await prisma.shopInventory.findMany({
+      where: { userLogin: login },
+      include: { item: true },
+      orderBy: { acquiredAt: 'asc' },
+    });
+  }
+
   return c.json(
     rows.map((r) => ({
       itemId: r.itemId,
@@ -9442,10 +9491,13 @@ app.post('/me/inventory/:id/equip', async (c) => {
     include: { item: true },
   });
   const lockedSheldon = equippedRows.find(
-    (r) => isSheldonApostle(r.item) && r.acquiredAt.getTime() + SHELDON_LOCK_MS > nowEquip.getTime(),
+    (r) =>
+      isSheldonApostle(r.item) &&
+      r.equippedAt != null &&
+      r.equippedAt.getTime() + SHELDON_LOCK_MS > nowEquip.getTime(),
   );
   if (lockedSheldon) {
-    const until = new Date(lockedSheldon.acquiredAt.getTime() + SHELDON_LOCK_MS).toISOString();
+    const until = new Date(lockedSheldon.equippedAt!.getTime() + SHELDON_LOCK_MS).toISOString();
     if (lockedSheldon.itemId === itemId && !equipped) {
       throw new HTTPException(409, { message: `l'Apôtre de Sheldon reste équipé jusqu'au ${until}` });
     }
@@ -9467,16 +9519,17 @@ app.post('/me/inventory/:id/equip', async (c) => {
       : undefined;
   const titleStr = typeof titlePayload === 'string' ? titlePayload : null;
 
+  const nowEquipTx = new Date();
   await prisma.$transaction(async (tx) => {
     if (equipped) {
       // Un seul objet équipé par catégorie : on déséquipe les autres de la même catégorie.
       await tx.shopInventory.updateMany({
         where: { userLogin: login, equipped: true, item: { category } },
-        data: { equipped: false },
+        data: { equipped: false, equippedAt: null },
       });
       await tx.shopInventory.update({
         where: { userLogin_itemId: { userLogin: login, itemId } },
-        data: { equipped: true },
+        data: { equipped: true, equippedAt: nowEquipTx },
       });
       if (category === 'title' && titleStr) {
         await tx.user.update({ where: { login }, data: { title: titleStr } });
@@ -9484,7 +9537,7 @@ app.post('/me/inventory/:id/equip', async (c) => {
     } else {
       await tx.shopInventory.update({
         where: { userLogin_itemId: { userLogin: login, itemId } },
-        data: { equipped: false },
+        data: { equipped: false, equippedAt: null },
       });
       if (category === 'title' && titleStr) {
         const u = await tx.user.findUnique({ where: { login }, select: { title: true } });
