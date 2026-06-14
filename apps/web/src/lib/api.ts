@@ -30,6 +30,10 @@ export interface LeaderboardEntry {
   /** Couleur du titre équipé (item boutique). Le titre se rend dans CETTE couleur,
    *  indépendamment du mode de jeu (qui remappe `--accent-gold`). Repli : doré fixe. */
   titleColor?: string | null;
+  /** Fin de la fenêtre de boost ELO ×2 « EN FEU » (ISO) — null/passé = pas boosté.
+   *  Déjà exposé publiquement par le backend (cf. toPublicUser) : alimente l'anneau
+   *  cosmétique des avatars dans le classement et partout ailleurs. */
+  eloMultUntil?: string | null;
   dodgeCount?: number;
   tournamentsWon?: number;
   /** Codes de badges de catalogue (cf. lib/badges.ts) — dont 'goat' pour le #1
