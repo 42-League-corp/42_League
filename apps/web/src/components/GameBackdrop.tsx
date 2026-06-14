@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useGameMode } from '../hooks/useGameMode';
 import { useTransitionPhase } from '../hooks/useTransitionPhase';
+import { usePerfTier } from '../hooks/usePerf';
 import type { Game } from '../lib/gameMode';
 
 /**
@@ -49,9 +50,15 @@ const PHASE_STYLES = {
 function GameBackdropImpl() {
   const { game } = useGameMode();
   const phase = useTransitionPhase();
+  const lite = usePerfTier() === 'lite';
 
   // Fallback sur idle si phase inconnue.
   const ps = (PHASE_STYLES as Record<string, PhaseStyle>)[phase] ?? PHASE_STYLES.idle;
+
+  // Palier lite : on retire le `blur()` (flou plein écran sur image 4K = l'opération
+  // la plus lourde du décor en compositing logiciel/VM). On conserve brightness +
+  // scrim + vignette → la photo reste assombrie et le texte lisible, sans le flou.
+  const filter = lite ? ps.filter.replace(/blur\([^)]*\)\s*/, '') : ps.filter;
 
   // Précharge les 5 photos une fois → cross-fade instantané ensuite.
   useEffect(() => {
@@ -82,7 +89,7 @@ function GameBackdropImpl() {
 
   const imgStyle = (visible: boolean): React.CSSProperties => ({
     opacity: visible ? 1 : 0,
-    filter: ps.filter,
+    filter,
     transform: `scale(${ps.scale})`,
     transition: `opacity 360ms ease, filter ${ps.filterDur}ms ease, transform 760ms cubic-bezier(0.16, 1, 0.3, 1)`,
   });
