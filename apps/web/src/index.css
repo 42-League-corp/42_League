@@ -827,3 +827,79 @@
     animation: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PALIER « LITE » — qualité graphique dégradée (cf. lib/perf.ts).
+   Posé via <html data-perf="lite"> quand : prefers-reduced-motion, machine très
+   faible, FPS bas détecté, ou réglage « Performance ». On NE touche PAS au design
+   (couleurs, layout, dégradés) : on coupe uniquement les opérations qui écroulent
+   le compositing logiciel (VM / vieux PC) :
+     1. flou plein écran (GameBackdrop : géré côté composant)
+     2. backdrop-filter (.glass) — l'effet le plus coûteux du web
+     3. fond attaché fixe + grille HUD fixe (repaint au scroll)
+     4. animations CSS infinies décoratives (GPU/CPU continu)
+     5. will-change orphelins (mémoire de calques gaspillée)
+   Le pendant JS (boucles framer-motion, particules) est coupé par MotionProvider
+   (reducedMotion='always' en lite). Aucun de ces blocs ne s'applique en 'full'.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* (2) backdrop-filter → fallback opaque proche du verre teinté d'origine. */
+[data-perf='lite'] .glass {
+  background: rgba(21, 18, 14, 0.94);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-perf='lite'] .glass-strong {
+  background: rgba(12, 10, 8, 0.97);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* (3) fond : on détache le background fixe (repaint au scroll) et on masque la
+   grille HUD fixe en surimpression. La teinte/dégradé du fond restent identiques. */
+[data-perf='lite'] body {
+  background-attachment: scroll;
+}
+[data-perf='lite'] body::before {
+  display: none;
+}
+
+/* (4) animations CSS infinies décoratives → figées. Les chiffres/badges gardent
+   leur état peint, seul le mouvement perpétuel disparaît. On conserve volontairement
+   `.animate-spin` (spinners de chargement) et les anims one-shot (fade-in, pop…). */
+[data-perf='lite'] .shimmer,
+[data-perf='lite'] .text-gold-shine,
+[data-perf='lite'] .title-rainbow,
+[data-perf='lite'] .soft-blink,
+[data-perf='lite'] .ops-duel,
+[data-perf='lite'] .profile-fx-ring,
+[data-perf='lite'] .elo-ember,
+[data-perf='lite'] .elo-fire-flicker,
+[data-perf='lite'] .elo-flame-bob,
+[data-perf='lite'] .sheldon-spore,
+[data-perf='lite'] .sheldon-ooze,
+[data-perf='lite'] .sheldon-spore-bob,
+[data-perf='lite'] .animate-spin-sun,
+[data-perf='lite'] .animate-gear-spin,
+[data-perf='lite'] .animate-gold-sweep,
+[data-perf='lite'] .animate-glow-pulse,
+[data-perf='lite'] .animate-pulse-ring,
+[data-perf='lite'] .animate-ember,
+[data-perf='lite'] .animate-shimmer,
+[data-perf='lite'] .animate-rgb-path-travel {
+  animation: none !important;
+}
+/* La pastille cosmétique reste visible (juste non pulsée). */
+[data-perf='lite'] .profile-fx-ring {
+  opacity: 0.85;
+}
+/* Décor d'univers : on garde l'entrée mais on coupe la respiration perpétuelle. */
+[data-perf='lite'] .animate-backdrop-in {
+  animation: backdrop-in 0.4s ease both;
+}
+
+/* (5) on libère les indices de calque devenus inutiles (anim coupée). */
+[data-perf='lite'] .gpu,
+[data-perf='lite'] .ops-duel {
+  will-change: auto;
+}
