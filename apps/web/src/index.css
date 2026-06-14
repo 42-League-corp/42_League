@@ -903,3 +903,11 @@
 [data-perf='lite'] .ops-duel {
   will-change: auto;
 }
+
+/* (6) anneau de grade des avatars : le `filter: saturate()` crée UN calque GPU
+   par avatar (× chaque ligne de classement → coûteux). On le retire en lite ; le
+   rebord conic-gradient + le halo box-shadow restent peints (perte de saturation
+   imperceptible). */
+[data-perf='lite'] .avatar-grade-ring {
+  filter: none !important;
+}

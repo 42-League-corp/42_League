@@ -108,7 +108,7 @@ export function Avatar({ login, imageUrl, size = 'md', className = '', grayscale
       {ring && (
         <div
           aria-hidden
-          className="absolute rounded-full pointer-events-none"
+          className="avatar-grade-ring absolute rounded-full pointer-events-none"
           style={{ inset: -ringW, ...ringStyle(ring, RING_GLOW[size]) }}
         />
       )}
