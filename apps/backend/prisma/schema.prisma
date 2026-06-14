@@ -827,8 +827,9 @@ model ShopItem {
 model ShopInventory {
   userLogin   String   @map("user_login")
   itemId      String   @map("item_id")
-  equipped    Boolean  @default(false)
-  acquiredAt  DateTime @default(now()) @map("acquired_at")
+  equipped    Boolean   @default(false)
+  acquiredAt  DateTime  @default(now()) @map("acquired_at")
+  equippedAt  DateTime? @map("equipped_at")
   // Image uploadée par le joueur pour les bannières personnalisables (allowUpload).
   userPayload Json?    @map("user_payload")
   user        User     @relation("userInventory", fields: [userLogin], references: [login], onDelete: Cascade, onUpdate: Cascade)
