@@ -1600,9 +1600,8 @@ function RecordResultForm({ challengeId, game, oppLogin, onDone }: {
 }
 
 // ─── Saisie d'un résultat de SET (Smash / Street Fighter) côté desktop ──────────
-// Auparavant la version desktop renvoyait vers « Déclarer une game ». Elle propose
-// désormais le même formulaire complet que la sheet mobile : format Bo3/Bo5, games
-// du perdant, vies du gagnant (Smash), et persos (favoris épinglés + plus joués).
+// Délègue tout le corps du set (format, score, persos optionnels) au composant
+// partagé SmashSetEditor — même UI « score d'abord » que la sheet mobile.
 
 function RecordSetResultForm({ challengeId, game, oppLogin, onDone }: {
   challengeId: string; game: 'smash' | 'streetfighter'; oppLogin: string; onDone: () => void;
