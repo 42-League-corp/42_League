@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Swords, X, Clock, Zap, Users, Target } from 'lucide-react';
 import { Panel } from '../../components/Panel';
 import { Avatar } from '../../components/Avatar';
+import { SheldonApostleAura, SHELDON_COLORS, isSheldonTitle } from '../../components/SheldonApostle';
 import { Button } from '../../components/Button';
 import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
@@ -42,12 +43,7 @@ import { Challenge2v2Flow } from './shared/Challenge2v2Flow';
 import { Mode1v1Toggle, type DuelMode } from './shared/Mode1v1Toggle';
 import { DeclareFfaGameFlow } from './shared/DeclareFfaGameFlow';
 import { DeclareDartsGameFlow } from './shared/DeclareDartsGameFlow';
-import { CharPicker, PerGameCharsEditor, type PerGameChars } from './shared/CharPicker';
-import { SmashCharIcon } from '../../components/SmashCharIcon';
-import { SfCharIcon } from '../../components/SfCharIcon';
-import { SMASH_ROSTER } from '../../lib/smash';
-import { SF_ROSTER } from '../../lib/sf';
-import { mostPlayedChars } from '../../lib/chars';
+import { SmashSetEditor, type SmashSetValue } from './shared/SmashSetEditor';
 import { NewTeamCelebration } from '../../components/NewTeamCelebration';
 import type { Declare2v2Response } from '../../lib/api';
 
@@ -814,24 +810,47 @@ function PlayerCard({
 }) {
   const t = useT();
   const [hovered, setHovered] = useState(false);
+  const isSheldon = isSheldonTitle(player.title);
   return (
     <div
-      className="card-hud rounded-xl p-3 hover-glow flex items-center gap-3 group"
+      className="relative rounded-xl p-3 hover-glow flex items-center gap-3 group overflow-hidden"
+      style={isSheldon ? {
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: `${SHELDON_COLORS.slime}40`,
+        background: `linear-gradient(135deg, #0d1d0d 0%, #071007 55%, #0a140a 100%)`,
+        boxShadow: `0 0 0 1px ${SHELDON_COLORS.slime}1a, 0 4px 16px -4px ${SHELDON_COLORS.slime}30`,
+      } : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {!isSheldon && <span className="absolute inset-0 card-hud rounded-xl pointer-events-none" />}
+      <SheldonApostleAura active={isSheldon} count={5} />
+
+      {/* Liseré supérieur */}
+      <span
+        className="absolute top-0 left-3 right-3 h-[1px] pointer-events-none"
+        style={isSheldon
+          ? { background: `linear-gradient(90deg, transparent, ${SHELDON_COLORS.slime}66, transparent)` }
+          : { background: 'linear-gradient(90deg, transparent, rgba(255,201,74,0.25), transparent)' }
+        }
+      />
+
       {/* Rang */}
-      <span className="w-8 flex-shrink-0 text-center font-mono font-extrabold tabular-nums text-sm text-muted-2">
+      <span className="relative w-8 flex-shrink-0 text-center font-mono font-extrabold tabular-nums text-sm text-muted-2">
         #{player.rank}
       </span>
 
       {/* Avatar + infos */}
-      <PlayerLink login={player.login} className="flex-1 min-w-0">
+      <PlayerLink login={player.login} className="relative flex-1 min-w-0">
         <Avatar login={player.login} imageUrl={player.imageUrl} size="md" />
         <div className="min-w-0 flex-1">
           <div className="font-display font-bold truncate text-text-strong text-sm">{player.login}</div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-gold font-extrabold font-mono tabular-nums text-[11px]">{player.elo}</span>
+            <span
+              className="font-extrabold font-mono tabular-nums text-[11px]"
+              style={isSheldon ? { color: SHELDON_COLORS.bile } : { color: 'var(--color-gold)' }}
+            >{player.elo}</span>
             <span className="text-[10px] text-muted-2">ELO</span>
           </div>
         </div>
@@ -845,7 +864,7 @@ function PlayerCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 8 }}
             transition={{ duration: 0.15 }}
-            className="flex items-center gap-1.5 flex-shrink-0"
+            className="relative flex items-center gap-1.5 flex-shrink-0"
           >
             <button
               type="button"
@@ -1589,45 +1608,27 @@ function RecordSetResultForm({ challengeId, game, oppLogin, onDone }: {
   challengeId: string; game: 'smash' | 'streetfighter'; oppLogin: string; onDone: () => void;
 }) {
   const t = useT();
-  const { refresh, me, matches } = useLeagueData();
+  const { refresh, me } = useLeagueData();
   const flash = useFlash();
-  const isSmash = game === 'smash';
   const isSf = game === 'streetfighter';
-  const charRoster = isSf ? SF_ROSTER : SMASH_ROSTER;
-  const CharIcon = isSf ? SfCharIcon : SmashCharIcon;
   const myLogin = me?.login;
-  const me_ = myLogin ?? t('defis.me');
   const myFavorites = (isSf ? me?.user?.favSf : me?.user?.favSmash) ?? [];
-  const myMostPlayed = useMemo(() => mostPlayedChars(matches, myLogin, game), [matches, myLogin, game]);
-  const oppMostPlayed = useMemo(() => mostPlayedChars(matches, oppLogin, game), [matches, oppLogin, game]);
 
   const [iWon, setIWon] = useState<boolean | null>(null);
-  const [bestOf, setBestOf] = useState<3 | 5>(3);
-  const [loserGames, setLoserGames] = useState(0);
-  const [charSelf, setCharSelf] = useState<string | null>(null);
-  const [charOpp, setCharOpp] = useState<string | null>(null);
-  const [winnerStocks, setWinnerStocks] = useState(3);
-  const [perGameChars, setPerGameChars] = useState<PerGameChars | null>(null);
+  const [setValue, setSetValue] = useState<SmashSetValue | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const target = Math.ceil(bestOf / 2);
-  const totalGames = target + loserGames;
-  const winnerLogin = iWon ? me_ : oppLogin;
-
   const send = async () => {
-    if (iWon === null) return;
-    if (!charSelf || !charOpp) { flash.show(t('defis.chooseBothChars'), 'error'); return; }
+    if (iWon === null || !setValue) return;
     setBusy(true);
     try {
-      // Par défaut un seul perso pour tout le set ; sinon liste encodée par manche.
-      const finalSelf = perGameChars ? perGameChars.self || charSelf : charSelf;
-      const finalOpp = perGameChars ? perGameChars.opp || charOpp : charOpp;
       await api.recordChallengeResult(challengeId, {
-        scoreSelf: iWon ? target : loserGames,
-        scoreOpponent: iWon ? loserGames : target,
-        game, bestOf, charSelf: finalSelf, charOpponent: finalOpp,
-        // Les vies (stocks) sont propres au Smash ; SF n'en a pas.
-        ...(isSmash ? { stocks: winnerStocks } : {}),
+        scoreSelf: setValue.scoreSelf,
+        scoreOpponent: setValue.scoreOpponent,
+        game,
+        bestOf: setValue.bestOf,
+        charSelf: setValue.charSelf,
+        charOpponent: setValue.charOpponent,
       });
       flash.show(t('defis.scoreSent'));
       await refresh();
@@ -1655,72 +1656,17 @@ function RecordSetResultForm({ challengeId, game, oppLogin, onDone }: {
         <span className="text-muted-2 text-lg">×</span>
       </button>
 
-      {/* Format Bo3 / Bo5 */}
-      <div>
-        <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.format')}</label>
-        <div className="grid grid-cols-2 gap-2">
-          {([3, 5] as const).map((bo) => (
-            <button key={bo} type="button"
-              onClick={() => { setBestOf(bo); setLoserGames((g) => Math.min(g, Math.ceil(bo / 2) - 1)); }}
-              className={`py-2.5 rounded-xl border-2 text-sm font-extrabold uppercase transition-all ${bestOf === bo ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
-            >Bo{bo}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Games du perdant */}
-      <div>
-        <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">
-          {t('defis.gamesOf')} {iWon ? oppLogin : me_} · {t('defis.winnerTarget')} {target}
-        </label>
-        <div className="flex gap-2">
-          {Array.from({ length: target }, (_, g) => (
-            <button key={g} type="button" onClick={() => setLoserGames(g)}
-              className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${loserGames === g ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
-            >{g}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Vies du gagnant (Smash uniquement) */}
-      {isSmash && (
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-2">{t('defis.winnerStocksShort')}</label>
-          <div className="flex gap-2">
-            {[1, 2, 3].map((s) => (
-              <button key={s} type="button" onClick={() => setWinnerStocks(s)}
-                className={`flex-1 py-2 rounded-lg border font-mono font-extrabold tabular-nums transition-all ${winnerStocks === s ? 'border-[#c97bff] bg-[#c97bff]/10 text-[#c97bff]' : 'border-border bg-bg-2/40 text-muted-2'}`}
-              >{'❤'.repeat(s)}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <CharPicker label={t('defis.yourChar')} value={charSelf} onChange={setCharSelf} roster={charRoster} Icon={CharIcon} favorites={myFavorites} favoritesLabel={t('favorites.label')} mostPlayed={myMostPlayed} />
-      <CharPicker label={`${t('defis.charOf')} ${oppLogin}`} value={charOpp} onChange={setCharOpp} roster={charRoster} Icon={CharIcon} mostPlayed={oppMostPlayed} />
-      <PerGameCharsEditor
-        totalGames={totalGames}
-        defaultSelf={charSelf}
-        defaultOpp={charOpp}
-        roster={charRoster}
-        Icon={CharIcon}
+      <SmashSetEditor
+        game={game}
+        iWon={iWon}
+        myLogin={myLogin}
+        oppLogin={oppLogin}
         myFavorites={myFavorites}
-        myMostPlayed={myMostPlayed}
-        oppMostPlayed={oppMostPlayed}
-        oppLabel={oppLogin}
-        onChange={setPerGameChars}
+        onChange={setSetValue}
       />
 
-      <div className="px-4 py-3 rounded-xl bg-bg-1/80 border border-border text-center text-sm text-muted-2 shadow-inner">
-        <span className={`font-extrabold ${iWon ? 'text-teal' : 'text-text-strong'}`}>{winnerLogin}</span>
-        {' '}{t('defis.winsShort')}{' '}<span className="font-extrabold text-text-strong font-mono tabular-nums">{target}</span>
-        <span className="text-muted mx-1.5 opacity-50">–</span>
-        <span className="font-extrabold text-text-strong font-mono tabular-nums">{loserGames}</span>
-        {' (Bo'}{bestOf}{')'}
-      </div>
-
       <div className="flex gap-2">
-        <Button size="sm" loading={busy} disabled={!charSelf || !charOpp} onClick={send} className="flex-1">{t('defis.send')}</Button>
+        <Button size="sm" loading={busy} onClick={send} className="flex-1">{t('defis.send')}</Button>
         <Button size="sm" variant="ghost" onClick={onDone} className="flex-none">{t('defis.cancel')}</Button>
       </div>
     </div>
