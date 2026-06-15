@@ -347,7 +347,10 @@ export function LeaderboardMobile() {
               const targetedBy = viewingPast ? undefined : allOps.find((o) => o.targetLogin === entry.login);
               return (
                 <StaggerItem key={entry.login}>
-                  <div id={isMe ? 'lb-me-row' : undefined} className="scroll-mt-24">
+                  <div
+                    id={isMe ? 'lb-me-row' : undefined}
+                    className="scroll-mt-24 cv-row"
+                  >
                     <PlayerRankCard
                       entry={entry}
                       wins={wl.wins}
