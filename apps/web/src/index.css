@@ -828,6 +828,17 @@
   }
 }
 
+/* ── Listes longues : rendu hors-écran sauté ─────────────────────────────────
+   content-visibility:auto = le navigateur ne calcule layout/paint d'une ligne
+   QUE lorsqu'elle approche du viewport (énorme gain sur classements/historiques,
+   sur toutes les machines). `contain-intrinsic-size: auto <h>` : taille estimée
+   AVANT 1er rendu, puis le mot-clé `auto` mémorise la hauteur réelle → pas de
+   saut de scrollbar. 100 % invisible (le contenu sauté est hors-écran). */
+.cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PALIER « LITE » — qualité graphique dégradée (cf. lib/perf.ts).
    Posé via <html data-perf="lite"> quand : prefers-reduced-motion, machine très
