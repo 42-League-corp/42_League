@@ -207,7 +207,9 @@ export function TeamLeaderboard() {
         <StaggerList className="space-y-2" stagger={0.04}>
           {rest.map((entry) => (
             <StaggerItem key={entry.id}>
-              <TeamCard entry={entry} isTop={false} />
+              <div className="cv-row">
+                <TeamCard entry={entry} isTop={false} />
+              </div>
             </StaggerItem>
           ))}
         </StaggerList>
