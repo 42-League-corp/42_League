@@ -32,9 +32,9 @@ export function XpBar({
       : 0;
 
   return (
-    <div className={`card-hud rounded-xl px-4 py-3 border-gold/25 ${className}`}>
+    <div className={`card-hud rounded-xl px-4 py-3 border-[#7dd3fc]/25 ${className}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="inline-flex items-center gap-1.5 font-display text-xs font-black uppercase tracking-[0.16em] text-gold">
+        <span className="inline-flex items-center gap-1.5 font-display text-xs font-black uppercase tracking-[0.16em] text-[#7dd3fc]">
           <Star className="w-3.5 h-3.5" strokeWidth={2.5} fill="currentColor" />
           {t('battlepass.level')} {level}
         </span>
@@ -43,13 +43,13 @@ export function XpBar({
         </span>
       </div>
 
-      {/* Piste + remplissage doré animé */}
-      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-bg-1/80 border border-gold/15">
+      {/* Piste + remplissage bleu clair animé */}
+      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-bg-1/80 border border-[#7dd3fc]/20">
         <motion.div
           className="absolute inset-y-0 left-0 rounded-full"
           style={{
-            background: 'linear-gradient(90deg, #ffb347 0%, #ffc94a 60%, #ffe39a 100%)',
-            boxShadow: '0 0 12px rgba(255,201,74,0.6)',
+            background: 'linear-gradient(90deg, #38bdf8 0%, #7dd3fc 55%, #bae6fd 100%)',
+            boxShadow: '0 0 12px rgba(56,189,248,0.6)',
           }}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
@@ -60,7 +60,7 @@ export function XpBar({
       {withLink && (
         <Link
           to="/passe"
-          className="mt-3 flex items-center justify-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-gold transition-colors hover:bg-gold/15 tap-transparent"
+          className="mt-3 flex items-center justify-center gap-1.5 rounded-lg border border-[#7dd3fc]/30 bg-[#38bdf8]/10 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#7dd3fc] transition-colors hover:bg-[#38bdf8]/15 tap-transparent"
         >
           {t('battlepass.profileBtn')}
           <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />

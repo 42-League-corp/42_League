@@ -10276,21 +10276,29 @@ app.get('/me/battlepass', async (c) => {
     prisma.battlePassClaim.findMany({ where: { userLogin: login }, select: { tier: true, grantedAt: true } }),
   ]);
   const claimedAt = new Map(claims.map((cl) => [cl.tier, cl.grantedAt]));
+  // Échelle complète : on affiche TOUS les paliers de 1 à BATTLE_PASS_MAX_TIERS,
+  // qu'ils soient configurés ou non, pour que le joueur voie la piste entière et
+  // quel palier donne quelle récompense. Les paliers non configurés = 'none'.
+  const cfg = new Map(tiers.map((t) => [t.tier, t]));
   return c.json({
     totalXp,
     level,
     xpIntoLevel,
     xpForNextLevel,
-    tiers: tiers.map((t) => ({
-      tier: t.tier,
-      xpRequired: cumulativeXpForTier(t.tier),
-      rewardKind: t.rewardKind,
-      item: t.rewardKind === 'item' && t.item ? serializeShopItem(t.item) : null,
-      coins: t.coins ?? null,
-      consumableKind: t.consumableKind ?? null,
-      unlocked: level >= t.tier,
-      claimedAt: claimedAt.has(t.tier) ? claimedAt.get(t.tier)!.toISOString() : null,
-    })),
+    tiers: Array.from({ length: BATTLE_PASS_MAX_TIERS }, (_, i) => {
+      const tier = i + 1;
+      const t = cfg.get(tier);
+      return {
+        tier,
+        xpRequired: cumulativeXpForTier(tier),
+        rewardKind: t?.rewardKind ?? 'none',
+        item: t && t.rewardKind === 'item' && t.item ? serializeShopItem(t.item) : null,
+        coins: t?.coins ?? null,
+        consumableKind: t?.consumableKind ?? null,
+        unlocked: level >= tier,
+        claimedAt: claimedAt.has(tier) ? claimedAt.get(tier)!.toISOString() : null,
+      };
+    }),
   });
 });
 
@@ -10821,6 +10829,9 @@ async function awardMatchEconomyTx(
 // via une courbe purement serveur — le front n'affiche que ce que l'API renvoie.
 // 1 niveau = 1 palier (BattlePassTier) ; atteindre un niveau accorde la
 // récompense du palier correspondant (reconcileBattlePassTx, idempotent).
+
+/** Nombre de paliers affichés sur la piste du passe (échelle complète 1..N). */
+const BATTLE_PASS_MAX_TIERS = 100;
 
 /** XP nécessaire pour passer du niveau L au niveau L+1 (L1→2:100, L2→3:150, …). */
 function xpForLevel(L: number): number {

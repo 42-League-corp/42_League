@@ -241,16 +241,20 @@ export function PassePage() {
                 </div>
                 {!loading && data && (
                   <div className="text-[11px] font-bold text-muted-2 tabular-nums">
-                    <span className="text-gold">{data.xpIntoLevel}</span> / {data.xpForNextLevel}{' '}
-                    <span className="uppercase tracking-wide text-gold/70">{t('battlepass.xp')}</span>
+                    <span className="text-[#7dd3fc]">{data.xpIntoLevel}</span> / {data.xpForNextLevel}{' '}
+                    <span className="uppercase tracking-wide text-[#7dd3fc]/70">{t('battlepass.xp')}</span>
                   </div>
                 )}
               </div>
 
-              {/* Barre de progression dorée */}
-              <div className="mt-2 h-3 w-full rounded-full bg-bg-1/80 border border-gold/20 overflow-hidden">
+              {/* Barre de progression bleu clair */}
+              <div className="mt-2 h-3 w-full rounded-full bg-bg-1/80 border border-[#7dd3fc]/20 overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-gold to-gold-dim shadow-gold-glow"
+                  className="h-full rounded-full"
+                  style={{
+                    background: 'linear-gradient(90deg, #38bdf8 0%, #7dd3fc 55%, #bae6fd 100%)',
+                    boxShadow: '0 0 12px rgba(56,189,248,0.55)',
+                  }}
                   initial={{ width: 0 }}
                   animate={{ width: `${pct * 100}%` }}
                   transition={{ duration: 0.7, ease: 'easeOut' }}
