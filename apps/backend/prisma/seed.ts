@@ -324,6 +324,41 @@ async function seed() {
     },
   });
 
+  // ── Passe de combat : ~30 paliers (idempotent par tier) ────────────────────
+  console.log('🎟️  Upserting battle pass tiers...');
+  // Cosmétiques actifs disponibles pour les paliers « milestone » (multiples de 5).
+  // À défaut (boutique vide), on retombe sur des coins pour ne jamais référencer
+  // un itemId inexistant (le schéma resterait valide mais le palier serait vide).
+  const cosmetics = await prisma.shopItem.findMany({
+    where: { active: true, category: { in: ['title', 'banner', 'badge', 'cosmetic'] } },
+    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    select: { id: true },
+  });
+  let cosmeticIdx = 0;
+  for (let tier = 1; tier <= 30; tier++) {
+    let data: {
+      rewardKind: string;
+      itemId: string | null;
+      coins: number | null;
+      consumableKind: string | null;
+    };
+    if (tier % 5 === 0 && cosmeticIdx < cosmetics.length) {
+      // Palier « milestone » : un cosmétique existant si la boutique en a.
+      data = { rewardKind: 'item', itemId: cosmetics[cosmeticIdx++]!.id, coins: null, consumableKind: null };
+    } else if (tier % 10 === 0) {
+      // Paliers de dizaine sans cosmétique disponible : un consommable « ELO ×2 ».
+      data = { rewardKind: 'consumable', itemId: null, coins: null, consumableKind: 'elo_mult' };
+    } else {
+      // Autres paliers : des coins proportionnels au niveau.
+      data = { rewardKind: 'coins', itemId: null, coins: tier * 25, consumableKind: null };
+    }
+    await prisma.battlePassTier.upsert({
+      where: { tier },
+      update: data,
+      create: { tier, ...data },
+    });
+  }
+
   console.log('\n✅ Done!');
   process.exit(0);
 }

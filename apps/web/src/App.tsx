@@ -88,6 +88,9 @@ const ShopPage = lazy(() =>
 const ShopGODPage = lazy(() =>
   import('./pages/ShopGODPage').then((m) => ({ default: m.ShopGODPage })),
 );
+const PassePage = lazy(() =>
+  import('./pages/passe').then((m) => ({ default: m.PassePage })),
+);
 const ShopGODUserPage = lazy(() =>
   import('./pages/ShopGODUserPage').then((m) => ({ default: m.ShopGODUserPage })),
 );
@@ -273,6 +276,7 @@ function AuthenticatedShell({ onReady }: { onReady?: () => void }) {
               <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/h2h" element={<H2HPage />} />
                 <Route path="/shop" element={<ShopPage />} />
+                <Route path="/passe" element={<PassePage />} />
                 <Route path="/shop-god" element={<ShopGODPage />} />
                 <Route path="/shop-god/players" element={<ShopGODPlayersPage />} />
                 <Route path="/shop-god/u/:login" element={<ShopGODUserPage />} />

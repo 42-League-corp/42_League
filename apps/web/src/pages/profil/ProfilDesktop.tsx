@@ -23,6 +23,7 @@ import { ChessTrophy } from '../../components/ChessTrophy';
 import { FavoriteCharsRow } from '../../components/FavoriteCharsRow';
 import { FavoriteCharsEditor } from '../../components/FavoriteCharsEditor';
 import { favoritesForGame, type FightingGame } from '../../lib/chars';
+import { XpBar } from '../../components/XpBar';
 import { useLeagueData } from '../../hooks/useLeagueData';
 import { useGameMode } from '../../hooks/useGameMode';
 import { useI18n, useT } from '../../lib/i18n';
@@ -292,6 +293,17 @@ export function ProfilDesktop() {
         <KV label={t('profil.wins')} value={String(stats.wins)} tone="win" />
         <KV label={t('profil.losses')} value={String(stats.losses)} tone="loss" />
       </div>
+
+      {/* Passe de combat : niveau + barre d'XP + accès à la page /passe */}
+      {typeof me.level === 'number' && (
+        <div className="mt-4">
+          <XpBar
+            level={me.level}
+            xpIntoLevel={me.xpIntoLevel ?? 0}
+            xpForNextLevel={me.xpForNextLevel ?? 0}
+          />
+        </div>
+      )}
 
       {/* Tournois remportés — amicaux vs officiels (coupe rouge = officiel). */}
       <div className="mt-4 grid grid-cols-2 gap-2">

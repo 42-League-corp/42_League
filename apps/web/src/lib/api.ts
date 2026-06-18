@@ -408,6 +408,39 @@ export interface ShopResponse {
   owned: string[];
 }
 
+// ─── Passe de combat (XP) ──────────────────────────────────────────────────────
+
+/** Un palier du passe vu par le joueur (cf. GET /me/battlepass). */
+export interface BattlePassTierView {
+  tier: number;
+  /** XP cumulée requise pour atteindre ce palier (cumulativeXpForTier). */
+  xpRequired: number;
+  rewardKind: 'item' | 'coins' | 'consumable' | 'none';
+  /** Présent si rewardKind==='item'. */
+  item?: ShopItemData | null;
+  coins?: number | null;
+  consumableKind?: string | null;
+  /** True si level >= tier. */
+  unlocked: boolean;
+  /** Date d'octroi (BattlePassClaim.grantedAt) si la récompense a été accordée. */
+  claimedAt?: string | null;
+}
+export interface BattlePassResponse {
+  totalXp: number;
+  level: number;
+  xpIntoLevel: number;
+  xpForNextLevel: number;
+  tiers: BattlePassTierView[];
+}
+/** Palier du passe côté admin (édition de la récompense, cf. /admin/battlepass/tiers). */
+export interface BattlePassTierAdmin {
+  tier: number;
+  rewardKind: 'item' | 'coins' | 'consumable' | 'none';
+  itemId?: string | null;
+  coins?: number | null;
+  consumableKind?: string | null;
+}
+
 /** Titre cosmétique possédé par un joueur (dérivé des accomplissements). */
 export interface OwnedTitle {
   key: string;
@@ -467,6 +500,13 @@ export interface MeResponse {
   moderatorPermissions?: Partial<Record<ModeratorPermissionKey, boolean>> | null;
   /** Solde de League Coins de l'utilisateur (défaut 0). */
   coins?: number;
+  /** Passe de combat (XP cumulative à vie) — niveau & progression au niveau racine. */
+  xp?: number;
+  level?: number;
+  xpIntoLevel?: number;
+  xpForNextLevel?: number;
+  /** Palier de passe atteint (== level). */
+  tier?: number;
   /** Réputation litiges : nb de litiges perdus (marque visible sur le profil). */
   disputesLost?: number;
   /** Fin du cooldown de sanction de litige (ISO) — déclaration & paris bloqués tant qu'elle est future. Null si aucune. */
@@ -2025,6 +2065,18 @@ export const api = {
     request<{ ok: true; login: string; coins: number }>('/admin/shop/grant', {
       method: 'POST',
       body: JSON.stringify({ login, amount }),
+    }),
+  // ── Passe de combat (XP) ────────────────────────────────────────────────────
+  battlePass: () => request<BattlePassResponse>('/me/battlepass'),
+  adminBattlePassTiers: () => request<BattlePassTierAdmin[]>('/admin/battlepass/tiers'),
+  adminSetBattlePassTier: (tier: number, input: Omit<BattlePassTierAdmin, 'tier'>) =>
+    request<BattlePassTierAdmin>(`/admin/battlepass/tiers/${tier}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  adminDeleteBattlePassTier: (tier: number) =>
+    request<{ ok: true }>(`/admin/battlepass/tiers/${tier}`, {
+      method: 'DELETE',
     }),
   // ── Suivi des coins (Shop GOD) ────────────────────────────────────────────
   /** Annuaire des joueurs avec leur solde (tri solde décroissant, recherche optionnelle). */

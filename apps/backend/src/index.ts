@@ -1186,6 +1186,12 @@ app.get('/me', async (c) => {
     equippedBanner: cosmetics.equippedBanner,
     // Solde « League Coin » du joueur (porte-monnaie boutique).
     coins: user?.leagueCoins ?? 0,
+    // XP & passe de combat : total à vie + niveau/progression dérivés (autorité serveur).
+    xp: user?.xp ?? 0,
+    level: levelFromXp(user?.xp ?? 0).level,
+    xpIntoLevel: levelFromXp(user?.xp ?? 0).xpIntoLevel,
+    xpForNextLevel: levelFromXp(user?.xp ?? 0).xpForNextLevel,
+    tier: levelFromXp(user?.xp ?? 0).level,
     // Réputation litiges : marque (nb de litiges perdus) + fin du cooldown de
     // sanction (déclaration/paris bloqués tant qu'elle est future).
     disputesLost: user?.disputesLost ?? 0,
@@ -2949,6 +2955,19 @@ async function settle2v2PendingAsPlayed(tx: Prisma.TransactionClient, p: Pending
       p.declaredAt,
       { coinFactor: decayFactor, countForQuests: decayFactor >= 1 },
     );
+    // XP + paliers du passe (2v2 : pas d'écart pairwise, gagnants 100 / autres 50).
+    await awardMatchExperienceTx(
+      tx,
+      'babyfoot',
+      [
+        { login: a1, won: winner === 'A' },
+        { login: a2, won: winner === 'A' },
+        { login: b1, won: winner === 'B' },
+        { login: b2, won: winner === 'B' },
+      ],
+      p.declaredAt,
+      { decayFactor },
+    );
   }
   return created;
 }
@@ -3057,6 +3076,17 @@ async function settlePendingAsPlayed(tx: Prisma.TransactionClient, p: PendingFor
       p.declaredAt,
       // Coins dégressés comme l'ELO ; quêtes non créditées sur un rematch dégressé.
       { coinFactor: decayFactor, countForQuests: decayFactor >= 1 },
+    );
+    // XP + paliers du passe — 1v1 : on passe l'écart de score (bonus dédié).
+    await awardMatchExperienceTx(
+      tx,
+      game,
+      [
+        { login: a, won: winner === 'A', scoreGap: Math.abs(scoreA - scoreB) },
+        { login: b, won: winner === 'B', scoreGap: Math.abs(scoreA - scoreB) },
+      ],
+      p.declaredAt,
+      { decayFactor, isDraw: winner === 'draw' },
     );
   }
   return created;
@@ -3422,6 +3452,13 @@ async function settleFfaAsPlayed(tx: Prisma.TransactionClient, p: PendingFfaForS
     ordered.map((pp) => ({ login: pp.login, won: pp.position === 1 })),
     p.declaredAt,
   );
+  // XP + paliers du passe — FFA : pas d'écart pairwise (1er = 100, autres 50).
+  await awardMatchExperienceTx(
+    tx,
+    'smash',
+    ordered.map((pp) => ({ login: pp.login, won: pp.position === 1 })),
+    p.declaredAt,
+  );
   return created;
 }
 
@@ -3736,6 +3773,13 @@ async function settleDartsAsPlayed(tx: Prisma.TransactionClient, p: PendingDarts
   // Coins + quêtes : le vainqueur (reste le plus bas = 1er du classement) touche
   // la prime de victoire, les autres la participation. Une manche compte toujours.
   await awardMatchEconomyTx(
+    tx,
+    'flechettes',
+    ordered.map((pp, i) => ({ login: pp.login, won: i === 0 })),
+    p.declaredAt,
+  );
+  // XP + paliers du passe — FFA fléchettes : pas d'écart pairwise (1er = 100, autres 50).
+  await awardMatchExperienceTx(
     tx,
     'flechettes',
     ordered.map((pp, i) => ({ login: pp.login, won: i === 0 })),
@@ -10192,6 +10236,112 @@ app.delete('/admin/shop/items/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Passe de combat ───────────────────────────────────────────────────────────
+
+// Validation d'un palier (admin). itemId requis pour 'item', coins pour 'coins',
+// consumableKind pour 'consumable' ; 'none' = palier vide (montre la progression).
+const BattlePassTierInputSchema = z.object({
+  rewardKind: z.enum(['item', 'coins', 'consumable', 'none']),
+  itemId: z.string().nullish(),
+  coins: z.number().int().nonnegative().nullish(),
+  consumableKind: z.enum(['anti_ops', 'elo_mult', 'force_duel', 'mini_ops']).nullish(),
+});
+
+function serializeBattlePassTierAdmin(t: {
+  tier: number;
+  rewardKind: string;
+  itemId: string | null;
+  coins: number | null;
+  consumableKind: string | null;
+}) {
+  return {
+    tier: t.tier,
+    rewardKind: t.rewardKind,
+    itemId: t.itemId ?? null,
+    coins: t.coins ?? null,
+    consumableKind: t.consumableKind ?? null,
+  };
+}
+
+// GET /me/battlepass — état du passe pour le joueur courant (spec §5). La piste
+// complète des paliers configurés + progression d'XP + déblocage/réclamation.
+app.get('/me/battlepass', async (c) => {
+  const login = await getCurrentLogin(c);
+  await getOrCreateUser(login);
+  const user = await prisma.user.findUnique({ where: { login }, select: { xp: true } });
+  const totalXp = user?.xp ?? 0;
+  const { level, xpIntoLevel, xpForNextLevel } = levelFromXp(totalXp);
+  const [tiers, claims] = await Promise.all([
+    prisma.battlePassTier.findMany({ orderBy: { tier: 'asc' }, include: { item: true } }),
+    prisma.battlePassClaim.findMany({ where: { userLogin: login }, select: { tier: true, grantedAt: true } }),
+  ]);
+  const claimedAt = new Map(claims.map((cl) => [cl.tier, cl.grantedAt]));
+  return c.json({
+    totalXp,
+    level,
+    xpIntoLevel,
+    xpForNextLevel,
+    tiers: tiers.map((t) => ({
+      tier: t.tier,
+      xpRequired: cumulativeXpForTier(t.tier),
+      rewardKind: t.rewardKind,
+      item: t.rewardKind === 'item' && t.item ? serializeShopItem(t.item) : null,
+      coins: t.coins ?? null,
+      consumableKind: t.consumableKind ?? null,
+      unlocked: level >= t.tier,
+      claimedAt: claimedAt.has(t.tier) ? claimedAt.get(t.tier)!.toISOString() : null,
+    })),
+  });
+});
+
+// GET /admin/battlepass/tiers — tous les paliers configurés (admin).
+app.get('/admin/battlepass/tiers', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const tiers = await prisma.battlePassTier.findMany({ orderBy: { tier: 'asc' } });
+  return c.json(tiers.map(serializeBattlePassTierAdmin));
+});
+
+// PUT /admin/battlepass/tiers/:tier — upsert de la récompense d'un palier (admin).
+app.put('/admin/battlepass/tiers/:tier', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const tier = Number(c.req.param('tier'));
+  if (!Number.isInteger(tier) || tier < 1) {
+    throw new HTTPException(400, { message: 'tier invalide' });
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = BattlePassTierInputSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const d = parsed.data;
+  const data = {
+    rewardKind: d.rewardKind,
+    itemId: d.rewardKind === 'item' ? d.itemId ?? null : null,
+    coins: d.rewardKind === 'coins' ? d.coins ?? null : null,
+    consumableKind: d.rewardKind === 'consumable' ? d.consumableKind ?? null : null,
+  };
+  const t = await prisma.battlePassTier.upsert({
+    where: { tier },
+    update: data,
+    create: { tier, ...data },
+  });
+  return c.json(serializeBattlePassTierAdmin(t));
+});
+
+// DELETE /admin/battlepass/tiers/:tier — supprime un palier (admin).
+app.delete('/admin/battlepass/tiers/:tier', async (c) => {
+  const me = await getCurrentLogin(c);
+  await requireAdmin(me);
+  const tier = Number(c.req.param('tier'));
+  if (!Number.isInteger(tier)) {
+    throw new HTTPException(400, { message: 'tier invalide' });
+  }
+  await prisma.battlePassTier.delete({ where: { tier } }).catch(() => {});
+  return c.json({ ok: true });
+});
+
 // ── Annonces générales (admin → tous les joueurs) ────────────────────────────
 
 function serializeAnnouncement(a: {
@@ -10308,6 +10458,7 @@ type CoinTxType =
   | 'sheldon_reward'
   | 'trophy_income'
   | 'dispute_malus'
+  | 'battlepass_tier'
   | 'admin_grant';
 
 interface CoinTxEntry {
@@ -10659,6 +10810,190 @@ async function awardMatchEconomyTx(
         gamesPlayed: { set: gamesPlayed },
       },
     });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// XP & passe de combat
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// L'XP est cumulative à vie (User.xp, jamais reset). Le niveau dérive de l'XP
+// via une courbe purement serveur — le front n'affiche que ce que l'API renvoie.
+// 1 niveau = 1 palier (BattlePassTier) ; atteindre un niveau accorde la
+// récompense du palier correspondant (reconcileBattlePassTx, idempotent).
+
+/** XP nécessaire pour passer du niveau L au niveau L+1 (L1→2:100, L2→3:150, …). */
+function xpForLevel(L: number): number {
+  return 50 * (L + 1);
+}
+
+/**
+ * Décompose une XP totale (cumulée à vie) en niveau + progression. Niveau de
+ * départ = 1 (totalXp 0 → niveau 1). `xpIntoLevel` = XP au-delà du seuil du
+ * niveau courant ; `xpForNextLevel` = coût total pour finir le niveau courant.
+ */
+function levelFromXp(totalXp: number): { level: number; xpIntoLevel: number; xpForNextLevel: number } {
+  let level = 1;
+  let remaining = Math.max(0, Math.floor(totalXp));
+  while (remaining >= xpForLevel(level)) {
+    remaining -= xpForLevel(level);
+    level++;
+  }
+  return { level, xpIntoLevel: remaining, xpForNextLevel: xpForLevel(level) };
+}
+
+/** XP cumulée requise pour ATTEINDRE le palier/niveau T (T1:0, T2:100, T3:250…). */
+function cumulativeXpForTier(T: number): number {
+  let sum = 0;
+  for (let k = 1; k < T; k++) sum += xpForLevel(k);
+  return sum;
+}
+
+type XpTxType = 'match' | 'admin_grant' | 'tier_bonus';
+
+interface XpTxEntry {
+  type: XpTxType;
+  refId?: string | null;
+  meta?: Prisma.InputJsonValue;
+}
+
+/**
+ * Écrit une ligne au journal des mouvements d'XP. Purement historique (jamais
+ * relu pour un total). Un delta nul n'est pas journalisé. Mirroir de logCoinTx.
+ */
+async function logXpTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  amount: number,
+  balanceAfter: number,
+  entry: XpTxEntry,
+): Promise<void> {
+  if (amount === 0) return;
+  await tx.xpTransaction.create({
+    data: {
+      id: randomUUID(),
+      userLogin: login,
+      amount,
+      balanceAfter,
+      type: entry.type,
+      refId: entry.refId ?? null,
+      meta: entry.meta ?? undefined,
+    },
+  });
+}
+
+/**
+ * Crédite de l'XP (jamais négatif côté usage). Retourne le nouveau total, ou
+ * null si joueur absent. Journalise le mouvement si `entry` est fourni. Mirroir
+ * de grantCoinsTx (mais l'XP ne se débite pas : on borne à 0 par sécurité).
+ */
+async function grantXpTx(
+  tx: Prisma.TransactionClient,
+  login: string,
+  amount: number,
+  entry?: XpTxEntry,
+): Promise<number | null> {
+  const target = await tx.user.findUnique({ where: { login }, select: { xp: true } });
+  if (!target) return null;
+  const next = Math.max(0, target.xp + amount);
+  const delta = next - target.xp;
+  await tx.user.update({ where: { login }, data: { xp: next } });
+  if (entry) await logXpTx(tx, login, delta, next, entry);
+  return next;
+}
+
+/**
+ * Octroie l'XP de match à chaque participant (DANS la transaction de
+ * settlement). À n'appeler que lorsque le match compte pour l'Elo, juste après
+ * awardMatchEconomyTx. Barème (spec §2) :
+ *  - base « a joué » : 50 ; bonus victoire : +50 (gagnant = 100 avant écart).
+ *  - 1v1 (scoreGap connu) : gagnant + min(max(gap,0),10)*5 ; perdant + (gap<=1?25:gap<=3?10:0).
+ *  - match nul (échecs) : chacun 50 + 25, pas de bonus victoire.
+ *  - FFA / 2v2 : pas de bonus d'écart (gagnant(s) 100, autres 50).
+ *  - Tout est ×decayFactor puis arrondi (Math.round). Mirroir de awardMatchEconomyTx.
+ */
+async function awardMatchExperienceTx(
+  tx: Prisma.TransactionClient,
+  game: string,
+  participants: { login: string; won: boolean; scoreGap?: number }[],
+  playedAt: Date,
+  opts: { decayFactor?: number; isDraw?: boolean } = {},
+): Promise<void> {
+  const decayFactor = opts.decayFactor ?? 1;
+  const isDraw = opts.isDraw ?? false;
+  for (const p of participants) {
+    let xp: number;
+    if (isDraw) {
+      // Nulle : pas de bonus victoire, mais une prime « match serré » fixe.
+      xp = 50 + 25;
+    } else {
+      xp = 50 + (p.won ? 50 : 0);
+      // Bonus d'écart 1v1 uniquement (scoreGap fourni seulement en 1v1).
+      if (p.scoreGap != null) {
+        const gap = p.scoreGap;
+        if (p.won) {
+          xp += Math.min(Math.max(gap, 0), 10) * 5; // max +50
+        } else {
+          xp += gap <= 1 ? 25 : gap <= 3 ? 10 : 0; // défaite serrée = + d'XP
+        }
+      }
+    }
+    const amount = Math.max(0, Math.round(xp * decayFactor));
+    if (amount > 0) {
+      await grantXpTx(tx, p.login, amount, {
+        type: 'match',
+        meta: { game, won: isDraw ? null : p.won },
+      });
+    }
+    // Accorde immédiatement les paliers franchis grâce à cet apport d'XP.
+    await reconcileBattlePassTx(tx, p.login);
+  }
+}
+
+/**
+ * Octroie automatiquement, dans l'ordre croissant, les paliers de passe de
+ * combat dont le niveau est atteint (tier <= level) et pas encore réclamés.
+ * Idempotent grâce à BattlePassClaim. Émet `battlepass:tier` si des paliers ont
+ * été accordés. À appeler dans la même transaction que le gain d'XP.
+ */
+async function reconcileBattlePassTx(tx: Prisma.TransactionClient, login: string): Promise<void> {
+  const user = await tx.user.findUnique({ where: { login }, select: { xp: true } });
+  if (!user) return;
+  const { level } = levelFromXp(user.xp);
+  const [tiers, claims] = await Promise.all([
+    tx.battlePassTier.findMany({ where: { tier: { lte: level } }, orderBy: { tier: 'asc' } }),
+    tx.battlePassClaim.findMany({ where: { userLogin: login }, select: { tier: true } }),
+  ]);
+  const claimed = new Set(claims.map((c) => c.tier));
+  const granted: number[] = [];
+  for (const t of tiers) {
+    if (claimed.has(t.tier)) continue;
+    switch (t.rewardKind) {
+      case 'item':
+        if (t.itemId) await grantItemTx(tx, login, t.itemId, false);
+        break;
+      case 'coins':
+        if (t.coins && t.coins > 0)
+          await grantCoinsTx(tx, login, t.coins, { type: 'battlepass_tier', refId: String(t.tier) });
+        break;
+      case 'consumable':
+        if (t.consumableKind) {
+          await tx.consumableInventory.upsert({
+            where: { userLogin_kind: { userLogin: login, kind: t.consumableKind } },
+            update: { quantity: { increment: 1 } },
+            create: { userLogin: login, kind: t.consumableKind, quantity: 1 },
+          });
+        }
+        break;
+      case 'none':
+      default:
+        break;
+    }
+    await tx.battlePassClaim.create({ data: { userLogin: login, tier: t.tier } });
+    granted.push(t.tier);
+  }
+  if (granted.length > 0) {
+    emit([login], { type: 'battlepass:tier', payload: { tiers: granted } });
   }
 }
 

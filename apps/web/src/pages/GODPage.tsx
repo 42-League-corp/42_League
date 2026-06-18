@@ -38,6 +38,8 @@ import {
   type AnnouncementKind,
   type AdminUserItems,
   type ConsumableKind,
+  type ShopItemData,
+  type BattlePassTierAdmin,
 } from '../lib/api';
 import { BADGE_ICONS } from '../lib/badgeIcons';
 import { ANNOUNCEMENT_KINDS, announcementKindMeta } from '../lib/announcements';
@@ -4756,6 +4758,223 @@ function ItemsAdminTab() {
   );
 }
 
+// ── Passe de combat (XP) Tab ────────────────────────────────────────────────
+
+const BP_REWARD_KINDS: BattlePassTierAdmin['rewardKind'][] = ['none', 'item', 'coins', 'consumable'];
+const BP_CONSUMABLES: ConsumableKind[] = ['anti_ops', 'elo_mult', 'force_duel', 'mini_ops'];
+
+/** Ligne d'édition d'un palier du passe (récompense : rien / item / coins / consommable). */
+function BattlePassTierRow({
+  tier,
+  items,
+  onSaved,
+  onDeleted,
+}: {
+  tier: BattlePassTierAdmin;
+  items: ShopItemData[];
+  onSaved: (t: BattlePassTierAdmin) => void;
+  onDeleted: (tier: number) => void;
+}) {
+  const t = useT();
+  const [rewardKind, setRewardKind] = useState<BattlePassTierAdmin['rewardKind']>(tier.rewardKind);
+  const [itemId, setItemId] = useState(tier.itemId ?? '');
+  const [coins, setCoins] = useState(String(tier.coins ?? 0));
+  const [consumableKind, setConsumableKind] = useState<ConsumableKind>(
+    (tier.consumableKind as ConsumableKind) ?? 'elo_mult',
+  );
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const input: Omit<BattlePassTierAdmin, 'tier'> = {
+        rewardKind,
+        itemId: rewardKind === 'item' ? itemId || null : null,
+        coins: rewardKind === 'coins' ? Number(coins) || 0 : null,
+        consumableKind: rewardKind === 'consumable' ? consumableKind : null,
+      };
+      const res = await api.adminSetBattlePassTier(tier.tier, input);
+      onSaved(res);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const del = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.adminDeleteBattlePassTier(tier.tier);
+      onDeleted(tier.tier);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2">
+      <span className="inline-flex items-center justify-center w-9 h-7 rounded bg-amber-400/15 text-amber-400 text-xs font-mono font-bold tabular-nums shrink-0">
+        {t('battlepass.admin.tier')} {tier.tier}
+      </span>
+
+      {/* Type de récompense */}
+      <select
+        value={rewardKind}
+        onChange={(e) => setRewardKind(e.target.value as BattlePassTierAdmin['rewardKind'])}
+        className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+      >
+        {BP_REWARD_KINDS.map((k) => (
+          <option key={k} value={k}>
+            {t(`battlepass.reward.${k}`)}
+          </option>
+        ))}
+      </select>
+
+      {/* Paramètre dépendant du type */}
+      {rewardKind === 'item' && (
+        <select
+          value={itemId}
+          onChange={(e) => setItemId(e.target.value)}
+          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500 max-w-[14rem]"
+        >
+          <option value="">— {t('battlepass.admin.item')} —</option>
+          {items.map((it) => (
+            <option key={it.id} value={it.id}>
+              {it.name} ({it.category})
+            </option>
+          ))}
+        </select>
+      )}
+
+      {rewardKind === 'coins' && (
+        <label className="flex items-center gap-1.5">
+          <img src="/42coin.webp" alt="" className="w-4 h-4" />
+          <Input type="number" value={coins} onChange={setCoins} className="w-24" />
+        </label>
+      )}
+
+      {rewardKind === 'consumable' && (
+        <select
+          value={consumableKind}
+          onChange={(e) => setConsumableKind(e.target.value as ConsumableKind)}
+          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-zinc-500"
+        >
+          {BP_CONSUMABLES.map((k) => (
+            <option key={k} value={k}>
+              {CONSUMABLE_LABEL[k]}
+            </option>
+          ))}
+        </select>
+      )}
+
+      <div className="flex items-center gap-2 ml-auto">
+        {err && <span className="text-xs text-red-400 font-mono">{err}</span>}
+        {saved && <span className="text-xs text-emerald-400 font-mono">{t('battlepass.admin.saved')}</span>}
+        <Btn variant="success" onClick={save} disabled={busy}>
+          {t('battlepass.admin.save')}
+        </Btn>
+        <Btn variant="danger" onClick={del} disabled={busy}>
+          {t('battlepass.admin.delete')}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+/** Onglet GOD : configuration des récompenses du passe de combat. */
+function BattlePassAdminTab() {
+  const t = useT();
+  const [tiers, setTiers] = useState<BattlePassTierAdmin[]>([]);
+  const [items, setItems] = useState<ShopItemData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  // Ajout d'un nouveau palier.
+  const [newTier, setNewTier] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const [ts, its] = await Promise.all([
+        api.adminBattlePassTiers(),
+        api.adminShopItems().catch(() => [] as ShopItemData[]),
+      ]);
+      setTiers([...ts].sort((a, b) => a.tier - b.tier));
+      setItems(its);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const upsert = (saved: BattlePassTierAdmin) =>
+    setTiers((prev) =>
+      [...prev.filter((t) => t.tier !== saved.tier), saved].sort((a, b) => a.tier - b.tier),
+    );
+  const remove = (tier: number) => setTiers((prev) => prev.filter((t) => t.tier !== tier));
+
+  const addTier = async () => {
+    const n = Number(newTier);
+    if (!Number.isInteger(n) || n <= 0) return;
+    setErr(null);
+    try {
+      const res = await api.adminSetBattlePassTier(n, { rewardKind: 'none' });
+      upsert(res);
+      setNewTier('');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <div className="p-4">
+      <Section title={t('battlepass.admin.title')}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+            {t('battlepass.admin.tier')}
+          </span>
+          <Input type="number" value={newTier} onChange={setNewTier} placeholder="ex. 5" className="w-24" />
+          <Btn variant="default" onClick={addTier} disabled={!Number(newTier)}>
+            + {t('battlepass.admin.save')}
+          </Btn>
+          {err && <span className="text-xs text-red-400 font-mono">{err}</span>}
+        </div>
+
+        {loading ? (
+          <div className="text-xs text-zinc-500 font-mono">…</div>
+        ) : tiers.length === 0 ? (
+          <div className="text-xs text-zinc-500 font-mono">{t('battlepass.empty')}</div>
+        ) : (
+          <div className="space-y-2">
+            {tiers.map((tier) => (
+              <BattlePassTierRow
+                key={tier.tier}
+                tier={tier}
+                items={items}
+                onSaved={upsert}
+                onDeleted={remove}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 // ── SF Sessions Tab ────────────────────────────────────────────────────────
 
 interface LocalSfSession {
@@ -5069,19 +5288,21 @@ function FeedbackTab() {
 }
 
 function ContentTab() {
-  const [sub, setSub] = useState<'announcements' | 'items'>('announcements');
+  const [sub, setSub] = useState<'announcements' | 'items' | 'battlepass'>('announcements');
   return (
     <div>
       <SubTabBar
         tabs={[
           { id: 'announcements', label: '📣 ANNONCES' },
           { id: 'items', label: '🎨 INVENTAIRES' },
+          { id: 'battlepass', label: '🎖 PASSE DE COMBAT' },
         ]}
         active={sub}
         onChange={setSub}
       />
       {sub === 'announcements' && <AnnouncementsTab />}
       {sub === 'items' && <ItemsAdminTab />}
+      {sub === 'battlepass' && <BattlePassAdminTab />}
     </div>
   );
 }

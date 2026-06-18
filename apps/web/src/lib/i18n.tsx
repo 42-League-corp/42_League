@@ -17,6 +17,7 @@ import { dict as profilDict } from './locales/profil';
 import { dict as pagesDict } from './locales/pages';
 import { dict as histteamDict } from './locales/histteam';
 import { dict as economyDict } from './locales/economy';
+import { dict as battlepassDict } from './locales/battlepass';
 
 export type Lang = 'fr' | 'en' | 'es';
 
@@ -674,6 +675,7 @@ const DOMAIN_DICTS = [
   pagesDict,
   histteamDict,
   economyDict,
+  battlepassDict,
 ];
 
 const DICTS: Record<Lang, Dict> = {
