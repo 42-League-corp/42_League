@@ -1711,8 +1711,8 @@ app.get('/leaderboard', async (c) => {
 // matchs 2v2 validés (bilan wins/losses). Partagé par le classement, la liste
 // « mes équipes » et le profil d'un duo.
 const TEAM_ENTRY_INCLUDE = {
-  player1: { select: { imageUrl: true } },
-  player2: { select: { imageUrl: true } },
+  player1: { select: { imageUrl: true, campus: true } },
+  player2: { select: { imageUrl: true, campus: true } },
   matchesAsTeamA: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
   matchesAsTeamB: { where: { mode: '2v2', countedForElo: true }, select: { winner: true } },
 } satisfies Prisma.BabyfootTeamInclude;
@@ -1736,6 +1736,10 @@ function enrichTeamEntry(t: TeamWithCounts) {
     losses: total - wins,
     player1ImageUrl: t.player1.imageUrl,
     player2ImageUrl: t.player2.imageUrl,
+    // Campus des deux joueurs : permet au front de cloisonner le classement
+    // d'équipes par campus (un duo « de campus » = ses deux joueurs du campus).
+    player1Campus: t.player1.campus,
+    player2Campus: t.player2.campus,
   };
 }
 
@@ -2135,6 +2139,7 @@ async function performSeasonRollover(newName: string) {
               elo,
               wins: s.w,
               losses: s.l,
+              campus: u.campus ?? null,
             },
           });
         }

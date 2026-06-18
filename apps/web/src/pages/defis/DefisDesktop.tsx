@@ -9,7 +9,7 @@ import { PlayerLink } from '../../components/PlayerLink';
 import { OutcomeButton } from '../../components/OutcomeButton';
 import { AbacusSlider } from '../../components/AbacusSlider';
 import { ContestModal } from '../../components/ContestModal';
-import { MatchmakingCTACard } from '../../components/MatchmakingButton';
+import { MatchmakingButton } from '../../components/MatchmakingButton';
 import {
   api,
   type Challenge,
@@ -172,7 +172,12 @@ export function DefisDesktop() {
         </div>
       )}
 
-      {/* ── 1. HERO CTAs (grille 3 colonnes : matchmaking | déclarer | défier) */}
+      {/* ── 0. MATCH ALÉATOIRE (matchmaking queue) ───────────────────────── */}
+      <div className="mb-4">
+        <MatchmakingButton />
+      </div>
+
+      {/* ── 1. HERO CTAs ─────────────────────────────────────────────────── */}
       {/* Les 2 boutons les plus importants du site : toujours au-dessus du pli,
           taille héro, jamais discrets. */}
       <HeroCTAs
@@ -312,7 +317,7 @@ function HeroCTAs({
         onClose={() => setCelebration(null)}
       />
     )}
-    <motion.div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
       {/* Seule la carte sélectionnée s'anime, via le morph `layoutId` (bouton ↔
           panneau). Les autres cartes n'ont PAS d'animation d'opacité d'entrée/
           sortie : sinon, combinées au `popLayout` (qui les repositionne dans un
@@ -321,11 +326,6 @@ function HeroCTAs({
           que la carte choisie se redimensionne. initial={false} évite en plus que
           le morph rejoue à chaque visite de la page. */}
       <AnimatePresence initial={false}>
-        {/* Match aléatoire — masqué quand un formulaire est ouvert */}
-        {openCard === null && (
-          <MatchmakingCTACard key="matchmaking" />
-        )}
-
         {(openCard === null || openCard === 'declare') && (
           <HeroCTACard
             key="declare"
@@ -524,7 +524,7 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
           bg-gradient-to-br from-bg-2/80 to-bg-1/90
           flex items-center gap-5 px-7 py-6
           transition-colors duration-300 text-left
-          `}
+          ${kind === 'ffa' || kind === 'darts' ? 'md:col-span-2 md:w-[calc(50%-0.5rem)] md:mx-auto' : ''}`}
         style={{ boxShadow: meta.glow }}
       >
         {/* Gradient d'accent en background */}
@@ -565,7 +565,7 @@ function HeroCTACard({ kind, expanded, onOpen, onClose, children }: HeroCTACardP
       transition={{
         layout: { type: 'spring', stiffness: 440, damping: 40, mass: 0.9 },
       }}
-      className="relative md:col-span-3 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col"
+      className="relative md:col-span-2 card-hud border-gold/40 rounded-2xl p-6 min-h-[460px] flex flex-col"
       style={{
         backgroundImage:
           'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,201,74,0.18), transparent 70%)',

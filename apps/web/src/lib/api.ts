@@ -198,6 +198,9 @@ export interface BabyfootTeamEntry extends BabyfootTeam {
   /** Avatar du joueur 1 (dénormalisé depuis users pour affichage). */
   player1ImageUrl?: string | null;
   player2ImageUrl?: string | null;
+  /** Campus des deux joueurs — cloisonnement du classement d'équipes par campus. */
+  player1Campus?: string | null;
+  player2Campus?: string | null;
 }
 
 export interface Declare2v2Response {
@@ -853,6 +856,8 @@ export interface SeasonStanding {
   elo: number;
   wins: number;
   losses: number;
+  /** Campus figé au snapshot. Null sur les anciens snapshots → restent globaux. */
+  campus?: string | null;
 }
 
 export interface PalmaresEntry {

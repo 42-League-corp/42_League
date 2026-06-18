@@ -745,6 +745,9 @@ model SeasonStanding {
   elo      Int
   wins     Int
   losses   Int
+  // Campus du joueur figé à la clôture (cloisonnement par campus du snapshot).
+  // Null sur les anciens snapshots (avant le tagging) → ceux-ci restent globaux.
+  campus   String?
 
   @@index([seasonId])
   @@index([login])
