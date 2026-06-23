@@ -118,7 +118,7 @@ import { streamSSE } from 'hono/streaming';
 import { bodyLimit } from 'hono/body-limit';
 import { registerSse, emit, broadcast, type SseEvent } from './sse.js';
 import { issueStreamToken, issueToken, verifyStreamToken, verifyToken } from './tokens.js';
-import { logAdminAction, notifyClientError } from './audit.js';
+import { logAdminAction, notifyClientError, notifyDiscordDispute } from './audit.js';
 import { rateLimit, clientIp, clearPenalty, getPenaltyInfo } from './rate-limit.js';
 
 // Hardcoded — immutable. No API can grant or revoke this.
@@ -3357,6 +3357,10 @@ app.post('/matches/:id/reject', async (c) => {
   }
   // Mon « score à valider » est traité (rejeté) → notif cloche soldée.
   void markNotifsReadByRef(me, id);
+  // Litige ouvert → alerte Discord pour l'arbitrage (sans donnée personnelle).
+  void notifyDiscordDispute({ game: rejectGame, kind: 'pending', reason: contestReason }).catch(
+    (err) => console.error('[dispute] discord notify failed', err),
+  );
   return c.json({ id, status: 'rejected', contestReason });
 });
 
@@ -3384,6 +3388,120 @@ app.post('/matches/:id/cancel', async (c) => {
     emit([opponentLogin], { type: 'match:cancelled', payload: { id, cancelledBy: me } });
   }
   return c.json({ id, status: 'cancelled' });
+});
+
+// ── Contestation a posteriori d'un match AUTO-VALIDÉ ─────────────────────────
+// Un match déclaré confirmé automatiquement après 48h (l'adversaire absent n'a pas
+// répondu) reste contestable tant qu'aucun litige n'a été ouvert. La contestation
+// ouvre simplement un litige (RejectedMatch 'open') rattaché au match compté, qui
+// part en file d'arbitrage (/GOD) : le résultat reste acquis tant qu'un admin n'a
+// pas tranché (pas d'annulation automatique de l'ELO). Seul le camp ADVERSE du
+// déclarant peut contester (le déclarant ne conteste pas son propre score).
+
+// Logins de l'ÉQUIPE du déclarant d'un match auto-validé (le déclarant seul en 1v1,
+// son duo en 2v2). Sert à n'autoriser la contestation qu'au camp adverse.
+type AutoConfirmedMatch = {
+  mode: string | null;
+  playerALogin: string;
+  playerBLogin: string;
+  playerA2Login: string | null;
+  playerB2Login: string | null;
+  autoConfirmDeclarerLogin: string | null;
+};
+function declarerSideLogins(m: AutoConfirmedMatch): string[] {
+  const decl = m.autoConfirmDeclarerLogin;
+  if (!decl) return [];
+  if (m.mode === '2v2') {
+    return decl === m.playerALogin || decl === m.playerA2Login
+      ? [m.playerALogin, m.playerA2Login].filter(Boolean) as string[]
+      : [m.playerBLogin, m.playerB2Login].filter(Boolean) as string[];
+  }
+  return [decl];
+}
+function isContestableBy(m: AutoConfirmedMatch, me: string): boolean {
+  const participants = [m.playerALogin, m.playerBLogin, m.playerA2Login, m.playerB2Login].filter(
+    Boolean,
+  ) as string[];
+  return participants.includes(me) && !declarerSideLogins(m).includes(me);
+}
+
+// Liste des matchs auto-validés que JE peux encore contester (camp adverse, pas
+// encore contestés). Alimente le bouton « Contester » côté front.
+app.get('/matches/contestable', async (c) => {
+  const me = await getCurrentLogin(c);
+  const rows = await prisma.playedMatch.findMany({
+    where: {
+      autoConfirmedAt: { not: null },
+      contestedAt: null,
+      OR: [{ playerALogin: me }, { playerBLogin: me }, { playerA2Login: me }, { playerB2Login: me }],
+    },
+    orderBy: { playedAt: 'desc' },
+    take: 100,
+  });
+  return c.json(rows.filter((m) => isContestableBy(m, me)));
+});
+
+app.post('/matches/played/:id/contest', async (c) => {
+  const me = await getCurrentLogin(c);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = RejectMatchSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: parsed.error.message });
+  }
+  const { contestReason, contestMessage } = parsed.data;
+
+  let info: { declarerLogin: string; game: string } | undefined;
+  await prisma.$transaction(async (tx) => {
+    const m = await tx.playedMatch.findUnique({ where: { id } });
+    if (!m) throw new HTTPException(404, { message: 'match introuvable' });
+    if (!m.autoConfirmedAt) {
+      throw new HTTPException(409, { message: 'seul un match auto-validé est contestable a posteriori' });
+    }
+    if (m.contestedAt) throw new HTTPException(409, { message: 'match déjà contesté' });
+    if (!isContestableBy(m, me)) {
+      throw new HTTPException(403, { message: 'seul le camp adverse du déclarant peut contester ce match' });
+    }
+    const decl = m.autoConfirmDeclarerLogin!;
+    // Reconstruit la perspective déclarant/adversaire : les côtés A/B suivent l'ordre
+    // canonique, pas l'ordre déclarant/adversaire.
+    const declSideIsA = decl === m.playerALogin || decl === m.playerA2Login;
+    const scoreDeclarer = declSideIsA ? m.scoreA : m.scoreB;
+    const scoreOpponent = declSideIsA ? m.scoreB : m.scoreA;
+    await tx.rejectedMatch.create({
+      data: {
+        id: randomUUID(),
+        declarerLogin: decl,
+        opponentLogin: me,
+        scoreDeclarer,
+        scoreOpponent,
+        contestReason,
+        contestMessage,
+        game: m.game,
+        playedMatchId: m.id,
+        status: 'open',
+      },
+    });
+    await tx.playedMatch.update({ where: { id }, data: { contestedAt: new Date() } });
+    info = { declarerLogin: decl, game: m.game };
+  });
+
+  if (info) {
+    emit([info.declarerLogin], { type: 'match:rejected', payload: { id, contestReason, rejectedBy: me } });
+    void notify(info.declarerLogin, {
+      type: 'match_rejected',
+      title: `@${me} a contesté ton match auto-validé`,
+      body: contestReason === 'never_played' ? 'Match jamais joué' : 'Score incorrect',
+      link: `/challenges?game=${encodeURIComponent(info.game)}`,
+      game: info.game,
+      refId: id,
+    });
+    // Litige ouvert → alerte Discord pour l'arbitrage (sans donnée personnelle).
+    void notifyDiscordDispute({ game: info.game, kind: 'auto_validated', reason: contestReason }).catch(
+      (err) => console.error('[dispute] discord notify failed', err),
+    );
+  }
+  return c.json({ id, status: 'contested', contestReason });
 });
 
 // =========================================================================
@@ -12122,32 +12240,163 @@ async function purgeOldAuditLogs(): Promise<void> {
   if (count > 0) console.log(`[purge] ${count} audit log entries older than 24 months deleted`);
 }
 
-// ── Expiration des matchs en attente non confirmés ──
-// Un PendingMatch jamais confirmé ni refusé reste affiché indéfiniment et pollue
-// l'UI des deux joueurs. On les purge après PENDING_MATCH_TTL_HOURS et on notifie
-// les deux camps pour que leur liste se rafraîchisse.
-const PENDING_MATCH_TTL_HOURS = Number(process.env.PENDING_MATCH_TTL_HOURS ?? 72);
+// ── Cooldown de 48h : auto-validation des matchs déclarés non confirmés ──
+// Un match déclaré que l'adversaire ne confirme NI ne conteste sous 48h est
+// AUTO-VALIDÉ avec le score du déclarant (l'ELO compte), puis reste contestable a
+// posteriori (cf. POST /matches/played/:id/contest) tant qu'aucun litige n'a été
+// ouvert ni tranché. Remplace l'ancienne purge (suppression à 72h) : on ne jette
+// plus le résultat, on l'entérine — l'adversaire absent ne bloque plus le match.
+const PENDING_MATCH_AUTOCONFIRM_HOURS = Number(process.env.PENDING_MATCH_AUTOCONFIRM_HOURS ?? 48);
+// Idem pour les défis : un défi (invitation à jouer) non accepté sous 48h EXPIRE
+// (status 'expired', sans pénalité ni auto-acceptation) et disparaît des listes.
+const CHALLENGE_ACCEPT_TTL_HOURS = Number(process.env.CHALLENGE_ACCEPT_TTL_HOURS ?? 48);
 
-async function purgeStalePendingMatches(): Promise<void> {
-  const cutoff = new Date(Date.now() - PENDING_MATCH_TTL_HOURS * 60 * 60 * 1000);
+async function autoConfirmStalePendingMatches(): Promise<void> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - PENDING_MATCH_AUTOCONFIRM_HOURS * 60 * 60 * 1000);
   const stale = await prisma.pendingMatch.findMany({
     where: { declaredAt: { lt: cutoff } },
-    select: { id: true, declarerLogin: true, opponentLogin: true, partner1Login: true, partner2Login: true },
+    orderBy: { declaredAt: 'asc' },
   });
   if (stale.length === 0) return;
-  await prisma.pendingMatch.deleteMany({ where: { id: { in: stale.map((m) => m.id) } } });
-  for (const m of stale) {
-    // 2v2 : prévenir aussi les coéquipiers.
-    const recipients = [m.declarerLogin, m.opponentLogin, m.partner1Login, m.partner2Login].filter(
-      Boolean,
-    ) as string[];
-    emit(recipients, {
-      type: 'match:expired',
-      payload: { id: m.id },
-    });
+
+  let confirmed = 0;
+  for (const p of stale) {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Re-lecture dans la transaction : un confirm/reject concurrent a pu la régler.
+        const fresh = await tx.pendingMatch.findUnique({ where: { id: p.id } });
+        if (!fresh) return null;
+        const created = await settlePendingAsPlayed(tx, fresh);
+        // Marque le match comme auto-validé (→ contestable a posteriori) et mémorise
+        // le déclarant (les côtés A/B suivent l'ordre canonique, pas déclarant/adversaire).
+        await tx.playedMatch.update({
+          where: { id: created.id },
+          data: { autoConfirmedAt: now, autoConfirmDeclarerLogin: fresh.declarerLogin },
+        });
+
+        // OPS (strictement 1v1) : un duel d'ops auto-validé consomme un match forcé,
+        // exactement comme au confirm manuel (cf. /matches/:id/confirm).
+        const opsBetween =
+          created.mode === '2v2'
+            ? null
+            : await tx.ops.findFirst({
+                where: {
+                  expiresAt: { gt: now },
+                  forcedUsed: { lt: OPS_FORCED_MATCHES },
+                  OR: [
+                    { ownerLogin: created.playerALogin, targetLogin: created.playerBLogin },
+                    { ownerLogin: created.playerBLogin, targetLogin: created.playerALogin },
+                  ],
+                },
+              });
+        if (opsBetween) {
+          const willEnd = opsBetween.forcedUsed + 1 >= OPS_FORCED_MATCHES;
+          await tx.ops.update({
+            where: { id: opsBetween.id },
+            data: { forcedUsed: { increment: 1 }, ...(willEnd ? { endedAt: now } : {}) },
+          });
+        }
+        // Paris sur un duel d'ops : réglés par le vainqueur (ou remboursés si nul).
+        let opsDuelCredited: string[] = [];
+        if (fresh.challengeId) {
+          const winnerLogin =
+            created.winner === 'A'
+              ? created.playerALogin
+              : created.winner === 'B'
+                ? created.playerBLogin
+                : null;
+          opsDuelCredited = winnerLogin
+            ? await settleBetsTx(tx, { targetType: 'ops', challengeId: fresh.challengeId }, winnerLogin)
+            : await refundBetsTx(tx, { targetType: 'ops', challengeId: fresh.challengeId });
+        }
+        return { match: created, opsTouched: !!opsBetween, opsDuelCredited };
+      });
+      if (!result) continue;
+      const match = result.match;
+      confirmed++;
+
+      const recipients =
+        match.mode === '2v2'
+          ? ([match.playerALogin, match.playerBLogin, match.playerA2Login, match.playerB2Login].filter(
+              Boolean,
+            ) as string[])
+          : [match.playerALogin, match.playerBLogin];
+      // Résultat poussé en temps réel + marqueur auto-validation (le front affiche
+      // « match auto-validé, contestable » à l'adversaire).
+      emit(recipients, { type: 'match:confirmed', payload: { ...match, autoConfirmed: true } });
+      // Le « score à valider » de l'adversaire est soldé, puis on le prévient que le
+      // match a été auto-validé faute de réponse — et qu'il peut encore le contester.
+      const opponents = [p.opponentLogin, p.partner2Login].filter(Boolean) as string[];
+      void markNotifsReadByRef(opponents, p.id);
+      void notifyMany(opponents, {
+        type: 'match_auto_confirmed',
+        title: `Match auto-validé`,
+        body: `Tu n'as pas répondu sous ${PENDING_MATCH_AUTOCONFIRM_HOURS}h : le score de @${p.declarerLogin} a été validé. Tu peux encore le contester.`,
+        link: `/challenges?game=${encodeURIComponent(match.game)}`,
+        game: match.game,
+        refId: match.id,
+      });
+      void notifyMatchResult(match);
+      broadcast({ type: 'leaderboard:update', payload: {} });
+      void maybeNotifyTop3(match.playerALogin, match.deltaA);
+      void maybeNotifyTop3(match.playerBLogin, match.deltaB);
+      if (result.opsDuelCredited.length) {
+        emit([...new Set(result.opsDuelCredited)], { type: 'panel:update', payload: {} });
+      }
+      if (result.opsTouched) {
+        emit([match.playerALogin, match.playerBLogin], {
+          type: 'ops:update',
+          payload: { reason: 'forced_played' },
+        });
+      }
+    } catch (err) {
+      console.error(`[auto-confirm] failed to settle pending match ${p.id}`, err);
+    }
+  }
+  if (confirmed > 0) {
+    console.log(
+      `[auto-confirm] ${confirmed} pending match(es) older than ${PENDING_MATCH_AUTOCONFIRM_HOURS}h auto-validated`,
+    );
+  }
+}
+
+// Expire les défis (invitations) non acceptés sous 48h : status 'expired', sans
+// pénalité ni auto-acceptation (un défi n'engage personne tant qu'il n'est pas
+// accepté). Seuls les défis 'pending' sont concernés ; les duels d'ops, nés
+// 'accepted', ne sont jamais touchés.
+async function expireStaleChallenges(): Promise<void> {
+  const cutoff = new Date(Date.now() - CHALLENGE_ACCEPT_TTL_HOURS * 60 * 60 * 1000);
+  const stale = await prisma.challenge.findMany({
+    where: { status: 'pending', createdAt: { lt: cutoff } },
+    select: {
+      id: true,
+      challengerLogin: true,
+      opponentLogin: true,
+      partnerLogin: true,
+      opponentPartnerLogin: true,
+      opsId: true,
+    },
+  });
+  // Sécurité : ne jamais expirer un duel d'ops forcé (il est de toute façon 'accepted').
+  const expirable = stale.filter((ch) => !ch.opsId);
+  if (expirable.length === 0) return;
+  await prisma.challenge.updateMany({
+    where: { id: { in: expirable.map((ch) => ch.id) } },
+    data: { status: 'expired', decidedAt: new Date() },
+  });
+  for (const ch of expirable) {
+    const recipients = [
+      ch.challengerLogin,
+      ch.opponentLogin,
+      ch.partnerLogin,
+      ch.opponentPartnerLogin,
+    ].filter(Boolean) as string[];
+    emit(recipients, { type: 'challenge:expired', payload: { id: ch.id } });
+    void markNotifsReadByRef([ch.opponentLogin, ch.opponentPartnerLogin].filter(Boolean) as string[], ch.id);
   }
   console.log(
-    `[purge] ${stale.length} pending match(es) older than ${PENDING_MATCH_TTL_HOURS}h deleted`,
+    `[expire] ${expirable.length} challenge(s) older than ${CHALLENGE_ACCEPT_TTL_HOURS}h expired`,
   );
 }
 
@@ -12393,9 +12642,6 @@ if (process.env.NODE_ENV !== 'test') {
       purgeOldAuditLogs().catch((err) => {
         console.error('failed to purge old audit logs', err);
       });
-      purgeStalePendingMatches().catch((err) => {
-        console.error('failed to purge stale pending matches', err);
-      });
       purgeScheduledDeletions().catch((err) => {
         console.error('failed to purge scheduled account deletions', err);
       });
@@ -12442,5 +12688,25 @@ if (process.env.NODE_ENV !== 'test') {
     setInterval(() => {
       checkSeasonSchedule().catch((err) => console.error('season schedule check failed', err));
     }, 60 * 1000);
+
+    // Cooldown de 48h : auto-validation des matchs déclarés non confirmés +
+    // expiration des défis non acceptés. Balayage toutes les 5 min (les délais
+    // sont en heures, pas besoin de précision à la minute) + une passe au boot
+    // pour rattraper ce qui a expiré pendant l'arrêt du process.
+    let staleSweepRunning = false;
+    const sweepStale = async () => {
+      if (staleSweepRunning) return;
+      staleSweepRunning = true;
+      try {
+        await autoConfirmStalePendingMatches();
+        await expireStaleChallenges();
+      } finally {
+        staleSweepRunning = false;
+      }
+    };
+    sweepStale().catch((err) => console.error('stale sweep failed', err));
+    setInterval(() => {
+      sweepStale().catch((err) => console.error('stale sweep failed', err));
+    }, 5 * 60 * 1000);
   });
 }

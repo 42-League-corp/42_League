@@ -73,7 +73,7 @@ export interface Challenge {
   id: string;
   challengerLogin: string;
   opponentLogin: string;
-  status: 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled';
+  status: 'pending' | 'accepted' | 'declined' | 'recorded' | 'cancelled' | 'expired';
   scheduledAt: string;
   createdAt: string;
   decidedAt: string | null;
@@ -128,6 +128,12 @@ export interface PlayedMatch {
   teamAId?: string | null;
   /** Équipe B (2v2). */
   teamBId?: string | null;
+  /** Daté = match AUTO-VALIDÉ après 48h sans réponse de l'adversaire (contestable a posteriori). */
+  autoConfirmedAt?: string | null;
+  /** Login du déclarant au moment de l'auto-validation (perspective déclarant/adversaire). */
+  autoConfirmDeclarerLogin?: string | null;
+  /** Daté quand un litige a déjà été ouvert sur ce match auto-validé. */
+  contestedAt?: string | null;
 }
 
 // ─── Smash FFA (Free-For-All) ─────────────────────────────────────────────────
@@ -1396,6 +1402,23 @@ export const api = {
       `/matches/${encodeURIComponent(id)}/cancel`,
       { method: 'POST' },
     ),
+
+  // ── Contestation a posteriori d'un match AUTO-VALIDÉ (48h sans réponse) ──
+  /** Matchs auto-validés que je peux encore contester (camp adverse, non contestés). */
+  contestableMatches: () => request<PlayedMatch[]>('/matches/contestable'),
+  /** Ouvre un litige sur un match auto-validé déjà compté (pas d'annulation d'ELO automatique). */
+  contestPlayedMatch: (
+    id: string,
+    contestReason: 'never_played' | 'wrong_score',
+    contestMessage: string,
+  ) =>
+    request<{ id: string; status: 'contested' }>(
+      `/matches/played/${encodeURIComponent(id)}/contest`,
+      { method: 'POST', body: JSON.stringify({ contestReason, contestMessage }) },
+    ).then((r) => {
+      fireContestRage('sender');
+      return r;
+    }),
 
   // ── Smash FFA (Free-For-All) ──
   pendingFfas: () => request<PendingFfa[]>('/matches/ffa/pending'),

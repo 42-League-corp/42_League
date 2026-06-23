@@ -165,6 +165,7 @@ const EVENT_DOMAINS: Record<string, Domain[]> = {
   'challenge:cancel_requested': ['challenges'],
   'challenge:cancel_refused': ['challenges'],
   'challenge:cancelled': ['challenges'],
+  'challenge:expired': ['challenges'],
   'challenge:recorded': ['matches', 'challenges'],
   'leaderboard:update': ['leaderboard'],
   'tournament:update': ['tournaments'],

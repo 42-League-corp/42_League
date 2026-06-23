@@ -111,6 +111,16 @@ export const dict: Record<Lang, Dict> = {
     // Sections / headers
     'defis.activity': 'Activité en cours',
     'defis.toConfirm': 'À confirmer',
+    // Cooldown 48h (auto-validation / expiration des défis)
+    'defis.cooldown.expireIn': 'Expire dans',
+    'defis.cooldown.expired': 'Expiré',
+    'defis.cooldown.autoValidateIn': 'Auto-validé dans',
+    'defis.cooldown.autoValidating': 'Validation…',
+    // Contestation a posteriori d'un match auto-validé
+    'defis.contestable.title': 'Auto-validés · à vérifier',
+    'defis.contestable.hint': 'Validé faute de réponse sous 48 h — tu peux encore le contester',
+    'defis.contestable.contest': 'Contester',
+    'defis.toast.matchContested': 'Match contesté — litige envoyé à l’arbitrage',
     'defis.scheduledDuels': 'Duels programmés',
     'defis.waitingConfirm': 'En attente de confirmation',
     'defis.pool': 'Pool de joueurs',
@@ -412,6 +422,16 @@ export const dict: Record<Lang, Dict> = {
 
     'defis.activity': 'Current activity',
     'defis.toConfirm': 'To confirm',
+    // 48h cooldown (auto-confirm / challenge expiry)
+    'defis.cooldown.expireIn': 'Expires in',
+    'defis.cooldown.expired': 'Expired',
+    'defis.cooldown.autoValidateIn': 'Auto-confirmed in',
+    'defis.cooldown.autoValidating': 'Confirming…',
+    // Post-hoc contestation of an auto-confirmed match
+    'defis.contestable.title': 'Auto-confirmed · review',
+    'defis.contestable.hint': 'Confirmed after 48h with no reply — you can still contest it',
+    'defis.contestable.contest': 'Contest',
+    'defis.toast.matchContested': 'Match contested — dispute sent to arbitration',
     'defis.scheduledDuels': 'Scheduled duels',
     'defis.waitingConfirm': 'Awaiting confirmation',
     'defis.pool': 'Player pool',
@@ -701,6 +721,16 @@ export const dict: Record<Lang, Dict> = {
 
     'defis.activity': 'Actividad en curso',
     'defis.toConfirm': 'Por confirmar',
+    // Cooldown 48h (auto-validación / expiración de retos)
+    'defis.cooldown.expireIn': 'Expira en',
+    'defis.cooldown.expired': 'Expirado',
+    'defis.cooldown.autoValidateIn': 'Auto-validado en',
+    'defis.cooldown.autoValidating': 'Validando…',
+    // Impugnación a posteriori de un partido auto-validado
+    'defis.contestable.title': 'Auto-validados · revisar',
+    'defis.contestable.hint': 'Validado sin respuesta en 48 h — aún puedes impugnarlo',
+    'defis.contestable.contest': 'Impugnar',
+    'defis.toast.matchContested': 'Partido impugnado — disputa enviada a arbitraje',
     'defis.scheduledDuels': 'Duelos programados',
     'defis.waitingConfirm': 'A la espera de confirmación',
     'defis.pool': 'Conjunto de jugadores',

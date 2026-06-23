@@ -302,6 +302,10 @@ model RejectedMatch {
   contestMessage String   @map("contest_message")
   // Discipline du match contesté (pour appliquer le malus d'Elo sur le bon Elo).
   game           String   @default("babyfoot")
+  // Contestation a posteriori : litige ouvert sur un match DÉJÀ compté car
+  // auto-validé après expiration du délai de 48h (cf. autoConfirmedAt). NULL pour
+  // les contestations classiques d'un match encore en attente (jamais compté).
+  playedMatchId  String?  @map("played_match_id")
   rejectedAt     DateTime @default(now()) @map("rejected_at")
   // Arbitrage : 'open' tant que non tranché, 'resolved' une fois jugé.
   status         String   @default("open")
@@ -576,6 +580,19 @@ model PlayedMatch {
   winner        String // 'A' or 'B'
   playedAt      DateTime @map("played_at")
   countedForElo Boolean  @map("counted_for_elo")
+  // Validation : NULL = confirmé bilatéralement par l'adversaire. Daté = match
+  // AUTO-VALIDÉ après expiration du délai de 48h (l'adversaire n'a pas répondu).
+  // Un tel match reste contestable a posteriori (cf. POST /matches/played/:id/contest)
+  // tant qu'aucun litige n'a été ouvert (contestedAt) ni tranché par un admin.
+  autoConfirmedAt DateTime? @map("auto_confirmed_at")
+  // Login du déclarant au moment de l'auto-validation. Les côtés A/B d'un match
+  // suivent l'ordre canonique (pairKey), pas l'ordre déclarant/adversaire : on
+  // mémorise donc qui a déclaré pour (1) n'autoriser la contestation qu'au camp
+  // adverse et (2) reconstruire la perspective déclarant/adversaire du litige.
+  autoConfirmDeclarerLogin String? @map("auto_confirm_declarer_login")
+  // Daté quand l'adversaire a ouvert un litige sur ce match auto-validé : empêche
+  // la double-contestation et retire le bouton « Contester » côté front.
+  contestedAt     DateTime? @map("contested_at")
   deltaA        Int      @map("delta_a")
   deltaB        Int      @map("delta_b")
   seasonId      String?  @map("season_id") // saison à laquelle appartient ce match

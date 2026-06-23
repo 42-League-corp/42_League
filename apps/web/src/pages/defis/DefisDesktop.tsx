@@ -18,6 +18,7 @@ import {
   type MatchResultInput,
   type PendingMatch,
   type PendingFfa,
+  type PlayedMatch,
 } from '../../lib/api';
 import { useMemo } from 'react';
 import { useLeagueData } from '../../hooks/useLeagueData';
@@ -30,6 +31,7 @@ import { useOpsStatus } from '../../hooks/useOpsStatus';
 import { useI18n, useT, type Lang } from '../../lib/i18n';
 import { fmtRelative } from '../../lib/format';
 import { useDefisLogic, challengeCancelState } from './shared/useDefisLogic';
+import { Cooldown } from './shared/Cooldown';
 import { gameColor, GAME_EMOJI as GAME_EMOJI_MAP } from '../../lib/gameVisuals';
 import {
   DeclareGameFlow,
@@ -94,6 +96,7 @@ export function DefisDesktop() {
     ffaWaiting,
     dartsToConfirm,
     dartsWaiting,
+    contestableMatches,
     others,
     recentOpponents,
     opponentCounts,
@@ -106,6 +109,7 @@ export function DefisDesktop() {
     confirmDarts,
     contestDarts,
     cancelDartsDeclaration,
+    contestMatch,
     requestAmicableCancel,
     respondAmicableCancel,
   } = useDefisLogic();
@@ -149,6 +153,7 @@ export function DefisDesktop() {
     ffaWaiting.length > 0 ||
     dartsToConfirm.length > 0 ||
     dartsWaiting.length > 0 ||
+    contestableMatches.length > 0 ||
     incoming.length > 0 ||
     accepted.length > 0 ||
     outgoing.length > 0;
@@ -208,12 +213,14 @@ export function DefisDesktop() {
           ffaWaiting={ffaWaiting}
           dartsToConfirm={dartsToConfirm}
           dartsWaiting={dartsWaiting}
+          contestableMatches={contestableMatches}
           incoming={incoming}
           accepted={accepted}
           outgoing={outgoing}
           myLogin={myLogin}
           lang={lang}
           refresh={refresh}
+          contestMatch={contestMatch}
           handleAction={handleAction}
           cancelDeclaration={cancelDeclaration}
           confirmFfa={confirmFfa}
@@ -604,12 +611,14 @@ interface ActivityStreamProps {
   ffaWaiting: PendingFfa[];
   dartsToConfirm: PendingFfa[];
   dartsWaiting: PendingFfa[];
+  contestableMatches: PlayedMatch[];
   incoming: Challenge[];
   accepted: Challenge[];
   outgoing: Challenge[];
   myLogin: string | undefined;
   lang: Lang;
   refresh: () => Promise<void>;
+  contestMatch: (id: string, reason: 'never_played' | 'wrong_score', message: string) => Promise<void>;
   handleAction: (id: string, action: 'accept' | 'decline') => Promise<void>;
   cancelDeclaration: (match: PendingMatch) => void;
   confirmFfa: (id: string, position: number) => Promise<void>;
@@ -624,14 +633,14 @@ interface ActivityStreamProps {
 
 function ActivityStream({
   pendingToConfirm, pendingWaiting, ffaToConfirm, ffaWaiting,
-  dartsToConfirm, dartsWaiting, incoming, accepted, outgoing,
-  myLogin, lang, refresh, handleAction, cancelDeclaration,
+  dartsToConfirm, dartsWaiting, contestableMatches, incoming, accepted, outgoing,
+  myLogin, lang, refresh, contestMatch, handleAction, cancelDeclaration,
   confirmFfa, contestFfa, cancelFfaDeclaration,
   confirmDarts, contestDarts, cancelDartsDeclaration,
   requestAmicableCancel, respondAmicableCancel,
 }: ActivityStreamProps) {
   const t = useT();
-  const urgentCount = pendingToConfirm.length + ffaToConfirm.length + dartsToConfirm.length + incoming.length;
+  const urgentCount = pendingToConfirm.length + ffaToConfirm.length + dartsToConfirm.length + contestableMatches.length + incoming.length;
 
   return (
     <div className="mb-8">
@@ -668,6 +677,13 @@ function ActivityStream({
           <ActivityGroup label={t('darts.toConfirm')} badge={dartsToConfirm.length} urgent>
             {dartsToConfirm.map((d) => (
               <DartsConfirmRow key={d.id} darts={d} myLogin={myLogin} onConfirm={confirmDarts} onContest={contestDarts} />
+            ))}
+          </ActivityGroup>
+        )}
+        {contestableMatches.length > 0 && (
+          <ActivityGroup label={t('defis.contestable.title')} badge={contestableMatches.length} urgent>
+            {contestableMatches.map((m) => (
+              <ContestableRow key={m.id} match={m} onContest={contestMatch} />
             ))}
           </ActivityGroup>
         )}
@@ -992,6 +1008,12 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
             </span>
           </>
         )}
+        {/* Cooldown 48h : passé ce délai sans réponse, le match est auto-validé. */}
+        <Cooldown
+          from={match.declaredAt}
+          label={t('defis.cooldown.autoValidateIn')}
+          expiredLabel={t('defis.cooldown.autoValidating')}
+        />
         <div className="ml-auto flex gap-2">
           <Button size="sm" loading={busy} onClick={is2v2 ? handleConfirm2v2 : handleConfirm}>{t('defis.confirmCheck')}</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
@@ -1006,6 +1028,73 @@ function PendingConfirmRow({ match, onDone }: { match: PendingMatch; onDone: () 
           score={`${match.scoreDeclarer}–${match.scoreOpponent}`}
           busy={busy}
           onSubmit={handleContestSubmit}
+          onClose={() => setContesting(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Ligne de match AUTO-VALIDÉ à contester (a posteriori) ───────────────────
+// Match déclaré confirmé automatiquement après 48h sans réponse de l'adversaire :
+// le résultat compte déjà, mais l'adversaire peut encore ouvrir un litige (qui part
+// en arbitrage, sans annuler l'ELO automatiquement).
+function ContestableRow({
+  match,
+  onContest,
+}: {
+  match: PlayedMatch;
+  onContest: (id: string, reason: 'never_played' | 'wrong_score', message: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [contesting, setContesting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const decl = match.autoConfirmDeclarerLogin ?? match.playerALogin;
+  // Score en perspective déclarant (les côtés A/B suivent l'ordre canonique).
+  const declSideIsA = decl === match.playerALogin || decl === match.playerA2Login;
+  const scoreDeclarer = declSideIsA ? match.scoreA : match.scoreB;
+  const scoreOpponent = declSideIsA ? match.scoreB : match.scoreA;
+  const iWon = scoreOpponent > scoreDeclarer;
+
+  const handleSubmit = async (reason: 'never_played' | 'wrong_score', message: string) => {
+    setContesting(false);
+    setBusy(true);
+    try {
+      await onContest(match.id, reason, message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="relative rounded-xl p-3 border border-amber-500/40 bg-amber-500/[0.05] flex flex-wrap items-center gap-2.5">
+        <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" strokeWidth={2.5} />
+        <PlayerLink login={decl} className="font-semibold text-amber-300 text-sm">{decl}</PlayerLink>
+        <span className="text-muted-2 text-sm">{t('defis.declared')}</span>
+        <span className="font-mono font-extrabold tabular-nums text-text-strong text-sm">
+          {scoreDeclarer}
+          <span className="text-muted mx-1">–</span>
+          {scoreOpponent}
+        </span>
+        <GameTag game={match.game} />
+        <span className="text-[11px] text-muted-2 hidden sm:inline">
+          → {t('defis.youHave')} {iWon ? t('defis.won') : t('defis.lost')}
+        </span>
+        <span className="text-[10px] text-amber-300/80 italic hidden md:inline">{t('defis.contestable.hint')}</span>
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setContesting(true)}
+            className="text-red border-red/30 hover:border-red hover:bg-red/5 hover:text-red">
+            {t('defis.contestable.contest')}
+          </Button>
+        </div>
+      </div>
+      {contesting && (
+        <ContestModal
+          declarerLogin={decl}
+          score={`${scoreDeclarer}–${scoreOpponent}`}
+          busy={busy}
+          onSubmit={handleSubmit}
           onClose={() => setContesting(false)}
         />
       )}
@@ -1468,6 +1557,12 @@ function ChallengeRow({ challenge, kind, myLogin, lang, onAccept, onDecline, onA
 
         {kind === 'incoming' && (
           <>
+            {/* Cooldown 48h : un défi non accepté sous ce délai expire (sans pénalité). */}
+            <Cooldown
+              from={challenge.createdAt}
+              label={t('defis.cooldown.expireIn')}
+              expiredLabel={t('defis.cooldown.expired')}
+            />
             <Button size="sm" onClick={onAccept}>{t('defis.accept')}</Button>
             <Button size="sm" variant="ghost" onClick={onDecline}>{t('defis.decline')}</Button>
           </>

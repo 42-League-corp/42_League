@@ -96,6 +96,34 @@ export async function notifyClientError(text: string): Promise<void> {
   });
 }
 
+/**
+ * Notifie Discord qu'une contestation (litige) vient d'être ouverte, en
+ * fire-and-forget. Réutilise le webhook d'audit. Ignoré en staging (canal réel)
+ * et si pas de webhook. RGPD : AUCUNE donnée personnelle (pas de login) — juste
+ * la discipline, le type de contestation et un lien vers la file d'arbitrage.
+ * `kind` distingue une contestation classique (`pending`, match jamais compté)
+ * d'une contestation a posteriori (`auto_validated`, match déjà compté).
+ */
+export async function notifyDiscordDispute(params: {
+  game: string;
+  kind: 'pending' | 'auto_validated';
+  reason?: string;
+}): Promise<void> {
+  if (process.env.APP_ENV === 'staging') return;
+  const url = process.env.DISCORD_AUDIT_WEBHOOK_URL;
+  if (!url) return;
+  const where = params.kind === 'auto_validated' ? ' (match auto-validé)' : '';
+  const reason = params.reason ? ` — motif : ${params.reason}` : '';
+  const content =
+    `⚖️ **Nouvelle contestation** — ${params.game}${where}${reason}. ` +
+    `Litige à arbitrer dans /GOD.`;
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content: content.slice(0, 1800), allowed_mentions: { parse: [] } }),
+  });
+}
+
 async function notifyDiscord(action: AdminAction): Promise<void> {
   // En staging, on ne notifie pas Discord : les admins testent des actions
   // fictives et les notifications pollueraient le canal de sécurité réel.
