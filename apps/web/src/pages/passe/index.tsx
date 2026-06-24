@@ -17,10 +17,12 @@ import { Panel } from '../../components/Panel';
 import { Skeleton } from '../../mobile/primitives/Skeleton';
 import { useFlash } from '../../hooks/useFlash';
 import { useT } from '../../lib/i18n';
+import { useIsLite } from '../../hooks/usePerf';
 import { api, type BattlePassResponse, type BattlePassTierView } from '../../lib/api';
 import { RARITY, resolveRarity } from '../../lib/rarity';
 
 const BLUE = '#38bdf8';
+const TIER_W = 132;
 
 /** Icône de chaque consommable (mêmes accents que la boutique). */
 const CONSUMABLE_ICON: Record<string, LucideIcon> = {
@@ -30,110 +32,265 @@ const CONSUMABLE_ICON: Record<string, LucideIcon> = {
   mini_ops: ShieldBan,
 };
 
+/**
+ * Scroll par glisser-déposer (souris) + molette verticale → défilement horizontal.
+ * Le tactile garde le scroll natif. Donne la sensation « piste » d'un passe de combat.
+ */
+function useDragScroll(ref: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let down = false;
+    let startX = 0;
+    let startLeft = 0;
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return; // laisse le scroll tactile natif
+      down = true;
+      startX = e.clientX;
+      startLeft = el.scrollLeft;
+      el.classList.add('cursor-grabbing');
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!down) return;
+      el.scrollLeft = startLeft - (e.clientX - startX);
+    };
+    const onUp = () => {
+      down = false;
+      el.classList.remove('cursor-grabbing');
+    };
+    const onWheel = (e: WheelEvent) => {
+      const delta = e.deltaY;
+      if (delta === 0 || el.scrollWidth <= el.clientWidth) return;
+      const atStart = el.scrollLeft <= 0;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+      // En butée, on rend la main au scroll vertical de la page.
+      if ((delta < 0 && atStart) || (delta > 0 && atEnd)) return;
+      e.preventDefault();
+      el.scrollLeft += delta;
+    };
+    el.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [ref]);
+}
+
+/** Compte à rebours animé d'un nombre 0 → target (cubic ease-out). */
+function useCountUp(target: number, active: boolean, durationMs = 900) {
+  const [val, setVal] = useState(active ? 0 : target);
+  useEffect(() => {
+    if (!active) {
+      setVal(target);
+      return;
+    }
+    let raf = 0;
+    let startTs = 0;
+    const tick = (now: number) => {
+      if (!startTs) startTs = now;
+      const p = Math.min(1, (now - startTs) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(target * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, active, durationMs]);
+  return val;
+}
+
 /** Métadonnées d'affichage de la récompense d'un palier (icône + libellé + couleur). */
 function rewardView(tier: BattlePassTierView, t: (k: string) => string) {
   if (tier.rewardKind === 'item' && tier.item) {
     const rk = RARITY[resolveRarity(tier.item)];
     return {
       hex: rk.hex,
+      tag: rk.label,
       name: tier.item.name,
-      icon: <Gem className="w-5 h-5" strokeWidth={2.4} style={{ color: rk.hex }} />,
+      icon: <Gem className="w-6 h-6" strokeWidth={2.4} style={{ color: rk.hex }} />,
     };
   }
   if (tier.rewardKind === 'coins') {
     return {
       hex: '#ffc94a',
+      tag: 'Coins',
       name: `${tier.coins ?? 0}`,
-      icon: <img src="/42coin.webp" alt="" className="w-5 h-5" />,
+      icon: <img src="/42coin.webp" alt="" className="w-6 h-6 drop-shadow" />,
     };
   }
   if (tier.rewardKind === 'consumable' && tier.consumableKind) {
     const Icon = CONSUMABLE_ICON[tier.consumableKind] ?? Zap;
     return {
       hex: '#5eead4',
+      tag: t('battlepass.reward.consumable'),
       name: t(`battlepass.consumable.${tier.consumableKind}`),
-      icon: <Icon className="w-5 h-5 text-teal-300" strokeWidth={2.2} />,
+      icon: <Icon className="w-6 h-6 text-teal-300" strokeWidth={2.2} />,
     };
   }
   return {
     hex: '#6b6453',
+    tag: '—',
     name: t('battlepass.reward.none'),
-    icon: <Gem className="w-5 h-5 text-muted/50" strokeWidth={2} />,
+    icon: <Gem className="w-6 h-6 text-muted/40" strokeWidth={2} />,
   };
 }
 
 /**
- * Une colonne de la frise (= un palier) : récompense en haut, nœud sur le rail
- * au centre, XP requise + état en bas. Le rail est rempli en bleu jusqu'au
- * niveau courant (segment de ligne par colonne, jointif entre voisins).
+ * Une colonne de la frise (= un palier) : carte récompense en haut, nœud sur le
+ * rail au centre, XP requise + état en bas. Animations façon passe de combat :
+ * entrée décalée, survol qui soulève la carte, rail bleu qui se remplit, nœud du
+ * palier courant pulsé avec un marqueur « TOI ».
  */
 function TierColumn({
   tier,
+  index,
   t,
   isCurrent,
+  lite,
   colRef,
 }: {
   tier: BattlePassTierView;
+  index: number;
   t: (k: string) => string;
   isCurrent: boolean;
+  lite: boolean;
   colRef?: (el: HTMLDivElement | null) => void;
 }) {
   const claimed = !!tier.claimedAt;
   const unlocked = tier.unlocked;
   const rw = rewardView(tier, t);
+  // Délai d'entrée plafonné : les paliers lointains n'attendent pas une éternité.
+  const delay = lite ? 0 : Math.min(index * 0.018, 0.5);
 
   return (
-    <div ref={colRef} className="relative shrink-0 w-[120px] snap-center flex flex-col items-center pt-1">
-      {/* Récompense (au-dessus du rail) */}
-      <div className="w-full px-1.5">
-        <div
-          className={`rounded-xl border p-2.5 flex flex-col items-center gap-1.5 text-center min-h-[92px] justify-center transition-all ${
-            unlocked ? '' : 'opacity-55'
-          }`}
-          style={{
-            borderColor: `${rw.hex}55`,
-            background: `${rw.hex}14`,
-            boxShadow: unlocked ? `0 0 16px -6px ${rw.hex}` : 'none',
-          }}
+    <motion.div
+      ref={colRef}
+      className="group relative shrink-0 snap-center flex flex-col items-center pt-2 select-none"
+      style={{ width: TIER_W }}
+      initial={lite ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4, ease: 'easeOut' }}
+    >
+      {/* Marqueur « palier actuel » flottant */}
+      {isCurrent && (
+        <motion.div
+          className="absolute -top-1 z-20 flex flex-col items-center"
+          initial={lite ? false : { opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: delay + 0.2 }}
         >
           <span
-            className="w-10 h-10 rounded-lg flex items-center justify-center border"
-            style={{ borderColor: `${rw.hex}55`, background: `${rw.hex}1f` }}
+            className="px-2 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-bg-1"
+            style={{ background: BLUE, boxShadow: `0 0 14px ${BLUE}` }}
+          >
+            {t('battlepass.jumpToCurrent')}
+          </span>
+        </motion.div>
+      )}
+
+      {/* Récompense (carte au-dessus du rail) */}
+      <div className="w-full px-1.5" style={{ marginTop: isCurrent ? 16 : 0 }}>
+        <motion.div
+          className="shine relative rounded-2xl border p-2.5 flex flex-col items-center gap-1.5 text-center min-h-[116px] justify-center overflow-hidden"
+          whileHover={lite ? undefined : { y: -6, scale: 1.04 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+          style={{
+            borderColor: unlocked ? `${rw.hex}88` : `${rw.hex}33`,
+            background: unlocked
+              ? `linear-gradient(160deg, ${rw.hex}26 0%, ${rw.hex}0d 60%, rgba(20,18,14,0.4) 100%)`
+              : 'rgba(20,18,14,0.55)',
+            boxShadow: unlocked ? `0 6px 22px -10px ${rw.hex}, inset 0 1px 0 rgba(255,255,255,0.06)` : 'none',
+            opacity: unlocked ? 1 : 0.5,
+          }}
+        >
+          {/* Liseré de rareté en haut */}
+          <span
+            className="absolute top-0 left-0 right-0 h-[3px]"
+            style={{ background: unlocked ? rw.hex : `${rw.hex}55` }}
+          />
+          {/* Halo de rareté pour les paliers débloqués */}
+          {unlocked && !lite && (
+            <span
+              className="absolute -top-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full blur-2xl pointer-events-none"
+              style={{ background: `${rw.hex}55` }}
+            />
+          )}
+          <span
+            className="relative w-12 h-12 rounded-xl flex items-center justify-center border"
+            style={{
+              borderColor: `${rw.hex}66`,
+              background: `${rw.hex}22`,
+              boxShadow: unlocked ? `0 0 16px -4px ${rw.hex}` : 'none',
+            }}
           >
             {rw.icon}
           </span>
-          <span className="text-[10.5px] font-bold text-text-strong leading-tight line-clamp-2">
+          <span
+            className="relative text-[8px] font-extrabold uppercase tracking-[0.12em]"
+            style={{ color: unlocked ? rw.hex : '#8a7d65' }}
+          >
+            {rw.tag}
+          </span>
+          <span className="relative text-[11px] font-bold text-text-strong leading-tight line-clamp-2">
             {rw.name}
           </span>
-        </div>
+          {claimed && (
+            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-gold flex items-center justify-center shadow-gold-glow">
+              <Check className="w-3 h-3 text-bg-1" strokeWidth={3.5} />
+            </span>
+          )}
+        </motion.div>
       </div>
 
       {/* Rail + nœud */}
-      <div className="relative w-full h-12 flex items-center justify-center my-0.5">
-        {/* Segment de ligne (jointif d'une colonne à l'autre) */}
+      <div className="relative w-full h-14 flex items-center justify-center my-0.5">
+        {/* Ligne de base (toujours présente, terne) */}
         <div
           className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[3px]"
-          style={{ background: unlocked ? BLUE : 'rgba(125,115,95,0.22)' }}
+          style={{ background: 'rgba(125,115,95,0.22)' }}
         />
+        {/* Remplissage bleu animé (paliers débloqués), jointif d'une colonne à l'autre */}
+        {unlocked && (
+          <motion.div
+            className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[3px] origin-left"
+            style={{
+              background: `linear-gradient(90deg, #0ea5e9, ${BLUE} 60%, #bae6fd)`,
+              boxShadow: '0 0 10px rgba(56,189,248,0.6)',
+            }}
+            initial={lite ? false : { scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ delay, duration: 0.45, ease: 'easeOut' }}
+          />
+        )}
         {/* Halo pulsé sur le palier courant */}
-        {isCurrent && (
+        {isCurrent && !lite && (
           <motion.span
-            className="absolute z-0 w-9 h-9 rounded-full border-2"
+            className="absolute z-0 w-10 h-10 rounded-full border-2"
             style={{ borderColor: BLUE }}
-            animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
+            animate={{ scale: [1, 1.9], opacity: [0.6, 0] }}
             transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
           />
         )}
         {/* Nœud */}
-        <span
-          className="relative z-10 inline-flex items-center justify-center w-9 h-9 rounded-full border-2 font-display text-sm font-extrabold tabular-nums"
+        <motion.span
+          className="relative z-10 inline-flex items-center justify-center w-10 h-10 rounded-full border-2 font-display text-sm font-extrabold tabular-nums"
+          initial={lite ? false : { scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: delay + 0.1, type: 'spring', stiffness: 420, damping: 18 }}
           style={
             unlocked
               ? {
                   borderColor: BLUE,
-                  background: 'rgba(56,189,248,0.18)',
-                  color: '#bae6fd',
-                  boxShadow: '0 0 14px rgba(56,189,248,0.55)',
+                  background: claimed
+                    ? 'linear-gradient(160deg, rgba(56,189,248,0.4), rgba(56,189,248,0.12))'
+                    : 'rgba(56,189,248,0.18)',
+                  color: '#e0f2fe',
+                  boxShadow: '0 0 16px rgba(56,189,248,0.6)',
                 }
               : {
                   borderColor: 'rgba(125,115,95,0.4)',
@@ -142,8 +299,8 @@ function TierColumn({
                 }
           }
         >
-          {claimed ? <Check className="w-4 h-4" strokeWidth={3} /> : tier.tier}
-        </span>
+          {claimed ? <Check className="w-4 h-4" strokeWidth={3} /> : unlocked ? tier.tier : <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />}
+        </motion.span>
       </div>
 
       {/* XP requise + état */}
@@ -168,17 +325,20 @@ function TierColumn({
           </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 export function PassePage() {
   const t = useT();
+  const lite = useIsLite();
   const { show } = useFlash();
   const [data, setData] = useState<BattlePassResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLDivElement | null>(null);
+
+  useDragScroll(scrollerRef);
 
   const load = useCallback(async () => {
     try {
@@ -195,15 +355,18 @@ export function PassePage() {
     void load();
   }, [load]);
 
-  // Auto-centrage de la frise sur le palier courant une fois les données prêtes.
-  useEffect(() => {
+  const scrollToCurrent = useCallback((smooth = true) => {
     const sc = scrollerRef.current;
     const nd = currentRef.current;
-    if (!loading && sc && nd) {
-      const target = nd.offsetLeft - sc.clientWidth / 2 + nd.offsetWidth / 2;
-      sc.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
-    }
-  }, [loading, data]);
+    if (!sc || !nd) return;
+    const target = nd.offsetLeft - sc.clientWidth / 2 + nd.offsetWidth / 2;
+    sc.scrollTo({ left: Math.max(0, target), behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+
+  // Auto-centrage de la frise sur le palier courant une fois les données prêtes.
+  useEffect(() => {
+    if (!loading) requestAnimationFrame(() => scrollToCurrent(true));
+  }, [loading, data, scrollToCurrent]);
 
   // Progression dans le niveau courant (0..1), clampée.
   const pct =
@@ -211,56 +374,89 @@ export function PassePage() {
       ? Math.min(1, Math.max(0, data.xpIntoLevel / data.xpForNextLevel))
       : 0;
 
+  const ready = !loading && !!data;
+  const levelCount = useCountUp(data?.level ?? 1, ready, 800);
+  const intoCount = useCountUp(data?.xpIntoLevel ?? 0, ready, 900);
+  const totalCount = useCountUp(data?.totalXp ?? 0, ready, 1000);
+
   return (
     <div className="space-y-5">
-      {/* ── En-tête : barre d'XP ────────────────────────────────────────── */}
+      {/* ── En-tête : barre d'XP premium ─────────────────────────────────── */}
       <Panel title={t('battlepass.title')}>
-        <div className="relative overflow-hidden rounded-2xl p-5 border border-gold/30 bg-gradient-to-br from-violet-500/20 via-bg-2 to-bg-1">
+        <div className="relative overflow-hidden rounded-2xl p-5 border border-gold/30 bg-gradient-to-br from-violet-600/25 via-bg-2 to-bg-1">
           <div className="absolute inset-0 hud-diag pointer-events-none opacity-30" />
-          <div className="absolute -left-8 -top-10 w-40 h-40 rounded-full bg-gold/18 blur-3xl pointer-events-none" />
-          <div className="absolute right-0 -bottom-12 w-44 h-44 rounded-full bg-violet-500/18 blur-3xl pointer-events-none" />
+          <div className="absolute -left-8 -top-10 w-44 h-44 rounded-full bg-gold/18 blur-3xl pointer-events-none" />
+          <div className="absolute right-0 -bottom-12 w-48 h-48 rounded-full bg-violet-500/20 blur-3xl pointer-events-none" />
+          {/* Étincelles flottantes */}
+          {!lite &&
+            ready &&
+            [0, 1, 2, 3].map((i) => (
+              <motion.span
+                key={i}
+                className="absolute rounded-full bg-[#bae6fd]"
+                style={{ width: 3, height: 3, left: `${18 + i * 22}%`, top: '60%' }}
+                animate={{ y: [-2, -24, -2], opacity: [0, 0.9, 0] }}
+                transition={{ duration: 2.6 + i * 0.4, repeat: Infinity, delay: i * 0.5, ease: 'easeInOut' }}
+              />
+            ))}
 
           <div className="relative flex items-center gap-4">
             {/* Médaillon niveau */}
-            <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-gold/35 to-violet-500/15 border border-gold/45 flex flex-col items-center justify-center shadow-gold-glow overflow-hidden">
+            <motion.div
+              className="relative shrink-0 w-[68px] h-[68px] rounded-2xl bg-gradient-to-br from-gold/35 to-violet-500/15 border border-gold/45 flex flex-col items-center justify-center shadow-gold-glow overflow-hidden"
+              initial={lite ? false : { scale: 0.6, rotate: -8, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+            >
               <Crown className="w-5 h-5 text-gold drop-shadow" strokeWidth={2.2} />
-              <span className="font-display text-xl font-extrabold text-text-strong tabular-nums leading-none">
-                {loading ? '–' : data?.level ?? 1}
+              <span className="font-display text-2xl font-extrabold text-text-strong tabular-nums leading-none">
+                {loading ? '–' : levelCount}
               </span>
-              <div className="absolute inset-y-0 -left-1/2 w-1/2 bg-white/20 blur-md animate-gold-sweep pointer-events-none" />
-            </div>
+              {!lite && (
+                <div className="absolute inset-y-0 -left-1/2 w-1/2 bg-white/20 blur-md animate-gold-sweep pointer-events-none" />
+              )}
+            </motion.div>
 
             <div className="relative min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <div className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-muted-2">
-                  {t('battlepass.level')} {loading ? '' : data?.level ?? 1}
+                  {t('battlepass.level')} {loading ? '' : levelCount}
                 </div>
                 {!loading && data && (
                   <div className="text-[11px] font-bold text-muted-2 tabular-nums">
-                    <span className="text-[#7dd3fc]">{data.xpIntoLevel}</span> / {data.xpForNextLevel}{' '}
+                    <span className="text-[#7dd3fc]">{intoCount}</span> / {data.xpForNextLevel}{' '}
                     <span className="uppercase tracking-wide text-[#7dd3fc]/70">{t('battlepass.xp')}</span>
                   </div>
                 )}
               </div>
 
-              {/* Barre de progression bleu clair */}
-              <div className="mt-2 h-3 w-full rounded-full bg-bg-1/80 border border-[#7dd3fc]/20 overflow-hidden">
+              {/* Barre de progression bleu clair + reflet qui balaie */}
+              <div className="shine relative mt-2 h-3.5 w-full rounded-full bg-bg-1/80 border border-[#7dd3fc]/20 overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full"
+                  className="h-full rounded-full relative overflow-hidden"
                   style={{
-                    background: 'linear-gradient(90deg, #38bdf8 0%, #7dd3fc 55%, #bae6fd 100%)',
-                    boxShadow: '0 0 12px rgba(56,189,248,0.55)',
+                    background: 'linear-gradient(90deg, #0284c7 0%, #38bdf8 55%, #bae6fd 100%)',
+                    boxShadow: '0 0 14px rgba(56,189,248,0.6)',
                   }}
                   initial={{ width: 0 }}
                   animate={{ width: `${pct * 100}%` }}
-                  transition={{ duration: 0.7, ease: 'easeOut' }}
-                />
+                  transition={{ duration: 0.9, ease: 'easeOut', delay: 0.1 }}
+                >
+                  {!lite && pct > 0 && (
+                    <motion.span
+                      className="absolute inset-y-0 w-1/3"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)' }}
+                      animate={{ x: ['-120%', '320%'] }}
+                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1 }}
+                    />
+                  )}
+                </motion.div>
               </div>
 
               {!loading && data && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-2 font-medium">
                   <Trophy className="w-3 h-3 text-gold/70" strokeWidth={2.4} />
-                  <span className="tabular-nums">{data.totalXp}</span>
+                  <span className="tabular-nums">{totalCount}</span>
                   <span className="uppercase tracking-wide text-[10px]">{t('battlepass.xp')}</span>
                   <span className="opacity-60">·</span>
                   <span>{t('battlepass.xpToNext')}: </span>
@@ -279,8 +475,8 @@ export function PassePage() {
         <div className="card-hud rounded-2xl p-3 overflow-hidden">
           <div className="flex gap-0">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="shrink-0 w-[120px] px-1.5">
-                <Skeleton className="h-[92px] rounded-xl" />
+              <div key={i} className="shrink-0 px-1.5" style={{ width: TIER_W }}>
+                <Skeleton className="h-[116px] rounded-2xl" />
               </div>
             ))}
           </div>
@@ -292,6 +488,15 @@ export function PassePage() {
         </div>
       ) : (
         <div className="card-hud rounded-2xl p-3 pt-2">
+          {/* Sous-titre piste + indice de scroll */}
+          <div className="flex items-center justify-between px-1 mb-1">
+            <div className="font-gaming text-[10px] uppercase tracking-[0.16em] text-[#7dd3fc]/80 font-extrabold flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3" strokeWidth={2.4} />
+              {t('battlepass.rewardsTrack')}
+            </div>
+            <div className="hidden sm:block text-[9px] text-muted-2/70 italic">{t('battlepass.dragHint')}</div>
+          </div>
+
           <div className="relative">
             {/* Fondus + indicateurs de défilement sur les bords */}
             <div className="pointer-events-none absolute left-0 inset-y-0 w-10 z-10 bg-gradient-to-r from-bg-1 to-transparent flex items-center">
@@ -303,23 +508,36 @@ export function PassePage() {
 
             <div
               ref={scrollerRef}
-              className="relative overflow-x-auto overflow-y-hidden snap-x scroll-px-6 px-1 pb-1"
+              className="relative overflow-x-auto overflow-y-hidden snap-x scroll-px-6 px-1 pb-1 cursor-grab scrollbar-none"
             >
-              <div className="flex min-w-max">
-                {data.tiers.map((tier) => {
+              <div className="flex min-w-max pt-3">
+                {data.tiers.map((tier, i) => {
                   const isCurrent = tier.tier === data.level;
                   return (
                     <TierColumn
                       key={tier.tier}
                       tier={tier}
+                      index={i}
                       t={t}
                       isCurrent={isCurrent}
+                      lite={lite}
                       colRef={isCurrent ? (el) => (currentRef.current = el) : undefined}
                     />
                   );
                 })}
               </div>
             </div>
+
+            {/* Bouton « revenir au palier actuel » */}
+            <button
+              type="button"
+              onClick={() => scrollToCurrent(true)}
+              className="absolute -bottom-1 right-2 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide text-bg-1 shadow-lg transition-transform hover:scale-105 active:scale-95"
+              style={{ background: `linear-gradient(135deg, ${BLUE}, #7dd3fc)`, boxShadow: `0 4px 16px -4px ${BLUE}` }}
+            >
+              <Crown className="w-3 h-3" strokeWidth={2.6} />
+              {t('battlepass.jumpToCurrent')}
+            </button>
           </div>
         </div>
       )}
